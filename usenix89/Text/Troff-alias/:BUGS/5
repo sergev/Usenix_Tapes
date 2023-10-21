@@ -1,0 +1,89 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!allegra!mit-eddie!rutgers!brl-adm!brl-smoke!gwyn
+From: gwyn@brl-smoke.UUCP
+Newsgroups: net.sources.bugs
+Subject: Re: Neat little alias & technique to facilite troff
+Message-ID: <5545@brl-smoke.ARPA>
+Date: 20 Jan 87 10:06:38 GMT
+References: <595@cubsvax.UUCP> <920@houxu.UUCP>
+Reply-To: gwyn@brl.arpa (Doug Gwyn (VLD/VMB) <gwyn>)
+Organization: Ballistic Research Lab (BRL), APG, MD.
+Lines: 77
+Posted: Tue Jan 20 05:06:38 1987
+
+In article <920@houxu.UUCP> jhv@houxu.UUCP (James Van Ornum) writes:
+>	tbl <<!EOF | eqn | pic | troff -mm | ipr -ltroff
+>	...
+>	!EOF
+
+That's pretty cute, but it assumes there is only one way the
+document will ever be formatted/typeset.  In case anyone wants
+to pursue this subject, I enclose an extension of the "doctype"
+command described in Kernighan & Pike; followups should go to
+some other newsgroup, or if you have improvements please send
+them to me <Gwyn@BRL.ARPA>:
+
+#!/usr/5bin/sh
+#	doctype -- synthesize proper command line for troff
+#	adapted from Kernighan & Pike
+
+#	last edit:	86/08/25	D A Gwyn
+#	SCCS ID:	@(#)doctype.sh	1.8
+
+PATH=/usr/5bin:/bin:/usr/bin
+if pdp11
+then	MACDIR=/usr/lib/tmac
+else	MACDIR=/usr/5lib/tmac		# BRL System V emulation
+fi
+
+eopt=
+macs=
+opts=
+topt=
+for i
+do	case "$i" in
+	-e)	eopt="$i";		shift;;
+	-m*)	macs="$macs $i";	shift;;
+	-T*)	topt=" $i";		shift;;
+	--)				shift;	break;;
+	-)					break;;
+	-*)	opts="$opts $i";	shift;;
+	*)					break;;
+	esac
+done
+
+if [ $# -gt 0 ]
+then	s="cat $* | "
+else	s=
+fi
+
+t=`cat $* |
+egrep '^\.(EQ|TS|\[|P|G1|IS)' |
+sort -u |
+awk '
+/^\.P$/ { mm++ }
+/^\.PP/ { ms++ }
+/^\.EQ/ { eqn++ }
+/^\.TS/ { tbl++ }
+/^\.PS/ { pic++ }
+/^\.G1/ { grap++ }
+/^\.IS/ { ideal++ }
+/^\.\[/ { refer++ }
+END {
+	if (refer > 0)	printf "refer | "
+	if (grap > 0)	printf "grap | "
+	if (grap > 0 || pic > 0)	printf "_PIC_ | "
+	if (ideal > 0)	printf "ideal | "
+	if (tbl > 0)	printf "tbl | "
+	if (eqn > 0)	printf "_EQN_ | "
+	printf "_TROFF_"
+	if (grap > 0 || pic > 0)	printf " -mpic"
+	if (mm > 0)	printf " -mm"
+	if (ms > 0 && mm == 0)	printf " -ms"
+	printf " -\n"
+} ' | sed -e s/_PIC_/"pic$topt"/ -e s/_EQN_/"eqn$topt"/ \
+	-e s/_TROFF_/"troff$topt$opts$macs"/ -e s%' -m'%" $MACDIR/tmac."%g`
+
+if [ -n "$eopt" ]
+then	eval "$s$t"
+else	echo $s$t
+fi

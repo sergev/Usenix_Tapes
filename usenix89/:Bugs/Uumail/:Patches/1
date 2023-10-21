@@ -1,0 +1,365 @@
+Path: plus5!wucs1!cuae2!ihnp4!cbatt!cbosgd!soma!usenet
+From: usenet@soma.bcm.tmc.edu (USENET maintenance)
+Newsgroups: net.sources.bugs,comp.mail.uucp
+Subject: uumail 4.1 patch #1
+Keywords: uumail 4.1 patch Configure REQUIRED
+Message-ID: <2898@soma.bcm.tmc.edu>
+Date: 2 Feb 87 22:08:45 GMT
+Reply-To: sob@soma.UUCP (Stan Barber)
+Distribution: world
+Organization: Neurology, Baylor College of Medicine, Houston, Tx
+Lines: 352
+Xref: plus5 net.sources.bugs:1074 comp.mail.uucp:200
+
+System: uumail version 4.1
+Patch #: 1
+Priority: REQUIRED
+Subject: First line of message folloing From_ line eaten; Configure fixes.
+From: gnu@hoptoad.UUCP
+
+Description:
+	Bug 1: Putfrom() reads the From_ lines and build a single From_
+	line from them until it runs into something that is not a From_line.
+	It throws this line away.
+	Bug 2: Configure did not allow you to specify flags on the 
+	LOCALMAIL program.
+
+Repeat by:
+	Bug 1: Take any message and run it though uumail with debugging. Then
+	look at the UUMAIL.TEST file. Notice that the first line following
+	the From_ line is missing.
+	Bug 2: Configure does not ask for local flags.
+
+Fix:	Bug 1: Reset the file pointer to the point it was after the last From_
+	line was detected.
+	Bug 2: Update Configure to ask about flags for the local mailer.
+
+	From rn, say "| patch -d DIR", where DIR is your rn source directory.
+	Outside of rn, say "cd DIR; patch <thisarticle".  If you don't have
+	the patch program, apply the following by hand, or get patch.
+
+
+	Stan Barber
+	{shell,rice,cuae2}!soma!sob
+
+Index:patchlevel.h
+*** patchlevel.h	Mon Feb  2 15:35:47 1987
+--- FIX/patchlevel.h	Mon Feb  2 15:37:39 1987
+***************
+*** 0
+
+--- 1,2 -----
++ #define PATCHLEVEL 1
++ static char * Version[] = "uumail 4.2 02/02/87";
+
+Index:uumail.c
+Prereq: 4.1
+*** /tmp/,RCSt1009271	Mon Feb  2 15:45:36 1987
+--- /tmp/,RCSt2009271	Mon Feb  2 15:45:37 1987
+***************
+*** 20,25
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
+   * Revision 4.1  86/12/15  13:14:44  sob
+   * Added attempted fix for null userid in from line on some system V machines.
+   * 
+
+--- 20,28 -----
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
++  * Revision 4.2  87/02/02  15:43:50  sob
++  * Added fix for lost line at the beginning of the message problems
++  * 
+   * Revision 4.1  86/12/15  13:14:44  sob
+   * Added attempted fix for null userid in from line on some system V machines.
+   * 
+***************
+*** 202,207
+  #define _DEFINE
+  
+  #include "uuconf.h"
+  
+  
+  EXTERN bool uupath;
+
+--- 205,211 -----
+  #define _DEFINE
+  
+  #include "uuconf.h"
++ #include "patchlevel.h"
+  
+  EXTERN bool uupath;
+  extern int      errno;
+***************
+*** 203,209
+  
+  #include "uuconf.h"
+  
+- 
+  EXTERN bool uupath;
+  extern int      errno;
+  extern struct passwd *getpwuid();
+
+--- 207,212 -----
+  #include "uuconf.h"
+  #include "patchlevel.h"
+  
+  EXTERN bool uupath;
+  extern int      errno;
+  extern struct passwd *getpwuid();
+***************
+*** 222,228
+  char templet[64];
+  struct mailname addrlist;	/* list of addresses */
+  int local;
+- static char Version[] ="$Header: uumail.c,v 4.1 86/12/15 13:14:44 sob Exp $";
+  
+  main(argc, argv)
+  	char **argv;
+
+--- 225,230 -----
+  char templet[64];
+  struct mailname addrlist;	/* list of addresses */
+  int local;
+  
+  
+  main(argc, argv)
+***************
+*** 224,229
+  int local;
+  static char Version[] ="$Header: uumail.c,v 4.1 86/12/15 13:14:44 sob Exp $";
+  
+  main(argc, argv)
+  	char **argv;
+  {
+
+--- 226,232 -----
+  struct mailname addrlist;	/* list of addresses */
+  int local;
+  
++ 
+  main(argc, argv)
+  	char **argv;
+  {
+***************
+*** 686,692
+  	char buf[BUFSIZ], addr[PATHSIZ], domain[PATHSIZ], user[NAMESIZ];
+  	int form;
+  	extern build();
+! 	long iop;
+  	(void) strcpy( bangpath,"");  /* zero bang path */
+  	/* code from smail follows  (Thanks Mark!) */
+  	for( ;; )
+
+--- 689,695 -----
+  	char buf[BUFSIZ], addr[PATHSIZ], domain[PATHSIZ], user[NAMESIZ];
+  	int form;
+  	extern build();
+! 	long iop, offset;
+  	(void) strcpy( bangpath,"");  /* zero bang path */
+  	/* code from smail follows  (Thanks Mark!) */
+  	for( ;; )
+***************
+*** 691,696
+  	/* code from smail follows  (Thanks Mark!) */
+  	for( ;; )
+  	{
+  		if ( fgets( buf, sizeof(buf), into )==NULL )
+  			break;
+  		if ( strncmp( "From ", buf, 5 ) 
+
+--- 694,700 -----
+  	/* code from smail follows  (Thanks Mark!) */
+  	for( ;; )
+  	{
++ 		offset=ftell(into); /* get current position in file */
+  		if ( fgets( buf, sizeof(buf), into )==NULL )
+  			break;
+  		if ( strncmp( "From ", buf, 5 ) 
+***************
+*** 760,767
+  	strcat(buf,"\n");
+  	/* if there is no output file (no headers), exit */
+  	if (outto == NULL) return;
+! 	write(outto->_file,buf,strlen(buf));
+! 	fflush(outto);
+  
+  }
+  
+
+--- 764,775 -----
+  	strcat(buf,"\n");
+  	/* if there is no output file (no headers), exit */
+  	if (outto == NULL) return;
+! 	(void) write(outto->_file,buf,strlen(buf));
+! 	/* now reset the input file to the beginning of the header
+! 	 * following the "From " lines
+! 	 */
+! 	(void) fseek(into,offset,0);
+! 	(void) fflush(outto);
+  
+  }
+  
+Index: Configure
+Prereq: 1.11
+*** /tmp/,RCSt1009257	Mon Feb  2 15:44:59 1987
+--- /tmp/,RCSt2009257	Mon Feb  2 15:45:01 1987
+***************
+*** 3,9
+  # If these # comments don't work, trim them.  Don't worry about the other
+  # shell scripts, Configure will trim # comments from them for you.
+  #
+! # $Header: Configure,v 1.11 86/12/15 13:27:39 sob Exp $
+  #
+  # $Log:	Configure,v $
+  # Revision 1.11  86/12/15  13:27:39  sob
+
+--- 3,9 -----
+  # If these # comments don't work, trim them.  Don't worry about the other
+  # shell scripts, Configure will trim # comments from them for you.
+  #
+! # $Header: Configure,v 1.12 87/02/02 15:44:21 sob Exp $
+  #
+  # $Log:	Configure,v $
+  # Revision 1.12  87/02/02  15:44:21  sob
+***************
+*** 6,11
+  # $Header: Configure,v 1.11 86/12/15 13:27:39 sob Exp $
+  #
+  # $Log:	Configure,v $
+  # Revision 1.11  86/12/15  13:27:39  sob
+  # Fixed useknownhosts bug
+  # 
+
+--- 6,14 -----
+  # $Header: Configure,v 1.12 87/02/02 15:44:21 sob Exp $
+  #
+  # $Log:	Configure,v $
++ # Revision 1.12  87/02/02  15:44:21  sob
++ # Added localflags option
++ # 
+  # Revision 1.11  86/12/15  13:27:39  sob
+  # Fixed useknownhosts bug
+  # 
+***************
+*** 78,83
+  resolve=''
+  mailer=''
+  localmail=''
+  internet=''
+  returnmail=''
+  bindir=''
+
+--- 81,87 -----
+  resolve=''
+  mailer=''
+  localmail=''
++ localflags=''
+  internet=''
+  returnmail=''
+  bindir=''
+***************
+*** 1018,1023
+      esac
+  done
+  
+  
+  
+  : determine where manual pages go
+
+--- 1022,1032 -----
+      esac
+  done
+  
++ : Do we need any special flags when calling the localmailer
++ case "$localflags" in
++ 	'') dflt=none;;
++ 	*) dflt=$localflags;;
++ esac
+  
+  $echo $n "Please enter any special flags needed when calling $localmail: [$dflt] $c"
+  . myread
+***************
+*** 1019,1024
+  done
+  
+  
+  
+  : determine where manual pages go
+  case "$mansrc" in
+
+--- 1028,1042 -----
+  	*) dflt=$localflags;;
+  esac
+  
++ $echo $n "Please enter any special flags needed when calling $localmail: [$dflt] $c"
++ . myread
++ case "$ans" in
++ 	'') ans='';;
++ esac
++ case $ans in
++ 	-*)localflags=$ans;;
++ 	*)localflags='';;
++ esac
+  
+  
+  
+***************
+*** 1020,1025
+  
+  
+  
+  : determine where manual pages go
+  case "$mansrc" in
+  '')
+
+--- 1038,1046 -----
+  	*)localflags='';;
+  esac
+  
++ 
++ 
++ 
+  : determine where manual pages go
+  case "$mansrc" in
+  '')
+***************
+*** 1586,1591
+  ndiro='$ndiro'
+  mailer='$mailer'
+  localmail='$localmail'
+  internet='$internet'
+  returnmail='$returnmail'
+  bindir='$bindir'
+
+--- 1607,1613 -----
+  ndiro='$ndiro'
+  mailer='$mailer'
+  localmail='$localmail'
++ localflags='$localflags'
+  internet='$internet'
+  returnmail='$returnmail'
+  bindir='$bindir'
+***************
+*** 1730,1736
+  #define MAILER "$mailer"
+  
+  /* local mail delivery program */
+! #define LOCALMAIL "$localmail %s"
+  
+  /* local mail directory */
+  #define MAILDIR	"$maildir"
+
+--- 1752,1758 -----
+  #define MAILER "$mailer"
+  
+  /* local mail delivery program */
+! #define LOCALMAIL "$localmail $localflags %s"
+  
+  /* local mail directory */
+  #define MAILDIR	"$maildir"
+Stan	     uucp:{shell,rice,cuae2}!soma!sob       Opinions expressed here
+Olan         domain:sob@rice.edu or sob@soma.bcm.tmc.edu   are ONLY mine &
+Barber       CIS:71565,623   BBS:(713)790-9004               noone else's.

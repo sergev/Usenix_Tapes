@@ -1,0 +1,302 @@
+.TH ANSITAPE 1 "23 June 1986" AICenter Merlin
+.\"@(#)ansitape.1 2.0 86/07/08 AICenter; by David S. Hayes
+.SH NAME
+ansitape \- ANSI-standard magtape label program
+.SH SYNOPSIS
+\fIansitape \fPtxrc\[vqfaei3\]
+\[\mt=\fIdevice\fP\]
+.RS +0.5i
+.br
+\[vo=\fIvolume-name\fP\]
+\[rs=\[ r | \fIrecordsize\fP \]\]
+\[bs=\fIblocksize\fP]
+.br
+\[rf=\[ v | f \]\]
+\[cc=\[ i | f | e \]\]
+.br
+\fIfilename1 filename2\fR . . .
+.RE -0.5i
+.SH DESCRIPTION
+.LP
+\fIAnsitape\fP reads, writes, and creates magtapes conforming to
+the ANSI standard for magtape labelling.  Primarily, this is useful
+to exchange tapes with VAX/VMS, which makes this kind of tape by default.
+.LP
+\fIAnsitape\fP is controlled by a function key letter
+.BR "(t, x, c, or r)" .
+Various options modify the format of the output tape.
+.SH "Writing ANSI Tapes"
+.PP
+The list of files on the command line is written to the tape.
+A full Unix pathname may be specified, however, only the last
+pathname component (everything after the last /) is used as
+the filename on the tape.
+.PP
+Normally, regular text files are to be exchanged.
+.I ansitape
+reads the files one line at a time and transfers them to the tape.
+The newline character at the end of each line is removed, and the
+file is written in a variable-length record format.  
+Variable-format files have the length of the longest record
+specified in a file header.
+Therefore,
+.I ansitape
+will read each input file from disk before it goes on to tape,
+to determine the maximum record size.  The read is skipped if
+the file is more than 100,000 bytes long.
+The default carriage control (implied)
+instructs the other host to restore the
+newline character before printing the record.
+.PP
+If \fIansitape\fP thinks that the input file is a Unix text file
+(Fortran or implied carriage control), it will automatically strip the
+the Unix newline from the end of each record.  No strip is done with
+embedded carriage control files, or with any file using a fixed-length
+record format.
+.PP
+For binary files, fixed-length records should be used.  VAX/VMS normally
+uses a record length of 512 bytes for things like directories and
+executable files, but data files may have any record length.
+Binary files should be flagged for embedded (\fIrf=e\fP) carriage
+control.
+.sp
+.SH "Reading ANSI Tapes"
+.PP
+When reading, the input file list is presumed to be the names
+of files to be extracted from the tape.  The shell wildcard
+characters asterisk (*) and question-mark (?) may be used.
+Of course, they must be quoted to prevent the shell from
+interpreting them before
+.I ansitape
+sees them.
+.PP
+None of the options for record format or carriage control need
+be specified when reading files.
+.I Ansitape
+will automatically pick up this information from the header
+records on the tape, and do the right thing.  If you can't get
+just what you want from
+.IR ansitape ,
+the resulting files may be run through 
+.IR dd(1) .
+.sp
+.SH "FUNCTION LETTERS"
+.PP
+These function letters describe the overall operation desired.
+One of them must be specified in the first argument to
+.IR ansitape .
+For lexically rigorous Unix fans, a minus sign (-) is allowed,
+but optional, to introduce the first keyword option set.
+.TP 6
+.I r
+Write the named files on the end of the tape.  This requires that
+the tape have been previously initialized with an ANSI volume header.
+.TP 6
+.I c
+Create a new magtape.  The tape is initialized with a new ANSI volume header.
+All files previously on the tape are destroyed.
+This option implies \fIr\fP.
+.TP 6
+.I x
+Extract all files from the tape.  Files are placed in the current directory.
+Protection is r/w to everyone, modified by the current \fIumask(2)\fP.
+.TP 6
+.I t
+List all of the names on the tape.
+.sp
+.SH "MODIFIER KEY LETTERS"
+.PP
+These key letters are part of the first argument to 
+.IR ansitape .
+.TP 6
+.I v
+Normally \fIansitape\fP does its work silently; the \fIv\fP (verbose) option 
+displays the name of each file \fIansitape\fP treats, preceded by the function
+letter.  It also displays the volume name of each tape as it is mounted.
+When used with the \fIt\fP option,
+\fIansitape\fP displays the number of tape blocks
+used by each file, the record format, and the carriage control option.
+.TP 6
+.I q
+Query before writing anything.  On write (c or r options), this
+causes \fIansitape\fP to ask before writing to the tape.  On extract
+operations, \fIansitape\fP displays the
+Unix pathname, and asks if it should extract the file.  Any response
+starting with a 'y' or 'Y' means yes, any other response (including
+an empty line) means no.
+.TP 6
+.I f
+File I/O is done to standard i/o instead.  For example, when writing a
+tape file that is to contain a lint listing, we could specify
+.sp
+	lint xyz.c | ansitape rf xyz.lint
+.sp
+instead of
+.sp
+	lint xyz.c > /tmp/xyz.lint
+.br
+	ansitape r /tmp/xyz.lint
+.br
+	rm /tmp/xyz.lint
+.sp
+When reading, this option causes the extracted files to be sent to
+stdout instead of a disk file.
+.TP 6
+.I a
+The tape should be read or written with the ASCII character set.  This
+is the default.
+.TP 6
+.I e
+The tape should be written with the EBCDIC character set.  The
+mapping is the same one used by the 
+.I dd(1)
+program with
+.IR conv=ebcdic .
+This option is automatically enabled if IBM-format labels are selected.
+.TP 6
+.I i
+Use IBM-format tape labels.  The IBM format is very similar, but
+not identical, to the ANSI standard.  The major difference is that
+the tape will contain no HDR3 or HDR4 records, thus restricting the
+name of the files on the tape to 17 characters.  This option automatically
+selects the EBCDIC character set for output.  To make an IBM-format
+label on a tape using the ASCII character set (why?), use the
+option sequence
+.IR ia .
+.TP 6
+.I 3
+Do not write HDR3 or HDR4 labels.  The HDR3 label is reserved for
+the use of the operating system that created the file.  HDR4 is for
+overflow of filenames that are longer than the 17 characters allocated
+in the HDR1 label.  Not all systems process these labels correctly, or
+even ignore them correctly.  This switch suppresses the HDR3 and HDR4
+labels when the tape is to be transfered to a system that would
+choke on them.
+.SH "FUNCTION MODIFIERS"
+.PP
+Each of these options should be given as a separate argument to
+.IR ansitape .
+Multiple options may be specified.  They must appear as after the
+key-letter options above, and before any filename arguments.
+.TP 6
+.IR mt= device
+Select an alternate drive on which the tape is mounted.
+The default is 
+.IR /dev/rmt8 .
+.TP 6
+.IR vo= volume-name
+Specify the name of the output volume.  Normally, this defaults
+to the first six characters of your login name.  The string 'UNIX'
+is used as the default if \fIansitape\fP cannot determine your login name.
+.TP 6
+.IR rs= recordsize
+Specify the output recordsize in bytes.  This is the maximum size
+in the case of variable-format files.  This option also turns on
+the fixed-record-format option.  Thus, if you want to have variable
+record sizes with a smaller maximum, you must specify
+.sp
+.ce 
+.IR rs= "recordsize " rf=v
+.sp
+When the recordsize is manually given, 
+.I ansitape
+does not read disk files to determine the maximum record length.
+.TP 6
+.I rs=r
+This is a variant of the 
+.I rs=
+option.  This causes 
+.I ansitape
+to read all disk files for recordsize, regardless of their size.
+Normally, files larger than 100K bytes are not scanned for recordsize.
+Using this option also implies variable-length records.
+.TP 6
+.IR bs= blocksize
+Specify the output blocksize, in bytes.  As many records as will
+fit are crammed into each physical tape block.  ANSI standards
+limit this to 2048 bytes (the default), but you may specify more
+or less.  Be advised that specifying more may prevent some
+systems from reading the tape.
+.TP 6
+.I rf=v
+Record format is variable-length.  In other words, they are
+text files.  This is the default, and should be left alone unless
+you really know what you're doing.
+.TP 6
+.I rf=f
+Record format is fixed-length.  This is usually
+a bad choice, and should be reserved for binary files.  This also
+turns off the newline strip usually done for Unix text files.
+.TP 6
+.I cc=i
+Carriage control implied (default).
+Unlike Unix text files, where records are delimited by a newline character,
+ANSI files do not normally include the newline as part of the record.
+Instead, a newline is automatically added to the record whenever it is
+sent to a printing device.
+.TP 6
+.I cc=f
+Carriage control Fortran.
+Each line is expected to start with a Fortran carriage-control
+character.  \fIAnsitape\fP does not insert these characters
+automatically, it merely marks the file as having them.
+This is of limited usefulness.  (Good opportunity for another
+ambitious hacker.)
+.TP 6
+.I cc=e
+Carriage control is embedded.  Carriage control
+characters (if any) are a part of the data records.  This is usually used in
+the case of binary data files.
+.TP 6
+.SH FILES
+/dev/rmt?	half-inch magnetic tape interface
+.br
+/dev/rar?	quarter-inch magnetic tape interface
+.br
+/dev/rst?	SCSI tape interface
+.SH "SEE ALSO"
+dd(1), umask(2), mtio(4), tp(5)
+.SH AUTHOR
+David S. Hayes, Site Manager, US Army Artificial Intelligence Center.
+Originally developed June 1986.
+Revised August 1986.  This software is in the public domain.
+.SH BUGS
+.LP
+The
+.I r
+(write) option cannot be used with quarter-inch archive tapes,
+since these tape drives cannot backspace.
+.LP
+There is no way to ask for the
+.IR n -th
+occurrence of a file.
+.LP
+Tape errors are handled ungracefully.
+.LP
+Files with names longer than 80 characters have the name truncated.
+This is a limitation of the ANSI labelling standard.  If the tape is
+made without HDR3 and HDR4 labels (\fI3\fP or \fIi\fP switch), the
+name is limited to 17 characters.
+.LP
+Multi-volume tape sets cannot yet be generated.
+.I ansitape
+will read them just fine, but it won't write them.
+Unix provides no device-independent way to detect
+a physical end-of-tape.  It was decided that a 2400-foot
+limitation was preferrable to device-dependence.
+.TP 6
+Note to Systems Programmers:
+.I ansitape
+uses a boolean function
+.I (eot)
+to determine when the tape drive
+has hit the end of file.  It is called every time a block
+of data is written to the tape.  If this function ever returns
+TRUE (a defined constant), an automatic volume switch occurs.
+The pertinent device registers are obtained by a MTIOCGET
+ioctl system call.  The registers are described in
+.I /sys/sundev/tmreg.h
+(Sun system with TapeMaster controller).  If you
+have a VAX, the filename will be slightly different.
+Sun Microsystems supplies this file even with binary-only
+distributions.

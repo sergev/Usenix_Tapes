@@ -1,0 +1,296 @@
+.\" @(#)netw.3 1.1 87/4/15 SMI; from UCB 4.2 
+.TH NETW L  "14 March 1987" 
+.SH NAME 
+pkill,addfd, answer, attach, block, useport, delfd, initfd, myport, phone, clrutmp, setutmp, isignal, openpty, loadtty,  settty, whoami, hostname, stty \- Some Nice Network/IO Functions 
+.SH SYNOPSIS 
+.nf
+.B #include <netw.h>
+.LP
+.B int pkill(fd)
+.B int fd;
+.LP
+.B int attach(s)
+.B char *s;
+.LP
+.B int answer(s)
+.B int s;
+.LP
+.B int phone(service,host)
+.B char *service,*host;
+.LP
+.B char *useport(port)
+.B int port
+.LP
+.B char *myport()
+.LP
+.B int answer(s)
+.B int s;
+.LP
+.B initfd()
+.LP
+.B addfd(x)
+.B int x;
+.LP
+.B delfd(x)
+.B int x;
+.LP
+.B int block()
+.LP
+.B char *whoami()
+.LP
+.B setutmp(string)
+.B char *string;
+.LP
+.B clrutmp()
+.LP
+.B isignal(fd.proc)
+.B int fd;
+.B int (*proc)();
+.LP
+.B loadtty(cond)
+.B TCOND cond;
+.LP
+.B settty(cond)
+.B TCOND cond;
+.LP
+.B openpty(cond,task)
+.B TCOND cond;
+.B int (*task)();
+.LP
+.B char *hostname();
+.LP
+.B stty (tcond,change,value)
+.B TCOND tcond;
+.B int change,value;
+.SH DESCRIPTION
+.LP
+.I pkill
+is used to close down ANY kind of connection.  Much like
+.I close
+except that it is more exacting. Still, when closing a
+a socket setup by
+.I attach
+it might not work correctly.
+.LP
+.I Attach
+is used to setup a listening post at a socket location.  The string
+passed to 
+.I attach
+contains the service the server is going to be.  It
+will error if the service passed to it does not exist or if the process
+cannot use the port.  
+.I Attach
+returns the file descripter to the listening post.
+
+   tmp = attach("game");
+
+Normally this function is used only by a server process.
+
+.LP
+.I answer
+accepts a 
+.I phone
+from a person.
+
+	s = attach(myport(),hostname())
+
+	d = answer(s)
+
+.LP
+.I phone
+is the routine used to connect to one of the services(5) that the
+program has access to.  The first argument is the service that
+it is connecting to.  The second argument is the machine on which
+the other process (the one it is connecting too) lives.
+It returns a file descripter that can be
+used for commincation between the two processes.
+
+   x = phone("game","sol");
+
+Normally this function is used only by the client process.
+
+.LP
+.I useport
+and
+.I myport
+will let
+.I phone
+and
+.I attach
+connect to a specific port instead of them going through the
+.I services(5)
+database like they normally do.
+
+	x = attach(useport(3000));
+
+	y = phone(useport(3000));
+
+	z = answer(myport());
+
+.I myport
+is special because it uses your uid to calculate which port
+it is going to use.  This is useful if several students are using
+sockets and you do not wish them to overlap.  The port a person
+uses is getuid()+OFFSET.  OFFSET is defined at compile time.
+.I WARNING: 
+unless you are root, you cannot access any ports less then 1024.
+.LP
+.I answer
+is used by the server to answer a phone call by the client.  The 
+argument is the file descripter returned by
+.I attach.
+It returns a socket that can be used for two directional
+communication between
+the two processes.  It is the counter-point to phone.  
+
+   y = answer(tmp);
+
+.LP
+.I initfd, addfd, delfd
+are the helpful functions that are used to control how
+.I block
+reacts to external stimulus.  
+.I initfd
+should be called first to initalize the common variables.
+.I addfd
+is used to add a file descripter to the descripters that
+.I block 
+reacts to.
+.I delfd
+will delete the file descripter that is passed to 
+.I delfd
+from the descripters that
+.I block
+reacts to.
+
+	initfd();
+
+	addfd(s);
+
+	delfd(s);
+
+.LP
+.I block
+is the bottom routine that returns which file descripter has data
+coming through it.  It
+.I only
+checks the file descripters that are told to it using
+.I addfd.
+It returns the file descripter that is currently making noise.
+Also, 
+.I block
+acts in a round robbin type mannor.  If a new message comes
+in along a file descripter,  that descripter will not be returned
+till all the descripters that previously have had messages
+sent down them have been handled.  Then and only then will
+it start again and look for new messages on sockets.  
+.I block
+will block if there are no messages on any of the file descripters
+that it knows about.
+
+	c=block();
+
+.LP
+.I whoami
+returns a pointer to a string that contains who the caller is in the
+form of "name@hostname".  This will even work if the process owner does
+not have a entry in the utmp file.
+
+	name = whoami();
+.LP
+.I setutmp
+sets a utmp entry for the terminal.  On most systems this call is
+not allowed except by the super-user and will return a error (<0). 
+The string passed is used as the host that is shown when
+the command 
+.I who(1)
+is called. 
+.LP
+.I clrutmp
+will clear the current utmp entry.  The restrictions are the
+same as in
+.I setutmp.
+.LP
+.I isignal
+allows you to set a function to handle a pipe in the same
+way what 
+.I signal(3)
+allows you to set a function to handle a signal.  The function
+is called with the file descripter as the first argument.
+.LP
+.I openpty
+allows easy use of a pseudo terminal(
+.I pty(4)
+)  withen a program.  The first argument is a terminal
+condition as returned by
+.I loadtty.  
+The second is the function that you wish to
+call. It returns a file descripter to the pty.
+.I (see example below)
+.LP
+.I loadtty
+loads a terminals current settings into the named buffer.  See
+.I stty(1)
+for more details.
+.LP
+.I settty
+sets the current terminal settings from the named buffer. See
+.I stty(1)
+for more details.
+.LP
+.I hostname
+returns a pointer to a string that contains the hostname.
+.LP
+.I stty
+is a function that can be used to change the current parameters
+of a TCOND block.  It is very much like
+.I stty(1)
+in purpose.
+.PP
+In the following example I use stty ,loadtty,and settty to change
+make my terminal stop echoing.
+
+	TCOND block;
+
+	loadtty(block);
+	stty(block,ECHO,FALSE);
+	settty(block);
+
+.PP
+The values 
+.I stty
+understands are the following:
+.nf
+
+	options:
+		COOKED: Make all IO cooked.
+		CBREAK: Make IO half-baked.
+		RAW:    Do no IO processing
+		LCASE:  Change how upper and lowercase is handled
+		ECHO:   Turn on or off echo.
+		BAUD:   Set the baud rate.
+.fi
+.PP
+Read the
+.I stty(1)
+manual for more information on what this means.
+
+	
+.SH COMMENTS
+
+Every routine that returns a pointer to a string is really
+returning a pointer to a static string within the function.  This
+means that you should not try to free it AND you should copy it
+elsewhere so that it does not get overwritten.
+
+.SH BUGS
+.PP
+When dealing with sockets created using attach,  there is no
+good way to close the socket and sometimes they are left open.
+Luckly, the system will clear them out in about 30 seconds.
+.PP
+Another problem is that isignal is not triggered when the socket
+is closed at the other end.  I have not figured out how to handle
+this yet.
+.SH AUTHOR
+Josh Siegel

@@ -1,0 +1,98 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site ut-ngp.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!mhuxt!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!ut-sally!ut-ngp!dlnash
+From: dlnash@ut-ngp.UUCP (Donald L. Nash)
+Newsgroups: net.sources
+Subject: Update to PC-More part 1 of 2 (modifications to source code)
+Message-ID: <2704@ut-ngp.UUCP>
+Date: 10 Dec 85 22:56:31 GMT
+Date-Received: 13 Dec 85 16:13:53 GMT
+Distribution: net
+Organization: UTexas Computation Center, Austin, Texas
+Lines: 85
+
+Here is an update to PC-More which fixes its problems with color monitors.
+This new version will run on either a monochrome system or a color system.
+No patching is necessary.  What follows is the modifications to the source
+code and the User's Guide.
+
+                         PC-More Update to Version 1.21
+
+In the source file for PC-More, make the following changes:
+
+    1)  At the beginning of the file is an external declaration
+
+            int x_mnl, x_srf, x_argc;
+
+        Add (*cls)() to this declaration to declare an external pointer
+        to a function.
+
+    2)  In the function main(), there is an int declaration statement at the
+        beginning of the function.  Add crt_mono() and crt_cls() to this
+        declaration to define 2 functions which return integers.  Actually,
+        they don't return anything, but they must be declared for the following
+        step to work.
+
+    3)  In the function main(), add the following lines of code after the
+        first three executable lines of the function.  These first three
+        lines follow the commented section describing the variables used
+        in main() and copy argc and argv[] into external variables.  The
+        new lines of code to add are:
+
+    if ((peek(0x410,0) & 0x30) != 0x30) /* This finds if a CGA is used. */
+        cls = cls_cga;  /* If using CGA, use appropriate cls function. */
+    else                /* If not using a CGA, then using monochrome, */
+        cls = cls_mono; /* so use monochrome cls function. */
+
+        These new lines become the 4th - 7th executable lines in main().
+
+    4)  Replace all occurences of 
+
+            crt_cls();
+            crt_mode(7);
+
+        with
+
+            (*cls)();
+
+    5)  Define the following 2 functions in the source code file:
+
+cls_mono()  /* Clears the screen on a monochrome monitor. */
+
+{
+    crt_cls();
+    crt_mode(7);
+}
+
+
+crt_cga()   /* Clears the screen on a color graphics adapter. */
+
+{
+    crt_cls();
+    crt_mode(2);
+}
+
+    6)  In the function wait(), find the "case 'v':" part to the switch.
+        In the printf() function, change "PC-More v1.2" to "PC-More v1.21".
+
+This completes the modification of the source code for PC-More.
+
+
+Add the following paragraph to the PC-More User's Guide, Section 4, after
+the discussion about key_getc(), crt_cls(), and crt_mode():
+
+    peek()      This function returns the value of a word in memory.  The
+                exact syntax is:
+
+                    unsigned offset;    /* Offset relative to */
+                    unsigned seg;       /*  a segment value. */
+                    int peek(), i;
+
+                    i = peek(offset,seg);
+
+                The C86 manual is not clear on the matter of what a word is
+                in this context.  I assume that they mean 2 bytes, which is
+                consistant with the meaning used elsewhere in the manual.
+                Since an int is 2 bytes long, this seems to be what they mean.
+
+This completes the modification of the PC-More User's Guide.

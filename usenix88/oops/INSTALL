@@ -1,0 +1,249 @@
+OOPS CLASS LIBRARY INSTALLATION NOTES		( December 31, 1988 )
+
+This is the OOPS Version 2 Release 2 "Guru Only" distribution,
+so-called because of its lack of complete and accurate documentation.
+
+The OOPS Library is intended to be portable to a UNIX system
+compatible with either System V or 4.2BSD and which supports the AT&T
+C++ translator, Release 1.2.1.  We have ported and tested OOPS on the
+following:
+
+	MASSCOMP Real-Time UNIX 3.1, att universe
+	MASSCOMP Real-Time UNIX 3.1, ucb universe
+	IBM RT-PC, ACIS 4.2
+	IBM RT-PC, AIX V1.1
+	Sun-3 UNIX 3.4
+	4.2BSD UNIX (VAX)
+
+A serious bug in the AIX 1.1 C compiler renders OOPS useless on this
+system.  IBM has supposedly corrected this problem under AIX 2.1, but
+since we no longer use AIX we have not verified this.
+
+Tim O'Konski at Hewlett-Packard has ported OOPS to the HP 320, and has
+contributed his machine-dependent code to this distribution kit.
+
+Send comments to:
+
+	Keith Gorlen
+	Building 12A, Room 2017
+	Computer Systems Laboratory
+	Division of Computer Research and Technology
+	National Institutes of Health
+	Bethesda, MD 20892
+	phone:	(301) 496-5363
+	uucp: uunet!ncifcrf.gov!nih-csl!keith
+	Internet: keith%nih-csl@ncifcrf.gov
+
+
+
+Guide to this Distribution Kit
+------------------------------
+The OOPS Library distribution kit consists of a main directory
+and the following subdirectories:
+
+errfac		Error Message Facility source files
+ex 		example programs for OOPS Reference Manual
+libmasscomp	machine-dependent code for MASSCOMP
+libhp320	machine-dependent code for HP 320
+librt-acis	machine-dependent code for IBM RT-PC running ACIS 4.2
+librt-aix	machine-dependent code for IBM RT-PC running AIX
+libsun3		machine-dependent code for Sun-3
+libvax		machine-dependent code for VAX
+paper		example programs for OOPS paper
+src		header and source files for the basic OOPS classes
+test		OOPS test suite for the basic OOPS classes
+vectest		OOPS test suite for the Vector classes
+vector		OOPS Vector classes
+ws		workspace for developing new classes
+
+The main directory is refered to as "OOPS" in the following
+discussion, but may be placed anywhere.
+
+Most subdirectories have files named "MAKEFILE" and "Makefile".  The
+"MAKEFILE" is used by the installation procedure, and should work with
+both the System V and BSD version of the "make" utility.  The fancier
+"Makefile" is used for development, and may not work under BSD.
+
+
+		Summary of steps in installing OOPS
+==============================================================================
+*1. Update C++ system include files
+ 2. Configure OOPS/Makefile
+ 3. Configure OOPS/src files
+*4. Build and install error message facility
+ 5. Build OOPS basic classes, test suite, and example programs
+ 6. Test OOPS
+*7. Install OOPS
+------------------------------------------------------------------------------
+* root permission required
+==============================================================================
+
+
+1. Update C++ system library and include files
+
+The file OOPS/bugs.1.2.1 contains a list of the bugs we have found in
+Release 1.2.1 of the C++ Translator.  Apply the fixes supplied for the
+library (LIB) and include files (INC).
+
+
+2. Edit OOPS/Makefile
+
+C++ compiler:				CC
+C++ debug switch:			CCDEBUG =
+C++ include files:			I = /usr/include/CC
+C++ library:				LIB_ID = C
+
+Public Directories for OOPS Installation
+
+directory for liboops.a:		OOPSLIBDIR = /usr/lib
+directory for OOPS include files:	OOPSINCDIR = /usr/include/oops
+directory where libC.a resides:		CLIBDIR = /lib
+directory for errgen utility:		ERRDIR = /usr/local/bin
+
+
+3. Edit OOPS/src files
+
+3.1 Edit oopsconfig.h:
+
+The OOPS Library source is configured for your system by setting
+flags in '$OOPS/src/oopsconfig.h' which specify the machine model 
+and operating system (UNIX variant).
+
+To configure the OOPS library for one of the not yet implemented
+options, at least all of the parameters appearing in oopsconfig.h
+will have to be defined for that option.
+
+3.2 Edit Object.h:
+
+The file "Object.h" defines a preprocessor macro named DEFINE_CLASS,
+which forms some symbol names by concatenating the class name argument
+with other strings.  As supplied, "Object.h" does this by separating
+the two parts with an empty comment sequence (/**/).  This doesn't
+work with some C preprocessors.  If you have one of these, replace the
+definition of the DEFINE_CLASS macro with that found in the file
+OOPS/src/DEFCLASS.h.  This uses the sequence \<newline> as the
+separator, which doesn't work with all preprocessors either.  ANSI C
+should fix this situation.
+
+
+3.3 Select correct version of _main.c:
+
+If you are using the "munch" version of the C++ translator:
+
+	ln _main.c_m _main.c
+
+Otherwise, you are using the "patch" version of the C++ translator:
+
+	ln _main.c_p _main.c
+
+
+4. Install error message facility (Skip this step for MASSCOMP)
+
+	su
+	make errorfacility
+
+This builds an error message registery facility and error processing
+library similar to "errcom" and the 3E library routines on the
+MASSCOMP.
+
+The "errgen" program reads a .err file to determine a facility name,
+and then reads the file /etc/errgen_tab to lookup the number assigned
+to that facility.  The facility number determines the high-order bits
+of the error numbers which "errgen" assigns, assuring that error numbers
+used by different facilities do not coincide.  "errgen" produces a
+.h file containing error symbols and their assigned numbers, and a .c
+file containing a table of error messages and formatting information.
+
+This step also creates a module containing the error handling library
+routines named "errors.o" and adds it to libC.a.
+
+The test program "testerr" on OOPS/errfac verifies that the error
+facilities have been built correctly.  It returns the first and last
+error defined in the file "testerrs.err".
+
+
+5. Build machine-dependent modules
+
+	make <machine>
+
+where <machine> is one of: hp320, masscomp, rt-acis, rt-aix, sun3, or vax.
+
+NOTE: If you are porting OOPS to a new target machine for which the
+machine-dependent code has not yet been written, skip this step.  The
+program "OOPS/test/process" will fail to build due to undefined
+symbols in the next step.  When this happens, just type "make" again,
+and the remainder of the test suite will be built.
+
+
+6. Build OOPS basic classes, test suite, and example programs
+
+	make
+
+
+7. Test OOPS
+
+	make verify
+
+This runs the test suite and compares the output of each test program
+with the contents of a .v file containing the correct output.  If the
+program runs correctly, you'll see the message "No differences
+encountered".  Some tests such as "date", "process", "random",
+"stack", and "tim" produce output to the terminal.  "date" outputs
+yesterday's, today's, and tomorrow's date.  "random" prints out a list
+of random numbers.  "stack" prints out a [CLTNEMPTY] error message to
+test error reporting, and "tim" prints out the current date and time.
+
+The test programs "error" and "identdict" frequently fail to compare
+because their output depends upon memory addresses that change from
+implementation to implementation.  "error" should differ only in the
+object address printed in the [CLTNEMPTY] error message.  "identdict"
+output is difficult to compare, but it is unlikely that the "oio" test
+will succeed if class IdentDict is not functioning properly.
+
+
+8. Install OOPS
+
+	su
+	make install
+
+The OOPS archive "liboops.a" is copied to "${OOPSLIBDIR}/liboops.a"
+and "ranlib" is executed on the library.  All OOPS header files are
+copied to directory ${OOSPINCDIR}.
+
+
+
+			TROUBLE SHOOTING
+
+Programming Tip
+---------------
+It is a good practice to protect header files against multiple
+inclusion by the C++ translator by means of:
+
+#ifndef UNIQUEFLAGH
+#define UNIQUEFLAGH
+. . .
+#endif/*UNIQUEFLAGH*/
+
+This should also be applied to declarations which, for some reason,
+must appear in more than one header file.
+
+Because of the modest include nesting in the OOPS Library source, and
+the potentially deep include nesting in application programs using
+OOPS classes, multiple inclusions may interact with peculiaries of the
+C++ translator, or your C-compiler, to produce source code which
+fails, in painfully mysterious ways, to compile.
+
+Problems with class Exception
+-----------------------------
+Test programs "error" and "except" test class Exception, the OOPS
+exception handler. If these programs fail to perform correctly
+suspicion can be directed to the performance of system functions
+"setjmp" and "longjmp".
+
+Problems with class Process
+---------------------------
+Progam "process" is used to test the OOPS co-routine mechanism (class
+Process,class Scheduler), the OOPS object queue (class SharedQueue)
+and OOPS semaphore (class Semaphore), all of which rely on the machine
+dependent module, 'exchj.o'. This is a natural place to look if there
+is a problem.

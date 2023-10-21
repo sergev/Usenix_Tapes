@@ -1,0 +1,239 @@
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: CS.aux,v 1.16 86/06/22 18:10:11 dick Exp $
+
+#
+#		C o l l e c t   S e t s
+#	Script, to be included.
+#
+#	Assumes set:
+#		$@
+#		$CVSLIB
+#		$Name
+#		$User
+#		$VN_Rcs
+#		$VN_User
+#		$TS_Rcs
+#		$TS_User
+#
+#	Collects the interesting file names from the administration and
+#	the repository in a number of shell variables:
+#							solved by:
+#		CLIST	conflict-ridden			(user)
+#		GLIST	modified, needs merging		(--/UV)
+#		MLIST	modified, needs checking in	(CM/--)
+#		OLIST	needs checking out		(--/UV)
+#		ALIST	to be added			(CM/--)
+#		RLIST	to be removed			(CM/--)
+#		WLIST	remove entry			(--/UV)
+#
+#	It sets OK to no if something is wrong.
+#
+
+for User in $@
+do
+	Rcs=$Repository/$User,v
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	# what entry is this?
+	case $VN_User in
+	"")
+		# no entry available, $TS_Rcs is invalid
+		
+		# how is the RCS file?
+		case $VN_Rcs in
+		"")
+			# there is no RCS file either
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: nothing known about $User >&2
+				OK=no
+				;;
+			*)
+				# there is a user file
+				echo $Name: use AE to create entry \
+								for $User >&2
+				OK=no
+				;;
+			esac
+			;;
+		*)
+			# there is an RCS file
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				OLIST="$OLIST $User"
+				;;
+			*)
+				# there is a user file
+				echo $Name: move away $User\; \
+							it is in the way >&2
+				CLIST="$CLIST $User"
+				OK=no
+				;;
+			esac
+			;;
+		esac
+		;;
+	
+	0)
+		# an entry for a new-born file, $TS_Rcs is dummy
+		
+		# how is the user file?
+		case "$TS_User" in
+		"")
+			# there is no user file, but there should be one
+			
+			echo $Name: warning: \
+					new-born $User has disappeared >&2
+			WLIST="$WLIST $User"
+			;;
+		*)
+			# there is a user file
+			
+			# how is the RCS file?
+			case $VN_Rcs in
+			"")
+				# there is no RCS file
+				
+				ALIST="$ALIST $User"
+				;;
+			*)
+				# there is an RCS file
+				
+				echo $Name: conflict: $User created \
+					independently by second party >&2
+				CLIST="$CLIST $User"
+				OK=no
+				;;
+			esac
+			;;
+		esac
+		;;
+
+	-*)
+		# an entry for a removed file, $TS_Rcs is valid
+		
+		# how is the user file?
+		case "$TS_User" in
+		"")
+			# there is no user file (as it should be)
+			
+			# how is the RCS file?
+			case -$VN_Rcs in
+			-)
+				# there is no RCS file
+			
+				# this is all-right, however; it has been
+				# removed independently by second party
+				WLIST="$WLIST $User"
+				;;
+			$VN_User)
+				# the RCS file is the same version as
+				# the user file
+				
+				# and that's OK
+				RLIST="$RLIST $User"
+				;;
+			*)
+				# the RCS file is a newer version than
+				# the user file
+				
+				# and this is definitely not OK
+				echo $Name: conflict: removed $User was \
+						modified by second party >&2
+				CLIST="$CLIST $User"
+				OK=no
+				;;
+			esac
+			;;
+		*)
+			# user file shouldn't be there
+			echo $Name: $User should be removed \
+						and is still there >&2
+			OK=no
+			;;
+		esac
+		;;
+	
+	*)
+		# a normal entry, $TS_Rcs is valid
+		
+		# how is the RCS file?
+		case $VN_Rcs in
+		"")
+			# there is no RCS file
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: warning: $User is not \
+						\(no longer\) pertinent >&2
+				WLIST="$WLIST $User"
+				;;
+			"$TS_Rcs")
+				# the user file is still unmodified
+				echo $Name: $User is no longer \
+							in the repository >&2
+				WLIST="$WLIST $User"
+				;;
+			*)
+				# the user file has been modified
+				echo $Name: conflict: $User is modified but \
+					no longer in the repository >&2
+				CLIST="$CLIST $User"
+				OK=no
+				;;
+			esac
+			;;
+		$VN_User)
+			# the RCS file is the same version as the user file
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: warning: $User was lost >&2
+				OLIST="$OLIST $User"
+				;;
+			"$TS_Rcs")
+				# the user file is still unmodified
+				# nothing special at all!
+				;;
+			*)
+				# the user file has been modified
+				# but do we believe it? This is complicated:
+				. $CVSLIB/ND.aux # sets MLIST, if necessary
+				;;
+			esac
+			;;
+		*)
+			# the RCS file is a newer version than the user file
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: warning: $User was lost >&2
+				OLIST="$OLIST $User"
+				;;
+			"$TS_Rcs")
+				# the user file is still unmodified
+				OLIST="$OLIST $User"
+				;;
+			*)
+				# the user file has been modified
+				GLIST="$GLIST $User"
+				;;
+			esac
+			;;
+		esac
+		;;
+	esac
+done

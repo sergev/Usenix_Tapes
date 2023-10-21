@@ -1,0 +1,176 @@
+DOCUMENTATION OF NROFF TAB FILE UTILITY
+-Bruce Townsend, Bell-Northern Research, March 1985
+ (utcs!bnr-vpa!bruce)
+
+	This file contains some documentation for the table program.
+This program makes printer and terminal driver tables suitable for
+nroff. The development of this program was motivated by the lack of
+any other means to prepare custom nroff driver tables, for those
+systems which do not have the original source that prepared the driver
+tables (usually found in /usr/lib/term).
+	The format for the tables imbodied in this program was deduced
+from a "term" manual page, and by examining the contents of several
+existing tab files. Therefore, this program is not definitive in
+any sense, but is intended as a help for those who (like myself) do
+not have access to any formal tools that make these tab files.
+	Also it is possible that this program will require modification
+for systems where the size of an integer is not 32 bits. The system
+that this program was developed on is an HP9000 (System III) and the
+data sizes are:
+		long	32
+		int	32
+		short	16
+		char	 8
+As I have not had access to different machines, I do not know whether
+certain data in the tab file is of int or long type, since that type
+is the same on our machine. I have assumed int type.
+
+If your luck is really bad, I suppose it is possible that the format
+of the tab file is different across various implementations.
+
+The format of the tab file is:
+Type	Name		Size on HP9000		Description
+----	----		--------------		-----------
+int	c_size		4 bytes	- The amount of character data in bytes
+				that follows the t_stor structure. In fact
+				the size of the file in bytes should be:
+				c_size + sizeof (c_size) + sizeof (t_stor)
+				(On our machine: c_size + 1004)
+
+struct {		1000 bytes - This is the storage for the "t"
+	int bset;		structure with one change. All the elements
+	int breset;		of the t structure which were pointers to
+	int Hor;		strings are now integer indexes to one
+	int Vert;		large character array.
+	int Newline;
+	int Char;
+	int Em;
+	int Halfline;
+	int Adj;
+	int twinit;
+	int twrest;
+	int twnl;
+	int hlr;
+	int hlf;
+	int flr;
+	int bdon;
+	int bdoff;
+	int iton;
+	int itoff;
+	int ploton;
+	int plotoff;
+	int up;
+	int down;
+	int right;
+	int left;
+	int codetab[256-32];
+	int zzz;
+} t_stor;
+
+char	array[c_size]	(variable size)- This is the storage for the strings
+					pointed to by the indexes.
+
+		How to Use the Table Program
+		----------------------------
+Examine the "term" manual page which explains the purpose of each of
+the items in the "t" structure. Make a copy of the tabXXX.c program
+and edit it, replacing XXX with a suitable mnemonic. Initialize the
+t structure to the integer or character string values that are necessary
+for the terminal or printer in question. You have a high degree of
+flexibility here, and variable-width characters, overstrike combinations,
+etc are easy to implement.
+
+The only catch here is determining which index of the t.codetab[] array
+corresponds to which nroff printable character. This information is not
+in the manual page. After some experimentation, I have made a table
+which list the characters I know about. The table has some holes in it,
+but is as complete as I can make it. If anyone has additions or
+corrections, please let me know. The table is found in the file
+charlist. Also, the comments in tabXXX.c should help.
+
+WARNING: ALL CHARACTER STRINGS IN THE codetab[] array MUST be at
+least two characters in size, not counting the null terminator.
+The typical definition for a zero-width string which prints nothing
+is "\000\0" and NOT "". THIS IS VERY IMPORTANT, because it is
+necessary to allow the first byte of these strings to be zero
+in the case of zero-width strings that do print something.
+E.G. the string "\000^\b" is a zero-width "hat" character.
+
+If the amount of char data is very large, you may need to increase the
+definition of C_SIZE in table.c. It is now set at 10000 characters.
+The table.c program will burp out a message to this effect if
+necessary.
+
+The t.bset and t.breset flags will need definitions from either
+<termio.h> or <sgtty.h>. Include whichever is appropriate for your
+system in tabXXX.c.
+
+After the tabXXX.c file has been edited, place it in the same
+directory as table.c and the Makefile, and compile the table with:
+	make tabXXX
+
+This will compile and run a program which will in turn make the
+tab file. Move the tabfile to its destination directory (likely
+/usr/term/tab).
+
+Run nroff as:
+	nroff -TXXX ...
+(for example):
+	nroff -T630P ...
+
+Debugging is not easy.
+You can use the supplied program which takes a tab file (tabXXX) and
+makes a source file (tabXXX.c). The program is called elbat (reverse
+of table) Do this by:
+	elbat tabXXX > tabXXX.c
+and compare to your original tabXXX.c
+	Do this for tab files that you have already to check that
+the format is the same on your system as on mine.
+
+
+		The Table Program
+		-----------------
+
+As mentioned before, this program is not to be considered a
+definitive one. It works for HP9000's as far as I can tell.
+
+However, it does have the feature of compressing the supplied
+character data as much as possible. If one string is the tail of
+another (e.g. the strings abcdef and def), than only the largest
+string is stored. The smaller is indexed into the middle of the
+larger. Repeated strings (including the null string) are only stored
+once.
+
+It should generate a tabfile very close to the size of the distributed
+tables. Check by using elbat on a distributed table, compile using
+the table utility, and compare the sizes. The character data will
+almost certainly be stored in a different order than in the
+distributed table, so "cmp -l" will find most bytes different.
+However, the nroff results using the two files should be identical.
+
+The program has not been extensively tested. There may be bugs or
+misinformation. Let me know of any problems.
+
+If the tab files produced by this program do not work at all on your
+system, then it may be that the data types for c_size, and
+t_stor.whatever are incorrect. (Long instead of int?) You can get an
+indication by looking at the first word (int or long?) of an
+existing tab file. This is the amount of char data stored in the
+file. Subtract it from the size of the file in bytes. The result
+will be the size of the t_stor structure plus the size of the c_size
+variable. The t_stor structure has 250 elements in it. If each is
+4 bytes, as on our system, and the c_size variable is 4 bytes also,
+then the result of the previous subtraction should be 1004. If
+the sizeof(int) on your system is 16 bits, then the difference
+should be 502. If it is not, then perhaps the types (some or all)
+of c_size, and the elements in t_stor should be changed to reflect
+this.
+
+			Good luck!
+
+I can be reached at:
+
+		utcs!bnr-vpa!bruce			(UUCP)
+or		(613) 726 - 3008			(Phone)
+		(Ottawa, Canada)
+

@@ -1,0 +1,211 @@
+#!/bin/sh
+#
+#  shell script to generate a sendmail <site>.dom file containing all
+#  the domain information for this site from a set of domain database
+#  files contained in this directory.
+#
+
+if [ $# -le 1 ]
+then	echo	usage: MAKE site files...
+	exit
+fi
+
+site=$1
+shift
+rm -f $site.dom
+
+awk '
+/^#/	{  break  }
+	{
+	n = split($2, domains, ".")
+
+	if ($1 != domains[1])
+		printf "R$*%s\t\t$1%s\n", $1, $2	>"S5"
+	else
+	{	for (i=n; i>1; i--)
+			print domains[i] " " domains[i-1]
+	}
+	}
+' $* | sort | uniq > $site
+
+awk '
+BEGIN	{
+	site = FILENAME
+	MINCLSIZE = 2
+	classes = "BCDEFGH"
+	c = 1; d = 0
+	}
+
+	{
+	domain[$1] = domain[$1] " " $2
+	}
+
+END	{
+	for (i in domain)
+	{	domain[i] = domain[i] " "
+		sort[++d] = i
+	}
+
+	for (i=2; i<=d; i++)
+	{	for (j=1; j<i; j++)
+		{	m = " " sort[i] " "
+			if (index(domain[sort[j]], m) > 0)
+			{	t = sort[i]
+				for (k=i; k>j; k--)
+					sort[k] = sort[k-1]
+				sort[j] = t
+			}
+		}
+
+		for (j=i+1; j<=d; j++)
+		{	m = " " sort[j] " "
+			if (index(domain[sort[i]], m) > 0)
+			{	t = sort[j]
+				for (k=j; k>i; k--)
+					sort[k] = sort[k-1]
+				sort[i] = t
+			}
+		}
+	}
+
+# local domain must be macro & class A
+	printf "DA%s\nCA%s\n", site, domain[site]	>"dom.classes"
+	printf "R$*$=A\t\t\t$1$2.$A\t\tu@h -> u@h.%s\n", site >"S6"
+	printf "R$*$=A.$A\t\t$1$2\t\tu@h.%s -> u@h\n", site >"S7"
+	printf "R$*@$=A.$+\t\t$@$>14$1$2.$3\n" >"S8"
+	printf "R$*$=A\t\t\t$@$1$2\n" >"S8"
+
+	for (i=1; i<=d; i++)
+	{	n = split(domain[sort[i]], subdoms, " ")
+		if (sort[i] == site)
+			continue;
+
+		if (n >= MINCLSIZE && c <= length(classes))
+		{	C = substr(classes, c, 1)
+			c++
+			print ""			     >"dom.classes"
+			printf "D%s%s\n", C, sort[i]	     >"dom.classes"
+			printf "C%s%s\n", C, domain[sort[i]] >"dom.classes"
+			printf "R$*$=%s\t\t\t$1$2.$%s\t\tu@d -> u@d.%s\n", \
+					C, C, sort[i] >"S6"
+			printf "R$*$=%s.$%s\t\t$1$2\t\tu@d.%s -> u@d\n", \
+					C, C, sort[i] >"S7"
+			printf "R$*@$=%s.$+\t\t$@$>14$1@$2.$3\n", C >"S8"
+			printf "R$*$=%s\t\t\t$@$1$2\n", C	>"S8"
+		}
+		else
+		{	for (m=1; m<=n; m++)
+			{	printf "R$*%s\t\t$1%s.%s\n", subdoms[m], \
+					subdoms[m], sort[i]  >"S6"
+				printf "R$*%s.%s\t\t$1%s\n", subdoms[m], \
+					sort[i], subdoms[m]  >"S7"
+				printf "R$*@%s.$+\t\t$@$>14$1@%s.$2\n", \
+					subdoms[m], subdoms[m]  >"S8"
+				printf "R$*%s\t\t\t$@$1%s\n", \
+					subdoms[m], subdoms[m]  >"S8"
+			}
+		}
+	}
+	}
+' $site
+
+rm -f $site
+
+#
+#  The header
+#
+cat >$site.dom <<EOF
+###############################################################################
+###############################################################################
+#####
+#####	@(#)$site.dom	UK-1.1 sendmail configuration		22/4/85
+#####
+#####	The domain database and rules
+#####
+###############################################################################
+###############################################################################
+
+# classes
+EOF
+
+#
+#  generate classes
+#
+while read class group
+do
+	echo $group | tr ' ' '\012' | fmt | sed "s/^/$class/"
+done  < dom.classes >> $site.dom
+
+rm -f dom.classes
+
+#
+#  hardwire top level domains in for now
+#
+echo '
+# top level domains
+CTuk uucp arpa csnet bitnet dec
+
+' >> $site.dom
+
+#
+#  Ruleset 5
+#
+cat >> $site.dom <<'EOF'
+
+#########################################
+#  Ruleset 5  --  domain name aliasing  #
+#########################################
+
+S5
+EOF
+if [ -f S5 ]
+then	cat S5 >> $site.dom
+	rm -f S5
+fi
+
+
+#
+#  Ruleset 6
+#
+cat >> $site.dom <<'EOF'
+
+#######################################################
+#  Ruleset 6  --  Expand address to full domain name  #
+#######################################################
+
+S6
+EOF
+cat S6 >> $site.dom
+rm -f S6
+
+#
+#  Ruleset 7
+#
+cat >> $site.dom <<'EOF'
+
+###########################################################
+#  Ruleset 7  --  Strip full domain name to minimum part  #
+###########################################################
+
+S7
+EOF
+cat -n S7 | sort -r | sed 's/^.......//' >> $site.dom
+rm -f S7
+
+cat >> $site.dom <<'EOF'
+
+ifdef(`JANET',`
+##############################################################
+#  Ruleset 8  --  Convert domains in NRS order to 822 order  #
+##############################################################
+
+S8
+R$*$=T			$@$1$2
+R$*@$=T.$+		$@$>14$1@$2.$3
+EOF
+cat -n S8 | sort -r | sed 's/^.......//' >> $site.dom
+rm -f S8
+echo "')" >> $site.dom
+
+echo $site.dom made
+exit

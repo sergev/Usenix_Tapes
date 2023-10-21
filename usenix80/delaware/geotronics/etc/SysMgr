@@ -1,0 +1,187 @@
+
+			UNIX SYSTEM MANAGER NOTES
+
+
+Our Unix system differs from the V6 documentation in the following ways:
+
+1)  The switch register "magic number" to go into single-user mode upon
+boot-up is ###### .  This number should NOT be disclosed to non super-
+users.  The password for "root" (time-sharing super-user) is "######".
+This should also be kept secret.  These change from time to time.
+
+2)  Upon occurrence of a memory parity error, a user process aborts with
+a "bus error" message on the user terminal and a parity controller dump
+on the operator console; if the error occurs in Unix code space, a
+"parity panic" should occur.
+
+3)  Load 000200 into the switch register if you need to suppress error
+logging on the operator console.
+
+
+System startup:
+
+The SMD disk pack with the RED label is the Unix system disk.  It is
+partitioned into four "logical devices":
+
+rpa)  This 57000-block area contains all operating system files and non-
+DP data storage.
+
+rpb)  This 57000-block area will eventually contain all DP files.  For
+now it contains an exact image of the latest full file-system dump.
+
+rpc)  3600-block swapping area.  DO NOT USE.
+
+rpd)  4200-block scratch area, large enough to hold a standard Unix RK05
+disk file system image.
+
+After powering up the hardware and spinning up the disk, you should see
+some numbers and a "$" prompt on the console.  If the RUN light is out,
+press CNTRL+BOOT to obtain the $ prompt.  If none, hardware problem!
+
+The disk pack must NOT be write-protected.  Respond to the $ boot
+prompt by typing "DP" (all type-ins are followed by RETURN).  The $
+prompt should be overwritten by an @ prompt; check the switch register
+setting then enter "unix".
+
+	Switches	Action
+
+	magic number	Unix boots up in single-user mode, remote
+			terminals disabled.  Use this WHENEVER you
+			need to perform system backup or repair disk
+			file structures.  Once you get the # prompt,
+			you should probably enter the "adm3a" command.
+			In single-user mode, you should do a "sync"
+			every time the disk is supposed to have been
+			updated, or a bad file structure may get worse.
+
+	000000		Unix boots up in time-sharing mode.  Remote
+			terminals are disabled if they were in that
+			state upon last shutdown.
+
+(Switch setting: key in the numbers on front panel, then press LSR.)
+
+If you bring the system up in time-sharing mode, login as "root" then
+set the date ("date mmddhhmm" format, e.g. "date 06030730" sets June
+third, time 07:30).  Finally, "/etc/startup" will check the file system
+(so you can abort if there is a problem) then activate remote
+terminals.  If there is a problem with the file system check, try
+another "chk /dev/rrpa" (see below) to be sure; sometimes the processes
+run at startup time will alter the file system while it is checked.
+
+
+System shutdown:
+
+If you are in single-user mode, enter "sync", wait for disk activity to
+subside, then press CNTRL+HLT/SS.  Otherwise (time-sharing mode), if it
+is possible to log in as "root", do so, then enter one of:
+
+"nohup sh /etc/shutdown &"	for scheduled 5-minute shutdown;
+
+"/etc/scram"			for immediate emergency shutdown.
+
+When shutdown is complete, a message to that effect is printed on the
+operator console.
+
+At this point, no timesharing terminals are active and all background
+"daemon" processes have been terminated.  You can do a file system
+check and daily incremental backup at this point.  To bring the system
+all the way down for power-off or re-boot, enter "sync", wait for the
+disk to quiet down, then press CNTRL+HLT/SS.  If you plan to re-boot,
+check the switch register contents then press CNTRL+BOOT etc.  To power
+off instead, just spin all disks down and turn the power off.
+
+If the system has printed a "panic" message on the operator console,
+just press CNTRL+HLT/SS to stop; don't try to login.
+
+If the system seems to have hung (RUN light still on), wait for the
+disk activity to stop, then press CNTRL+HLT/SS.
+
+If the run light goes out during normal operation, the system has REALLY
+died.  Bring Unix up in single-user mode and check the file structure.
+
+
+Checking the system file structure:
+
+It is possible to mess up the system file structure, especially if Unix
+dies while active.  Except after a "normal" (/etc/shutdown) shutdown,
+you are advised to bring the system up in single-user mode and enter
+
+"chk /dev/rpa"	to perform first an "icheck" then a "dcheck" of the
+		file system.  The Programmer's Manual has more info on
+		this under "CRASH (VIII)".  If nothing is wrong, the
+		resulting printout should look something like:
+
+				/dev/rrpa:
+				spcl      40
+				files   2577
+				large    626
+				direc    199
+				indir    627
+				used   24101
+				free   32327
+				/dev/rrpa:
+
+"missing" blocks alone are no problem, unless they outnumber the
+"free" blocks.  For other problems, see the section VIII info on
+"CLRI", "CRASH", "DCHECK", "ICHECK", "NCHECK".  Before attempting to
+patch up a clobbered file system, it is advisable to do a "daily
+backup" (see below) on a SCRATCH tape, to save as many new files as
+possible.
+
+NOTE:  If there is any file system activity during a check, such as
+during the /etc/startup run, there will be spurious messages such as
+"dups in free list".  Try the check again when activity has subsided.
+Also, remember to do frequent "sync"s in single-user mode.
+
+
+Daily system backup:
+
+This is best done after "/etc/shutdown" or "/etc/scram", or in 
+single-user mode, but adequate results can be obtained even during
+normal time-sharing.  Mount the "UNIX DUMP INCREMENT" tape with a
+write ring, go into super-user mode somehow ("su" or "login: root" if in
+time-sharing mode, always if single-user; you will have a "#" prompt),
+and enter:
+
+"dump ais 550 /dev/rpa"
+
+The "550" is the tape length in feet; use 1150 instead for larger reel.
+If the dump process reports that you need more than 1.0 tape, you need
+to locate another for part 2, etc.  Be sure to label these clearly.
+Ignore any "phase error" messages.  These do not hurt the backup.
+
+
+Restoring the file system:
+
+If things get REALLY clobbered, and you are willing to retreat to the
+state at the last daily backup, you should restore the dump:
+
+1)  Mount the "DOUG'S RK0 UNIX SYSTEM" RK05 disk cartridge, and boot
+"DK" instead of "DP", in SINGLE-USER mode.  This disk is to be used
+ONLY for file system maintenance; if you suspect an RK disk drive
+problem, do NOT proceed until you have backed up the disk on some other
+system.
+
+2)  Enter "dd if=/dev/rrpb of=/dev/rrpa bs=100b count=570" to restore
+the last full file system dump.  If this doesn't work for some reason,
+use the alternate method:
+2A) Enter "/etc/mkfs /dev/rpa 57000" then mount the first of three dump
+tapes (labeled "UNIX DUMP #1" etc.).  Enter "restor r /dev/rpa"; type
+a RETURN when you see the "last chance..." message.  Change tapes as
+required, type RETURN when each new tape is ready.
+
+3)  Mount the daily "UNIX DUMP INCREMENT" tape and enter
+"restor r /dev/rpa".
+
+4)  "sync", halt the processor, and boot up the restored volume.  Don't
+forget to check the switch register!
+
+5)  Edit the "message of the day" to inform users of the loss of files.
+
+
+Message of the day:
+
+This is file /etc/motd .  It gets typed out on each login, so keep it
+brief.  Its owner is "doug", so you need to enter "super-user" mode to
+edit it.
+

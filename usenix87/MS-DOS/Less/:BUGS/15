@@ -1,0 +1,1600 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site rna.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!cmcl2!rna!dan
+From: dan@rna.UUCP (Dan Ts'o)
+Newsgroups: net.sources.bugs
+Subject: Re: Mods to less...
+Message-ID: <425@rna.UUCP>
+Date: 18 Jul 85 05:33:33 GMT
+Date-Received: 19 Jul 85 14:50:48 GMT
+Organization: Rockefeller Neurobiology
+Lines: 1768
+
+rn char *first_cmd;
+  extern char version[];
+  
+  static char cmdbuf[90];		/* Buffer for holding a multi-char command */
+  static char *cp;		/* Pointer into cmdbuf */
+  static int cmd_col;		/* Current column of the multi-char command */
+
+--- 15,27 -----
+  extern char current_file[];
+  extern int intrquit;
+  
++ #define	DEFEDITOR "vi"			/* Default $EDITOR */
++ 
++ #ifdef	EOFQUIT
++ extern int eofquit;
++ extern int curr_ac, ac;
++ #endif
++ 
+  static char cmdbuf[90];		/* Buffer for holding a multi-char command */
+  static char *cp;		/* Pointer into cmdbuf */
+  static int cmd_col;		/* Current column of the multi-char command */
+***************
+*** 294,309
+  				c = getcc();
+  				goto again;
+  			}
+! 		} else switch (c)
+! 		{
+! 		case '0': case '1': case '2': case '3': case '4':
+! 		case '5': case '6': case '7': case '8': case '9':
+! 			/*
+! 			 * First digit of a number.
+! 			 */
+! 			mcc = ':';
+! 			start_mcc();
+! 			goto again;
+  
+  		case 'f':
+  		case ' ':
+
+--- 304,333 -----
+  				c = getcc();
+  				goto again;
+  			}
+! 		} else {
+! #ifdef	EOFQUIT
+! 			intrquit = 0;
+! 			if (strchr(" fdj\006\026", c) == 0)
+! 				eofquit = 0;
+! 			else if (eofquit) {
+! 				eofquit = 0;
+! 				if (curr_ac+1 >= ac)
+! 					quit();
+! 				else
+! 					next_file(1);
+! 				continue;
+! 			}
+! #endif
+! 			switch (c)
+! 			{
+! 			case '0': case '1': case '2': case '3': case '4':
+! 			case '5': case '6': case '7': case '8': case '9':
+! 				/*
+! 				 * First digit of a number.
+! 				 */
+! 				mcc = ':';
+! 				start_mcc();
+! 				goto again;
+  
+  			case ('V'-'@'):
+  			case ('F'-'@'):
+***************
+*** 305,319
+  			start_mcc();
+  			goto again;
+  
+! 		case 'f':
+! 		case ' ':
+! 			/*
+! 			 * Forward one screen.
+! 			 */
+! 			lower_left();
+! 			clear_eol();
+! 			forward(sc_height - 1);
+! 			break;
+  
+  		case 'b':
+  			/*
+
+--- 329,345 -----
+  				start_mcc();
+  				goto again;
+  
+! 			case ('V'-'@'):
+! 			case ('F'-'@'):
+! 			case 'f':
+! 			case ' ':
+! 				/*
+! 				 * Forward one screen.
+! 				 */
+! 				lower_left();
+! 				clear_eol();
+! 				forward(sc_height - 1);
+! 				break;
+  
+  			case ('B'-'@'):
+  			case 033:
+***************
+*** 315,328
+  			forward(sc_height - 1);
+  			break;
+  
+! 		case 'b':
+! 			/*
+! 			 * Backward one screen.
+! 			 */
+! 			lower_left();
+! 			clear_eol();
+! 			backward(sc_height - 1);
+! 			break;
+  
+  		case 'e':
+  		case 'j':
+
+--- 341,356 -----
+  				forward(sc_height - 1);
+  				break;
+  
+! 			case ('B'-'@'):
+! 			case 033:
+! 			case 'b':
+! 				/*
+! 				 * Backward one screen.
+! 				 */
+! 				lower_left();
+! 				clear_eol();
+! 				backward(sc_height - 1);
+! 				break;
+  
+  	/* dyt */
+  #ifdef	EDITORCMD
+***************
+*** 324,343
+  			backward(sc_height - 1);
+  			break;
+  
+! 		case 'e':
+! 		case 'j':
+! 		case '\r':
+! 		case '\n':
+! 			/*
+! 			 * Forward N (default 1) line.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			lower_left();
+! 			clear_eol();
+! 			forward(n);
+! 			break;
+  
+  		case 'y':
+  		case 'k':
+
+--- 352,366 -----
+  				backward(sc_height - 1);
+  				break;
+  
+! 	/* dyt */
+! #ifdef	EDITORCMD
+! 			case 'v':
+! 			case 'e':
+! 				if (!current_file[0] || !strcmp("-", current_file))
+! 					error("Cannot edit this input");
+! 				else {
+! 					register char *cp;
+! 					char *getenv();
+  
+  					cp = getenv("EDITOR");
+  					if (cp == NULL || *cp == 0)
+***************
+*** 339,356
+  			forward(n);
+  			break;
+  
+! 		case 'y':
+! 		case 'k':
+! 			/*
+! 			 * Backward N (default 1) line.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			lower_left();
+! 			clear_eol();
+! 			backward(n);
+! 			break;
+  
+  		case 'd':
+  			/*
+
+--- 362,392 -----
+  					register char *cp;
+  					char *getenv();
+  
+! 					cp = getenv("EDITOR");
+! 					if (cp == NULL || *cp == 0)
+! 						cp = DEFEDITOR;
+! 					raw_mode(0);
+! 					execlp(cp, cp, current_file, 0);
+! 					raw_mode(1);
+! 					error("Cannot exec editor");
+! 				}
+! 				break;
+! #else
+! 			case 'e':
+! #endif
+! 			case 'j':
+! 			case '\r':
+! 			case '\n':
+! 				/*
+! 				 * Forward N (default 1) line.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				lower_left();
+! 				clear_eol();
+! 				forward(n);
+! 				break;
+  
+  			case 'y':
+  			case 'k':
+***************
+*** 352,369
+  			backward(n);
+  			break;
+  
+! 		case 'd':
+! 			/*
+! 			 * Forward N lines 
+! 			 * (default same as last 'd' or 'u' command).
+! 			 */
+! 			n = cmd_int();
+! 			if (n > 0)
+! 				scroll = n;
+! 			lower_left();
+! 			clear_eol();
+! 			forward(scroll);
+! 			break;
+  
+  		case 'u':
+  			/*
+
+--- 388,405 -----
+  				forward(n);
+  				break;
+  
+! 			case 'y':
+! 			case 'k':
+! 				/*
+! 				 * Backward N (default 1) line.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				lower_left();
+! 				clear_eol();
+! 				backward(n);
+! 				break;
+  
+  			case ('D'-'@'):
+  			case 'd':
+***************
+*** 365,382
+  			forward(scroll);
+  			break;
+  
+! 		case 'u':
+! 			/*
+! 			 * Forward N lines 
+! 			 * (default same as last 'd' or 'u' command).
+! 			 */
+! 			n = cmd_int();
+! 			if (n > 0)
+! 				scroll = n;
+! 			lower_left();
+! 			clear_eol();
+! 			backward(scroll);
+! 			break;
+  
+  		case 'R':
+  			/*
+
+--- 401,419 -----
+  				backward(n);
+  				break;
+  
+! 			case ('D'-'@'):
+! 			case 'd':
+! 				/*
+! 				 * Forward N lines 
+! 				 * (default same as last 'd' or 'u' command).
+! 				 */
+! 				n = cmd_int();
+! 				if (n > 0)
+! 					scroll = n;
+! 				lower_left();
+! 				clear_eol();
+! 				forward(scroll);
+! 				break;
+  
+  			case ('U'-'@'):
+  			case 'u':
+***************
+*** 378,395
+  			backward(scroll);
+  			break;
+  
+! 		case 'R':
+! 			/*
+! 			 * Flush buffers, then repaint screen.
+! 			 */
+! 			ch_init(0);
+! 			/* Fall thru */
+! 		case 'r':
+! 			/*
+! 			 * Repaint screen.
+! 			 */
+! 			repaint();
+! 			break;
+  
+  		case 'g':
+  			/*
+
+--- 415,433 -----
+  				forward(scroll);
+  				break;
+  
+! 			case ('U'-'@'):
+! 			case 'u':
+! 				/*
+! 				 * Backward N lines 
+! 				 * (default same as last 'd' or 'u' command).
+! 				 */
+! 				n = cmd_int();
+! 				if (n > 0)
+! 					scroll = n;
+! 				lower_left();
+! 				clear_eol();
+! 				backward(scroll);
+! 				break;
+  
+  			case 'R':
+  				/*
+***************
+*** 391,406
+  			repaint();
+  			break;
+  
+! 		case 'g':
+! 			/*
+! 			 * Go to line N, default beginning of file.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			cmd_exec();
+! 			jump_back(n);
+! 			break;
+  
+  		case 'p':
+  			/*
+
+--- 429,446 -----
+  				backward(scroll);
+  				break;
+  
+! 			case 'R':
+! 				/*
+! 				 * Flush buffers, then repaint screen.
+! 				 */
+! 				ch_init(0);
+! 				/* Fall thru */
+! 			case 'r':
+! 				/*
+! 				 * Repaint screen.
+! 				 */
+! 				repaint();
+! 				break;
+  
+  			case 'g':
+  				/*
+***************
+*** 402,429
+  			jump_back(n);
+  			break;
+  
+! 		case 'p':
+! 			/*
+! 			 * Go to a specified percentage into the file.
+! 			 */
+! 			n = cmd_int();
+! 			if (n < 0)
+! 				n = 0;
+! 			if (n > 100)
+! 				n = 100;
+! 			cmd_exec();
+! 			jump_percent(n);
+! 			break;
+! 
+! 		case 'G':
+! 			/*
+! 			 * Go to line N, default end of file.
+! 			 */
+! 			n = cmd_int();
+! 			cmd_exec();
+! 			if (n <= 0)
+! 				jump_forw();
+! 			else
+  				jump_back(n);
+  			break;
+  
+
+--- 442,455 -----
+  				repaint();
+  				break;
+  
+! 			case 'g':
+! 				/*
+! 				 * Go to line N, default beginning of file.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				cmd_exec();
+  				jump_back(n);
+  				break;
+  
+***************
+*** 425,431
+  				jump_forw();
+  			else
+  				jump_back(n);
+! 			break;
+  
+  		case '=':
+  			/*
+
+--- 451,457 -----
+  					n = 1;
+  				cmd_exec();
+  				jump_back(n);
+! 				break;
+  
+  			case 'p':
+  				/*
+***************
+*** 427,445
+  				jump_back(n);
+  			break;
+  
+! 		case '=':
+! 			/*
+! 			 * Print file name, etc.
+! 			 */
+! 			error(eq_message(error_width(), MNAME|MOF|MBYTE|MPCT));
+! 			break;
+! 			
+! 		case 'v':
+! 			/*
+! 			 * Print version number, without the "@(#)".
+! 			 */
+! 			error(version+4);
+! 			break;
+  
+  		case 'q':
+  			/*
+
+--- 453,470 -----
+  				jump_back(n);
+  				break;
+  
+! 			case 'p':
+! 				/*
+! 				 * Go to a specified percentage into the file.
+! 				 */
+! 				n = cmd_int();
+! 				if (n < 0)
+! 					n = 0;
+! 				if (n > 100)
+! 					n = 100;
+! 				cmd_exec();
+! 				jump_percent(n);
+! 				break;
+  
+  			case 'G':
+  				/*
+***************
+*** 441,451
+  			error(version+4);
+  			break;
+  
+! 		case 'q':
+! 			/*
+! 			 * Exit.
+! 			 */
+! 			return;
+  
+  		case '/':
+  		case '?':
+
+--- 466,482 -----
+  				jump_percent(n);
+  				break;
+  
+! 			case 'G':
+! 				/*
+! 				 * Go to line N, default end of file.
+! 				 */
+! 				n = cmd_int();
+! 				cmd_exec();
+! 				if (n <= 0)
+! 					jump_forw();
+! 				else
+! 					jump_back(n);
+! 				break;
+  
+  			case '=':
+  				/*
+***************
+*** 447,465
+  			 */
+  			return;
+  
+! 		case '/':
+! 		case '?':
+! 			/*
+! 			 * Search for a pattern.
+! 			 * Accept chars of the pattern until \n.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			mcc = last_mcc = c;
+! 			start_mcc();
+! 			c = getcc();
+! 			goto again;
+  
+  		case 'n':
+  			/*
+
+--- 478,500 -----
+  					jump_back(n);
+  				break;
+  
+! 			case '=':
+! 				/*
+! 				 * Print file name, etc.
+! 				 */
+! 				error(eq_message(error_width(), MNAME|MOF|MBYTE|MPCT));
+! 				break;
+! 				
+! #ifdef	EDITORCMD
+! 			case 'V':
+! #else
+! 			case 'v':
+! #endif
+! 				/*
+! 				 * Print version number, without the "@(#)".
+! 				 */
+! 				error(version+4);
+! 				break;
+  
+  			case 'q':
+  				/*
+***************
+*** 461,479
+  			c = getcc();
+  			goto again;
+  
+! 		case 'n':
+! 			/*
+! 			 * Repeat previous search.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			mcc = last_mcc;
+! 			start_mcc();
+! 			cmd_exec();
+! 			search(mcc, (char *)NULL, n);
+! 			mcc = 0;
+! 			break;
+  
+  		case 'h':
+  			/*
+
+--- 496,506 -----
+  				error(version+4);
+  				break;
+  
+! 			case 'q':
+! 				/*
+! 				 * Exit.
+! 				 */
+! 				return;
+  
+  			case '/':
+  			case '?':
+***************
+*** 475,487
+  			mcc = 0;
+  			break;
+  
+! 		case 'h':
+! 			/*
+! 			 * Help.
+! 			 */
+! 			help();
+! 			repaint();
+! 			break;
+  
+  		case 'E':
+  			/*
+
+--- 502,520 -----
+  				 */
+  				return;
+  
+! 			case '/':
+! 			case '?':
+! 				/*
+! 				 * Search for a pattern.
+! 				 * Accept chars of the pattern until \n.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				mcc = last_mcc = c;
+! 				start_mcc();
+! 				c = getcc();
+! 				goto again;
+  
+  			case 'n':
+  				/*
+***************
+*** 483,500
+  			repaint();
+  			break;
+  
+! 		case 'E':
+! 			/*
+! 			 * Edit a new file.  Get the filename.
+! 			 */
+! 			cmd_reset();
+! 			mcc = 'E';
+! 			start_mcc();
+! 			putc(' ');	/* This looks nicer */
+! 			cmd_col++;
+! 			c = getcc();
+! 			goto again;
+! 			
+  #if SHELL_ESCAPE
+  		case '!':
+  			/*
+
+--- 516,554 -----
+  				c = getcc();
+  				goto again;
+  
+! 			case 'n':
+! 				/*
+! 				 * Repeat previous search.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				mcc = last_mcc;
+! 				start_mcc();
+! 				cmd_exec();
+! 				search(mcc, (char *)NULL, n);
+! 				mcc = 0;
+! 				break;
+! 
+! 			case 'h':
+! 				/*
+! 				 * Help.
+! 				 */
+! 				help();
+! 				repaint();
+! 				break;
+! 
+! 			case 'E':
+! 				/*
+! 				 * Edit a new file.  Get the filename.
+! 				 */
+! 				cmd_reset();
+! 				mcc = 'E';
+! 				start_mcc();
+! 				putc(' ');	/* This looks nicer */
+! 				cmd_col++;
+! 				c = getcc();
+! 				goto again;
+  #if SHELL_ESCAPE
+  			case '!':
+  				/*
+***************
+*** 496,510
+  			goto again;
+  			
+  #if SHELL_ESCAPE
+! 		case '!':
+! 			/*
+! 			 * Shell escape.
+! 			 */
+! 			cmd_reset();
+! 			mcc = '!';
+! 			start_mcc();
+! 			c = getcc();
+! 			goto again;
+  #endif
+  
+  		case 'N':
+
+--- 550,564 -----
+  				c = getcc();
+  				goto again;
+  #if SHELL_ESCAPE
+! 			case '!':
+! 				/*
+! 				 * Shell escape.
+! 				 */
+! 				cmd_reset();
+! 				mcc = '!';
+! 				start_mcc();
+! 				c = getcc();
+! 				goto again;
+  #endif
+  
+  			case 'N':
+***************
+*** 507,521
+  			goto again;
+  #endif
+  
+! 		case 'N':
+! 			/*
+! 			 * Examine next file.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			next_file(n);
+! 			break;
+  
+  		case 'P':
+  			/*
+
+--- 561,575 -----
+  				goto again;
+  #endif
+  
+! 			case 'N':
+! 				/*
+! 				 * Examine next file.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				next_file(n);
+! 				break;
+  
+  			case 'P':
+  				/*
+***************
+*** 517,531
+  			next_file(n);
+  			break;
+  
+! 		case 'P':
+! 			/*
+! 			 * Examine previous file.
+! 			 */
+! 			n = cmd_int();
+! 			if (n <= 0)
+! 				n = 1;
+! 			prev_file(n);
+! 			break;
+  
+  		case '-':
+  			/*
+
+--- 571,585 -----
+  				next_file(n);
+  				break;
+  
+! 			case 'P':
+! 				/*
+! 				 * Examine previous file.
+! 				 */
+! 				n = cmd_int();
+! 				if (n <= 0)
+! 					n = 1;
+! 				prev_file(n);
+! 				break;
+  
+  			case '-':
+  				/*
+***************
+*** 527,540
+  			prev_file(n);
+  			break;
+  
+! 		case '-':
+! 			/*
+! 			 * Toggle a flag setting.
+! 			 */
+! 			mcc = '-';
+! 			start_mcc();
+! 			c = getcc();
+! 			mcc = 0;
+  			if (c == erase_char || c == kill_char)
+  				/* Abort the "-" command. */
+  				break;
+
+--- 581,594 -----
+  				prev_file(n);
+  				break;
+  
+! 			case '-':
+! 				/*
+! 				 * Toggle a flag setting.
+! 				 */
+! 				mcc = '-';
+! 				start_mcc();
+! 				c = getcc();
+! 				mcc = 0;
+  			if (c == erase_char || c == kill_char)
+  				/* Abort the "-" command. */
+  				break;
+***************
+*** 544,549
+  		default:
+  			bell();
+  			break;
+  		}
+  	}
+  }
+
+--- 598,604 -----
+  		default:
+  			bell();
+  			break;
++ 		}
+  		}
+  	}
+  }
+
+*** less.l	Wed Jul 17 23:26:15 1985
+--- ../less/less.l	Sun Jul 14 23:09:34 1985
+***************
+*** 39,44
+  .IP f
+  Same as SPACE.
+  .PP
+  .IP b
+  Scroll backward one screen.
+  .PP
+
+--- 39,50 -----
+  .IP f
+  Same as SPACE.
+  .PP
++ .IP "^F"
++ Same as SPACE.
++ .PP
++ .IP "^V"
++ Same as SPACE.
++ .PP
+  .IP b
+  Scroll backward one screen.
+  .PP
+***************
+*** 42,47
+  .IP b
+  Scroll backward one screen.
+  .PP
+  .IP RETURN
+  Scroll forward N lines, default 1.
+  .PP
+
+--- 48,56 -----
+  .IP b
+  Scroll backward one screen.
+  .PP
++ .IP "^B"
++ Same as b.
++ .PP
+  .IP RETURN
+  Scroll forward N lines, default 1.
+  .PP
+***************
+*** 45,51
+  .IP RETURN
+  Scroll forward N lines, default 1.
+  .PP
+! .IP e
+  Same as RETURN.
+  .PP
+  .IP j
+
+--- 54,60 -----
+  .IP RETURN
+  Scroll forward N lines, default 1.
+  .PP
+! .IP j
+  Same as RETURN.
+  .PP
+  .IP y
+***************
+*** 48,56
+  .IP e
+  Same as RETURN.
+  .PP
+- .IP j
+- Also the same as RETURN.
+- .PP
+  .IP y
+  Scroll backward N lines, default 1.
+  .IP k
+
+--- 57,62 -----
+  .IP j
+  Same as RETURN.
+  .PP
+  .IP y
+  Scroll backward N lines, default 1.
+  .IP k
+***************
+*** 60,65
+  Scroll forward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+  .PP
+  .IP u
+  Scroll backward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+
+--- 66,74 -----
+  Scroll forward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+  .PP
++ .IP "^D"
++ Same as d.
++ .PP
+  .IP u
+  Scroll backward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+***************
+*** 64,69
+  Scroll backward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+  .PP
+  .IP r
+  Repaint the screen.
+  .PP
+
+--- 73,81 -----
+  Scroll backward N lines, default 10.
+  If N is specified, it becomes the new default for all d and u commands.
+  .PP
++ .IP "^U"
++ Same as u.
++ .PP
+  .IP r
+  Repaint the screen.
+  .PP
+***************
+*** 101,106
+  .IP n
+  Repeat previous search, for N-th occurence of the last pattern.
+  .PP
+  .IP E [filename]
+  Examine a new file.
+  If the filename is missing, the "current" file (see the N and P commands
+
+--- 113,126 -----
+  .IP n
+  Repeat previous search, for N-th occurence of the last pattern.
+  .PP
++ .IP v
++ Invoke $EDITOR or
++ .I vi
++ on the current file. Does not return.
++ .PP
++ .IP e
++ Same as v.
++ .PP
+  .IP E [filename]
+  Examine a new file.
+  If the filename is missing, the "current" file (see the N and P commands
+***************
+*** 126,132
+  this will toggle the setting of that option
+  and print a message describing the new setting.
+  .PP
+! .IP v
+  Prints the version number of 
+  .I less 
+  being run.
+
+--- 146,152 -----
+  this will toggle the setting of that option
+  and print a message describing the new setting.
+  .PP
+! .IP V
+  Prints the version number of 
+  .I less 
+  being run.
+***************
+*** 233,239
+  the -c command line option will tell 
+  .I less
+  to skip this checking.
+! (However, if the data is not "clean", unpredicatable results may occur.)
+  .PP
+  If a command line option begins with \fB+\fR,
+  the remainder of that option is taken to be an initial command to
+
+--- 253,263 -----
+  the -c command line option will tell 
+  .I less
+  to skip this checking.
+! (However, if the data is not "clean", unpredictable results may occur.)
+! .PP
+! The -s option directs
+! .I less
+! to squeeze multiple empty lines to one.
+  .PP
+  If a command line option begins with \fB+\fR,
+  the remainder of that option is taken to be an initial command to
+
+*** main.c	Wed Jul 17 23:26:51 1985
+--- ../less/main.c	Sun Jul 14 23:25:20 1985
+***************
+*** 25,30
+  public int pr_type;		/* Type of prompt (short, medium, long) */
+  public int bs_mode;		/* How to process backspaces */
+  public int know_dumb;		/* Don't complain about dumb terminals */
+  
+  /*
+   * Defaults for command line options.
+
+--- 25,35 -----
+  public int pr_type;		/* Type of prompt (short, medium, long) */
+  public int bs_mode;		/* How to process backspaces */
+  public int know_dumb;		/* Don't complain about dumb terminals */
++ /* dyt */
++ public int sflag;		/* Squeeze empty lines */
++ #ifdef	EOFQUIT
++ public int eofquit;		/* Quit at end of file */
++ #endif
+  
+  /*
+   * Defaults for command line options.
+***************
+*** 41,47
+  extern int nbufs;
+  extern int sigs;
+  
+! static char current_file[128];
+  
+  static int ac;
+  static char **av;
+
+--- 46,53 -----
+  extern int nbufs;
+  extern int sigs;
+  
+! /* dyt - made public */
+! public char current_file[128];
+  
+  public int ac;
+  public int curr_ac;
+***************
+*** 43,49
+  
+  static char current_file[128];
+  
+! static int ac;
+  static char **av;
+  static int curr_ac;
+  
+
+--- 49,56 -----
+  /* dyt - made public */
+  public char current_file[128];
+  
+! public int ac;
+! public int curr_ac;
+  static char **av;
+  
+  /*
+***************
+*** 45,51
+  
+  static int ac;
+  static char **av;
+- static int curr_ac;
+  
+  /*
+   * Edit a new file.
+
+--- 52,57 -----
+  public int ac;
+  public int curr_ac;
+  static char **av;
+  
+  /*
+   * Edit a new file.
+***************
+*** 85,91
+  		 * and the input file (for data) are the same,
+  		 * we get weird results at best.
+  		 */
+! 		error("Can't take input from a terminal");
+  		if (f > 0)
+  			close(f);
+  		return;
+
+--- 91,101 -----
+  		 * and the input file (for data) are the same,
+  		 * we get weird results at best.
+  		 */
+! /* dyt */
+! 		if (curr_ac == 0)
+! 			write(2, "Usage: less [-options] [files]\n", 31);
+! 		else
+! 			error("Can't take input from a terminal");
+  		if (f > 0)
+  			close(f);
+  		return;
+***************
+*** 396,401
+  	case 'M':
+  		pr_type = PR_LONG;
+  		break;
+  	case 't':
+  		top_search = !TOP_SEARCH;
+  		break;
+
+--- 406,415 -----
+  	case 'M':
+  		pr_type = PR_LONG;
+  		break;
++ /* dyt - squeeze empty lines */
++ 	case 's':
++ 		sflag = 1;
++ 		break;
+  	case 't':
+  		top_search = !TOP_SEARCH;
+  		break;
+***************
+*** 457,462
+  	av = argv;
+  	curr_ac = 0;
+  
+  	/*
+  	 * Set up terminal, etc.
+  	 */
+
+--- 471,483 -----
+  	av = argv;
+  	curr_ac = 0;
+  
++ /* dyt */
++ 	if (!isatty(1)) {
++ 		*--argv = "cat";
++ 		execv("/bin/cat", argv);
++ 		write(2, "Cannot exec /bin/cat\n", 21);
++ 		exit(1);
++ 	}
+  	/*
+  	 * Set up terminal, etc.
+  	 */
+***************
+*** 461,467
+  	 * Set up terminal, etc.
+  	 */
+  	raw_mode(1);
+- 	get_term();
+  	open_getc();
+  	init();
+  
+
+--- 482,487 -----
+  	 * Set up terminal, etc.
+  	 */
+  	raw_mode(1);
+  	open_getc();
+  	get_term();
+  	init();
+***************
+*** 463,468
+  	raw_mode(1);
+  	get_term();
+  	open_getc();
+  	init();
+  
+  	if (setjmp(main_loop) == 0)
+
+--- 483,489 -----
+  	 */
+  	raw_mode(1);
+  	open_getc();
++ 	get_term();
+  	init();
+  
+  	if (setjmp(main_loop) == 0)
+
+*** prim.c	Wed Jul 17 23:26:59 1985
+--- ../less/prim.c	Sun Jul 14 22:31:14 1985
+***************
+*** 11,16
+  extern int sigs;
+  extern char *line;
+  
+  /*
+   * Display n lines, scrolling forward, 
+   * starting at position pos in the input file.
+
+--- 11,20 -----
+  extern int sigs;
+  extern char *line;
+  
++ #ifdef	EOFQUIT
++ extern int eofquit;
++ #endif
++ 
+  /*
+   * Display n lines, scrolling forward, 
+   * starting at position pos in the input file.
+***************
+*** 35,40
+  			 */
+  			if (!force && position(TOP) != NULL_POSITION)
+  			{
+  				if (quiet == NOT_QUIET)
+  					bell();
+  				else
+
+--- 39,47 -----
+  			 */
+  			if (!force && position(TOP) != NULL_POSITION)
+  			{
++ #ifdef	EOFQUIT
++ 				eofquit++;
++ #endif
+  				if (quiet == NOT_QUIET)
+  					bell();
+  				else
+*** screen.c	Wed Jul 17 23:27:04 1985
+--- ../less/screen.c	Sun Jul 14 23:48:31 1985
+***************
+*** 45,50
+  public int sc_width, sc_height;	/* Height & width of screen */
+  public int ul_width, ue_width;	/* Printing width of underline sequences */
+  
+  /*
+   * These two variables are sometimes defined in,
+   * and needed by, the termcap library.
+
+--- 45,53 -----
+  public int sc_width, sc_height;	/* Height & width of screen */
+  public int ul_width, ue_width;	/* Printing width of underline sequences */
+  
++ /* dyt */
++ extern int tty;			/* Keyboard input */
++ 
+  /*
+   * These two variables are sometimes defined in,
+   * and needed by, the termcap library.
+***************
+*** 82,88
+  		/*
+  		 * Get terminal modes.
+  		 */
+! 		ioctl(2, TCGETA, &s);
+  
+  		/*
+  		 * Save modes and set certain variables dependent on modes.
+
+--- 85,91 -----
+  		/*
+  		 * Get terminal modes.
+  		 */
+! 		ioctl(tty, TCGETA, &s);
+  
+  		/*
+  		 * Save modes and set certain variables dependent on modes.
+***************
+*** 107,113
+  		 */
+  		s = save_term;
+  	}
+! 	ioctl(2, TCSETAW, &s);
+  #else
+  	struct sgttyb s;
+  	static struct sgttyb save_term;
+
+--- 110,116 -----
+  		 */
+  		s = save_term;
+  	}
+! 	ioctl(tty, TCSETAW, &s);
+  #else
+  	struct sgttyb s;
+  	static struct sgttyb save_term;
+***************
+*** 111,116
+  #else
+  	struct sgttyb s;
+  	static struct sgttyb save_term;
+  
+  	if (on)
+  	{
+
+--- 114,120 -----
+  #else
+  	struct sgttyb s;
+  	static struct sgttyb save_term;
++ 	struct tchars tc;
+  
+  	if (on)
+  	{
+***************
+*** 117,123
+  		/*
+  		 * Get terminal modes.
+  		 */
+! 		ioctl(2, TIOCGETP, &s);
+  
+  		/*
+  		 * Save modes and set certain variables dependent on modes.
+
+--- 121,127 -----
+  		/*
+  		 * Get terminal modes.
+  		 */
+! 		ioctl(tty, TIOCGETP, &s);
+  
+  		/*
+  		 * Save modes and set certain variables dependent on modes.
+***************
+*** 139,145
+  		 */
+  		s = save_term;
+  	}
+! 	ioctl(2, TIOCSETP, &s);
+  #endif
+  }
+  
+
+--- 143,149 -----
+  		 */
+  		s = save_term;
+  	}
+! 	ioctl(tty, TIOCSETP, &s);
+  #endif
+  }
+  
+*** signal.c	Wed Jul 17 23:27:05 1985
+--- ../less/signal.c	Sun Jul 14 23:54:36 1985
+***************
+*** 34,39
+  extern char *first_cmd;
+  extern jmp_buf main_loop;
+  
+  /*
+   * Interrupt signal handler.
+   */
+
+--- 34,42 -----
+  extern char *first_cmd;
+  extern jmp_buf main_loop;
+  
++ /* dyt */
++ int intrquit = 0;
++ 
+  /*
+   * Interrupt signal handler.
+   */
+***************
+*** 129,134
+  		 * {{ You may wish to replace the bell() with 
+  		 *    error("Interrupt"); }}
+  		 */
+  	}
+  
+  	longjmp(main_loop, 1);
+
+--- 132,139 -----
+  		 * {{ You may wish to replace the bell() with 
+  		 *    error("Interrupt"); }}
+  		 */
++ 		if (intrquit++)
++ 			first_cmd = "q";
+  	}
+  
+  	longjmp(main_loop, 1);
+*** ttyin.c	Wed Jul 17 23:27:06 1985
+--- ../less/ttyin.c	Sun Jul 14 23:24:48 1985
+***************
+*** 13,19
+   */
+  public int reading;
+  
+! static int tty;
+  
+  /*
+   * Open keyboard for input.
+
+--- 13,20 -----
+   */
+  public int reading;
+  
+! /* dyt - made public */
+! int tty = 2;
+  
+  /*
+   * Open keyboard for input.
+***************
+*** 23,28
+  open_getc()
+  {
+  	tty = 2;
+  }
+  
+  /*
+
+--- 24,32 -----
+  open_getc()
+  {
+  	tty = 2;
++ /* dyt */
++ 	if (!isatty(tty))
++ 		tty = open("/dev/tty", 2);
+  }
+  
+  /*
+
+*** makefile.bsd42	Sat Jul 13 18:52:01 1985
+--- Makefile	Wed Jul 17 23:15:52 1985
+***************
+*** 57,63
+  
+  # SHELL_ESCAPE is 1 if you wish to allow shell escapes.
+  # (This is possible only if your system supplies the system() function.)
+! SHELL_ESCAPE = 0
+  
+  
+  ##########################################################################
+
+--- 57,63 -----
+  
+  # SHELL_ESCAPE is 1 if you wish to allow shell escapes.
+  # (This is possible only if your system supplies the system() function.)
+! SHELL_ESCAPE = 1
+  
+  
+  ##########################################################################
+***************
+*** 69,75
+  
+  # INSTALL_LESS is a list of the public versions of less.
+  # INSTALL_MAN is a list of the public versions of the manual page.
+! INSTALL_LESS =	/usr/local/less
+  INSTALL_MAN =	/usr/man/manl/less.l
+  
+  # OPTIM is passed to the compiler and the loader.
+
+--- 69,75 -----
+  
+  # INSTALL_LESS is a list of the public versions of less.
+  # INSTALL_MAN is a list of the public versions of the manual page.
+! INSTALL_LESS =	/usr/local/bin/less
+  INSTALL_MAN =	/usr/man/manl/less.l
+  
+  # OPTIM is passed to the compiler and the loader.
+***************
+*** 96,102
+  	"-Doff_t=$(off_t)" "-DVOID=$(VOID)" \
+  	"-DREGCMP=$(REGCMP)" "-DRECOMP=$(RECOMP)" \
+  	"-DSHELL_ESCAPE=$(SHELL_ESCAPE)" \
+! 	"-DXENIX=$(XENIX)"
+  
+  CFLAGS = $(OPTIM) $(DEFS)
+  
+
+--- 96,105 -----
+  	"-Doff_t=$(off_t)" "-DVOID=$(VOID)" \
+  	"-DREGCMP=$(REGCMP)" "-DRECOMP=$(RECOMP)" \
+  	"-DSHELL_ESCAPE=$(SHELL_ESCAPE)" \
+! 	"-DXENIX=$(XENIX)" \
+! 	"-DEOFQUIT" \
+! 	"-Dstrchr=index" \
+! 	"-DEDITORCMD"
+  
+  CFLAGS = $(OPTIM) $(DEFS)
+  
+*** man.c.org	Sun Sep 25 21:05:27 1983
+--- man.c	Sun Jul 14 20:53:04 1985
+***************
+*** 276,281
+  	char *cp;
+  {
+  	char cmd[BUFSIZ];
+  
+  	if (cp[0] == 'c')
+  		sprintf(cmd, "%s %s", nomore? CAT : MORE, cp);
+
+--- 273,280 -----
+  	char *cp;
+  {
+  	char cmd[BUFSIZ];
++ /* dyt */
++ 	char *pager, *getenv();
+  
+  	pager = getenv("MANPAGER");
+  	if (pager == NULL || *pager == 0) {
+***************
+*** 277,282
+  {
+  	char cmd[BUFSIZ];
+  
+  	if (cp[0] == 'c')
+  		sprintf(cmd, "%s %s", nomore? CAT : MORE, cp);
+  	else
+
+--- 276,287 -----
+  /* dyt */
+  	char *pager, *getenv();
+  
++ 	pager = getenv("MANPAGER");
++ 	if (pager == NULL || *pager == 0) {
++ 		pager = getenv("PAGER");
++ 		if (pager == NULL || *pager == 0)
++ 			pager = MORE;
++ 	}
+  	if (cp[0] == 'c')
+  		sprintf(cmd, "%s %s", nomore? CAT : pager, cp);
+  	else
+***************
+*** 278,284
+  	char cmd[BUFSIZ];
+  
+  	if (cp[0] == 'c')
+! 		sprintf(cmd, "%s %s", nomore? CAT : MORE, cp);
+  	else
+  		sprintf(cmd, nomore? "%s %s" : "%s %s|%s", NROFF, cp, MORE);
+  	system(cmd);
+
+--- 283,289 -----
+  			pager = MORE;
+  	}
+  	if (cp[0] == 'c')
+! 		sprintf(cmd, "%s %s", nomore? CAT : pager, cp);
+  	else
+  		sprintf(cmd, nomore? "%s %s" : "%s %s|%s", NROFF, cp, pager);
+  	system(cmd);
+***************
+*** 280,286
+  	if (cp[0] == 'c')
+  		sprintf(cmd, "%s %s", nomore? CAT : MORE, cp);
+  	else
+! 		sprintf(cmd, nomore? "%s %s" : "%s %s|%s", NROFF, cp, MORE);
+  	system(cmd);
+  }
+  
+
+--- 285,291 -----
+  	if (cp[0] == 'c')
+  		sprintf(cmd, "%s %s", nomore? CAT : pager, cp);
+  	else
+! 		sprintf(cmd, nomore? "%s %s" : "%s %s|%s", NROFF, cp, pager);
+  	system(cmd);
+  }
+  

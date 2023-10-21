@@ -1,0 +1,551 @@
+Path: plus5!wuphys!wucs!wucs2!wucs1!cuae2!clyde!rutgers!husc6!seismo!munnari!mulga!ausmelb!yarra!richb
+From: richb@yarra.OZ (Rich Burridge)
+Newsgroups: net.sources.bugs
+Subject: Better use of function keys with Sun asteroids.
+Keywords: Sun (asteroids game).
+Message-ID: <92@yarra.OZ>
+Date: 15 Dec 86 06:25:09 GMT
+Organization: Sun Computer Australia (Melbourne)
+Lines: 538
+Posted: Mon Dec 15 00:25:09 1986
+
+These context diffs are to provide the following:
+
+(1) The choice of keys for entering hyperspace and manipulation
+    of the rocket motors, left a lot to be desired. They were
+    too far apart. Thanks to Matt Crawford and Doug Landauer for
+    spotting this, and especially to Doug for his context diffs.
+    I used his idea and implemented it in a slightly different
+    way.
+
+    Motor on is now the 'g' (go) key or function key R1.
+    Motor off is now the 's' (stop) key or function key R2.
+    Hyperspace is now the 't' (teleport) key or function key R3.
+
+(2) Doug also suggested displaying the number of ships left. I
+    have included his diffs for this (again in a slightly different
+    way - sorry Doug, authors priviledge) and added in another couple
+    of lines which display the correct number of ships when one has
+    just died.
+
+There is a problem running asteroids on a color machine. I am
+currently trying to track this one down. Again, thanks to Matt Crawford
+for spotting it. Under V3.0, asteroids doesn't seem to work properly if
+you compile it with the -O switch, so compile with -g or nothing.
+
+Regards Rich.
+
+Rich Burridge            ISD:  +61 3 267-6222
+Sun Australia            STD:  (03) 267-6222
+14 Queens Rd,            ARPA: richb%yarra.oz@seismo.css.gov
+Melbourne, VIC 3004.     UUCP: seismo!munnari!yarra.oz!richb
+AUSTRALIA.               ACS:  richb@yarra.oz
+
+
+
+*** ast_main.c~ Mon Dec 15 07:31:04 1986
+--- ast_main.c	Mon Dec 15 09:53:30 1986
+***************
+*** 71,76
+  
+  struct hscore highscore[MAXHS] ;
+  
+  char progname[MAXLINE] ;          /* Name of this program. */
+  char titlestring[MAXLINE] ;
+  int c ;                           /* Value returned by wgread. */
+
+--- 71,85 -----
+  
+  struct hscore highscore[MAXHS] ;
+  
++ int key_stations[3] = {21, 22, 23} ;  /* Station values for function keys R1-R3. */
++ char old_key_vals[3][MAXLINE] ;       /* Function key string values to save. */
++ char new_key_vals[3][MAXLINE] =       /* Function key values used by asteroids. */
++      {
++        "g",                           /* Motor on - Function key R1. */
++        "s",                           /* Motor off - Function key R2. */
++        "t"                            /* Hyperspace/teleport - Function key R3. */
++      } ;
++ 
+  char progname[MAXLINE] ;          /* Name of this program. */
+  char titlestring[MAXLINE] ;
+  int c ;                           /* Value returned by wgread. */
+***************
+*** 1114,1119
+                            while (wgread() != 0) ; /* Flush some output. */
+                            state = 0 ;             /* Clear previous button state. */
+                            basecount-- ;
+                            if (basecount == 0) basestatus = BIDLE ;
+                            else
+                              {
+
+--- 1123,1129 -----
+                            while (wgread() != 0) ; /* Flush some output. */
+                            state = 0 ;             /* Clear previous button state. */
+                            basecount-- ;
++                           addscore(0) ;           /* Correct number of ships left. */
+                            if (basecount == 0) basestatus = BIDLE ;
+                            else
+                              {
+***************
+*** 1137,1144
+        keys = 0 ;
+        switch (c)
+          {
+!           case 'q'       :
+!           case 'Q'       : closedown() ;
+                             break ;
+  
+            case ESC       : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+
+--- 1147,1153 -----
+        keys = 0 ;
+        switch (c)
+          {
+!           case K_QUIT    : closedown() ;
+                             break ;
+  
+            case K_GO      : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+***************
+*** 1141,1147
+            case 'Q'       : closedown() ;
+                             break ;
+  
+!           case ESC       : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+                             break ;
+  
+            case DEL       : motoron = 0 ;
+
+--- 1150,1156 -----
+            case K_QUIT    : closedown() ;
+                             break ;
+  
+!           case K_GO      : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+                             break ;
+  
+            case K_STOP    : motoron = 0 ;
+***************
+*** 1144,1150
+            case ESC       : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+                             break ;
+  
+!           case DEL       : motoron = 0 ;
+                             break ;
+  
+            case BACKSPACE : if (basestatus == BACTIVE)
+
+--- 1153,1159 -----
+            case K_GO      : motoron = ((basestatus == BACTIVE) && (fuel > 0)) ;
+                             break ;
+  
+!           case K_STOP    : motoron = 0 ;
+                             break ;
+  
+            case K_TELEPORT: if (basestatus == BACTIVE)
+***************
+*** 1147,1153
+            case DEL       : motoron = 0 ;
+                             break ;
+  
+!           case BACKSPACE : if (basestatus == BACTIVE)
+                               if (fuel >= (FULLTANK / 5))
+                                 {
+                                   fuel -= (FULLTANK / 5) ;  /* 20% loss each hyperspace. */
+
+--- 1156,1162 -----
+            case K_STOP    : motoron = 0 ;
+                             break ;
+  
+!           case K_TELEPORT: if (basestatus == BACTIVE)
+                               if (fuel >= (FULLTANK / 5))
+                                 {
+                                   fuel -= (FULLTANK / 5) ;  /* 20% loss each hyperspace. */
+***************
+*** 1201,1207
+    clear_screen() ;                  /* Clear the asteroids window. */
+    if (givehelp) do_help_screen() ;  /* Output initial help/start screen. */
+    clear_screen() ;                  /* White background, before inversion. */
+-   init() ;
+    basecount = 3 ;
+    startlist() ;
+    basestatus = BWAITING ;
+
+--- 1210,1215 -----
+    clear_screen() ;                  /* Clear the asteroids window. */
+    if (givehelp) do_help_screen() ;  /* Output initial help/start screen. */
+    clear_screen() ;                  /* White background, before inversion. */
+    basecount = 3 ;
+    init() ;
+    startlist() ;
+***************
+*** 1203,1208
+    clear_screen() ;                  /* White background, before inversion. */
+    init() ;
+    basecount = 3 ;
+    startlist() ;
+    basestatus = BWAITING ;
+    ftime(&tlast) ;
+
+--- 1211,1217 -----
+    if (givehelp) do_help_screen() ;  /* Output initial help/start screen. */
+    clear_screen() ;                  /* White background, before inversion. */
+    basecount = 3 ;
++   init() ;
+    startlist() ;
+    basestatus = BWAITING ;
+    ftime(&tlast) ;
+*** ast_stuff.c~	Mon Dec 15 07:31:05 1986
+--- ast_stuff.c	Mon Dec 15 09:24:31 1986
+***************
+*** 14,19
+   *  do_help_screen        - Output initial help/start screen.
+   *  doflashbonus          - Display bonus message.
+   *  draw_frame            - Create popup window for help message.
+   *  getline               - Get characters from player until RETURN pressed.
+   *  get_options           - Get user command line options.
+   *  rint                  - Pseudo random number generator.
+
+--- 14,20 -----
+   *  do_help_screen        - Output initial help/start screen.
+   *  doflashbonus          - Display bonus message.
+   *  draw_frame            - Create popup window for help message.
++  *  function_keys         - Set or reset the asteroids function keys.
+   *  getline               - Get characters from player until RETURN pressed.
+   *  get_options           - Get user command line options.
+   *  rint                  - Pseudo random number generator.
+***************
+*** 32,37
+  #include <sys/timeb.h>
+  
+  extern char bonusstr[MAXLINE] ;      /* Bonus message. */
+  extern char progname[MAXLINE] ;      /* Name of this program. */
+  extern char titlestring[MAXLINE] ;   /* Title string for asteroids window. */
+  
+
+--- 33,40 -----
+  #include <sys/timeb.h>
+  
+  extern char bonusstr[MAXLINE] ;      /* Bonus message. */
++ extern char new_key_vals[3][MAXLINE] ;   /* Function key values used by asteroids. */
++ extern char old_key_vals[3][MAXLINE] ;   /* Function key string values to save. */
+  extern char progname[MAXLINE] ;      /* Name of this program. */
+  extern char titlestring[MAXLINE] ;   /* Title string for asteroids window. */
+  
+***************
+*** 47,52
+  extern int fuelxoffset ;             /* Start of fuel display bar. */
+  extern int givehelp ;                /* Set to 0, no initial help given. */
+  extern int height ;                  /* Window height. */
+  extern int orgx ;                    /* Window X origin. */
+  extern int orgy ;                    /* Window Y origin. */
+  extern int rr ;                      /* Used by rint for random numbers. */
+
+--- 50,56 -----
+  extern int fuelxoffset ;             /* Start of fuel display bar. */
+  extern int givehelp ;                /* Set to 0, no initial help given. */
+  extern int height ;                  /* Window height. */
++ extern int key_stations[3] ;         /* Station values for function keys R1-R3. */
+  extern int orgx ;                    /* Window X origin. */
+  extern int orgy ;                    /* Window Y origin. */
+  extern int rr ;                      /* Used by rint for random numbers. */
+***************
+*** 73,79
+        basecount += 1 ;
+        bonusship *= 2 ;   /* double it. */
+      }
+!   SPRINTF(titlestring," Score : %6d",score) ;
+    showtitle() ;
+  }
+   
+
+--- 77,83 -----
+        basecount += 1 ;
+        bonusship *= 2 ;   /* double it. */
+      }
+!   SPRINTF(titlestring," Score : %6d                Ships : %6d  ",score,basecount) ;
+    showtitle() ;
+  }
+   
+***************
+*** 168,173
+    BLT_SCRN(x+1,y+1,fr_width-2,fr_height-2,RCLR) ;
+    BLT_SCRN(x+3,y+3,fr_width-6,fr_height-6,RSET) ;
+    BLT_SCRN(x+5,y+5,fr_width-10,fr_height-10,RCLR) ;
+  }
+  
+  
+
+--- 172,202 -----
+    BLT_SCRN(x+1,y+1,fr_width-2,fr_height-2,RCLR) ;
+    BLT_SCRN(x+3,y+3,fr_width-6,fr_height-6,RSET) ;
+    BLT_SCRN(x+5,y+5,fr_width-10,fr_height-10,RCLR) ;
++ }
++ 
++ 
++ function_keys(state)        /*  Set or reset the function keys. */
++ int state ;
++ 
++ {
++   int count = 176 ;         /* 0xB0 -- the starting entry for strings. */
++   int fd,i ;
++ 
++   if ((fd = open("/dev/kbd",0,0)) < 0)
++     {
++       FPRINTF(stderr,"sidtool: can't open /dev/kbd\n") ;
++       exit(1) ;
++     }
++   for (i = 0; i < 3; i++)      /* Set up function keys. */
++     {
++       if (state == KEY_SET)
++         {
++           get_key(fd,key_stations[i],old_key_vals[i],count) ;
++           set_key(fd,key_stations[i],new_key_vals[i],count++) ;
++         }
++       else set_key(fd,key_stations[i],old_key_vals[i],count++) ;
++     }
++   CLOSE(fd) ;
+  }
+  
+  
+*** ast_sun.c~	Mon Dec 15 07:31:05 1986
+--- ast_sun.c	Mon Dec 15 08:52:51 1986
+***************
+*** 16,21
+   *  toolsw_sighandler
+   *  starttool
+   *  startup
+   *  write_bold          - Output text item in pseudo bold.*  writeln
+   *  getwindowparms      - Return window dimensions.
+   *  wgread              - Check for button or key pressed.
+
+--- 16,23 -----
+   *  toolsw_sighandler
+   *  starttool
+   *  startup
++  *  get_key             - Get the value of a function key.
++  *  set_key             - Set the value of a function key.
+   *  write_bold          - Output text item in pseudo bold.*  writeln
+   *  getwindowparms      - Return window dimensions.
+   *  wgread              - Check for button or key pressed.
+***************
+*** 35,40
+  #include <sys/file.h>
+  #include <sys/ioctl.h>
+  #include <sys/un.h>
+  #include <signal.h>
+  #include <errno.h>
+   
+
+--- 37,43 -----
+  #include <sys/file.h>
+  #include <sys/ioctl.h>
+  #include <sys/un.h>
++ #include <sundev/kbio.h>
+  #include <signal.h>
+  #include <errno.h>
+   
+***************
+*** 160,165
+  {
+    char **tool_attrs = NULL ;
+  
+    UNLINK(SOCKNAME) ;
+    sout = socket(AF_UNIX,SOCK_STREAM,0) ;      /* Create server socket. */
+    server.sun_family = AF_UNIX ;
+
+--- 163,169 -----
+  {
+    char **tool_attrs = NULL ;
+  
++   function_keys(KEY_SET) ;                    /* Set asteroid function keys. */
+    UNLINK(SOCKNAME) ;
+    sout = socket(AF_UNIX,SOCK_STREAM,0) ;      /* Create server socket. */
+    server.sun_family = AF_UNIX ;
+***************
+*** 206,211
+    KILL(pid,SIGKILL) ;                         /* Murder the child !! */
+    CLOSE(snew) ;
+    CLOSE(sout) ;
+  }
+  
+  
+
+--- 210,216 -----
+    KILL(pid,SIGKILL) ;                         /* Murder the child !! */
+    CLOSE(snew) ;
+    CLOSE(sout) ;
++   function_keys(KEY_RESET) ;                  /* Restore old function key values. */
+  }
+  
+  
+***************
+*** 235,240
+    nullcur.cur_function = RXOR ;
+    nullcur.cur_shape->pr_size.x = 0 ;
+    nullcur.cur_shape->pr_size.y = 0 ;
+  }
+  
+  
+
+--- 240,275 -----
+    nullcur.cur_function = RXOR ;
+    nullcur.cur_shape->pr_size.x = 0 ;
+    nullcur.cur_shape->pr_size.y = 0 ;
++ }
++ 
++ 
++ get_key(fd,station,value,count)
++ int fd,station,count ;
++ char value[MAXLINE] ;
++ 
++ {
++   struct kiockey key ;
++ 
++   key.kio_tablemask = 0 ;
++   key.kio_entry = count ;
++   key.kio_station = station ;
++   IOCTL(fd,(int) KIOCGETKEY,(char *) &key) ;
++   STRCPY(value,key.kio_string) ;
++ }
++ 
++ 
++ set_key(fd,station,value,count)
++ int fd,station,count ;
++ char value[MAXLINE] ;
++ 
++ {
++   struct kiockey key ;
++ 
++   key.kio_tablemask = 0 ;
++   key.kio_entry = count ;
++   key.kio_station = station ;
++   STRCPY(key.kio_string,value) ;
++   IOCTL(fd,(int) KIOCSETKEY,(char *) &key) ;
+  }
+  
+  
+*** asteroids.h~	Mon Dec 15 07:56:12 1986
+--- asteroids.h	Mon Dec 15 08:45:16 1986
+***************
+*** 50,55
+  #define  CONNECT      (void) connect
+  #define  FCLOSE       (void) fclose
+  #define  FPRINTF      (void) fprintf
+  #define  KILL         (void) kill
+  #define  LISTEN       (void) listen
+  #define  NICE         (void) nice
+
+--- 50,56 -----
+  #define  CONNECT      (void) connect
+  #define  FCLOSE       (void) fclose
+  #define  FPRINTF      (void) fprintf
++ #define  IOCTL        (void) ioctl
+  #define  KILL         (void) kill
+  #define  LISTEN       (void) listen
+  #define  NICE         (void) nice
+***************
+*** 81,88
+  #define  CTRLS        19                   /* Used to halt the asteroids game. */
+  #endif
+  
+! #define  ESC          '\033'               /* Definitions of valid asteroid keys. */
+! #define  DEL          '\177'
+  #define  BACKSPACE    '\010'
+  
+  #define  FLASHTIME    4                    /* Seconds */
+
+--- 82,94 -----
+  #define  CTRLS        19                   /* Used to halt the asteroids game. */
+  #endif
+  
+! /* Definitions for asteroid keys. */
+! #define  K_QUIT       'q'                  /* Quit the asteroids game. */
+! #define  K_GO         'g'                  /* Turn the rocket motor on. */
+! #define  K_STOP       's'                  /* Turn the rocket motor off. */
+! #define  K_TELEPORT   't'                  /* Jump through hyperspace. */
+! 
+! /* Key definitions used by getline. */
+  #define  BACKSPACE    '\010'
+  #define  DEL          '\177'
+  
+***************
+*** 84,89
+  #define  ESC          '\033'               /* Definitions of valid asteroid keys. */
+  #define  DEL          '\177'
+  #define  BACKSPACE    '\010'
+  
+  #define  FLASHTIME    4                    /* Seconds */
+  #define  FLICKERTIME  20                   /* Jiffies */
+
+--- 90,96 -----
+  
+  /* Key definitions used by getline. */
+  #define  BACKSPACE    '\010'
++ #define  DEL          '\177'
+  
+  #define  FLASHTIME    4                    /* Seconds */
+  #define  FLICKERTIME  20                   /* Jiffies */
+***************
+*** 96,101
+  
+  #define  OFFCURSOR    0                    /* Modes for the mouse cursor. */
+  #define  TRACKCURSOR  1
+  
+  /* Asteroid event values. */
+  #define  LEFTUP       1                    /* Left mouse button up. */
+
+--- 103,111 -----
+  
+  #define  OFFCURSOR    0                    /* Modes for the mouse cursor. */
+  #define  TRACKCURSOR  1
++ 
++ #define  KEY_SET      0                    /* Used for function key setup. */
++ #define  KEY_RESET    1
+  
+  /* Asteroid event values. */
+  #define  LEFTUP       1                    /* Left mouse button up. */
+*** asteroids.help~	Mon Dec 15 08:09:05 1986
+--- asteroids.help	Mon Dec 15 08:38:47 1986
+***************
+*** 13,20
+  Pressing the MIDDLE button will fire a missile out of the
+  front of the spaceship.
+  
+! You can enter hyperspace by pressing the BACKSPACE key. This
+! will return you to the screen in a random position.
+  
+  You can turn your rocket motors on by pressing the ESC key.
+  Pressing the DELETE key will turn your rocket motors off.
+
+--- 13,20 -----
+  Pressing the MIDDLE button will fire a missile out of the
+  front of the spaceship.
+  
+! You can enter hyperspace by pressing the 't' or the R3 function
+! key. This will return you to the screen in a random position.
+  
+  You can turn your rocket motors on with 'g' or the R1 function
+  key. Pressing 's' or the R2 function key will turn your rocket
+***************
+*** 16,23
+  You can enter hyperspace by pressing the BACKSPACE key. This
+  will return you to the screen in a random position.
+  
+! You can turn your rocket motors on by pressing the ESC key.
+! Pressing the DELETE key will turn your rocket motors off.
+  
+  To quit the game at any time, just press the q key.
+  
+
+--- 16,24 -----
+  You can enter hyperspace by pressing the 't' or the R3 function
+  key. This will return you to the screen in a random position.
+  
+! You can turn your rocket motors on with 'g' or the R1 function
+! key. Pressing 's' or the R2 function key will turn your rocket
+! motors off.
+  
+  To quit the game at any time, just press the q key.
+  
+D
+D

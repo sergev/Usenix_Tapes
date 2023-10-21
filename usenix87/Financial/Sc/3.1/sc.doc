@@ -1,0 +1,426 @@
+.TH SC 1
+.SH NAME
+pname \- spread sheet calculator
+.SH SYNOPSIS
+.B pname
+[
+.I file
+]
+
+.SH DESCRIPTION
+The spread sheet calculator
+.I pname
+is based on rectangular tables, in much the same style
+as Visicalc or Lotus 123.  When it is invoked it presents you with an empty
+table organized as rows and columns of cells.  Each cell may have a label
+string associated with it and an expression.  The expression may be a
+constant or it may compute something based on other entries.
+
+When \fIpname\fR is running, the screen is divided into four regions. The top
+line is for entering commands. The second line is for messages from
+\fIpname\fR.
+The third line and the first four columns show the row and column numbers.
+The rest of the screen forms a window looking at the table.
+The screen has two
+cursors: a cell cursor (indicated by a '<' on the screen) and a character
+cursor (indicated by the terminal's hardware cursor).  The cell and
+character cursors are often the same.  They will differ when a command
+is being typed on the top line.
+
+Commands which use the terminal's control key
+such as ^N will work both when a
+command is being typed and when in normal mode.
+
+The cursor control commands and the row, column commands can be 
+prefixed by a numeric argument indicating how many times the command
+is to be executed.  "^U" can be used before the number if
+the number is to be entered while a command is being typed
+into the command line.
+
+Cursor control commands:
+
+.IP ^N
+Move the cell cursor to the next row.
+
+.IP ^P
+Move the cell cursor to the previous row.
+
+.IP ^F
+Move the cell cursor forward one column.
+
+.IP ^B
+Move the cell cursor backward one column.
+
+.IP ^H
+Backspace one character.
+
+.IP "h, j, k, l"
+Alternate cursor controls (left, down, up, right).
+
+.IP "Arrow Keys"
+The terminal's arrow keys provide another alternate set of cell
+cursor controls if they exist and are supported in the
+.I termcap
+entry.
+Some terminals have arrow keys which conflict
+with other control key codes.  For example, a terminal could send ^H when the
+back arrow key is depressed.  In these cases, the conflicting arrow key
+performs the same function as the key combination it mimics.
+
+.IP 0
+Move the cell cursor to column 0 of the current row. 
+
+.IP $
+Move the cell cursor to the last valid column in the current row.
+
+.IP ^
+Move the cell cursor to row 0 of the current column.
+
+.IP #
+Move the cell cursor to the last valid row in the current column.
+
+.IP g
+Go to a cell.  The program will prompt for the name of a cell.
+Enter a cell number such as "a0" or "ae122".
+
+.PP
+Cell entry and editing commands:
+
+.IP =
+Prompts for an expression which will be evaluated dynamically to produce a
+value for the cell pointed at by the cell cursor.  This may be used in
+conjunction with ^V to make one entries value be dependent on anothers.
+
+.IP """
+Enter a label for the current cell.
+
+.IP <
+Enter a label that will be flushed left against the
+left edge of the cell.
+
+.IP >
+Enter a label that will be flushed right against the
+right edge of the cell.
+
+.IP x
+Clears the current cell.  You may prefix this command with a count of
+the number of cells on the current row to clear.  Cells cleared with
+this command may be recalled with any of the variations of the pull
+command.
+
+.IP e
+Edit the value associated with the current cell.  This is identical to '='
+except that the command line starts out containing the old value or
+expression associated with the cell.
+
+.IP E
+Edit the string associated with the current cell.  This is the same as
+either "leftstring", "rightstring", or "label", with the additional
+fact that the command line starts out with the old string.
+
+.IP m 
+Mark a cell to be used as the source for the copy command.
+
+.IP c
+Copy the last marked cell to the current cell, updating the row and
+column references.
+
+.IP ^T
+Toggle cell display.  The current cell's contents are displayed in line
+one when no command being entered or edited.  ^T turns the
+display on or off.
+
+.PP
+File operations
+
+.IP G
+Get a new database from a file.
+
+.IP P
+Put the current database into a file.
+
+.IP W
+Write a listing of the current database in a form that matches its
+appearance on the screen.  This differs from the "put" command in that
+"put"s files are intended to be reloaded with "get", while "write" produces
+a file for people to look at.
+
+.IP T
+Write a listing of the current database to a file, but put ":"s between
+each field.  This  is useful for tables that will be further formatted
+by the
+.I tbl
+preprocessor of
+.I nroff.
+
+.IP M
+Merges the database from the named file into the current database.  Values,
+expressions and names defined in the named file are written into the current
+file, overwriting the existing entries at those locations.
+
+.PP
+Row and Column operations.  Members of this class of commands can be used
+on either rows or columns.  The second letter of the command is either
+a column designator (one of the characters c, j, k, ^N, ^p) or a 
+row designator (one of r, l, h, ^B, ^F).
+Commands which move or copy cells also modify the variable references 
+in affected cell expressions.
+Variable references may be frozen by using the "fixed" operator.
+
+.IP "ar, ac"
+Creates a new row (column) immediately following the current row (column).
+It is initialized
+to be a copy of the current one.
+
+.IP "dr, dc"
+Delete this row (column).
+
+.IP "pr, pc, pm"
+Pull deleted rows (columns) back into the spread sheet.  The last deleted
+set of cells is put back into the spread sheet at the current location.
+.I Pr
+inserts enough rows to hold the data.
+.I Pc
+inserts enough columns to hold the data.
+.I Pm
+(merge) does not insert rows or columns. It overwrites the cells
+beginning at the current cursor location.
+
+.IP "ir, ic"
+Insert a new row (column) by moving the row (column) containing the cell
+cursor, and all
+following, down (right) one.  The new position will be empty.
+
+.IP "zr, zc"
+Hide ("zap") the current row (column).  This keeps a row or column from being
+displayed but keeps it in the data base.
+
+.IP "vr, vc"
+Removes expressions from the affected rows (columns), leaving only
+the values which were in the cells before the command
+was executed.
+
+.IP "sr, sc"
+Show hidden rows (columns).  Type in a range of rows or columns
+to be revealed.  The command default is the first range of rows or
+columns currently hidden.
+
+.IP f
+Sets the output format to be used for printing the numbers in each cell in
+the current column.  Type in two numbers which will be the width in
+characters of a column and the number of digits which will follow the
+decimal point.  Note that this command has only a column version and
+does have a second letter.
+
+.PP
+Region Operations:
+Region commands
+affect a rectangular region on the screen.  
+All of the commands in this class start with a slash; the second
+letter of the command indicates which command to do.
+The program will prompt for needed paramters.  Phrases surrounded by
+square brackets in the prompt are informational only and may be erased with
+the backspace key. 
+
+.IP "/x"
+Clear a region.  Cells cleared with this command may be recalled
+via any of the pull row or column commands.
+
+.IP "/c"
+Copy a region to the area starting at the current cell.
+
+.IP "/f"
+Fill a region with constant values.  The start and increment numbers
+may be positive or negative.
+
+.PP
+Miscellaneous commands:
+
+.IP q
+Exit from \fIpname\fR.  If you were editing a file, and you modified
+it, then
+\fIpname\fR will ask about saving before exiting. 
+If you aren't editing a file and haven't saved the data you
+entered, you will get a chance to save the data
+before you exit.
+
+.IP ^C
+Alternate exit command.
+
+.IP ?
+Types a brief helpful message.
+
+.IP "^G or ESC"
+Abort entry of the current command.
+
+.IP "^R or ^L"
+Redraw the screen.
+
+.IP ^V
+Types, in the command line, the name of the cell referenced by
+the cell cursor.  This is used when typing in expressions which refer to
+entries in the table.
+
+.IP ^E
+Types, in the command line, the expression of the cell referenced
+by the cell cursor.
+
+.IP ^A
+Types, in the command line, the value of the cell referenced
+by the cell cursor.
+
+.PP
+Expressions that are used with the '=' and 'e' commands have a fairly
+conventional syntax.  Terms may be variable names (from the ^V command),
+parenthesised expressions, negated terms, and constants. 
+Rectangular regions of the screen may be operated upon with '@' functions
+such as sum (@sum), average (@avg) and product (@prod).
+Terms may be combined using many binary
+operators.  Their precedences (from highest to lowest) are: ^; *,/; +,-;
+<,=,>,<=,>=; &; |; ?.
+
+.TP 15
+e+e
+Addition.
+
+.TP 15
+e-e
+Subtraction.
+
+.TP 15
+e*e
+Multiplication.
+
+.TP 15
+e/e
+Division.
+
+.TP 15
+e^e
+Exponentiation.
+
+.TP 15
+@sum(v:v)
+Sum all valid (nonblank) entries in the region whose two corners are defined
+by the two variable (cell) names given.
+
+.TP 15
+@avg(v:v)
+Average all valid (nonblank) entries in the region whose two corners are defined
+by the two variable (cell) names given.
+
+.TP 15
+@prod(v:v)
+Multiply together all valid (nonblank) entries in the region whose two
+corners are defined by the two variable (cell) names given.
+
+.TP 15
+e?e:e
+Conditional: If the first expression is true then the value of the second is
+returned, otherwise the value of the third is.
+
+.TP 15
+<,=,>,<=,>=
+Relationals: true iff the indicated relation holds.
+
+.TP 15
+&,|
+Boolean connectives.
+
+.TP 15
+fixed
+To make a variable not change automatically when a cell moves,
+put the word \*(lqfixed\*(rq in front of the reference.  I.e.
+B1*fixed C3
+
+.PP
+Assorted math functions.  Most of these are standard system functions
+more fully described in
+.I math(3).
+All of them operate on floating point numbers (doubles);
+the trig functions operate with angles in radians.
+
+.TP 15
+@exp(expr)
+Returns exponential function of <expr>.
+
+.TP 15
+@ln(expr)
+Returns the natural logarithm of <expr>.
+
+.TP 15
+@log(expr)
+Returns the base 10 logarithm of <expr>.
+
+.TP 15
+@pow(expr1,expr2)
+Returns <expr1> raised to the power of <expr2>.
+
+.TP 15
+@floor(expr)
+Returns returns the largest integer not greater than <expr>.
+
+.TP 15
+@ceil(expr)
+Returns the smallest integer not less than <expr>.
+
+.TP 15
+@hypot(x,y)
+Returns SQRT(x*x+y*y), taking precautions against unwarranted overflows.
+
+.TP 15
+@fabs(expr)
+Returns the absolute value |expr|.
+
+.TP 15
+@sin(expr), @cos(expr), @tan(expr)
+Return trigonometric functions of radian arguments. The magnitude of the
+arguments are not checked to assure meaningful results.
+
+.TP 15
+@asin(expr)
+Returns the arc sin in the range -pi/2 to pi/2
+
+.TP 15
+@acos(expr)
+Returns the arc cosine in the range 0 to pi.
+
+.TP 15
+@atan(expr)
+Returns the arc tangent of <expr> in the range -pi/2 to pi/2.
+
+.TP 15
+@dtr(expr)
+Converts <expr> in degrees to radians.
+
+.TP 15
+@rtd(expr)
+Converts <expr> in radians to degrees.
+
+.TP 15
+pi
+A constant quite close to pi.
+
+.TP 15
+@max(expr1,expr2)
+Returns the largest value of the two expressions.
+
+.TP 15
+@min(expr1,expr2)
+Returns the smallest value of the two expressions.
+
+.TP 15
+@gamma(expr1)
+Returns the natural log of the gamma function.
+
+.SH SEE ALSO
+bc(1), dc(1)
+
+.SH BUGS
+
+Expression reevaluation is done in the same top-to-bottom, left-to-right
+manner as is done in other spread sheet calculators.  This is silly.  A
+proper following of the dependency graph with (perhaps) recourse to
+relaxation should be implemented.
+
+At most 200 rows and 40 columns.

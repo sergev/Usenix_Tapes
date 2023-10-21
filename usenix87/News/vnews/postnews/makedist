@@ -1,0 +1,45 @@
+: This shell procedure creates the distributions file.
+
+. ../lib/makedefs
+
+dlist=`sed -e '/^#/d' -e 's/[^:]*://' -e 's/:.*//' -e 's/,/ /g' -e 's/  */ /g' $LIBDIR/sys | tr ' ' '
+' | sed -e '/^!/d' -e 's/\..*//' | sort | uniq`
+
+exec < distlist
+while read dist desc
+do	case "$dist" in
+	""|\#*)	;;
+	local|world)
+		echo "$dist	$desc"
+		;;
+	*)	ndlist=
+		for x in $dlist
+		do	if test "$x" = "$dist"
+			then	echo "$dist	$desc"
+			else	ndlist="$ndlist $x"
+			fi
+		done
+		dlist="$ndlist"
+		;;
+	esac
+done
+ndlist=
+for x in $dlist
+do	case "$x" in
+	fa|mod|net|ug|to|all)
+		;;
+	*)	grep "^$x " $LIBDIR/active > junk
+		if test -s junk
+		then	:
+		else	ndlist="$ndlist $x"
+		fi
+		rm junk
+		;;
+	esac
+done
+if test "$ndlist" != "" -a "$ndlist" != " "
+then	echo "The following distributions are not known to me: $ndlist" >&2
+	echo "Please add descriptions of them to postnews/distlist." >&2
+	exit 1
+fi
+exit 0

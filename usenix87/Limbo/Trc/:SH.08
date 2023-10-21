@@ -1,0 +1,1708 @@
+: Subject: TRC - expert system building tool (part 8 of 8)
+: This is a shar archive.  Extract with sh, not csh.
+: The rest of this file will extract:
+: p_out.c parser scanner.c
+echo extracting - p_out.c
+sed 's/^X//' > p_out.c << '!EOR!'
+X/*      P_OUT.C -- Translate production rules to pascal.   Version 1.1    */
+X/*      co-authored by Dean Hystad and Dan Kary.                          */
+X
+X#include	<stdio.h>
+X#include 	"main.h"
+X
+XFILE *fp,*lp;
+X
+Xchar *p_type_names[4] = {
+X			"integer",
+X			"real",
+X			"strings",
+X			"record"
+X};
+X
+Xp_gen_test()
+X/* generate procedures to test each data type and return a relop code */
+X{
+X	int i;
+X
+X	for(i = 0; i < 3; i++){
+X            fprintf(fp,"\n\nfunction %stest_%s(", prefix, p_type_names[i]) ;
+X            fprintf(fp,"\n\t\ta, b: %s ):", p_type_names[i]) ;
+X	    fprintf(fp,"\n\t\tinteger ;") ;
+X            fprintf(fp,"\n\nvar\n\treturn: integer ;") ;
+X	    fprintf(fp,"\n\nbegin\n") ;
+X	    fprintf(fp,"\tif(a < b) then return := 4\n");
+X	    fprintf(fp,"\telse if(a = b) then return := 2\n");
+X	    fprintf(fp,"\telse return := 1 ;\n");
+X	    fprintf(fp,"\t%stest_%s := return\n", prefix, p_type_names[i]) ;
+X	    fprintf(fp,"end ;\n") ;
+X	}
+X}
+X
+X
+Xp_gen_search()
+X/* generate procedures to search each structure for a compound match */
+X{
+X	int    i;
+X	struct def_list *temp;
+X	struct data_type *temp2;
+X	struct case_list *c_temp;
+X
+X	temp = token_list;
+X	while(temp){
+X	    if(temp->data_types){
+X		temp2 = temp->data_types;
+X		fprintf(fp,"\n\nfunction search_%s%s_record(\n\t\tndx : integer",prefix,temp->name);
+X		while(temp2){
+X		    if(temp2->type <= 2){
+X		        fprintf(fp," ;\n\t\t%s : %s",temp2->name,p_type_names[temp2->type]);
+X		        fprintf(fp," ;\n\t\t%s_relop : integer",temp2->name);
+X			if(temp2->elts)
+X			    fprintf(fp," ;\n\t\t%s_case : %s",temp2->name,p_type_names[temp2->type]);
+X		    }
+X		    temp2 = temp2->next;
+X		}
+X		fprintf(fp," ):\n\t\t%s%s_record_ptr ;\n\n",prefix,temp->name);
+X		fprintf(fp,"var\n");
+X		fprintf(fp,"\tflag : integer ;\n");
+X		fprintf(fp,"\ttemp : %s%s_record_ptr ;\n", prefix,temp->name);
+X		fprintf(fp,"\treturn : %s%s_record_ptr ;\n\n",prefix,temp->name);
+X		fprintf(fp,"begin\n");
+X		fprintf(fp,"\treturn := nil ;\n");
+X		fprintf(fp,"\tflag := 0 ;\n");
+X		fprintf(fp,"\ttemp := %s%s_temp[ndx];\n\twhile (flag=0) and (temp <> nil) do begin", prefix,temp->name);
+X		temp2 = temp->data_types;
+X		fprintf(fp,"\n\t\tif temp^.MARK = 0 then begin");
+X		fprintf(fp,"\n\t\t\tflag := 7 ;");
+X		while(temp2){
+X		    if(temp2->type <= 2){
+X			if(temp2->elts){
+X			    fprintf(fp,"\n\t\t\tcase( %s_case )of",temp2->name);
+X			    fprintf(fp,"\n\t\t\t0:");
+X			}
+X			fprintf(fp,"\n");
+X			if(temp2->elts) fprintf(fp,"\t");
+X		        fprintf(fp,"\t\t\tif( (flag and %stest_", prefix);
+X			fprintf(fp,"%s",p_type_names[temp2->type]);
+X		        fprintf(fp,"(temp^.%s, %s) and %s_relop)=0 )then",
+X			    temp2->name, temp2->name, temp2->name);
+X			fprintf(fp,"\n\t\t\t\tflag := 0 ;");
+X			if(temp2->elts){
+X			    c_temp = temp2->elts;
+X			    while(c_temp){
+X				fprintf(fp,"\n\t\t\t%d:", c_temp->id);
+X		        	fprintf(fp,"\n\t\t\t\tif( (flag and test_");
+X				fprintf(fp,"%s",p_type_names[temp2->type]);
+X		        	fprintf(fp,"(temp^.%s, temp^.%s)and %s_relop)=0 ) then",
+X			    		temp2->name, c_temp->name, temp2->name);
+X				fprintf(fp,"\n\t\t\t\tflag := 0 ;");
+X				c_temp = c_temp->next;
+X			    }
+X			    fprintf(fp,"\n\t\t\telse: flag := 0 ;\n\t\t\tend ;\n\t\t\tend ;");
+X			}
+X		      }
+X		      temp2 = temp2->next;
+X		    }
+X		    fprintf(fp,"\n\t\t\tif( flag<>0 )then begin\n\t\t\t\ttemp^.MARK := 1;\n");
+X		    fprintf(fp,"\t\t\t\treturn := temp ;\n\t\t\tend ;\n\t\tend ;\n\t\ttemp := temp^.next ;\n");
+X		    fprintf(fp,"\tend ;\n\tsearch_%s%s_record := return ;\nend ;\n",prefix, temp->name);
+X	            
+X	    }
+X	    temp = temp->next;
+X	}
+X}
+X	
+X
+Xp_gen_free()
+X/* generate procedures to free a structure */
+X{
+X	int 	i;
+X	struct def_list *temp;
+X	struct data_type *temp2;
+X
+X	temp = token_list;
+X	while(temp){
+X	  if(temp->data_types){
+X	     fprintf(fp,"\n\nprocedure free_%s%s_record(\n",prefix,temp->name);
+X	     fprintf(fp,"\t\tstart : integer ) ;\n\n");
+X	     fprintf(fp,"var\n\ti : integer ;\n\nbegin\n");
+X	     fprintf(fp,"\ti := start ;\n");
+X	     fprintf(fp,"\twhile( i < %s%s_max )do begin\n",prefix, temp->name);
+X	     fprintf(fp,"\t\tif( %s%s_list[i] <> nil )then begin\n",prefix, temp->name);
+X	     fprintf(fp,"\t\t\tif( %s%s_list[i]^.prev = nil )then\n",prefix, temp->name);
+X	     fprintf(fp,"\t\t\t\t%s%s_list[0] := %s%s_list[i]^.next\n",prefix,temp->name,prefix,temp->name);
+X	     fprintf(fp,"\t\t\telse\n");
+X	     fprintf(fp,"\t\t\t\t%s%s_list[i]^.prev^.next := %s%s_list[i]^.next ;\n",prefix,temp->name,prefix,temp->name);
+X	     fprintf(fp,"\t\t\tif( %s%s_list[i]^.next <> nil )then\n",prefix,temp->name);
+X	     fprintf(fp,"\t\t\t\t%s%s_list[i]^.next^.prev := %s%s_list[i]^.prev ;\n",prefix,temp->name,prefix,temp->name);
+X 	     temp2 = temp->data_types;
+X	     fprintf(fp,"\t\t\tdispose( %s%s_list[i] ) ;\n",prefix,temp->name);
+X	     fprintf(fp,"\t\t\t%s%s_list[i] := nil ;\n",prefix,temp->name);
+X	     fprintf(fp,"\t\t\ti := %s%s_max ;\n",prefix,temp->name);
+X	     fprintf(fp,"\t\t\t%stoken[%s%s]:= %stoken[%s%s]-1 ;\n",prefix,prefix,temp->name,prefix,temp->name);
+X	     fprintf(fp,"\t\tend ;\n\t\ti := i+1 ;\n\tend ;\nend ;\n");
+X	  }
+X	  temp = temp->next;
+X	}
+X}
+X
+X
+Xp_gen_restore()
+X/* generate procedure to restore structures */
+X{
+X	int 	i;
+X	struct def_list *temp;
+X
+X	temp = token_list;
+X	fprintf(fp,"\n\nprocedure %srestore ;\n\n", prefix);
+X	fprintf(fp,"var\n\ti : integer ;\n\nbegin\n");
+X	while(temp){
+X	  if(temp->data_types){
+X	    fprintf(fp,"\tfor i := 1 to %s%s_max-1 do\n", prefix,temp->name);
+X	    fprintf(fp,"\t\tif(%s%s_list[i] <> nil)then begin\n", prefix,temp->name);
+X	    fprintf(fp,"\t\t\t%s%s_list[i]^.MARK := 0 ;\n", prefix, temp->name);
+X	    fprintf(fp,"\t\t\t%s%s_list[i] := nil ;\n", prefix,temp->name);
+X	    fprintf(fp,"\t\tend ;\n");
+X	  }
+X	  temp = temp->next;
+X	}
+X	fprintf(fp,"end ;\n");
+X}
+X
+X
+Xp_gen_add()
+X/* generate procedures to add each structure to a list */
+X{
+X	int 	i;
+X	struct def_list *temp;
+X	struct data_type *temp2;
+X
+X	temp = token_list;
+X	while(temp){
+X	    fprintf(fp,"\nprocedure %sadd_%s_record", prefix,temp->name);
+X	    if(temp->data_types){
+X		fprintf(fp,"(\n");
+X		temp2 = temp->data_types;
+X		i = 0;
+X		while(temp2){
+X	            if(i) fprintf(fp," ;\n");	
+X		    if((temp2->type >= 0) && (temp2->type <= 2))
+X		        fprintf(fp,"\t\t%s: %s",temp2->name,p_type_names[temp2->type]);
+X		    i=1;
+X		    temp2 = temp2->next;
+X		}
+X		fprintf(fp," )");
+X	    }
+X	    fprintf(fp," ;\n\n");
+X	    if(temp->data_types){
+X		fprintf(fp,"var\n");
+X		fprintf(fp,"\ttemp : %s%s_record_ptr ;\n", prefix, temp->name);
+X	    }
+X	    fprintf(fp,"\nbegin\n");
+X	    if(temp->data_types){
+X		fprintf(fp,"\tnew(temp) ;\n"); 
+X	        temp2 = temp->data_types;
+X	        while(temp2){
+X		    if(temp2->type <= 2) 
+X			fprintf(fp,"\ttemp^.%s := %s ;\n",temp2->name,temp2->name);
+X	  	    temp2 = temp2->next;
+X	        }
+X	        fprintf(fp,"\ttemp^.MARK := 0 ;\n");
+X	        fprintf(fp,"\ttemp^.next := %s%s_list[0] ;\n",prefix,temp->name);
+X	        fprintf(fp,"\ttemp^.prev := nil ;\n");
+X	        fprintf(fp,"\tif(%s%s_list[0] <> nil)then\n",prefix,temp->name);
+X	        fprintf(fp,"\t\t%s%s_list[0]^.prev := temp ;\n",prefix,temp->name);
+X	        fprintf(fp,"\t%s%s_list[0] := temp ;\n",prefix,temp->name);
+X	    }
+X	    fprintf(fp,"\t%stoken[%s%s] := %stoken[%s%s]+1 ;\n",prefix,prefix,temp->name,prefix,prefix,temp->name);
+X	    fprintf(fp,"end ;\n\n");
+X            temp = temp->next;
+X	}
+X}
+X
+Xp_gen_init(mode)
+X/* generate procedure to initialize stm */
+X/* if mode is zero, then generate only code to add to stm */
+Xint mode;
+X{
+X	int i;
+X	struct init *temp;
+X	struct fields *temp2;
+X	struct def_list *t, *d_temp;
+X	struct data_type *t2;
+X
+X	temp = init_list->next;			/* the first one is a place holder */
+X	if(mode){
+X	    fprintf(fp,"\n\nprocedure %sinit ;\n\nvar\n\ti : integer ;\n\n", prefix);
+X	    fprintf(fp,"begin\n");
+X	    fprintf(fp,"\tfor i := 0 to %d do\n",total_tokens-1);
+X	    fprintf(fp,"\t\t%stoken[i] := 0 ;\n",prefix);
+X	    d_temp = token_list;
+X	    for(i = 0; i < total_tokens; i++){
+X	        fprintf(fp,"\t%stoken_name[%d] := '%s%s' ;\n",prefix,i,prefix,d_temp->name);
+X	        d_temp = d_temp->next ;
+X	    }
+X	    d_temp = token_list;
+X	    while(d_temp){
+X	        if(d_temp->data_types){
+X		    fprintf(fp,"\tfor i := 0 to %s%s_max do begin\n",prefix,d_temp->name);
+X		    fprintf(fp,"\t\t%s%s_list[i] := nil ;\n",prefix,d_temp->name);
+X		    fprintf(fp,"\t\t%s%s_temp[i] := nil ;\n",prefix,d_temp->name);
+X		    fprintf(fp,"\tend ;\n");
+X	        }
+X	        d_temp = d_temp->next;
+X	    }
+X	}
+X	while(temp){
+X	    if(temp->count){
+X	        if(mode == 0) fprintf(fp,"\t\t");
+X		fprintf(fp,"\tfor i := 0 to %d do\n\t",temp->count-1);
+X	    }
+X	    if(mode == 0) fprintf(fp,"\t\t");
+X	    fprintf(fp,"\t%sadd_%s_record" , prefix, temp->object);
+X	    t = token_list;
+X	    while(strcmp(t->name, temp->object) != 0)
+X		t = t->next;
+X	    i = 0;
+X	    t2 = t->data_types;
+X            if(t->data_types) fprintf(fp,"( ");
+X	    while(t2){
+X		temp2 = temp->items;
+X		while((temp2) && (strcmp(temp2->element, t2->name) != 0))
+X			temp2 = temp2->next;
+X		if((temp2) && (temp2->type != 3)){
+X		    if(i) fprintf(fp,", "); i = 1;
+X		    if(temp2->type >= 0){
+X		        if(temp2->type == 2) fprintf(fp,"'");
+X		        fprintf(fp,"%s",temp2->value);
+X		        if(temp2->type == 2) fprintf(fp,"'");
+X		    }
+X		    else{
+X			if(temp2->empty)
+X			   fprintf(fp,"%s%s_empty[%d].%s", prefix,temp2->object,
+X				temp2->index, temp2->value);
+X			else
+X			   fprintf(fp,"%s%s_list[%d]^.%s", prefix,temp2->object,
+X				temp2->index, temp2->value);
+X		    }
+X		}
+X		else if(t2->type != 3){
+X		    if(i) fprintf(fp,", "); i = 1;
+X		    if(t2->type == 2)
+X			fprintf(fp,"''");
+X		    if(t2->type == 1)
+X			fprintf(fp,"0.0");
+X		    if(t2->type == 0)
+X			fprintf(fp,"0");
+X		}
+X		t2 = t2->next;
+X	    }
+X	    if(t->data_types) fprintf(fp," )");
+X	    fprintf(fp," ;\n");
+X	    temp = temp->next;
+X	}
+X	if(mode){
+X	    fprintf(fp,"end ;\n\n\n");
+X	}
+X}
+X
+X
+Xp_gen_structs()
+X/* generate structure definitions from token list */
+X{
+X	int i;
+X	struct def_list *temp;
+X	struct data_type *temp2;
+X
+X	i = 0;
+X	temp = token_list;
+X	while(temp){
+X	  if(temp->data_types){
+X	    fprintf(fp,"\n\t%s%s_record_ptr = ^%s%s_record ;\n", prefix,temp->name,prefix,temp->name);
+X	    fprintf(fp,"\n\t%s%s_record = record\n",prefix,temp->name);
+X	    if(temp->data_types){
+X		temp2 = temp->data_types;
+X		while(temp2){
+X		    if(temp2->type != 3)
+X		        fprintf(fp,"\t\t%s : %s ;\n",temp2->name,p_type_names[temp2->type]);
+X		    else
+X		        fprintf(fp,"\t\t%s : %s%s_record_ptr ;\n", temp2->name,prefix,temp->name);
+X		    temp2 = temp2->next;
+X		}
+X	    }
+X	    fprintf(fp,"\t\tMARK : integer ;\n");
+X	    fprintf(fp,"\t\tprev : %s%s_record_ptr ;\n", prefix,temp->name);
+X	    fprintf(fp,"\t\tnext : %s%s_record_ptr ;\n", prefix,temp->name);
+X	    fprintf(fp,"\tend ;\n\n");
+X	  }
+X	  i++;
+X	  temp = temp->next;
+X	}
+X}
+X
+X
+Xp_gen_zero()
+X/*
+Xgenerate a procedure that will free or zero all data
+Xstructures generated by trc
+X*/
+X{
+X	int i;
+X	struct def_list *d_temp;
+X	struct data_type *dt_temp;
+X
+X	fprintf(fp,"\n\nprocedure %szero ;\n\nvar\n\ti : integer ;\n",prefix);
+X	/* pointer definitions */
+X	d_temp = token_list;
+X	while(d_temp){
+X	    if(d_temp->data_types)
+X	        fprintf(fp,"\t%s_tmp : %s%s_record_ptr ;\n", d_temp->name, prefix, d_temp->name);
+X	    d_temp = d_temp->next;
+X	}
+X	fprintf(fp,"\nbegin\n");
+X	/* free struct lists */
+X	d_temp = token_list;
+X	while(d_temp){
+X	    if(d_temp->data_types){
+X	        fprintf(fp,"\twhile( %s%s_list[0] <> nil )do begin\n", prefix,d_temp->name);
+X	        fprintf(fp,"\t\t%s%s_list[1] := %s%s_list[0] ;\n", prefix,d_temp->name, prefix,d_temp->name);
+X	        fprintf(fp,"\t\tfree_%s%s_record(1);\n\tend ;\n", prefix,d_temp->name);
+X	    }
+X	    d_temp = d_temp->next;
+X	}
+X	/* zero structure pointers */
+X	d_temp = token_list;
+X	while(d_temp){
+X	    if(d_temp->data_types){
+X	        fprintf(fp,"\tfor i := 0 to %s%s_max-1 do begin\n", prefix,d_temp->name);
+X	        fprintf(fp,"\t\t%s%s_list[i] := nil ;\n", prefix,d_temp->name);
+X		fprintf(fp,"\t\t%s%s_temp[i] := nil ;\n", prefix,d_temp->name);
+X                fprintf(fp,"\tend ;\n");
+X	    }
+X	    d_temp = d_temp->next;
+X	}
+X	/* zero integer arrays */
+X	fprintf(fp,"\tfor i := 0 to %d do\n",total_tokens-1);
+X	fprintf(fp,"\t\t%stoken[i] := 0 ;\n", prefix);
+X	fprintf(fp,"end ;\n");
+X}
+X
+X
+Xp_trans_code(rule, list, fp, label)
+Xstruct rule *rule;
+Xstruct list *list;
+XFILE *fp;
+Xchar *label;
+X{
+X	struct match *m_temp;
+X	struct list *l_temp;
+X	int i, j;
+X	char c[512];
+X
+X	l_temp = list;
+X	while(l_temp){
+X		    i = 0;
+X		    while(l_temp->name[i]){
+X			if(l_temp->name[i] == '$'){
+X			    i++; j = 0;
+X			    while(l_temp->name[i] != '.'){
+X				c[j] = l_temp->name[i];
+X				if(c[j] == '\0'){
+X				    fprintf(stderr,"cannot translate %s in rule %s\n",c, rule->label);
+X				    fprintf(stderr,"%s\n", l_temp->name);
+X				    return;
+X				}
+X				i++; j++;
+X			    }
+X			    i++;
+X			    c[j] = '\0';
+X			    m_temp = rule->complex;
+X			    if((strcmp(c, "FAIL")) == 0){
+X				fprintf(fp,"begin");
+X				if(rule->recurs == 0)
+X				    fprintf(fp,"\n\t\t\t\t%srestore ;\n",prefix);
+X				fprintf(fp,"\t\t\t\t{1}goto %s\n\t\t\tend\n",label);
+X			    }
+X			    else{
+X			      while(m_temp && j){
+X				if((strcmp(c, m_temp->free_name)) == 0){
+X				    fprintf(fp,"%s%s_", prefix , m_temp->object);
+X				    if(m_temp->empty)
+X				        fprintf(fp,"empty[%d].", m_temp->index);
+X				    else
+X				        fprintf(fp,"list[%d]^.", m_temp->index);
+X				    j = 0;
+X				}
+X				m_temp = m_temp->next;
+X			      }
+X			      if(j){
+X				fprintf(stderr,"cannot translate %s in rule %s\n",c, rule->label);
+X				fprintf(stderr,"%s\n", l_temp->name);
+X				return;
+X			      }
+X			    }
+X			}
+X			else{
+X			    fprintf(fp,"%c",l_temp->name[i]);
+X			    i++;
+X			}
+X		    }
+X		fprintf(fp,"\n");
+X		l_temp = l_temp->next;
+X	}
+X}
+X
+X
+Xp_gen_header()
+X{
+X	struct list *l_temp;
+X	struct def_list *d_temp;
+X	int i,j;
+X
+X	l_temp = header_code ;
+X	while(l_temp){
+X		fprintf(fp,"%s\n",l_temp->name);
+X		l_temp = l_temp->next;
+X	}
+X	d_temp = token_list;
+X	fprintf(fp,"const\n");
+X	for(i = 0; i < total_tokens; i++){
+X		fprintf(fp,"\t%s%s = %d ;\n",prefix,d_temp->name,i);
+X		j = max_free[i];
+X		if(j < 2) j = 2;
+X		fprintf(fp,"\t%s%s_max = %d ;\n",prefix, d_temp->name, j);
+X		d_temp = d_temp->next;
+X	}
+X	fprintf(fp,"\ntype\n\tstrings = string[20] ;");
+X	p_gen_structs();
+X	fprintf(fp,"\nvar\n");
+X	fprintf(fp,"\t%stotal_tokens : integer ;\n",prefix);
+X	fprintf(fp,"\t%stoken : array[0..%d]of integer ;\n",prefix,total_tokens-1);
+X	fprintf(fp,"\t%stoken_name : array[0..%d]of strings ;\n",prefix,total_tokens-1);
+X	i = 0;
+X	d_temp = token_list;
+X	while(d_temp){
+X	    if(d_temp->data_types){
+X		fprintf(fp,"\t%s%s_list : array[0..%s%s_max]of %s%s_record_ptr ;\n",prefix,d_temp->name,prefix,d_temp->name,prefix,d_temp->name);
+X		fprintf(fp,"\t%s%s_temp : array[0..%s%s_max]of %s%s_record_ptr ;\n",prefix,d_temp->name,prefix,d_temp->name,prefix,d_temp->name);
+X		if(max_empty[i])
+X			fprintf(fp,"\t%s%s_empty : array[0..%d]of %s%s_record ;\n",prefix,d_temp->name,max_empty[i]-1,prefix,d_temp->name);
+X	    }
+X	    d_temp = d_temp->next;
+X	    i++;
+X	}
+X}
+X
+X
+Xp_translate()
+X/* Produce the output code */
+X{
+X	int i, j, k, l, count, prev_index, label_count;
+X	char s[512];
+X	struct list *l_temp;
+X	struct def_list *d_temp, *d_temp2;
+X	struct data_type *dt_temp;
+X	struct rule *r_temp, *r_temp2, *r_const;
+X	struct match *m_temp, *m_temp2, *m_temp3, *m_temp4;
+X	struct test *t_temp;
+X	struct list *label_temp;
+X
+X	if((fp = fopen("loop.p", "w")) == NULL){
+X	    fprintf(stderr,"Unable to open loop.p\n");
+X	    exit();
+X	}
+X        if((lp = fopen("loop.l", "w")) == NULL){
+X	    fprintf(stderr,"Unable to open loop.l\n");
+X	    exit();
+X	}
+X	p_gen_header();
+X	p_gen_free();
+X	p_gen_restore();
+X	p_gen_test();
+X	p_gen_search();
+X	p_gen_add();
+X	init_list = init_list2;
+X	p_gen_init(1);
+X	fprintf(fp,"\nprocedure %sloop ;\n\nvar\n\ti : integer ;\n", prefix);
+X	fprintf(fp,"\nlabel\n\tStart,\n****labels*****\n\tStop ;\n\nbegin\n"); 
+X	fprintf(fp,"\twhile True do begin\n%sStart:\n", prefix);
+X	r_temp = rule_list;
+X	while(r_temp->next != NULL)
+X		r_temp = r_temp->next;
+X	r_const = r_temp;
+X	while(r_temp){
+X
+X	    /* label of this rule */
+X	    fprintf(fp,"%s%s:\n", prefix,r_temp->label);
+X	    fprintf(lp,"\t%s%s,\n", prefix, r_temp->label);
+X
+X	    /* test for code that must precede all tests */
+X	    m_temp3 = m_temp = r_temp->complex;
+X	    /* skip over empty definitions */
+X	    while((m_temp) && (m_temp->empty)){
+X		m_temp3 = m_temp;
+X		m_temp = m_temp->next;
+X	    }
+X	    /* if the first non empty entry is c_code it must precede all tests */
+X  	    if(m_temp)
+X	       if(m_temp->c_code){
+X		if(r_temp->prev)
+X		    sprintf(s,"%s%s\0",prefix, r_temp->prev->label);
+X		else
+X		    sprintf(s,"%sEnd\0",prefix);
+X		p_trans_code(r_temp, m_temp->c_code, fp, s);
+X		/* unlink the code so it isn't inserted twice */
+X		m_temp3->next = m_temp->next;
+X	    }
+X
+X	    /* test for object counts */
+X	    fprintf(fp,"\t\tif(");
+X	    d_temp = token_list;
+X	    for(i = 0; i < total_tokens; i++){
+X		if(r_temp->search[i] > 0)
+X		    fprintf(fp,"(%stoken[%s%s] >= %d) and\n\t\t\t", prefix, prefix,d_temp->name,r_temp->search[i]);
+X		if(r_temp->search[i] < 0)
+X		    fprintf(fp,"(%stoken[%s%s] <= 0) and\n\t\t\t", prefix, prefix,d_temp->name);
+X		d_temp = d_temp->next;
+X	    }
+X	    d_temp = token_list;
+X	    fprintf(fp,"True)then begin");
+X
+X	    /* generate complex matching code */
+X
+X	    /* first initialize the current free variable matrix */
+X	    for(i = 0; i < total_tokens; i++)
+X		current_free[i] = 1;
+X
+X	    m_temp = m_temp3 = r_temp->complex;
+X	    prev_index = 0;
+X	    while(m_temp){
+X		if(m_temp->c_code){
+X		    if((prev_index == 0) || (r_temp->recurs == 0)){
+X		        if(r_temp->prev)
+X		            sprintf(s,"%s%s\0", prefix,r_temp->prev->label);
+X		        else
+X		            sprintf(s,"%s\0End", prefix);
+X		    }
+X		    else
+X			sprintf(s,"%s%s_%s_%d\0", prefix,
+X		    	r_temp->label, m_temp3->object, prev_index);
+X		    p_trans_code(r_temp, m_temp->c_code, fp, s);
+X		 }
+X		 else if(m_temp->empty){
+X		     /* declaration only - don't generate any code */
+X		     i = 0;
+X		 }
+X		 else{
+X		 i = 0;
+X		 d_temp = token_list;
+X		 while(strcmp(m_temp->object, d_temp->name) != 0){
+X		     i++;
+X		     d_temp = d_temp->next;
+X		 }
+X		 if(d_temp->data_types){
+X		     for(count = 0; count < m_temp->count; count++){
+X
+X		     /* initialize temp */
+X		     fprintf(fp,"\n\t\t\t%s%s_temp[%d] := %s%s_list[0];\n"
+X		     , prefix, m_temp->object, current_free[i], prefix, m_temp->object);
+X
+X		     /* print a label */
+X		     if(r_temp->recurs){
+X			fprintf(fp,"%s%s_%s_%d:\n",prefix,r_temp->label,m_temp->object,current_free[i]);
+X			fprintf(lp,"\t%s%s_%s_%d,\n",prefix,r_temp->label,m_temp->object,current_free[i]);
+X		     }
+X
+X		     /* free the previously found item */
+X		     if(r_temp->recurs){
+X		 	 fprintf(fp,"\t\t\tif(%s%s_list[%d]<>nil)\n", prefix, m_temp->object, current_free[i]);
+X			 fprintf(fp,"\t\t\t\t%s%s_list[%d]^.MARK := 0;\n", prefix, m_temp->object, current_free[i]);
+X		     }
+X
+X		     /* do the search */
+X		     fprintf(fp,"\t\t\t%s%s_list[%d] := search_%s%s_record(%d"
+X		     , prefix , m_temp->object, current_free[i], prefix, m_temp->object, current_free[i]);
+X		     dt_temp = d_temp->data_types;
+X		     while(dt_temp){
+X		         if(dt_temp->type <= 2){
+X		 	     t_temp = m_temp->tests;
+X			     j = 1;
+X			     while(j && t_temp){
+X			         if(strcmp(t_temp->element, dt_temp->name) == 0){
+X			 	     j = 0;
+X				     if((t_temp->type == 0) || (t_temp->type == 1))
+X				         fprintf(fp,", %s",t_temp->value);
+X				     if(t_temp->type == 2)
+X				         fprintf(fp,", '%s'",t_temp->value);
+X				     if(t_temp->type == -1){
+X				 	 if(t_temp->id)
+X					     fprintf(fp,", 0");
+X					 else{
+X				             l = 0;
+X				             m_temp2 = r_temp->complex;
+X				             while(m_temp2){
+X					         if(strcmp(m_temp2->free_name, t_temp->free_name) == 0){
+X					             l = m_temp2->index;
+X					 	     m_temp4 = m_temp2;
+X					             m_temp2 = NULL;
+X					         }
+X					         else
+X					             m_temp2 = m_temp2->next;
+X				             }
+X					     if(m_temp4->empty)
+X				                 fprintf(fp,", %s%s_empty[%d].%s", prefix,m_temp4->object,l,t_temp->value);
+X					     else
+X				                 fprintf(fp,", %s%s_list[%d]^.%s", prefix,m_temp4->object,l,t_temp->value);
+X				         }
+X				     }
+X				     fprintf(fp,", %d", t_temp->relop);
+X			    	     if(dt_temp->elts)
+X				 	 fprintf(fp,", %d",t_temp->id);
+X			         }
+X			         else
+X				     t_temp = t_temp->next;
+X			     }
+X			     if(j){
+X			         switch(dt_temp->type){
+X			         case 0: fprintf(fp,", 0, 7");
+X				        break;
+X			         case 1: fprintf(fp,", 0.0, 7");
+X				        break;
+X			         case 2: fprintf(fp,", '', 7");
+X			         default: break;
+X			         }
+X			         if(dt_temp->elts)
+X			 	     fprintf(fp,", 0");
+X			     }
+X		         }
+X		         dt_temp = dt_temp->next;
+X		     }
+X		     fprintf(fp,") ;\n");
+X		     fprintf(fp,"\t\t\tif( %s%s_list[%d] = nil )then begin\n",prefix,				 m_temp->object,current_free[i]);
+X		     /* search failed on first of rule */
+X
+X		     if((prev_index == 0) || (r_temp->recurs == 0)){
+X		         fprintf(fp,"\t\t\t\t%srestore ;\n", prefix);
+X		         if(r_temp->prev)
+X		             fprintf(fp,"\t\t\t\t{2}goto %s%s;\n\t\t\tend ;", prefix,r_temp->prev->label);
+X		         else
+X		             fprintf(fp,"\t\t\t\t{3}goto %sStop ;\n\t\t\tend ;", prefix);
+X		     }
+X
+X		     /* search failed - not first of rule */
+X		     else{
+X			 fprintf(fp,"\t\t\t\t{4}goto %s%s_%s_%d ;\n\t\t\tend ;", prefix,
+X		    	 r_temp->label, m_temp3->object, prev_index);
+X		     }
+X
+X		     /* move index one beyond the one currently found */
+X		     if(r_temp->recurs) fprintf(fp,"\n\t\t\t%s%s_temp[%d] := %s%s_list[%d]^.next;", prefix,
+X				m_temp->object, current_free[i], prefix,
+X				m_temp->object, current_free[i]);
+X
+X		     m_temp3 = m_temp;
+X		     prev_index = current_free[i];
+X		     current_free[i]++;
+X		}
+X	    }
+X	}
+X	m_temp = m_temp->next;
+X    }
+X
+X    /* get rule number for next 3 statements */
+X
+X    i = 1;
+X    r_temp2 = r_const;
+X    while(r_temp != r_temp2){
+X        r_temp2 = r_temp2->prev;
+X        i++;
+X    }
+X
+X
+X    /* generate ADD code */
+X
+X    fprintf(fp,"\n");
+X    init_list = r_temp->add;
+X    p_gen_init(0);
+X
+X    /* generate MARK code */
+X    /* first MARK objects deleted by name */
+X    m_temp = r_temp->complex;
+X    while(m_temp){
+X	if(m_temp->mark){
+X	    d_temp = token_list;
+X	    while(strcmp(m_temp->object, d_temp->name))
+X	        d_temp = d_temp->next;
+X		if(d_temp->data_types)
+X	            fprintf(fp,"\n\t\t\t\tfree_%s%s_record(%d) ;", prefix,m_temp->object, m_temp->index);
+X		else
+X	            fprintf(fp,"\n\t\t\t\t%stoken%s[%s] := %stoken%s[%s]-1 ;",			        prefix, prefix,d_temp->name,prefix,prefix,d_temp->name);
+X	    }
+X	    m_temp = m_temp->next;
+X	}
+X
+X	/* now MARK the rest of the objects */
+X	d_temp = token_list;
+X	for(i = 0; i < total_tokens; i++){
+X	    if(r_temp->mark[i]){
+X	        fprintf(fp,"\n\t\t\tfor i := 0 to %d do",r_temp->mark[i]-1);
+X		if(d_temp->data_types)
+X	            fprintf(fp,"\n\t\t\t\tfree_%s%s_record(1) ;", prefix,d_temp->name);
+X		else
+X	            fprintf(fp,"\n\t\t\t\t%stoken%s[%s] := %stoken%s[%s]-1 ;",				prefix,prefix,d_temp->name,prefix,prefix,d_temp->name);
+X	    }
+X	    d_temp = d_temp->next;
+X	}
+X	d_temp = token_list;
+X
+X	fprintf(fp,"\n\t\t\t%srestore ;\n", prefix);
+X
+X	l_temp = r_temp->c_code;
+X	p_trans_code(r_temp, l_temp, fp);
+X	if(find_name(r_temp->opt))
+X	    fprintf(fp,"\t\t\t{5}goto %s%s;\n\t\tend ;\n", prefix, r_temp->opt);
+X	else
+X	    fprintf(fp,"\t\t\tgoto %sStart;\n\t\tend ;\n", prefix);
+X	r_temp = r_temp->prev;
+X    }
+X    fprintf(fp,"\t\tgoto Stop ;\n\tend ;\n%sStop:\n", prefix);
+X    fprintf(fp,"\nend ;\n");
+X    if(zeroing)
+X	p_gen_zero;
+X    l_temp = trailer_code;
+X    while(l_temp){
+X	fprintf(fp,"%s\n",l_temp->name);
+X	l_temp = l_temp->next;
+X    }
+X}
+X
+!EOR!
+echo extracting - parser
+sed 's/^X//' > parser << '!EOR!'
+X%{
+X#include	"main.h"
+Xint ii, jj, st, last_free;
+X%}
+X
+X%start file
+X
+X%token DELIM ARROW TOKEN MARK ADD C_CODE NOT INT FLOAT STRING POINTER
+X%token OPTIMIZE INTEGER DOUBLE STR LE GE LT GT EQ NE HAT RECURS SEMI
+X%token BACKTRACK TRACE PROFILE DUMP NORECURS PREFIX EMPTY SAVE ZERO PASCAL
+X
+X%%
+X
+X
+Xfile		:  header defs stm ltm DELIM trailer
+X		|  error
+X		    {
+X			fprintf(stderr,"%d: syntax error\n", lineno);
+X			errors++;
+X		    }
+X		;
+X
+Xheader		: error DELIM
+X		    {
+X			fprintf(stderr,"%d: syntax error in header\n",lineno);
+X			errors++;
+X		    }
+X		| DELIM
+X		    {
+X			st = 1;
+X			last_free = 0;
+X		    }
+X		| C_CODE DELIM
+X		    {
+X			st = 1;
+X			do_header();
+X		    }
+X		;
+X
+Xdefs		: definitions DELIM
+X			{
+X			    insert_rule();
+X			    stm = (int *) calloc(total_tokens, sizeof(int));
+X			    current_free = (int *) calloc(total_tokens, sizeof(int));
+X			    current_empty = (int *) calloc(total_tokens, sizeof(int));
+X			    max_free = (int *) calloc(total_tokens, sizeof(int));
+X			    max_empty = (int *) calloc(total_tokens, sizeof(int));
+X			    for(ii = 0; ii < total_tokens; ii++){
+X				max_free[ii] = current_free[ii] = 1;
+X				max_empty[ii] = current_empty[ii] = 0;
+X			    }
+X			}
+X		;
+X
+Xdefinitions	: /* empty */
+X		| error
+X		    {
+X			fprintf(stderr,"%d: syntax error in definition\n",lineno);
+X			errors++;
+X		    }
+X		| definitions definition
+X		;
+X
+Xdefinition	: TOKEN
+X			{
+X			    insert_token($1);
+X			}
+X		| TOKEN '(' item_list ')'
+X			{
+X			    insert_token($1);
+X			}
+X		;
+X
+Xitem_list	: /* empty */
+X		| item_list item
+X		;
+X
+Xitem		: TOKEN ':' type
+X			{
+X			    if(add_struct($1, $3) == -1){
+X				fprintf(stderr,"%d: duplicate name in definition -> %s\n", lineno, $1);
+X				errors++;
+X			    }
+X			}
+X		;
+X
+Xtype		: INT
+X			{
+X			    $$ = 0;
+X			}
+X		| FLOAT
+X			{
+X			    $$ = 1;
+X			}
+X		| STRING
+X			{
+X			    $$ = 2;
+X			}
+X		| POINTER
+X			{
+X			    $$ = 3;
+X			}
+X		;
+X
+Xstm		: error DELIM
+X		    {
+X			fprintf(stderr,"%d: syntax error in short term memory\n",lineno);
+X			errors++;
+X		    }
+X		| st DELIM
+X			{
+X			    st = 0;	/* no longer parsing stm */
+X			    init_list2 = init_list; /* save init_list */
+X			    init_list = NULL;
+X			    insert_init();		/* make a new init_list */
+X			    build_case_list();		/* prepare cross reference for ltm */
+X			}
+X		;
+X
+Xst		: /* empty */
+X		| st entry
+X		;
+X
+Xentry		: count TOKEN
+X			{
+X			    if((ii = find_token($2)) < 0){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else{
+X				if(st) stm[ii]++;	/* if stm is being parsed */
+X			        do_init_list($2);
+X				insert_count($1);
+X			        insert_init();
+X			    }
+X			}
+X		| count TOKEN '(' init_list ')'
+X			{
+X			    if((ii = find_token($2)) < 0){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else{
+X				if(st) stm[ii]++;	/* if stm is being parsed */
+X			        do_init_list($2);
+X				insert_count($1);
+X			        insert_init();
+X			    }
+X			}
+X		;
+X
+X
+Xcount		: /* empty */
+X			{
+X				$$ = 1;
+X			}
+X		| INTEGER
+X			{
+X				jj = atoi($1);
+X				if(jj < 0){
+X				    $$ = 1;
+X				    fprintf(stderr,"%d: negative count is undefined\n", lineno);
+X				    errors++;
+X				}
+X				else if(jj == 0){
+X				    $$ = 1;
+X				    fprintf(stderr,"%d: zero count is undefined\n", lineno);
+X				    errors++;
+X				}
+X				else
+X				    $$ = jj;
+X			}
+X		;
+X
+X
+Xinit_list	: /* empty */
+X		| init_list init_item
+X		;
+X
+Xinit_item	: TOKEN ARROW INTEGER
+X			{
+X				insert_fields($1, $3, 0, 0, 0);
+X			}
+X		| TOKEN ARROW DOUBLE 
+X			{
+X				insert_fields($1, $3, 0, 1, 0);
+X			}
+X		| TOKEN ARROW STR
+X			{
+X				insert_fields($1, $3, 0, 2, 0);
+X			}
+X		| TOKEN ARROW TOKEN '.' TOKEN
+X			{
+X				if(st) {
+X				    fprintf(stderr,
+X				    "%d: free variables are not permitted in stm\n",
+X				    lineno);
+X				    errors++;
+X				}
+X				else if((jj = find_free($3)) == -1){
+X				    fprintf(stderr,"%d: undefined free variable -> %s\n",lineno, $3);
+X				    errors++;
+X				}
+X				else
+X				    insert_fields($1, $5, $3, -1, jj);
+X			}
+X		;
+X
+X
+Xltm		: opts lt
+X		;
+X
+Xopts		: /* empty */
+X		| opts opt
+X		;
+X
+Xopt		: BACKTRACK
+X			{
+X			    backtracking = 1;
+X			}
+X		| TRACE
+X			{
+X			    tracing = 1;
+X			}
+X		| PROFILE
+X			{
+X			    profiling = 1;
+X			}
+X		| DUMP
+X			{
+X			    dumping = 1;
+X			}
+X		| RECURS
+X			{
+X			    recursing = 1;
+X			    rule_list->recurs = 1;
+X			}
+X		| NORECURS
+X			{
+X			    recursing = 0;
+X			    rule_list->recurs = 0;
+X			}
+X		| PREFIX TOKEN
+X			{
+X			    prefix = (char *) $2;
+X			}
+X		| SAVE
+X			{
+X			    saving = 1;
+X			}
+X		| ZERO
+X			{
+X			    zeroing = 1;
+X			}
+X		| PASCAL
+X			{
+X			    pascal = 1;
+X			}
+X		;
+X
+Xlt		: /* empty */
+X		| lt production
+X		;
+X
+Xproduction	: error SEMI
+X		    {
+X			fprintf(stderr,"%d: syntax error in previous rule\n",lineno);
+X			errors++;
+X		    }
+X		| label lhs ARROW rhs SEMI
+X			{
+X			    pnum++;
+X			    rule_list->add = init_list;
+X			    init_list = NULL;
+X			    insert_init();
+X			    insert_rule();
+X			    if(recursing)
+X				rule_list->recurs = 1;
+X			    for(ii = 0; ii < total_tokens; ii++){
+X				if(max_free[ii] < current_free[ii])
+X				    max_free[ii] = current_free[ii];
+X				if(max_empty[ii] < current_empty[ii])
+X				    max_empty[ii] = current_empty[ii];
+X				current_free[ii] = 1;
+X				current_empty[ii] = 0;
+X			    }
+X			}
+X		;
+X
+Xlabel		:  TOKEN ':'
+X			{
+X			    if(find_name($1)){
+X				fprintf(stderr,"%d: redefined label -> %s\n",lineno,$1);
+X				errors++;
+X			    }
+X			    else if((find_token($1)) >= 0){
+X				fprintf(stderr,"%d: label repeats object declaration -> %s\n",lineno, $1);
+X				errors++;
+X			    }
+X			    else{
+X				insert_label($1);
+X			    }
+X			}
+X		| ':'
+X			{
+X				insert_label(gen_next_label());
+X			}
+X		;
+X
+Xlhs		: /* empty */
+X		| lhs match
+X		;
+X
+Xmatch		:  count TOKEN 
+X			{
+X			    if((ii = find_token($2)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $2, $2);
+X				errors++;
+X			    }
+X			    else{
+X				add_test($2, 0, 7, 0, 0, 0,current_free[ii], 0);
+X				add_count($1);
+X				if($1 > 1){
+X				    rule_list->search[ii]+= $1;
+X				    current_free[ii]+= $1;
+X				}
+X				else{
+X				    rule_list->search[ii]++;
+X				    current_free[ii]++;
+X				}
+X			    }
+X			    current_match = NULL;
+X			    current_test = NULL;
+X			}
+X		|  NOT TOKEN
+X			{
+X			    if((ii = find_token($2)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii]){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $2, $2);
+X				errors++;
+X			    }
+X			    else rule_list->search[ii]--;
+X			    current_match = NULL;
+X			    current_test = NULL;
+X			    
+X			}
+X		| count '(' free_variable match_list ')'
+X			{
+X			    last_free = 0;
+X			    if(($1 > 1) && $3){
+X				fprintf(stderr,"%d: count on free variables undefined\n", lineno);
+X				errors++;
+X			    }
+X			    add_count($1);
+X			    current_match = NULL;
+X			    current_test = NULL;
+X			    if($1 > 1){
+X			        current_free[ii]+= $1;
+X			        rule_list->search[ii]+= $1;
+X			    }
+X			    else{
+X			        current_free[ii]++;
+X			        rule_list->search[ii]++;
+X			    }
+X			}
+X		| EMPTY TOKEN TOKEN
+X			{
+X			    if((ii = find_token($2)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else if(find_free($3) != -1){
+X				fprintf(stderr,"%d: free variable already defined -> %s\n",lineno, $3);
+X				errors++;
+X			    }
+X			    else{
+X				add_test($2,0,-1,0,0,$3, current_empty[ii], -1);
+X				current_empty[ii]++;
+X				current_match = NULL;
+X				current_test  = NULL;
+X			    }
+X			}
+X		| C_CODE
+X			{
+X			    add_test_code();
+X			}
+X		| RECURS
+X			{
+X			    rule_list->recurs = 1;
+X			}
+X		| NORECURS
+X			{
+X			    rule_list->recurs = 0;
+X			}
+X		;
+X
+Xfree_variable   : /* empty */
+X			{
+X				$$ = 0;
+X			}
+X		| HAT TOKEN TOKEN
+X			{
+X			    if((ii = find_token($2)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				errors++;
+X			    }
+X			    else if(find_free($3) != -1){
+X				fprintf(stderr,"%d: free variable already defined -> %s\n",lineno, $3);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $2, $2);
+X				errors++;
+X			    }
+X			    else{
+X				add_test($2,0,7,0,0,$3, current_free[ii], 0);
+X				last_free = $3;
+X			    }
+X			    $$ = 1;
+X			}
+X		;
+X
+X
+Xmatch_list	: /* empty */
+X			{
+X			}
+X		| match_list match_element
+X			{
+X			}
+X		;
+X
+X
+Xmatch_element   : TOKEN '.' TOKEN relop INTEGER
+X			{
+X			    if((ii = find_token($1)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$1);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $1, $1);
+X				errors++;
+X			    }
+X			    else if((jj = search_structs($1,$3)) < 0){
+X				fprintf(stderr,"%d: undefined object field -> %s.%s\n",lineno,$1,$3);
+X				errors++;
+X			    }
+X			    else if(jj != 0){
+X				fprintf(stderr,"%d: object field must be integer\n", lineno);
+X			    }
+X			    else{
+X				add_test($1,$3,$4,$5,0, 0, current_free[ii], 0);
+X			    }
+X			}
+X
+X		| TOKEN '.' TOKEN relop DOUBLE
+X			{
+X			    if((ii = find_token($1)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$1);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $1, $1);
+X				errors++;
+X			    }
+X			    else if((jj = search_structs($1,$3)) < 0){
+X				fprintf(stderr,"%d: undefined object field -> %s.%s\n",lineno,$1,$3);
+X				errors++;
+X			    }
+X			    else if(jj != 1){
+X				fprintf(stderr,"%d: object field must be double\n",lineno);
+X			    }
+X			    else{
+X				add_test($1,$3,$4,$5,1, 0, current_free[ii], 0);
+X			    }
+X			}
+X
+X		| TOKEN '.' TOKEN relop STR
+X			{
+X			    if((ii = find_token($1)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$1);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $1, $1);
+X				errors++;
+X			    }
+X			    else if((jj = search_structs($1,$3)) < 0){
+X				fprintf(stderr,"%d: undefined object field -> %s.%s\n",lineno,$1,$3);
+X				errors++;
+X			    }
+X			    else if(jj != 2){
+X				fprintf(stderr,"%d: object field must be a string\n",lineno);
+X			    }
+X			    else{
+X				add_test($1,$3,$4,$5,2,0,current_free[ii], 0);
+X			    }
+X			}
+X		| TOKEN '.' TOKEN relop TOKEN '.' TOKEN
+X			{
+X			    if((ii = find_token($1)) == -1){
+X				fprintf(stderr,"%d: undefined object -> %s\n",lineno,$1);
+X				errors++;
+X			    }
+X			    else if(rule_list->search[ii] < 0){
+X				fprintf(stderr,"%d: can't have %s and NOT %s in the same rule\n", lineno, $1, $1);
+X				errors++;
+X			    }
+X			    else if(search_structs($1,$3) < 0){
+X				fprintf(stderr,"%d: undefined element -> %s.%s\n",lineno,$1,$3);
+X				errors++;
+X			    }
+X			    else if((find_free($5) == -1)  /* not a free var */
+X				|| ((jj = strcmp($5, last_free)) == 0)){
+X				if(jj == 0)
+X				     $5 = $1;
+X				if(strcmp($1, $5) != 0){
+X				    fprintf(stderr,"%d: semantic error: use a free variable\n",lineno);
+X				    errors++;
+X				}
+X				else if(strcmp($3, $7) == 0){
+X				    fprintf(stderr,"%d: degenerate case, please rewrite\n",lineno);
+X				    errors++;
+X				}
+X			        else if(search_structs($5,$7) < 0){
+X				    fprintf(stderr,"%d: undefined element -> %s.%s\n",lineno,$5,$7);
+X				    errors++;
+X			        }
+X				else if(cmp_type($1, $3, $7) == -1){
+X				    fprintf(stderr,"%d: types of %s.%s and %s.%s do not match\n", lineno, $1, $3, $5, $7);
+X				    errors++;
+X				}
+X				else{
+X				    add_test($1,$3,$4,$7,-1, $5, current_free[ii], 0);
+X				}
+X			    }
+X			    else if((jj = match_type($1, $3, $5, $7)) == 0){
+X				fprintf(stderr,"%d: types of %s.%s and %s.%s do not match\n", lineno, $1, $3, $5, $7);
+X				errors++;
+X			    }
+X			    else{
+X				if((jj == 1) || (jj == 2))
+X				    add_test($1,$3,$4,$7,-1, $5, current_free[ii], 0);
+X			    }
+X			}
+X		;
+X
+Xrhs		: optional_part pass_part
+X		;
+X
+Xoptional_part	: /* empty */
+X		| optional_part option
+X		;
+X
+Xoption		: MARK mark_list
+X		| ADD add_list
+X		| OPTIMIZE TOKEN
+X			{
+X			    opt($2);
+X			}
+X		| MARK error
+X			{
+X			    fprintf(stderr,"%d: syntax error in MARK statement\n", lineno);
+X			    errors++;
+X			}
+X		| ADD error
+X			{
+X			    fprintf(stderr,"%d: syntax error in ADD statement\n", lineno);
+X			    errors++;
+X			}
+X		| OPTIMIZE error
+X			{
+X			    fprintf(stderr,"%d: syntax error in OPTIMIZE statement\n", lineno);
+X			    errors++;
+X			}
+X		;
+X
+Xmark_list	: /* empty */
+X		| mark_list mark_item
+X		;
+X
+Xmark_item	: count TOKEN
+X			{
+X			    jj = 1;
+X			    if($1 >0) jj = $1;
+X			    if((ii = find_token($2)) == -1){
+X			        if(mark_free($2)){
+X				    if(jj > 1){
+X				        fprintf(stderr,"%d: can't MARK more than 1 %s\n",lineno,$2);
+X				        errors++;
+X				    }
+X			        }
+X				else{
+X				    fprintf(stderr,"%d: undefined object -> %s\n",lineno,$2);
+X				    errors++;
+X				}
+X			    }
+X			    else if(rule_list->search[ii] < (rule_list->mark[ii]  + jj)){
+X				fprintf(stderr,"%d: can't mark more %s's than are found\n", lineno, $2);
+X				errors++;
+X			    }
+X			    else{
+X				if($1)
+X				    rule_list->mark[ii]+= $1;
+X				else
+X				    rule_list->mark[ii]++;
+X			    }
+X			}
+X		;
+X
+X
+Xadd_list	: entry
+X		| add_list entry
+X		;
+X
+Xpass_part	:  /* empty */
+X		|  C_CODE 
+X		    {
+X			do_code();
+X		    }
+X		;
+X
+Xtrailer		: /* empty */
+X		| error
+X		    {
+X			fprintf(stderr,"%d: syntax error in trailer\n",lineno);
+X			errors++;
+X		    }
+X		| C_CODE
+X		    {
+X			do_trailer();
+X		    }
+X		;
+X
+Xrelop		:  LE		/* <= */
+X		    {
+X			$$ = 6;
+X		    }
+X		|  GE		/* >= */
+X		    {
+X			$$ = 3;
+X		    }
+X		|  LT		/* <  */
+X		    {
+X			$$ = 4;
+X		    }
+X		|  GT		/* >  */
+X		    {
+X			$$ = 1;
+X		    }
+X		|  EQ		/* == */
+X		    {
+X			$$ = 2;
+X		    }
+X		|  NE		/* != */
+X		    {
+X			$$ = 5;
+X		    }
+X		;
+X
+X%%
+X
+X#include "scanner.c"
+X
+X
+!EOR!
+echo extracting - scanner.c
+sed 's/^X//' > scanner.c << '!EOR!'
+X#include <stdio.h>
+X#include <ctype.h>
+X
+X#define	 NUM 19
+X/* number of reserved words */
+Xchar *words[NUM] = {    /* the strings to compare against */
+X	    "MARK",
+X	    "ADD",
+X	    "NOT",
+X	    "INT",
+X	    "FLOAT",
+X	    "STRING",
+X	    "POINTER",
+X	    "OPTIMIZE",
+X	    "RECURS",
+X	    "BACKTRACK",
+X	    "TRACE",
+X	    "PROFILE",
+X	    "DUMP",
+X	    "NORECURS",
+X	    "PREFIX",
+X	    "EMPTY",
+X	    "SAVE",
+X	    "PASCAL",
+X	    "ZERO"
+X	};
+Xint ret[NUM] = {	/* the value to return to yyparse */
+X	    MARK,
+X	    ADD,
+X	    NOT,
+X	    INT,
+X	    FLOAT,
+X	    STRING,
+X	    POINTER,
+X	    OPTIMIZE,
+X	    RECURS,
+X	    BACKTRACK,
+X	    TRACE,
+X	    PROFILE,
+X	    DUMP,
+X	    NORECURS,
+X	    PREFIX,
+X	    EMPTY,
+X	    SAVE,
+X	    PASCAL,
+X	    ZERO
+X	};
+X
+Xyylex()
+X{
+X    char c, s[512], *t;
+X    int i, nb, dot, current_line;
+X
+X    current_line = lineno;
+X    i = nb = dot = 1;
+X    while((c = getc(stdin)) != EOF){
+X	if(c == ' ');		/* ignore white space */
+X	else if(c == '\t');
+X	else if(c == '%'){
+X	    c = getc(stdin);
+X	    if(c == '%')
+X		return(DELIM);
+X	    ungetc(c, stdin);
+X	    fprintf(stderr,"%d: unexpected '%c'\n", '%', lineno);
+X	    errors++;
+X	}
+X	else if(c == '.'){
+X	    return('.');
+X	}
+X	else if(c == ':'){
+X	    return(':');
+X	}
+X	else if(c == '('){
+X	    return('(');
+X	}
+X	else if(c == ')'){
+X	    return(')');
+X	}
+X	else if(c == '^'){
+X	    return(HAT);
+X	}
+X	else if(c == '\n'){
+X		lineno++;
+X	}
+X	else if(c == '>'){
+X	    c = getc(stdin);
+X	    if(c == '=')
+X		return(GE);
+X	    ungetc(c, stdin);
+X	    return(GT);
+X	}
+X	else if(c == '<'){
+X	    c = getc(stdin);
+X	    if(c == '=')
+X		return(LE);
+X	    ungetc(c, stdin);
+X	    return(LT);
+X	}
+X	else if(c == '!'){
+X	    c = getc(stdin);
+X	    if(c == '=')
+X		return(NE);
+X	    ungetc(c, stdin);
+X	    fprintf(stderr,"%d: unexpected '!'\n", lineno);
+X	    errors++;
+X	}
+X	else if(c == '='){
+X	    c = getc(stdin);
+X	    if(c == '>')
+X		return(ARROW);
+X	    if(c == '=')
+X		return(EQ);
+X	    ungetc(c, stdin);
+X	    fprintf(stderr,"%d: unexpected '='\n", lineno);
+X	    errors++;
+X 	}
+X	else if(c == ';'){
+X	    return(SEMI);
+X	}
+X	else if(c == '{'){
+X	    i = 0;
+X	    while(nb){
+X		c = getc(stdin);
+X		if(c == EOF){
+X		    fprintf(stderr,"%d: unterminated C code\n", current_line);
+X		    errors++;
+X		    return(EOF);
+X		}
+X		if(c == '}') {
+X		    nb--;
+X		    if(nb) 
+X			s[i++] = c;
+X		    else{
+X			s[i] = '\0';
+X			t = (char *) malloc (i + 1);
+X			strcpy(t,s); 
+X			append_code(t);
+X			return(C_CODE);
+X		    }
+X		}
+X		else{
+X		    if(c == '{') nb++;
+X		    if((c == '\n') || (i == 510)){
+X			lineno++;
+X			s[i] = '\0';
+X			t = (char *) malloc(i + 1);
+X			strcpy(t,s);
+X			append_code(t);
+X			i = 0;
+X		    }
+X		    else
+X			s[i++] = c;
+X		}
+X	    }
+X	    return(C_CODE);
+X	}
+X	else if(c == '\042'){
+X	    i = 0;
+X	    while(dot){
+X		c = getc(stdin);
+X		if(c == '\042'){
+X		    s[i] = '\0';
+X		    dot = 0;
+X		}
+X		else if(c == '\n'){
+X		    fprintf(stderr,"%d: newline embedded in string\n",lineno);
+X		    s[i] = '\0'; lineno++;
+X		    errors++; dot = 0;
+X		}
+X		else{
+X		    s[i++] = c;
+X		    if(c == '\\')
+X			s[i++] = getc(stdin);
+X		}
+X	    }
+X	    yylval = malloc(strlen(s) + 1);
+X	    strcpy(yylval, s);
+X	    return(STR);
+X	}
+X	else if((isdigit(c)) || (c == '-')){
+X	    s[0] = c;
+X	    i = 1;
+X	    while(i){
+X		c = getc(stdin);
+X		if((isdigit(c)) || ((c == '.') && (dot))){
+X		    s[i++] = c;
+X		    if(c == '.') dot = 0;
+X		}
+X		else{
+X		    ungetc(c, stdin);
+X		    s[i] = '\0';
+X		    i = 0;
+X		}
+X	    }
+X	    yylval = malloc(strlen(s) + 1);
+X	    strcpy(yylval, s);
+X	    if(dot) return(INTEGER);
+X	    return(DOUBLE);
+X	}
+X	else if(isalpha(c)){
+X	    s[0] = c;
+X	    i = 1;
+X	    while(i){
+X		c = getc(stdin);
+X		if((c == '_') || (isalpha(c)) || (isdigit(c))){
+X		    s[i++] = c;
+X		}
+X		else{
+X		    ungetc(c, stdin);
+X		    s[i] = '\0';
+X		    i = 0;
+X		}
+X	    }
+X	    for(i = 0; i < NUM; i++)	/* search the reserved word list */
+X		if(strcmp(words[i],s) == 0)
+X		    return(ret[i]);
+X	    yylval = malloc(strlen(s) + 1);
+X	    strcpy(yylval, s);
+X	    return(TOKEN);
+X	}
+X	else if(c == '/'){			/* check for comments */
+X	    if((c = getc(stdin)) != '*'){
+X		ungetc(c, stdin);
+X		printf("%d: unexpected '/'\n", lineno);
+X		errors++;
+X	    }
+X	    else{			/* check for comment terminator */
+X		i = 1;
+X		while(i){
+X		    c = getc(stdin);
+X		    if(c == EOF){
+X			fprintf(stderr,"%d: unterminated comment\n", current_line);
+X			errors++;
+X			return(EOF);
+X		    }
+X		    else if(c == '\n')
+X			lineno++;
+X		    else if(c == '*'){
+X			c = getc(stdin);
+X			if(c == '/')
+X			    i = 0;
+X		    }
+X		}
+X	    }
+X	}
+X	else{
+X	     fprintf(stderr,"%d: unexpected or undefined character: \\0%o\n", lineno, c);
+X	     errors++;
+X	}
+X    }
+X    return(c);
+X}
+X
+!EOR!

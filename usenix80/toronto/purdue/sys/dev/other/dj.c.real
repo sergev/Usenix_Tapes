@@ -1,0 +1,141 @@
+#
+
+
+/*    copyright 1975,  ian inc
+ *
+ *    This driver is from the University of New South Wales
+ *
+ */
+
+/*
+ *		DJ-11 DRIVER
+ */
+
+#include	"../param.h"
+#include	"../conf.h"
+#include	"../user.h"
+#include	"../tty.h"
+#include	"../proc.h"
+
+#define	NDJ11	16		/*only 1 dj all lines*/
+
+
+#define	DJADDR	0160010		/*1st dj address*/
+#define	DJTIE	0040000		/*xmit interupt enable*/
+#define	DJTSE	0000400		/*xmit scan enable*/
+#define	DJTR	0100000		/*xmitter ready*/
+#define	DJDP	0100000		/*data present*/
+#define	DJRIE	0000100		/*rcvr interupt enable*/
+#define	DJRE	0000001		/*rcvr enable*/
+#define	ERRFLAG	0060000		/*oe,fe,pe*/
+
+struct	tty	DJ11[NDJ11];
+
+struct	djregs	{
+	int	djcsr;
+	int	djrbuf;
+	int	djtcr;
+	int	djtbuf;
+}
+
+djopen(dev,flag)
+{
+	register char *addr;
+	register struct tty *tp;
+	extern	 djstart();
+
+	if(dev.d_minor >= NDJ11) {
+		u.u_error = ENXIO;
+		return;
+	}
+
+	tp = &DJ11[dev.d_minor];
+	if(u.u_procp->p_ttyp == 0)
+		u.u_procp->p_ttyp = tp;
+	tp->t_addr = djstart;         /* a special start routine */
+	tp->t_dev  = dev;
+
+	if((tp->t_state&ISOPEN) == 0) {
+		tp->t_state = SSTART | ISOPEN | CARR_ON;
+		tp->t_flags = XTABS | LCASE | ECHO | CRMOD;
+		tp->t_erase = CERASE;
+		tp->t_kill  = CKILL;
+	}
+
+	DJADDR->djcsr = DJTIE | DJTSE | DJRE | DJRIE;
+}
+
+djclose(dev)
+{
+	register struct tty *tp;
+
+	tp = &DJ11[dev.d_minor];
+	wflushtty(tp);
+	tp->t_state = 0;
+}
+
+
+djread(dev)
+{
+	ttread(&DJ11[dev.d_minor]);
+}
+
+
+djwrite(dev)
+{
+	ttwrite(&DJ11[dev.d_minor]);
+}
+
+
+djstart(atp)
+struct tty *atp;
+{
+	/* enable xmitter for this line */
+	DJADDR->djtcr =| 1<<(atp-DJ11);
+}
+
+
+djxint(dev)
+{
+	register int c;
+	register struct tty *tp;
+
+	while (DJADDR->djcsr&DJTR)	/*loop till xmitter happy */
+	{
+	c = DJADDR->djtbuf;
+	tp = &DJ11[c>>8];
+	if((c = getc(&tp->t_outq)) >= 0)
+		DJADDR->djtbuf = c + (partab[c]&0200);
+	  else	DJADDR->djtcr   =& ~(1<<(tp-DJ11));  /*turn it off*/
+
+	if(tp->t_outq.c_cc == 0 || tp->t_outq.c_cc == TTLOWAT)
+		wakeup(&tp->t_outq);
+	}
+}
+
+
+djrint(dev)
+{
+	register int c, *addr;
+	register struct tty *tp;
+
+	while (DJADDR->csr&0200)		/*loop till fifo empty*/
+	{
+		c = DJADDR->djrbuf;
+		if(c&ERRFLAG) return;
+		tp = &DJ11[(c>>8)&017]; /*line number*/
+		c =& 0177;
+		ttyinput(c,tp);
+	}
+}
+
+
+djsgtty(dev,v)
+	int *v;
+{
+	register struct tty *tp;
+
+	tp = &DJ11[dev.d_minor];
+	ttystty(tp,v);
+}
+

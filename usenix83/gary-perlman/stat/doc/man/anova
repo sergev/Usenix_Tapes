@@ -1,0 +1,204 @@
+.TH ANOVA 1STAT "October 16, 1980"
+.SH NAME
+anova \- statistics: multi-factor analysis of variance
+.SH SYNOPSIS
+.B anova
+[column names]
+.SH DESCRIPTION
+.I anova
+does multi-factor analysis of variance on designs
+with within groups factors, between groups factors, or both.
+.I anova
+reads from the standard input (via redirection with < or piped
+with |) and writes to the standard output.
+.I anova
+allows variable numbers of replications
+(averaged before analysis) on any factor.
+All factors except the random factor must be crossed;
+some nested designs are not allowed.
+Unequal group sizes on between groups factors are allowed
+and are solved with the weighted means solution,
+however empty cells are not permitted.
+The program is based on a method of doing analysis discussed by
+Keppel (1973) in
+.I "Design and Analysis: A Researcher's Handbook."
+The input format was designed with the help of Jay McClelland of UCSD.
+
+.I "Input Format."
+.I anova
+uses an input format unlike conventional programs.
+The input format was designed so that if a user specifies
+the role individual data play in the overall design,
+.I anova
+would figure out program parameters that usually need to
+be explicitly specified with a special control language.
+This way, the error prone process of design specification
+is taken out of the hands of the user.
+The input to 
+.I anova
+consists of each datum on a separate line,
+preceded by a list of indexes, one for each factor,
+that specifies the level of each factor at which that datum was obtained.
+By convention, data are always in the last column,
+and indexes for the one allowable random factor must be in the first.
+Data can be real numbers or integers.
+Indexes can be any character string,
+allowing mnemonic labels to simplify reading the output.
+For example:
+.ce
+fred  3  hard  10
+indicates that "fred" at level "3" of the factor indexed by column two
+and at level "hard" of the factor indexed by column three, scored 10.
+Indexes and data on a line can be separated by tabs or spaces for readability.
+Data from an experiment consists of a series of lines like the one above.
+The order of these lines does not matter, so additional data can
+simply be appended to the end of a file.
+Replications are coded by having more than one line
+with the same list of leading indexes.
+
+With this information, 
+.I anova
+determines the number of factors,
+and the number and names of levels of each factor.
+.I anova
+also figures out whether a factor is between groups or within
+groups so that it can correctly choose error terms for F-ratios.
+
+Optionally, names of independent and dependent variables can
+be specified to 
+.I anova,
+providing mnemonic labels for the output.
+These names can be quite long but will be truncated in the output.
+The names should have unique first characters because that is all
+that is used in the F tables.
+For example, in a three factor design, the call to 
+.I anova:
+.ce
+anova subjects group difficulty errors
+would give the name "subjects" to the random factor,
+"group" and "difficulty" to the next two,
+and "errors" to the dependent variable.
+If names are not specified, the default name for the random factor
+is RANDOM, for the dependent variable, DATA, and for the independent
+variables, A, B, C, D, etc.
+
+.I "Output Format."
+The output from 
+.I anova
+consists of cell means and standard deviations
+for each source not involving the random factor,
+a summary of design information, and an F table.
+Sums of squares, degrees of freedom, mean squares, F ratio and
+significance level are all reported for each F test.
+.SH "LIMITATIONS AND DIAGNOSTICS
+.PP
+The maximum number of factors 
+.I anova
+allows is ten, and the maximum
+number of levels of factors is 100 (on some versions, 500),
+although both these
+limitations can be changed by resetting just one parameter
+and recompiling.
+.PP
+.I anova
+checks its input to make sure that data are numerical,
+and that each datum is preceded by a consistent number of indexes
+(if not,
+.I anova
+will complain about "Ragged input").
+.PP
+.I anova
+will not print its F tables if it cannot make sense out
+of the the input specification
+("Unbalenced factor or Empty cell").
+This can happen if there is missing data
+and is detected when the cell sizes of all the scores
+for a source do not add up to the expected grand total,
+the number of levels of the data column reported with the design information.
+(This number is equal to the product of all the within subjects factors,
+and the number of levels of the random factor.)
+Unbalenced factors often are due to a typographical error,
+but the empty cell size message can be due to an illegal nested design
+(only the random factor can be nested).
+.PP
+.I anova
+uses a temporary file to store its input,
+will complain if it is unable to create it
+("Can't open temporary file").
+This is usually because you are in some other user's directory
+that is "write protected."
+.I anova
+has to allocate space to compute means and for some designs
+it will be unable due to lack of available memory
+.SH EXAMPLE
+.PP
+Suppose you have done an experiment in which the two
+factors of interest were difficulty of material to be learned,
+and amount of knowledge a person brings with him or her
+into the experiment.
+Each person is given two learning tasks, one easy and one hard,
+so task difficulty is a within groups factor.
+Three people are experts in the task domain you have chosen,
+while four are novices, so knowledge is a between groups factor
+with unequal group sizes.
+The dependent variable is the amount of time it takes a person
+to correctly work through a problem.
+Data is formatted as follows:
+in column one is the name of the person;
+in column two is the level of the difficulty factor;
+in column three is the level of the knowledge factor;
+and in column four is the time, in seconds, to solve the problem.
+A set of fictitious data follow.
+.nf
+.ce 100
+lucy     easy     novice     12
+lucy     hard     novice     22
+fred     easy     novice     15
+fred     hard     novice     16
+ethel    easy     novice     10
+ethel    hard     novice     15
+ricky    easy     novice     25
+ricky    hard     novice     30
+ernie    easy     expert      7
+ernie    hard     expert     10
+bert     easy     expert     12
+bert     hard     expert     18
+bigbird  easy     expert     15
+bigbird  hard     expert     14
+.ce 0
+.fi
+
+The call to 
+.I anova
+to analyze the data would probably look like:
+
+.ce
+anova subjects difficulty knowledge time < data
+
+"data" being the name of the file containing the above data.
+Notice that subjects is the random factor so indexes for that
+factor appear in the first column.
+Data, here called "time", must appear in the last column.
+You can see that "difficulty" is a within groups factor
+because each person appears at every level of that factor.
+In the third column are indexes for "knowledge", the between groups
+factor, so identified because no person appears at more than one
+level of that factor.
+.SH FILES
+/tmp/anova.????
+.SH SEE\ ALSO
+dm(1),
+.br
+G. Perlman,
+Data analysis programs for the UNIX operating system,
+.I "Behavior Research Methods and Instrumentation,"
+1980,
+.I 12,
+554-558.
+.SH AUTHOR
+Gary Perlman
+.SH BUGS
+Huge designs, such as those with hundreds of levels of the random factor,
+cause some rounding errors to creep in.
+This only seems to be true when the effects of a factor
+are negligible, so it appears this is not a practical problem.

@@ -1,0 +1,153 @@
+.TH LAYOUT 3I "13 December 1987" "InterViews" "InterViews Reference Manual"
+.SH NAME
+Layout \- structured text layout
+.SH SYNOPSIS
+.B #include <InterViews/Text/layout.h>
+.SH DESCRIPTION
+A Layout composes a structured Text(3I) object into a chain of TextBlock(3I)
+objects.  Text flows from one TextBlock to the next, and is formatted to
+make best use of available space.  Composition objects in the structured
+text specify the way the text will be formatted.
+.PP
+A layout is typically used to implement multi-block text documents, such as
+documents with multiple pages, multiple columns, or mixed text and graphics.
+A layout does not specify the size or position of TextBlocks \- these are
+controlled by the scene hierarchy into which the TextBlocks are composed.
+The layout simply specifies the order in which the TextBlocks are filled.
+.PP
+A typical example of the use of a layout is to view a document such as a
+newsletter.  An application would construct a number of TextBlocks, each of
+which would be composed inside boxes or other scenes to give the desired
+appearance.  Other interactors, such as GraphicBlocks, Borders and Glue
+might also be used.  The various interactors would typically be composed
+into one or more outer level objects representing pages of the document.
+The TextBlocks would be chained together in the desired order by Layouts.
+The document might contain more than one Layout, each used to specify the
+TextBlocks which correspond to a particular ``story''.
+.PP
+Layouts specify the font and font style of the text they control.
+Each separate ``context'' in the Text object can have a separate Painter.
+Layouts also perform hit detection on their Text object on the basis of Text
+context.
+.SH PUBLIC OPERATIONS
+.TP
+.B "Layout(Text*, Sensor*, TextPainter*)"
+Create a new Layout containing the given Text object.  The Sensor will be
+used by all TextBlocks chained to the Layout, and the Painter is used to
+specify the default font.  At present, only fixed-width fonts can be used.
+.TP
+.B "~Layout()"
+When a Layout is deleted, its Text is deleted and its TextBlocks are
+unchained.
+.TP
+.B "void Chain(TextBlock*)"
+.ns
+.TP
+.B "void Unchain(TextBlock*)"
+Add a TextBlock to the end of the chain or remove a TextBlock from the
+chain.  All TextBlocks in the chain will have the same output Painter and
+input Sensor, namely those passed to the Layout constructor.
+.TP
+.B "void Rechain()"
+Recalculate the layout following some change to the TextBlock chain.
+Normally this is called automatically.
+.TP
+.B "void Listen(Sensor *)"
+Use the Sensor for all TextBlocks in the chain.
+.TP
+.B "Coord X()"
+.ns
+.TP
+.B "Coord Y()"
+.ns
+.TP
+.B "Coord Remaining()"
+.ns
+.TP
+.B "boolean Drawing()"
+Access functions used by Text composition objects to find the current
+position, space remaining on the current line, and the drawing state.
+.TP
+.B "boolean SkipTo(Coord x, Coord y)"
+Called by a Text composition object to skip over a portion of the text
+without drawing.  Returns false if the skip cannot be performed, indicating
+that the text should be drawn.
+.TP
+.B "void String(const char*, int length)"
+.ns
+.TP
+.B "void Spaces(int count)"
+Called by Text objects to add a substring or space characters to the
+output text.
+.TP
+.B "void NewLine()"
+Called by Text composition objects to end the current line and begin a new
+line in the output.  The new line will start at the current left margin.
+.TP
+.B "void Caret()"
+Called by Text objects to add a zero-width marker to the output, usually to
+indicate the position of a text cursor.
+.TP
+.B "void Margins(int left, int right)"
+Called by Text composition objects to adjust the current left margin by
+\fIleft\fP and the current right margin by
+\fIright\fP.  Positive adjustments move the margins away from the edges of
+the textblock (increase the width of the margins).
+.TP
+.B "void Damage(...)"
+.ns
+.TP
+.B "void ExtraDamage(...)"
+.ns
+.TP
+.B "void EndDamage(...)"
+Used by Text objects to control the reformatting of the text.
+.TP
+.B "void Enter(void* context)"
+.ns
+.TP
+.B "void Leave(void* context)"
+Used by Text objects to indicate the current Text ``context''.  The context
+is the basis for specifying different fonts and for hit detection.
+.TP
+.B "void Paint(void* context, TextPainter*)"
+.ns
+.TP
+.B "void Unpaint(void* context)"
+Specify a new Painter to use when displaying the text for the given
+\fIcontext\fP.  The previous Painter will be ``hidden'' until the context is
+subsequently Unpainted.  Any number of levels of hiding can be achieved.
+Each Unpaint call removes only the topmost level.  A context which is not
+explicitly painted will be painted using the same Painter as the
+enclosing context.
+.TP
+.B "boolean Hit(Event&, void*& context, void*& after)"
+Perform hit detection on the text, returning true if the Event is targetted
+at a TextBlock in the chain or false if not.  If the return value is true,
+the ``context'' of the Text object
+whose text ``covers'' the point specified by the coordinates
+contained in the Event will be returned in \fIcontext\fP, or nil if the
+event is outside all contexts.  If the covering Text object is a composition
+object then the context of the component Text object ``before'' the event
+point will be returned in \fIafter\fP, or nil if there is no such component.
+This is useful for determining the position of a hit within a composite
+object such as a text list.
+.TP
+.B "void Repair()"
+.ns
+.TP
+.B "void Touch(Text*)"
+.ns
+.TP
+.B "void Show(Text*)"
+Changes to the Text object managed by the Layout do not automatically result
+in recomposition of the output.  An application uses \fITouch\fP to
+indicate that the portion of the output occupied by a Text object needs to
+be recomposed.  \fIRepair\fP causes recomposition of all Touched areas (and any
+other areas affected by the changes), and redraws the output.  Touching
+widely separated Text objects before calling Repair will result in
+inefficient screen updating;
+it is better to call Repair for each change or group of changes that are
+close together.  \fIShow\fP is a combination of Touch and Repair.
+.SH SEE ALSO
+Text(3I), TextBlock(3I)

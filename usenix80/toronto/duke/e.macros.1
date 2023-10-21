@@ -1,0 +1,368 @@
+.de LP
+.sp
+..
+.de IP
+.in 4
+.ti -4
+.sp
+\\$1
+..
+.de PP
+.in 0
+.sp
+.ti +5
+..
+.PP
+In addition to fixes of some obscure bugs, version 6 of "e"
+includes
+a macro processor.
+Macros are invoked from within
+the editor by using the "x" command, whose syntax (in Backus normal form) is
+.sp
+( . , . ) x [<range>] [<suffix>] <d> <macro> [<d> <arg>] *
+.sp
+where "(\ .\ ,\ .\ )" is as described in the documentation for
+.bd ed,
+and <range> and <suffix> are as described in the documentation for
+.bd e.
+.PP
+The "x"
+command invokes the macro <macro>, with the <arg>s as arguments.
+<d>, which may be any single character, serves to delimit the macro
+name and any arguments which are present.
+Any occurrences of <d> which are intended to be part of the macro name
+or the arguments, rather than delimiters, should be escaped with a
+"\e".
+It is usually convenient to use a blank for <d>.
+.SP
+The actual file from which
+.bd e
+reads is
+<macro>.em,
+which should be a file containing editor commands.
+.bd E
+looks for this file in the following places, in the order given:
+..br
+	the current directory
+	the user's ebin directory
+	/usr/ebin
+.sp
+While
+.bd e
+is executing the macro, the editor variables ~I, ~J, ~A, and ~0 through ~9 are
+set as described below.
+After the macro finishes, these variables revert to their
+original values.
+.PP
+To facilitate the use of macros, the following additions have
+been made to "e":
+.IP 1.
+Editor variables:
+.br
+A variable indicator is a character used to signal that the
+following character represents an editor variable.
+Outside of macros, the default is for the variable indicator
+feature to be turned off,
+although there are a number of useful editor variables
+which may be accessed if the user turns this feature on
+using the "vb" command (q.v.).
+Inside macros, the variable indicator is set to "~" for
+the duration of the macro,
+but the variable indicator may be escaped by using a "\e",
+and may be changed or removed for the duration of the macro by
+using the "vb" command.
+.sp
+Suppose the variable indicator has been set to "~".
+Then "~" followed by any single character denotes
+an editor variable.
+Currently, the following variables have meaning:
+.sp
+Inside macros, ~0 is the macro name.  Outside of macros,
+~0 is the name of the editor.
+.sp
+Inside macros,
+~1 thru ~9 are the first nine arguments to the macro.
+Outside of macros,
+~1 through ~9 are the first nine
+arguments to
+.bd e.
+Thus, if
+.bd e
+were invoked by "e name1 name2" and the command "vb ~" were executed,
+then the command "e ~2" would cause "name2" to be edited.
+.sp
+~A is the entire argument list (i.e. ~1 thru whatever),
+with blanks in between each pair of arguments.
+.sp
+~B is the name of the user's bin directory, suffixed with a slash.
+.sp
+~D is a rubout.  This is useful in macro files containing
+substitution commands.  For example,
+	s/~1//
+.br
+might cause problems if ~1 contains a slash, but since it is
+almost inconceivable that ~1 will contain a rubout,
+	s~D~1~D~D
+.br
+should work without any problems.
+.sp
+~E is the name of the user's ebin directory, suffixed with a slash.
+.sp
+~F
+is the name of the file being edited.
+.sp
+In macros,
+if addresses and/or a range were specified when the macro was
+invoked, then ~G is the concatenation of the two addresses,
+separated by a comma.  Otherwise, ~G is a null string.
+Outside of macros, ~G is a null string.
+.sp
+~H is the name of the user's home directory, suffixed with a slash.
+.sp
+Inside macros,
+~I and ~J
+are the addresses specified when the macro was invoked.
+If only one address (and no range) was specified, then
+~I and ~J are the same.  If no addresses and no range were specified, then both
+~I and ~J default to the current line.  However, if the range
+argument was also given, <range>-1 is added to ~J.
+Note that if a range and/or one or more addresses were specified,
+then "~G" is the same as "~I,~J".
+.sp
+~K is the editor's procss ID in octal.  This is useful
+for creating unique names for temporary files.
+.sp
+~N is the number of arguments which were given when the macro (or the editor) was invoked.
+.IP 2.
+The variable indicator command:
+.br
+vb [ <blanks> ] [ <char> ]
+.br
+The use of variable indicators is discussed under "editor variables"
+(q.v.).  The function of the "vb" command is to change the
+variable indicator to <char>.  "vb"
+without an argument prints the character currently in use.
+"vb<blanks>" removes the variable indicator entirely.
+Note that <blank> cannot be used as a variable indicator.
+.sp
+Outside of macros, there is no variable indicator unless one has
+been set using "vb <char>".
+Within
+macros, the variable indicator is "~", even if the variable
+indicator is something different outside of macros.
+This is
+so that a user can use macros even after changing the
+variable indicator.
+If the "vb" command is used within a macro,
+the variable indicator is changed for the duration of the macro only.
+.IP 3.
+An addition to the "!" command:
+.br
+Unlike
+.bd ed,
+.bd e
+allows the user to use the "!" command inside the "g" command.
+Among other things, this allows conditional branching to labels
+(see above).
+In addition, "!" without arguments invokes a shell which is
+immune to breaks and quits.
+
+When used inside "<" files and macro files, "!" invokes a
+shell or shell command which has the "<" file or macro file as
+its standard input.  However, "!!" invokes a shell or shell
+command which has the editor's standard input as its standard
+input.
+.IP 4.
+The echo command:
+.br
+ec [ 0 | 1 ]
+.br
+"ec1" causes
+.bd e
+to echo every character it reads.  "ec0" causes it to stop echoing.
+This feature is useful mainly for debugging macros and editor scripts.
+.IP 5.
+The shift command:
+.br
+sh
+.br
+This command has an analogous effect to "shift" in the shell:
+~2 becomes ~1, ~3 becomes ~2, etc.
+.IP EXAMPLE\ 1.
+Suppose the file "/usr/dsn/ebin/para.em" contains the following:
+
+.nf
+: : syntax: ( . , . ) x,para
+: : the indicated range of lines is run thru nroff.
+: : right justification is not done.
+: direct byte count messages to null file
+> /dev/null
+~I,~J w ~Htmp~Ka
+!nroff /usr/dsn/nroff/para.1 ~Htmp~Ka /usr/dsn/nroff/shortend > ~Htmp~Kb
+~I,~J d
+~I- r ~Htmp~Kb
+: redirect output
+>
+!rm ~Htmp~Ka ~Htmp~Kb
+.fi
+.LP
+The above macro will execute nroff on the specified range of lines.
+For example,
+	1,5x para
+.br
+or	1,5x;para
+.br
+or	1x5 para
+.br
+will replace lines 1 thru 5 by an nroff'ed version of lines 1 thru
+5.  The contents of /usr/dsn/nroff/para.1 are such that nroff is invoked
+with right justification turned
+off.  This is necessary in order to keep spaces from building up
+if para is executed repeatedly on the same range of lines.
+The file /usr/dsn/nroff/shortend simply contains the
+nroff command ".pl\ \\nnl".
+.LP
+In the coding for the macro, the line
+	> /dev/null
+.br
+prevents the "w" and "r" commands from producing byte count
+messages at the terminal.  The
+	>
+.br
+near the end of the file redirects the editor output back
+to the terminal.
+.IP EXAMPLE\ 2.
+Suppose the file "/usr/dsn/ebin/sep.em" contains
+the following:
+
+.nf
+: : syntax:  ( . , . ) x,sep,<text>,[i|g]
+: : starting at the first occurrence of <text>, the
+: : indicated range of lines is separated into two lines.
+: : any tabs or blanks preceding <text> are removed.
+: : "i" or "g" indicates "interactive" or "global".
+~I,~J s~D[ 	]*\(~1\)~D\n\1~D~2
+.fi
+.LP
+The characters inside the brackets are a tab and a blank.
+Thus if line 5 is
+	hello there		y'all
+.br
+then typing
+	5xn sep y'all
+.br
+or	5xn,sep,y'all
+.br
+will cause line 5 to be replaced by the two lines
+	hello there
+	y'all
+.br
+WITHOUT any tabs or blanks at the end of line 5.
+Then, since we typed "xn" rather than "x", a neighborhood will
+be printed out around line 5.
+Typing
+	5x sep y'all i
+.br
+or	5x/sep/y'all/i
+.br
+would do the truncation interactively!
+.IP EXAMPLE\ 3.
+Suppose the file "/usr/dsn/ebin/u.em" contains
+the following:
+
+.nf
+: : syntax: ( . , . ) x,u,<arg1>,<arg2>,...,<argn>
+: : performs the equivalent of
+: :	( . , . ) u.<arg1> <arg2> ... <argn>
+: : except that tabs and blanks are first removed
+: : at the point of the unite.
+:
+: "goto" rather than exit so that dot will be set.
+!if ~I = ~J goto end
+~I+,~Js/^[ 	]*//
+: end
+~I,~Ju.~A
+.fi
+.LP
+Thus, if lines 5 and 6 were
+	hello
+			y'all
+.br
+then typing
+	5x2 u there
+.br
+would replace these lines by
+	hellotherey'all
+.br
+Note that this is the same as what we would get by typing
+	6s/[ 	]*//
+	5u2.there
+.br
+Because of the way ~A works, any one of
+.nf
+	"5x2 u  there "
+	"5x2,u,,there "
+	"5x2,u,,there,"
+	"5x2,u, there "
+.fi
+would replace lines 5 and 6 by
+	hello there y'all
+.br
+just as if we had typed
+	"6s/	*//"
+	"5u2. "
+.IP EXAMPLE\ 4.
+Suppose one wants to look at every file in the current directory.
+From the shell, this can easily be accomplished by
+typing "e *".  This invokes the editor on the first file in
+the directory.
+Typing "va ~" to set the variable indicator to "~", and then
+repeatedly typing "sh" followed by "e ~1"
+will edit each of the other files.
+.IP NOTES:
+.PP
+The difference between the "x" command and the "<" command are
+analogous to the differences between typing "sh <name>" and
+"next <name>" in the shell.
+In particular:
+.IP 1.
+With the "x" command, one specifies arguments which cause the
+variables ~I, ~J, ~A, and ~0 through ~9 to be set for the
+duration of the macro, whereas with the "<" command, these
+variables retain their original values.
+.IP 2.
+The "<" command reads directly from the file whose name is given,
+whereas the "x" command appends ".em" to the name and looks for the
+file in several different directories, according to the search
+order discussed above.
+.PP
+There are a number of editor macros available.  They are
+self-documenting in that the first few lines of each macro file
+consist of a description of what the macro does.
+(This is the purpose of the lines beginning with ": :" in the
+examples above.)
+To get a list of available macros, go into the editor and type
+"x tell".  This will print out a list of all macros in
+your current directory, in your ebin directory, and in
+"/usr/ebin".
+.br
+To get documentation on a particular macro, type
+	x tell macroname
+.br
+(don't include the ".em" on the end of the macro name!).
+This will print out all lines in the macro
+file that begin with ": :".  I heartily encourage
+that writers of macro files put documentation into their
+macros in this way, so that "tell" will work on them, too!
+.PP
+Some of the macros make use of temporary files in the user's
+home directory.  These files are named
+"~Htmp~K", "~Htmp~Ka", "~Htmp~Kb", "~Htmp~Kc", 
+etc., where ~H is the user's home directory,
+and ~K is a string of digits created by the editor.
+The macros will
+delete these files when done with them, but if the user hits
+"break" during the execution of a macro, some of them may be
+left lying around.
+
+		Dana S. Nau

@@ -1,0 +1,1215 @@
+@chapter GNU C++ Header Files and Libraries
+
+The GNU C++ compiler is a program which translates C++ code into the
+assembly language of a given machine.  As such, it may be said that GNU C++
+@strong{implements} the C++ programming language for that machine.  However,
+most users are accustomed to a certain amount of support beyond the bare
+language itself.  A set of header files are provided which simplify
+interfacing GNU C++ code with C and UNIX routines.  These header files are
+needed to solve the following two problems.
+
+First, while it is optional in C to declare a function like @samp{printf}
+before using it, in GNU C++, failure to do so results in a warning.
+Second, in C the declaration @code{int atoi()} declares that @samp{atoi} is
+a function returning an int, while in GNU C++ that declaration would mean
+that function @samp{atoi} @emph{takes no arguments} and returns an int.
+Consequently, the following call
+
+@example
+int i = atoi ("20");
+@end example
+
+@noindent
+would be tagged as an error in GNU C++ (unless the user specified the flag
+@samp{-fno-strict-prototype} @xref{Options}).  The header files provided
+in the GNU C++ distribution provide appropriate declarations for many of
+the most frequently used functions.  In the cases where a GNU C++ header
+file has the same name as a standard C header file (such as
+@file{stdio.h}), that header file should take precedence over the C
+version.  This can be ensured by placing the GNU C++ header files in a
+directory which is always searched @emph{before} the standard directories,
+such as @file{/usr/include}.
+
+GNU C++ library provides another bridge between the bare language and its
+actual use.  For example, the standard UNIX input/output facilities provide
+an untyped interface between user code and the input/output devices.
+Because C++ is a more strongly typed language, one would expect an
+input/output interface that is also strongly typed.  The GNU C++ stream
+library provides such an interface.  The stream library, and other library
+functions are described below.
+
+The GNU C++ header files and public service object library are found in
+the directory @file{dist-libg++}.  The header files are all in the
+sub-directory @file{incl}.  The sources for the public service object
+library, as well as some test programs, are in the sub-directory
+@file{src}.
+
+@section Header Files
+
+All GNU C++ header files provided in the release conform to the following
+conventions.  It is recommended that these conventions be followed,
+especially if you wish to contribute code to the GNU C++ libraries.
+
+@itemize @bullet
+@item 
+Include files that define C++ classes begin with capital letters
+(as do the names of the classes themselves).  @file{stream.h} is
+uncapitalized for AT&T C++ compatibility.  These files are split
+into two logical parts, class declarations and inlined functions.   
+Inline functions are processed only if the files are compiled
+with the @samp{-O} switch, which automatically defines @code{__OPTIMIZE__}.
+If the files are not compiled with @samp{-O}, the function versions
+of all inlines, kept in @file{libg++.a} are used, providing
+fast-compile/slow-run performance. Otherwise inlines are used
+extensively to achieve slow-compile/fast-run performance.
+
+@item 
+Include files that supply function prototypes for other C
+functions (system calls & libraries) are all lower case.
+
+@item 
+Note that in GNU C++, function prototypes may be declared for
+functions that do not actually exist. This is fine, so
+long as these functions are not actually used in a program.
+
+@item 
+All include files define a preprocessor variable _X_H, where X
+is the name of the file, and conditionally compile only if this
+has not been already defined. In those cases where a file must
+be included more than once, one can undefine the corresponding
+variable.
+
+@end itemize
+
+Function prototypes in most of the following files have been created
+mainly by reading descriptions found in various Unix manuals. As of
+this writing, few have been thoroughly checked for accuracy. Most
+declarations appear to be correct for Vax BSD, Sun, and most SystemV
+based systems. Corrections are most welcome.  The header files currently
+provided are (with a brief description of their functionality):
+
+@table @samp
+
+@item std.h
+A collection of common system calls and @file{libc.a} functions.
+Only those functions that can be declared without introducing
+new type definitions (socket structures, for example) are
+provided. Common @code{char*} functions (like @code{strcmp}) are among
+the declarations. 
+
+@item string.h
+This file merely includes @file{<std.h>}, where string function prototypes
+are declared. This is a workaround for the fact that system
+@file{string.h} and @file{strings.h} files often differ in contents.
+
+@item math.h
+A collection of prototypes for functions usually found in libm.a,
+plus some @code{#define}d constants that appear to be consistent with those
+provided in the AT&T version. The value of @code{HUGE} should be checked
+before using.
+
+@item stdio.h
+Declaration of @code{FILE} (@code{_iobuf}), lowest-common-denominator
+versions of common macros (like @code{getc}), and function prototypes for
+@file{libc.a} functions that operate on @code{FILE*}'s. The value @code{BUFSIZ}
+and the declaration of @code{_iobuf} should be checked before using.
+
+@item stddef.h
+Various useful @code{#define}'s and enumeration types,
+such as @code{TRUE}, @code{FALSE}, and @code{NULL}.
+The type definition for pointers to libg++ error handling functions,
+@code{typedef void (*one_arg_error_handler_t)(char*);}
+is also given here.
+    
+@item stdarg.h
+Definitions for vararg declarations.  This is the version provided with the
+GNU CC distribution.
+
+@end table
+
+@section The stream class
+
+The stream class provides an efficient, easy-to-use, and type-secure
+interface between GNU C++ and an underlying input/output facility, such as
+the one provided by UNIX.  This section documents the implementation
+highlights of the GNU C++ stream facility.  For a more complete discussion
+about what streams provide and how they are used, see Stroustrup's ``The
+C++ Programming Language.''
+
+Classes @code{istream} and @code{ostream} are derived from class File.  All
+operations are based on common C stdio library functions.  They support the
+basic istream and ostream features described in the Stroustrup C++ book,
+ch. 8 (with a few minor differences) together with a few other operations
+based on the File class.  @code{istream} is a non-public derived class of
+@code{File}, and only imports functions necessary for input operations.
+@code{ostream}s are similarly structured for output operations.
+
+Many programs previously using the AT&T stream library should run
+with no modification.  Here is a brief summary of differences
+between stream operations supported here versus those described by
+Stroustrup, ch.8:
+
+@itemize @bullet
+@item 
+istreams and ostreams are derived classes of class @code{File}
+(see below) rather than new classes with @code{streambuf}
+members.  Methods for opening, closing, etc., streams are a
+little different, although most AT&T methods are supported.
+
+@item 
+@code{f >> c} for @code{istream f} and @code{char c}, behaves
+exactly @code{f.get(c)}, and does @strong{not} skip white
+space.
+
+@item 
+Similarly, @code{f << c} behaves like @code{f.put(c)}. This
+feature should only be used when all files are compiled with the
+flag @code{-fchar-charconst}. Otherwise, care is required when
+outputting single-quoted constants like @code{'\n'} or @code{'a'}.
+Without the @code{-fchar-charconst} flag, @code{'\n'} and
+all other single-quoted constants are treated as @strong{integer}
+constants, so @code{f<<'\n'} will print @code{10}.
+
+@item 
+Otherwise, the behavior of "<<" and ">>" is closer to stdio
+@code{scanf} and @code{printf} (upon which they are based) than
+are the AT&T versions. ">>" operators ignore leading whitespace
+before performing conversions. There is no @code{skipws} class
+variable in the stream classes to control this.
+
+@item 
+Although istreams and ostreams may be bound to the same physical
+file, istreams do not possess a @code{tied_to} variable to
+control flushing of output streams tied to input streams. The
+stdio I/O functions already perform this function for standard
+input and output, which is generally the only case in which this
+construct is useful.
+
+@item 
+Streams constructed out of character buffers are not yet supported.
+@end itemize
+
+
+@section The File class
+    
+The @code{File} class supports basic IO on unix files.  Operations are
+based on common C stdio library functions.
+
+@code{File} serves as the base class for istreams, ostreams, and other
+derived classes. It contains the interface between the Unix stdio file
+library and these more structured classes.  Most operations are implemented
+as simple calls to stdio functions. @code{File} class operations are also fully
+compatible with raw system file reads and writes (like the system
+@code{read} and @code{lseek} calls) when buffering is disabled (see below).
+The @code{FILE*} stdio file pointer is, however maintained as private.
+Classes derived from File may only use the IO operations provided by File,
+which encompass essentially all stdio capabilities.
+
+Compilation of class @code{File} requires the existence of a suitable
+version of @file{stdio.h}, as well as several system include files, and
+other include files provided with this distribution. There are also three
+conditional compilation flags, HAVE_VPRINTF, HAVE_SETLINEBUF, and
+HAVE_SETVBUF, that should be checked for correctness before compilation.
+
+The class contains four general kinds of functions: methods for
+binding @code{File}s to physical Unix files, basic IO methods,
+file and buffer control methods, and methods for maintaining
+logical and physical file status.
+
+
+@subsection Binding
+
+Binding and related tasks are accomplished via @code{File} constructors
+and destructors, and member functions 
+@code{open, close, remove, filedesc, name, setname}.
+
+@code{Files} may be constructed in any of the ways supported by a
+version of 'open', plus a default constructor.  They differ in
+specifying if
+
+@itemize @bullet
+
+@item 
+a file with a given filename should be opened.  The second
+argument refers to the IO mode (@code{io_readonly, io_readwrite},
+etc.).  The third represents the access mode (@code{a_create},
+etc.). These modes encompass those available via the system open
+function, but are decribed via enumeration types, rather than
+combinations of special flags.
+
+@item 
+same as above, except the mode is given using the @code{fopen}
+char* string argument (@code{"r", "w", "a", "r+", "w+", "a+"}).
+
+@item 
+the @code{File} should be bound to a file associated with the
+given (open) file descriptor. This method should be used only if
+a file pointer associated with the file descriptor has not yet
+been obtained. The second argument specifies the io_mode, as
+above. This must match the actual IO mode of the file.
+
+@item 
+the @code{File} should be bound to a FILE* file pointer already
+somehow obtained. This is mainly used to bind @code{Files} to
+the default stdin, stdout, and stderr files.
+
+@item 
+the @code{File} should not yet be bound to anything. Files may be
+declared via this default, and then later opened via @code{open}.
+
+@end itemize
+
+After a successful open, the corresponding file descriptor is
+accessible (for use in system calls, etc.)  via @code{filedesc()}.
+A @code{File} may be bound to different physical files
+at different times: each call to @code{open}, closes the old
+physical file and rebinds the @code{File} to a new physical file.
+
+If a file name is provided in a constructor or open, it is
+maintained as class variable @code{nm} and is accessible
+via @code{name}.  If no name is provided, then @code{nm} remains
+null, except that @code{Files} bound to the default files stdin,
+stdout, and stderr are automatically given the names
+@code{(stdin), (stdout), (stderr)} respectively.  
+The function @code{setname} may be used to change the
+internal name of the @code{File}. This does not change the name
+of the physical file bound to the File.
+      
+The member function @code{close} closes a file.  The
+@code{~File} destructor closes a file if it is open, except
+that stdin, stdout, and stderr are flushed but left open for
+the system to close on program exit since some systems may
+require this, and on others it does not matter.  @code{remove}
+closes the file, and then deletes it if possible by calling the
+system function to delete the file with the name provided in
+the @code{nm} field.
+
+@subsection Basic IO
+
+@itemize @bullet
+
+@item 
+@code{read} and @code{write} perform binary IO via stdio
+@code{fread} and @code{fwrite}.
+
+@item 
+@code{get} and @code{put} for chars are inline functions that
+invoke stdio @code{getc} and @code{putc} macros. 
+
+@item 
+@code{get(char* s, int maxlength, char terminator='\n')} behaves
+as described by Stroustrup. It reads at most maxlength characters
+into s, stopping when the terminator is read, and pushing the
+terminator back into the input stream. To accomodate different
+conventions about what to do about the terminator, the function
+@code{getline(char* s, int maxlength, char terminator='\n')}
+behaves like get, except that the terminator becomes part of the
+string, and is not pushed back.
+
+@item 
+@code{put(const char* s)} outputs a null-terminated string via
+stdio @code{fputs}.
+
+@item 
+@code{form} is a front-end for stdio @code{printf}, and
+@code{scan} for @code{scanf}.  Note that the member function
+@code{form} is distinct from (and typically more useful than) the
+nonmember @code{form}.
+
+@item 
+@code{unget} and @code{putback} are synonyms.  Both call stdio
+@code{ungetc}.
+
+@end itemize
+
+@subsection File Control
+
+@code{flush}, @code{seek}, @code{tell}, and @code{tell} call the
+corresponding stdio functions.
+
+@code{setbuf} is mainly useful to turn off buffering in cases
+where nonsequential binary IO is being performed. @code{raw} is a
+synonym for @code{setbuf(_IONBF)}.  After a @code{f.raw()}, using
+the stdio functions instead of the system @code{read, write},
+etc., calls entails very little overhead.  Moreover, these become
+fully compatible with intermixed system calls (e.g.,
+@code{lseek(f.filedesc(), 0, 0)}). While intermixing @code{File}
+and system IO calls is not at all recommended, this technique
+does allow the @code{File} class to be used in conjuction with
+other functions and libraries already set up to operate on file
+descriptors. @code{setbuf} should be called at most once after a
+constructor or open, but before any IO.
+
+@subsection File Status
+
+File status is maintained in several ways. 
+
+A @code{File} may be checked for accessibility via
+@code{is_open()}, which returns true if the File is bound to a
+usable physical file, @code{readable()}, which returns true if
+the File can be read from (opened for reading, and not in a
+_fail state), or @code{writable()}, which returns true if the
+File can be written to.
+
+@code{File} operations return their status via two means: failure and
+success are represented via the logical state. Also, the
+return values of invoked stdio and system functions that
+return useful numeric values (not just failure/success flags)
+are held in a class variable accessible via @code{iocount}.
+(This is useful, for example, in determining the number of
+items actually read by the @code{read} function.)
+
+Like the AT&T i/o-stream classes, but unlike the description in
+the Stroustrup book, p238, @code{rdstate()} returns the bitwise
+OR of @code{_eof}, @code{_fail} and @code{_bad} not necessarily
+distinct values. The functions @code{eof()}, @code{fail()},
+@code{bad()}, and @code{good()} can be used to test for each of
+these conditions independently.
+
+@code{_fail} becomes set for any input operation that could not
+read in the desired data, and for other failed operations. As
+with all unix IO, @code{_eof} becomes true only when an input
+operations fails because of an end of file. Therefore,
+@code{_eof} is not immediately true after the last successful
+read of a file, but only after one final read attempt. Thus, for
+input operations, @code{_fail} and @code{_eof} almost always
+become true at the same time.  @code{bad} is set for unbound
+files, and may also be set by applications in order to communicate
+input corruption. Conversely, @code{_good} is defined as 0 and
+is returned by @code{rdstate()} if all is well.
+
+The state may be modified via @code{clear(flag)}, which,
+despite its name, sets the corresponding state_value flag.
+@code{clear()} with no arguments resets the state to _good.
+@code{failif(int cond)} sets the state to @code{_fail} only if
+@code{cond} is true.  @code{failif} also invokes the function
+@code{error}.  @code{error} in turn calls a resetable error
+handling function pointed to by the non-member global variable
+@code{File_error_handler} only if a system error has been
+generated.  Since @code{error} cannot tell if the current
+system error is actually responsible for a failure, it may at
+times print out spurious messages.  Three error handlers are
+provided. The default, @code{verbose_File_error_handler} calls
+the system function @code{perror} to print the corresponding
+error message on standard error, and then returns to the
+caller.  @code{quiet_File_error_handler} does nothing, and
+simply returns.  @code{fatal_File_error_handler} prints the
+error and then aborts execution. These three handlers, or any
+other user-defined error handlers can be selected via the
+non-member function @code{set_File_error_handler}.
+
+All read and write operations communicate either logical or
+physical failure by setting the _fail flag.  All further
+operations are blocked if the state is in a _fail or _bad
+condition. Programmers must explicitly use @code{clear()} to
+reset the state in order to continue and IO processing after
+either a logical or physical failure.  C programmers who are
+unfamiliar with these conventions should note that, unlike
+the stdio library, @code{File} functions indicate IO success,
+status, or failure soley through the state, not via return values of
+the functions.  The @code{void*} operator or @code{rdstate()}
+may be used to test success.  In particular, according to c++
+conversion rules, the @code{void*} coercion is automatically
+applied whenever the @code{File&} return value of any
+function is tested in an @code{if} or @code{while}.  Thus,
+for example, an easy way to copy all of stdin to stdout until
+eof (at which point @code{get} fails) or some error is
+@code{char c; while(cin.get(c) && cout.put(c));}.
+
+@subsection The SFile class
+
+@code{SFile} (short for structure file) is provided both as a
+demonstration of how to build derived classes from @code{File},
+and as a useful class for processing files containing
+fixed-record-length binary data.  They are created with
+constructors with one additional argument declaring the size (in
+bytes, i.e, @code{sizeof} units) of the records.  @code{get},
+will input one record, @code{put} will output one, and the []
+operator, as in @code{f[i]}, will position to the i'th record. If
+the file is being used mainly for random access, it is often a
+good idea to eliminate internal buffering via @code{setbuf} or
+@code{raw}. Here is an example:
+
+@example            
+class record
+@{
+  friend class SFile;
+  char c; int i; double d;     // or anything at all
+@};
+
+void demo()
+@{
+  record r;
+  SFile recfile("mydatafile", sizeof(record), io_readwrite, a_create);
+  recfile.raw();
+  for (int i = 0; i < 10; ++i)  // ... write some out
+  @{    
+    r = something();
+    recfile.put(&r);            // must use '&r' for proper coercion
+  @}
+  for (i = 9; i >= 0; --i)      // now use them in reverse order
+  @{
+    recfile[i].get(&r);
+    do_something_with(r);
+  @}
+@}
+@end example
+
+@subsection The PlotFile Class
+
+Class @code{PlotFile} is a simple derived class of @code{File}
+that may be used to produce files in Unix plot format.  Public
+functions have names corresponding to those in the @code{plot(5)}
+manual entry. 
+
+
+@section The String class
+
+The @code{String} class is designed to extend GNU C++ to support
+string processing capabilities similar to those in languages like
+awk.  The class provides facilities that ought to be convenient
+and efficient enough to be useful replacements for @code{char*}
+based processing via the C string library (i.e., @code{strcpy,
+strcmp,} etc., in many applications.
+
+String processing facilities usually have two major bottlenecks:
+storage management and copying. The @code{String} class avoids
+most such problems, at the expense of other, cheaper forms of
+overhead via the following strategies:
+
+@itemize @bullet
+
+@item 
+String variables are really pointers to the actual @code{_Srep}
+representations, in a way roughly similar to that described in
+the Stroustrup book, p 184. This technique allows string
+representations to be shared across many String variables.  This
+can greatly reduce copying in many applications, and generally
+compensates for the extra level of indirection.  The length of a
+String, its currently allocated maximum size, and its reference
+count are contained in the @code{_Srep} representation. Strings
+may be as long as representable by a @code{short int} (typically 32767
+bytes), although the implementation is best tuned for
+manipulating Strings of length less than a hundred bytes or so.
+
+@item 
+All dynamic allocation is controlled from within the class.
+Users should never need to allocate and deallocate space for
+Strings. Deallocation is controlled via a simple reference
+counting mechanism. Unfortunately, because of the differences
+between their allocation strategies, Strings are not
+well-integrated with Obstacks.
+
+@item 
+The built-in new operator and/or the C realloc function, are used
+internally for allocation purposes.  In order to reduce
+allocation and re-allocation needs, whenever a String expands as
+the result of some operation, it is over-allocated by about a
+factor of two. Thus, Strings are originally given only as much
+space as they need, but if there is any indication that a String
+might be growing, it is over-allocated. 
+
+@item  
+String processing often involve operations intermixing String
+variables with quoted string constants, characters, and the like.
+In order to avoid coercions from non-Strings into Strings in such
+cases, which would require otherwise useless allocation overhead,
+most String operations are explicitly overloaded for each supported
+argument type combination. In the case of infix operators, special
+versions are provided only for non-Strings occurring on the
+right-hand side of the operator, just to keep down proliferation of
+function definitions.  The corresponding operations are performed by
+calling lower-level (and otherwise inaccessible) string
+manipulation functions with the apprpriate parameters.  This
+strategy substitutes function call overhead for allocation
+overhead.
+
+@item 
+A separate @code{SubString} class supports the usual substring
+extraction and modification operations. This is implemented in a
+way that user programs never directly construct or represent
+substrings, which are only used indirectly via String operations.
+
+@item 
+Another separate class, @code{Regex} is also used indirectly via
+String operations in support of regular expression searching,
+matching, and the like.  Regex capabilities are based entirely on
+the functions provided in GNU Emacs source file @file{regex.c}.
+
+@end itemize
+
+@subsection String  Constructors
+
+Strings are initialized and assigned as follows:
+@table @code
+
+@item String x;  String y = 0;
+Set x and y to the nil string. Note that 0 (or "") may 
+always be used to refer to the nil string.
+
+@item String x = "Hello"; String y("Hello");
+Set x and y to a copy of the string "Hello".
+
+@item String x = 'A'; String y('A');
+Set x and y to the string value "A"
+
+@item String u = x; String v(x);
+Set u and v to the same string as String x
+
+@item String u = x(1,4); String v(x(1,4));
+Set u and v to the length 4 substring of x starting at position 1.
+
+@item String x("abc", 2); 
+Sets x to "ab", i.e., the first 2 characters of "abc". The
+second (length) argument may be greater that the length of the 
+char* string. This form of the constructor may be used just 
+to pre-allocate space via, for example, @code{String x("", 100)}, 
+although this is rarely useful.
+
+@item String x = dec(20);
+Sets x to "20". As here, Strings may be initialized or assigned
+the results of any @code{char*} function.
+
+@end table
+
+There are no directly accessible forms for declaring SubString
+variables.
+
+@subsection Regex constructors
+
+The Regex class is based entirely on the GNU emacs regex
+functions.  Refer to the GNU Emacs documentation for details
+about regular expression syntax, etc. See the internal
+documentation in files @file{regex.h} and @file{regex.c} for
+implementation details.
+
+The declaration @code{Regex r("[a-zA-Z_][a-zA-Z0-9_]*");} creates
+a compiled regular expression suitable for use in String
+operations described below. (In this case, one that matches any
+C++ identifier). The first argument may also be a String.
+Be careful in distinguishing the role of backslashes in quoted
+GNU C++ char* constants versus those in Regexes. For example, a Regex
+that matches either one or more tabs or strings beginning
+with "ba" and ending with any number of occurrences of "na"
+could be declared as @code{Regex r = "\\(\t+\\)\\|\\(ba\\(na\\)*\\)"}
+Note that only one backslash is needed to signify the tab, but
+two are needed for the parenthesization and virgule, since the
+GNU C++ lexical analyzer decodes and strips backslashes before
+they are seen by Regex.
+
+There are three additional optional arguments to the Regex constructor 
+that are seldom useful:
+
+@table @code
+@item fast (default 0)
+@code{fast} may be set to true (1) if the Regex should be
+"fast-compiled". This causes an additional compilation step that
+is generally worthwhile if the Regex will be used many times.
+
+@item bufsize (default 40)
+This is an estimate of the size of the internal compiled
+expression. Set it to a larger value if you know that the
+expression will require a lot of space. If you do not know, 
+do not worry: realloc is used if necessary.
+
+@item transtable (default none == 0)
+The address of a byte translation table (a char[256]) that
+translates each character before matching.
+
+@end table
+
+
+As a convenience, several Regexes are predefined and usable in
+any program. Here are their declarations from @file{String.h}.
+
+@example
+extern Regex RXwhite;          // = "[ \n\t]+"
+extern Regex RXint;            // = "-?[0-9]+"
+extern Regex RXdouble;         // = "-?\\(\\([0-9]+\\.[0-9]*\\)\\|
+                               //    \\([0-9]+\\)\\|\\(\\.[0-9]+\\)\\)
+                               //    \\([eE][---+]?[0-9]+\\)?"
+extern Regex RXalpha;          // = "[A-Za-z]+"
+extern Regex RXlowercase;      // = "[a-z]+"
+extern Regex RXuppercase;      // = "[A-Z]+"
+extern Regex RXalphanum;       // = "[0-9A-Za-z]+"
+extern Regex RXidentifier;     // = "[A-Za-z_][A-Za-z0-9_]*"
+
+@end example
+
+@subsection examples
+
+Most @code{String} class capabilities are best shown via example.
+The examples below use the following declarations.
+
+@example
+    String x = "Hello";
+    String y = "world";
+    String n = "123";
+    String z;
+    char*  s = ",";
+    String lft, mid, rgt;
+    Regex  r = "e[a-z]*o";
+    Regex  r2("/[a-z]*/");
+    char   c;
+    int    i, pos, len;
+    double f;
+    String words[10];
+    words[0] = "a";
+    words[1] = "b";
+    words[2] = "c";
+    
+@end example
+
+@subsection Matching
+
+The usual lexigraphic relational operators (@code{==, !=, <, <=, >, >=}) 
+are defined.
+
+Other matching operations are based on some form of the
+@code{index} function.  As seen in the following examples,
+the second optional @code{startpos} argument to @code{index}
+and all other operations involving search specifies the
+starting position of the search: If non-negative, it results in a
+left-to-right search starting at position @code{startpos},
+and if negative, a right-to-left search starting at position
+@code{x.length() - startpos}. In all cases, the index
+returned is that of the beginning of the match, or -1 if
+there is no match.
+
+@table @code
+
+@item x.index("lo")
+returns the zero-based index of the leftmost occurence of
+substring "lo" (3, in this case).  The argument may be a 
+String, SubString, char, char*, or Regex.
+
+@item x.index("l", 2)
+returns the index of the first of the leftmost occurence of "l"
+found starting the search at position x[2], or 2 in this case.
+
+@item x.index("l", -1)
+returns the index of the rightmost occurence of "l", or 3 here.
+
+@item x.index("l", -3)
+returns the index of the righmost occurence of "l" found by
+starting the search at the 3rd to the last position of x,
+returning 2 in this case.
+
+@item pos = r.search("leo", 3, len, 0)
+returns the index of r in the @code{char*} string of length 3,
+starting at position 0, also placing the  length of the match
+in reference parameter len.
+
+@item x.contains("He")
+returns true if the String x contains the substring "He". The
+argument may be a String, SubString, char, or char*, or Regex.
+
+@item x.contains(RXwhite);
+returns true if x contains any whitespace (space, tab, or
+newline). Recall that @code{RXwhite} is a global whitespace Regex.
+
+@item x.contains(r)
+returns true if x contains any instance of the Regex r.
+
+@item x.matches(r)
+returns true if String x as a whole matches Regex r.
+
+@end table
+
+@subsection Substring extraction
+
+Substrings may be extracted via the @code{at}, @code{before} and
+@code{after} functions.  These behave as either lvalues or
+rvalues.
+
+@table @code
+
+@item z = x.at(2, 3)
+sets String z to be equal to the length 3 substring of String x
+starting at zero-based position 2, setting z to "llo" in this
+case. A nil String is returned if the arguments don't make sense.
+
+@item x.at(2, 2) = "r"
+Sets what was in positions 2 to 3 of x to "r", setting x to
+"Hero" in this case. As indicated here, SubString assignments may
+be of different lengths.
+
+@item x.at("He") = "je";
+x("He") is the substring of x that matches the first occurence of
+it's argument. The substitution sets x to "jello". If "He" did
+not occur, the substring would be nil, and the assignment would
+have no effect.
+
+@item  x.at("l", -1) = "i";
+replaces the rightmost occurence of "l" with "i", setting x to
+"Helio".
+
+@item z = x.at(r)
+sets String z to the match in x of Regex r, or "ello" in this
+case. A nil String is returned if there is no match.
+
+@item z = x.before("o")
+sets z to the part of x to the left of the first occurrence of
+"o", or "Hell" in this case. The argument may also be a String,
+SubString, or Regex.
+
+@item x.before("ll") = "Bri";
+sets the part of x to the left of "ll" to "Bri", setting x to
+"Brillo".
+
+@item z = x.before(2)
+sets z to the part of x to the left of x[2], or "He" in this
+case.
+
+@item z = x.after("Hel")
+sets z to the part of x to the right of "Hel", or "lo" in this
+case.
+
+@item x.after("Hel") = "p";  
+sets x to "Help";
+
+@item z = x.after(3)
+sets z to the part of x to the right of x[3] or "o" in this case.
+
+@item z = "  ab c"; z = z.after(RXwhite)  
+sets z to the part of its old string to the right of the first
+group of whitespace, setting z to "ab c"; Use gsub(below) to
+strip out multiple occurences of whitespace or any pattern.
+
+@end table
+
+@subsection Concatenation
+
+@table @code
+
+@item  z = x + s + ' ' + y.at("w") + y.after("w") + ".";
+sets z to "Hello, world."
+
+@item x += y;
+sets x to "Helloworld"
+
+@item z = replicate(x, 3);
+sets z to "HelloHelloHello".
+
+@item z = join(words, 3, "/")
+sets z to the concatenation of the first 3 Strings in String
+array words, each separated by "/", setting z to "a/b/c" in this
+case.  The last argument may be any of the usual, including "" or
+0, for no separation.
+
+@end table
+
+@subsection  String manipulation
+
+@table @code
+
+@item z = "left/middle/right"; decompose(z, lft, mid, rgt, r2);
+sets lft to the part of z to the left of the match via Regex r2,
+mid to the match, and rgt to the part to the right of the match,
+setting lft = "left", mid = "/middle/", and rgt to "right" in
+this case. The last argument may be any of the usual. If there
+is no match, lft, mid, and rgt remain unchanged, and decompose
+returns 0.
+
+@item z = "this string has five words"; i = split(z, words, 10, RXwhite);
+sets up to 10 elements of String array words to the parts of z
+separated by whitespace, and returns the number of parts actually
+encountered (5 in this case). Here, words[0] = "this", words[1] =
+"string", etc.  The last argument may be any of the usual.
+If there is no match, all of z ends up in words[0]. The words array
+is @strong{not} dynamically created by split. 
+
+@item x.gsub("l","ll")
+substitutes all original occurrences of "l" with "ll", setting x
+to "Hellllo". The first argument may be any of the usual,
+including Regex.  If the second argument is "" or 0, all
+occurences are deleted.
+
+@item z = x + y;  z.del("loworl");
+deletes the leftmost occurence of "loworl" in z, setting z to
+"Held".
+
+@item z = reverse(x)
+sets z to the reverse of x, or "olleH".
+
+@item z = upcase(x)
+sets z to x, with all letters set to uppercase, setting z to "HELLO"
+
+@item z = downcase(x)
+sets z to x, with all letters set to lowercase, setting z to "HELLO"
+
+
+@end table
+
+@subsection Reading and writing
+
+@table @code
+
+@item cout << x 
+writes out x. cout.put(x) has the same effect.
+
+@item cout << x(2, 3)
+writes out the substring "llo".
+
+@item cin >> x
+reads a whitespace-bounded string into x.
+
+@item cin.get(x, 100)
+reads up to 100 characters into x, stopping at a newline.
+
+@item cin.getline(x, 100)
+reads up to 100 characters into x, stopping at, but including, a
+newline.
+
+@end table
+
+@subsection Conversion
+
+@table @code
+
+@item x.length()
+returns the length of String x (5, in this case).
+
+@item s = (char*)x
+can be used to extract the @code{char*} char array. This
+coercion is useful for sending a String as an argument to any
+function expecting a @code{const char*} argument (like
+@code{atoi}, and @code{File::open}). This operator must be
+used with care.  Strings should not be @strong{modified} by
+nonmember functions. Doing so may corrupt their
+representation.  The conversion is defined to return a const
+value so that GNU C++ will produce warning and/or error
+messages if changes are attempted.  In cases where the String
+must be modified via a function taking a @code{char*}
+argument, the @code{make_unique} member function may be
+employed. This forces x to point to an unshared string
+representation. For example, if for some reason, a String
+needed to be changed via @code{strcpy}, @code{x.make_unique();
+strcpy(x, "Hi");} would generate a compiler warning, but would
+work corectly so long as x already possessed sufficient space.
+Again, this is not a recommended practice.
+
+@item c = x[i]
+returns the @strong{value} of the i'th character of x.  The
+value of i is not checked against the bounds of the string.
+(All this ensures that using elements of x[i] for, e.g.,
+computing a hash function is as efficient as using raw char*
+indexing.) Since the value, and not the reference is returned,
+@code{x[i] = 'a';} does not work. This sort of operation can be
+performed via the SubString operators as in 
+@code{x.at(i, 1) = "a";}.
+
+@end table
+
+@section The Integer class.
+
+The @code{Integer} class provides multiple precision integer arithmatic
+facilties. @code{Integers} are represented using a reference-counting
+dynamic allocation technique almost exactly the same as used in class
+@code{String}. 
+
+@code{Integers} may be up to @code{b * ((1 << b) - 1)} bits long,
+where @code{b} is the number of bits per short (typically 1048560
+bits when @code{b = 16}).  The implementation file @file{Integer.cc} 
+contains some machine-dependent constants that should be checked
+for accuracy before compilation.  The implementation assumes that a
+@code{long} is at least twice as long as a @code{short}. This
+assumption hides beneath almost all primitive operations, and would
+be very difficult to change. It also relies on correct behaviour of
+@emph{unsigned}  arithmetic operations.
+
+Some of the arithmetic algorithms are loosely based on those
+provided in the MIT Scheme @file{bignum.c} release, which is
+Copyright (c) 1987 Massachusetts Institute of Technology. Their use
+here falls within the provisions described in the Scheme release.
+
+Integers may be declared and intitialized via
+@table @code
+
+@item Integer x;
+Declares an unitialized Integer.
+
+@item Integer x = 2; Integer y(2);
+Set x and y to the Integer value 2;
+
+@item Integer u(x); Integer v = x;
+Set u and v to the same value as x.
+
+@end table
+
+@code{Integers} may be coerced back into longs via the @code{long}
+coercion operator. If the Integer cannot fit into a long, this returns
+MINLONG or MAXLONG (depending on the sign) where MINLONG is the most
+negative, and MAXLONG is the most positive representable long.  The
+member function @code{fits_in_long()} may be used to test this.
+
+All of the usual arithmetic operators are provided (@code{+, -, *, /,
+%, +=, ++, -=, --, *=, /=, %=, ==, !=, <, <=, >, >=}).  All operators
+support special versions for mixed arguments of Integers and regular
+C++ longs in order to avoid useless coercions, as well as to allow
+automatic promotion of shorts and ints to longs, so that they may be
+applied without additional Integer coercion operators.  The only
+operators that behave differently than the corresponding int or long
+operators are @code{++} and @code{--}.  Because C++ does not
+distinguish prefix from postfix application, these are declared as
+@code{void} operators, so that no confusion can result from applying
+them as postfix.  Thus, for Integers x and y, @code{ ++x; y = x; } is
+correct, but @code{ y = ++x; } and @code{ y = x++; } are not.
+
+Bitwise operators (@code{~, &, |, ^, <<, >>, &=, |=, ^=, <<=, >>=}) are
+also provided.  However, these operate on sign-magnitude, rather than
+two's complement representations. The sign of the result is arbitrarily
+taken as the sign of the first argument. For example, @code{Integer(-3)
+& Integer(5)} returns @code{Integer(-1)}, not -3, as it would using
+two's complement. Also, @code{~}, the complement operator, complements
+bits up to the next @code{short} boundary of the representation. While
+arbitrary, this effect may be useful when combined with other bitwise
+operations.
+
+Several other common integer functions are available. For compatibility,
+many corresponding @code{long} and mixed argument functions are also 
+implemented.
+
+@table @code
+
+@item void divide(x, y, q, r);
+Sets q to the quotient and r to the remainder of x and y.
+(q and r are passed and returned by reference)
+
+@item Integer pow(x, p)
+returns x raised to the power p.
+
+@item Integer gcd(x, y)
+returns the greatest common divisor of x and y.
+
+@item Integer abs(x);
+returns the absolute value of x.
+
+@item Integer sqr(x)
+returns x * x;
+
+@item Integer sqrt(x)
+returns the floor of the  square root of x.
+
+@item Integer rnd(x)
+returns a random number between 0 and x-1, or between x+1 and 0 if
+x is negative. This function uses the standard libc rand().
+
+@item long lg(x);
+returns the floor of the base 2 logarithm of abs(x)
+
+@item int sign(x)
+returns -1 if x is negative, 0 if zero, else +1.
+Using @code{if (sign(x) == 0)} is a generally faster method
+of testing for zero than using relational operators.
+
+@item int even(x)
+returns true if x is an even number
+
+@item int odd(x)
+returns true if x is an odd number.
+
+@item void bitset(Integer& x, long b)
+sets the b'th bit (counting right-to-left from zero) of x to 1.
+
+@item void bitclear(Integer& x, long b)
+sets the b'th bit of x to 0.
+
+@item int bittest(Integer x, long b)
+returns true if the b'th bit of x is 1.
+
+@item Integer atoI("1234567");
+converts the char* string into its Integer form.
+
+@item char* Itoa(x);
+returns a (static) pointer to the ascii string value of x.
+The static buffer is of fixed size (BUFSIZ, typically 1024). 
+Conversion of very large integers (>= pow(10, BUFSIZ)) causes
+an exception.
+
+@end table
+
+Several other member functions are available that were designed
+mainly for internal use, but are conceivably useful in other 
+contexts as well.
+
+@table @code
+
+@item int x.cmp(Integer y)
+returns a negative number if x<y, zero if x==y, or positive if x>y.
+
+@item int x.ucmp(Integer y)
+like cmp, but performs unsigned comparison.
+
+@item void x.setlength(long len)
+pre-allocates len shorts for x.
+
+@item void x.make_unique()
+forces x to have a unique (unshared) Irep pointer. 
+
+@item void x.error(char* msg)
+Calls @code{*Integer_error_handler}. This is called internally when
+division by zero and similar exceptions occur. The default
+error handler prints the error message and aborts execution.
+@end table
+
+@section Obstacks
+
+The @code{Obstack} class is a simple rewrite of the C obstack macros and
+functions provided in the GNU CC compiler source distribution.  
+
+Obstacks provide a simple method of creating and maintaining a string
+table, optimized for the very frequent task of building strings
+character-by-character, and sometimes keeping them, and sometimes
+not. They seem especially useful in any parsing application. One of the
+test files demonstrates usage.
+
+A brief summary:
+@table @code
+
+@item grow   
+places something on the obstack without committing to wrap 
+it up as a single entity yet.
+
+@item finish 
+wraps up a constructed object as a single entity, 
+and returns the pointer to its start address.
+
+@item copy   
+places things on the obstack, and @emph{does} wrap them up.
+@code{copy} is always equivalent to first grow, then finish.
+
+@item free   
+deletes something, and anything else put on the obstack since its creation.
+@end table
+
+The other functions are hardly ever needed:
+@table @code
+@item blank
+is like grow, except it just grows the space by size units
+without placing anything into this space
+@item alloc
+corresponds in the same way to @code{copy}.
+@item chunk_size, base, etc.
+just return class variables.
+@item grow_fast
+places a character on the obstack without checking if there is enough room.
+@end table
+
+Here is a lightly edited version of the original C documentation:
+
+These functions operate a stack of objects.  Each object starts life
+small, and may grow to maturity.  (Consider building a word syllable
+by syllable.)  An object can move while it is growing.  Once it has
+been ``finished'' it never changes address again.  So the ``top of the
+stack'' is typically an immature growing object, while the rest of the
+stack is of mature, fixed size and fixed address objects.
+
+These routines grab large chunks of memory, using the GNU C++ @code{new}
+operator.  On occasion, they free chunks, via @code{delete}.
+
+Each independent stack is represented by a Obstack.
+
+One motivation for this package is the problem of growing char strings
+in symbol tables.  Unless you are a ``facist pig with a read-only mind''
+[Gosper's immortal quote from HAKMEM item 154, out of context] you
+would not like to put any arbitrary upper limit on the length of your
+symbols.
+
+In practice this often means you will build many short symbols and a
+few long symbols.  At the time you are reading a symbol you don't know
+how long it is.  One traditional method is to read a symbol into a
+buffer, @code{realloc()}ating the buffer every time you try to read a
+symbol that is longer than the buffer.  This is beaut, but you still will
+want to copy the symbol from the buffer to a more permanent
+symbol-table entry say about half the time.
+
+With obstacks, you can work differently.  Use one obstack for all symbol
+names.  As you read a symbol, grow the name in the obstack gradually.
+When the name is complete, finalize it.  Then, if the symbol exists already,
+free the newly read name.
+
+The way we do this is to take a large chunk, allocating memory from
+low addresses.  When you want to build a symbol in the chunk you just
+add chars above the current ``high water mark'' in the chunk.  When you
+have finished adding chars, because you got to the end of the symbol,
+you know how long the chars are, and you can create a new object.
+Mostly the chars will not burst over the highest address of the chunk,
+because you would typically expect a chunk to be (say) 100 times as
+long as an average object.
+
+In case that isn't clear, when we have enough chars to make up
+the object, @emph{they are already contiguous in the chunk} (guaranteed)
+so we just point to it where it lies.  No moving of chars is
+needed and this is the second win: potentially long strings need
+never be explicitly shuffled. Once an object is formed, it does not
+change its address during its lifetime.
+
+When the chars burst over a chunk boundary, we allocate a larger
+chunk, and then copy the partly formed object from the end of the old
+chunk to the beggining of the new larger chunk.  We then carry on
+accreting characters to the end of the object as we normaly would.
+
+A special version of grow is provided to add a single char at a time
+to a growing object.
+
+Summary:
+
+@itemize @bullet
+@item 
+We allocate large chunks.
+@item 
+We carve out one object at a time from the current chunk.
+@item 
+Once carved, an object never moves.
+@item 
+We are free to append data of any size to the currently growing object.
+@item 
+Exactly one object is growing in an obstack at any one time.
+@item 
+You can run one obstack per control block.
+@item 
+You may have as many control blocks as you dare.
+@item 
+Because of the way we do it, you can `unwind' a obstack back to a
+previous state. (You may remove objects much as you would with a stack.)
+@end itemize
+
+The obstack data structure is used in many places in the GNU C++ compiler.
+
+Differences from the the GNU C version
+@enumerate
+@item 
+The obvious differences stemming from the use of classes and
+inline functions instead of structs and macros. The C
+@code{init} and @code{begin} macros are replaced by constructors.
+
+@item 
+Overloaded function names are used for grow (and others),
+rather than the C @code{grow}, @code{grow0}, etc.
+
+@item 
+All dynamic allocation uses the the built-in @code{new} operator.
+This restricts flexibility by a little, but maintains compatibility
+with usual C++ conventions. Also, users can always redefine
+@code{new} and @code{delete} for this class.
+
+@item 
+There are now two versions of finish:
+
+@enumerate
+@item 
+finish() behaves like the C version.
+
+@item 
+finish(char terminator) adds @code{terminator}, and then calls
+@code{finish()}.  This enables the normal invocation of @code{finish(0)} to
+wrap up a string being grown character-by-character.
+@end enumerate
+
+@item 
+There are special versions of grow(const char* s) and 
+copy(const char* s) that add the null-terminated string @code{s}
+after computing its length.
+
+@end enumerate

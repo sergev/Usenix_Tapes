@@ -1,0 +1,45 @@
+: tocrc -- remake table of contents for the UNIX manual
+: 	-- run once a week from pcrontab
+
+manualsdir=/usr/man
+man0=${manualsdir}/man0
+
+for section in 1 2 3 4 5 6 7 8
+	do
+	case ${section} in
+		1)	roman=I		;;
+		2)	roman=II	;;
+		3)	roman=III	;;
+		4)	roman=IV	;;
+		5)	roman=V		;;
+		6)	roman=VI	;;
+		7)	roman=VII	;;
+		8)	roman=VIII	;;
+	esac
+	cd ${manualsdir}/man${section}
+	tocx=${man0}/tocx${section}
+	toc=${man0}/toc${section}
+	rm -f $tocx
+	for manualpage in *.${section}*
+		do
+		ed - ${manualpage} <<! >> ${tocx}
+		/^\.SH[ 	][ 	]*NAME[ 	]*\$/+1p
+		q
+!
+		done
+	ed - ${tocx} <<!
+	1,\$s/ *\\\\- */(${roman}) /
+	w
+	1,\$s/([IV]*) /" "/
+	1,\$s/.*/.xx "&"/
+	w ${toc}
+	q
+!
+	done
+
+tempfile=/tmp/toc$$
+cd ${man0}
+cat toc? > ${tempfile}
+ptx -t ${tempfile} ptxx
+rm ${tempfile}
+chmod o-w toc? tocx? ptxx

@@ -1,0 +1,728 @@
+		INSTRUCTIONS FOR SHELL V2.06M    20-Jan-87
+		-----------------------------
+
+SHELL V2.04. (C)Copyright 1986, Matthew Dillon, All Rights Reserved.
+You may distribute this program for non-profit only.
+
+		Shell V2.06M by Steve Drew.
+		--------------------------
+--------------------------------------------------------------------------
+Note:
+    These Instructions are my specific 2.06M Instructions and Matt's 2.04
+    merged together. 
+    A preceding | indicates that funtionality has been changed/enhanced,
+    a preceding * indicates that this is functionality or a command
+    that has been added in my manx version.
+
+    for version releases see readme file. 
+---------------------------------------------------------------------------
+
+      (A)   Compiling
+      (B)   Overview
+      (C)   Quicky tech notes on implimentation.
+ 
+      (D)   Command pre-processor
+      (E)   Command Line Editing
+      (F)   Function Keys
+      (G)   Command-list
+      (H)   special SET variables
+ 
+      (I)   example .login file.
+ 
+
+ 
+(A) COMPILING:
+ 
+|   makefile supplied.
+|
+|   Your manx should be patched for 1.2 (c.lib) otherwise fexec wont work
+|   and you'll just get "command not found" for all external commands.
+
+
+(B) OVERVIEW:
+ 
+   OVERVIEW of the major features:
+ 
+   -simple history
+   -redirection
+   -piping
+   -command search path 
+   -aliases
+   -variables & variable handling (embedded variables)
+   -file name expansion via '?' and '*'
+   -conditionals
+   -source files  (w/ gotos and labels)
+   -many built in commands to speed things up
+
+   PROBLEMS
+ 
+   -Append '>>' does NOT work with BCPL programs.  It does work with all
+    internal and non-bcpl programs.
+ 
+   -This version runs UNDER WORKBENCH 1.2 ONLY.
+    
+ 
+(C) QUICK TECH NOTES:
+ 
+   PIPES have been implimented using temporary RAM: files.  Thus, you
+   should be careful when specifying a 'ram:*' expansion as it might
+   include the temp. files.  These files are deleted on completion of
+   the pipe segment.
+ 
+   The file names used are completely unique, even with multiple shell
+   running simultaniously.
+ 
+   My favorite new feature is the fact that you can now redirect to and
+   from, and pipe internal commands.  'echo charlie >ram:x', for
+   instance.  Another favorite:
+ 
+      echo "echo mem | shell" | shell
+ 
+   To accomplish these new features, I completely re-wrote the command
+   parser in execom.c
+ 
+   The BCPL 'RUN' command should not be redirected.. .strange things
+   happen.
+ 
+   NO BCPL program should be output-append redirected (>>).
+ 
+ 
+(D)   Command pre-processor
+ 
+   preprocessing is done on the command line before it is passed on to
+   an internal or external routine:
+ 
+   ^c       where c is a character is converted to that control character.
+            Thus, say '^l' for control-l.
+ 
+   $name    where name is a variable name.  Variable names can consist of
+            0-9, a-z, A-Z, and underscore (_).  The contents of the
+            specified variable is used.  If the variable doesn't exist,
+            the specifier is used.  That is, if the variable 'i' contains
+            'charlie', then '$i' -> 'charlie'.  If the variable 'i' doesn't
+            exist, then '$i'->'$i' .
+ 
+   ;        delimits commands.   echo charlie ; echo ben.
+ 
+   ' '      (a space). Spaces delimit arguments.
+ 
+   "string" a quoted string.  For instance, if you want to echo five spaces
+            and an 'a':
+ 
+            echo      a       -> a
+            echo "    a"      ->      a
+ 
+   \c       overide the meaning of special characters.  '\^a' is a
+            circumflex and an a rather than control-a.  To get a backslash,
+            you must say '\\'.
+ 
+            also used to overide alias searching for commands.
+ 
+   >file    specify output redirection.  All output from the command is
+            placed in the specified file.
+ 
+   >>file   specify append redirection (Does not work with BCPL programs).
+ 
+   <file    specify input redirection.  The command takes input from the
+            file rather than the keyboard (note: not all commands require
+            input).  It makes no sense to say  'echo <charlie' since
+            the 'echo' command only outputs its arguments.
+ 
+   |        PIPE specifier.  The output from the command on the left becomes
+            the input to the command on the right.  The current SHELL
+            implimentation uses temporary files to store the data.
+ 
+   !!       execute the previously executed command.
+   !nn      (nn is a number).  Insert the history command numbered n (see
+            the HISTORY command)
+   !partial search backwards through the history list for a command which
+            looks the same as 'partial', and execute it.
+ 
+   #        Enter comment.  The rest of the line is discarded (note: \#
+            will, of course, overide the comment character's special
+            meaning)
+ 
+
+(E) Command Line Editing
+
+*  - Command line can be upto 255 chars.
+*  - Inserts and deletes are handled correctly over
+*    multiple screen lines. The program will keep track of
+*    the line width should the window get resized.
+*
+*	KEY DEFINITIONS:
+*   	  	Up Arrow    Recal previous commands
+*	  	Down Arrow  Recal commands
+*		Left Arrow  Move cursor about command line.
+*		Right Arrow  "     "      "      "      "
+*		^A	    Toggle insert/overtype mode.
+*		^D	    EOF
+*		^E	    Put cursor at end of text.
+*		^K	    Delete to end of line.
+*		^R	    Retype current line.
+*		^U	    Erase entire line.
+*		^X	    Erase entire line.
+*		^Z	    Put cursor at start of text.
+*		f1 - f10    Execute command if variable exists.
+*		F1 - F10    More commands (Shifted f keys).
+*		Help 	    invokes help command
+
+(F) Function keys.
+		
+*  - Just set the variable f1-f10 or F1-F10 (shifted) to
+*    the desired string.
+*
+*	  eg. 
+*  	     $ set f1 "dir -s df0:"			
+
+ 
+(G)  COMMAND LIST:
+ 
+   The first argument is the command-name... if it doesn't exist in the
+   list below and isn't an alias, it is assumed to be an external (disk)
+   command.
+ 
+   AUTOMATIC SOURCING may be accomplished by naming shell scripts with a
+   .sh suffix.  Thus, if you say 'stuff' and the file 'stuff.sh' exists in
+   your current or C: directory, it will be SOURCED with any arguments you
+   have placed in the $_passed variable.
+ 
+   EXCEPTION_PROCESSING:
+ 
+      if no _except variable exists, any command which fails causes the
+      rest of the line to abort as if an ABORTLINE had been executed.  If
+      the _except variable exists, it is of the form:
+ 
+      "nnn;commands..."
+ 
+      where nnn is some value representing the minimum return code required
+      to cause an error.  Whenever a command returns a code which i*
+      larger or equal to nnn, the commands in _except are executed before
+      anything.  WHEN _except EXISTS, THE COMMAND LINE DOES NOT ABORT
+      AUTOMATICALLY.  Thus, if you want the current line being executed
+      to be aborted, the last command in _except should be an "abortline".
+ 
+      exception handling is disabled while in the exception handling routine
+      (thus you can't get into any infinite loops this way).
+ 
+      Thus if _except = ";", return codes are completely ignored.
+ 
+      example:
+ 
+      set _except "20;abortline"
+ 
+ 
+   ABORTLINE
+ 
+      or just 'abort'.  Causes the rest of the line to be aborted. Used in
+      conjunction with exception handling.
+ 
+      % echo a;abort;echo b
+      a
+ 
+ 
+   HELP
+ 
+|     simply displays all the available commands.  The commands are
+|     displayed in search-order.  That is, if you give a partial name
+|     the first command that matches that name in this list is the one
+|     executed.  Generally, you should specify enough of a command so that
+|     it is completely unique.
+ 
+   QUIT
+   EXIT
+   RETURN [n]
+ 
+      quit my SHELL (awww!).  End, El-Zappo, Kapow. Done, Finis.  If you
+      use RETURN and are on the top source level, the shell exits with the
+      optional return code.  (see RETURN below)
+ 
+ 
+   SET
+   SET name
+   SET name string
+ 
+      The first method lists all current variable settings.
+      The second method lists the setting for that particular variable,
+      or creates the variable if it doesn't exist (to "")
+      The last method sets a variable to a string.
+ 
+      see the section on special _ variables down below
+ 
+ 
+   UNSET name name name....
+ 
+      unset one or more variables.  Deletes them entirely.
+ 
+ 
+   ALIAS
+   ALIAS name
+   ALIAS name string
+ 
+      same as SET, but applies to the alias list.  You can alias a single
+      name to a set of commands.  For instance:
+ 
+      alias hi "echo a; echo b"
+ 
+      then you can simply say 'hi'.  Aliases come in two forms the second
+      form allows you to place the arguments after an alias in a variable
+      for retrieval:
+ 
+      alias xxx "%i echo this $i is a test"
+ 
+      % xxx charlie
+      this charlie is a test
+ 
+      The rest of the command line is placed in the specified variable
+      for the duration of the alias.  This is especially useful when used
+      in conjunction with the 'FOREACH' command.
+ 
+ 
+   UNALIAS name name name...
+ 
+      delete aliases..
+ 
+ 
+   ECHO string
+   ECHO -n string
+ 
+      echo the string to the screen.  If '-n' is specified, no newline is
+      output.
+ 
+ 
+   STRHEAD  varname breakchar string
+ 
+      remove everything after and including the breakchar in 'string' and
+      place in variable 'varname':
+ 
+         % strhead j . aaa.bbb
+         % echo $j
+         aaa
+         %
+ 
+ 
+   STRTAIL  varname breakchar string
+ 
+      remove everything before and including the breakchar in 'string' and
+      place in variable 'varname':
+ 
+         % strtail j . aaa.bbb
+         % echo $j
+         bbb
+         %
+ 
+ 
+   SOURCE file [arguments]
+ 
+      execute commands from a file.  You can create SHELL programs in
+      a file and then execute them with this command.  Source'd files
+      have the added advantage that you can have loops in your command
+      files (see GOTO and LABEL).  You can pass SOURCE files arguments
+      by specifying arguments after the file name.  Arguments are passed
+      via the _passed variable (as a single string).
+ 
+      Automatic 'sourcing' is accomplished by placing a .sh extension on
+      the file and executing it as you would a C program:
+ 
+      --------- file hello.sh ---------
+      foreach i ( $_passed ) "echo yo $i"
+      ---------------------------------
+      % hello a b c
+      yo a
+      yo b
+      yo c
+ 
+ 
+   MV from to
+   MV from from from ... from todir
+ 
+      Allows you to rename a file or move it around within a disk.  Allows
+      you to move 1 or more files into a single directory.
+ 
+ 
+   CD
+   CD ..
+   CD path
+ 
+|     Change your current working directory.  You may specify '..' to go
+|     back one directory (this is a CD specific feature, and does not
+|     work with normal path specifications).
+ 
+      CD without any arguments displays the path of the directory you
+      are currently in.
+ 
+ 
+   PWD
+      rebuild _cwd by backtracing from your current directory.
+ 
+ 
+   RM [-r] file file file...
+ 
+      DeleteFile().  Remove the specified files.  Remove always returns
+      errorcode 0.  You can remove empty directories.  The '-r' option
+      will remove non-empty directories by recursively removing all sub
+      directories.
+*     If  you specify any wildcard deletes the files will be listed as
+*     they are deleted. This can be suppressed by redirecting to nil: 
+*	eg.  rm df0:.../*.o   delete all .o files from every directory.
+ 
+|  COPY [-u][-d] file file
+|  COPY [-u][-d] file1 file2...fileN dir
+|  COPY [-r][-u][-d] dir1 dir2...dirN dir
+ 
+      copy files or directories.  when copying directories, the "-r" option
+      must be specified to copy subdirectories as well.  Otherwise, only
+      top level files in the source directory are copied.
+
+*     All files will be displayed as they are copied and directory's displayed
+*     as they are created. This output can be suppessed by redirecting to nil:
+*	eg. copy -r >nil: df0: df1:
+*     copy will abort after current file on Control-C.
+
+|     copy by default sets the date of the destination file to that of
+|     the source file. To overide this feature use the -d switch.
+
+|     Another useful option is the -u (update) mode were copy will not
+|     copy any files which exists already in the destination directory
+|     if the destination file is newer or equal to the source file.
+|     This is usefull when developing code say in ram: eg. 'copy *.c ram:'
+|     when done you can copy -u ram: df1: and only those modules you have 
+|     modified will be copied back.
+
+|     copy command will now create the destination directory if it does
+|     not exist when specified as 'copy [-r] dir dir'. If you specify
+|     copy file file file dir, then 'dir' must already exist.
+ 
+
+*  RUN file
+*
+*     Finds the specified file via $_path variable, or 2nd via AmigaDos
+*     PATH setting, then calls AmigaDos Run command with the explicit
+*     path/command. This command is really only implemented to allow
+*     consistancy in first checking the shell pathing before amigados
+*     pathing. Since shell allows for device names in _path it does'nt
+*     care when you swap disks; if you had "df0:c/" in _path then whatever
+*     disk you have in df0: will be checked. AmigaDos PATH always resolves
+*     to a Lock that points only to a particular disk label:directory.
+
+
+   MKDIR name name name...
+ 
+      create the following directories.
+ 
+ 
+   HISTORY [partial_string]
+ 
+      Displays the enumerated history list.  The size of the list is
+      controlled by the _history variable.  If you specify a partial-
+      string, only those entries matching that string are displayed.
+ 
+ 
+   MEM
+ 
+      Display current memory statistics for CHIP and FAST.
+ 
+ 
+   CAT [file file....]
+ 
+      Type the specified files onto the screen.  If no file is specified,
+      STDIN in used.  CAT is meant to output text files only.
+ 
+ 
+|  DIR [-sdf] [path path ... ]
+ 
+|	- default output show's date, protection, block size, byte size.
+*	- Dir command rewritten to allow options:
+*		-s short mutil(4) collum display of files
+*			(directory files are in italics).
+*		-d directorys only
+*		-f files only
+*
+*	  eg. dir -s *.info       (short directory of all .info files.)
+				
+|	  the directory command will also not expand files that are
+|	  directories if as result of a wildcard expansion. eg:
+|	  'dir df0:*'  and 'dir df0:' will give same results
+|	  expect previously if df0:* was specified all subdirectories
+|	  of df0: were expanded also.
+|	  (to list one level of subdirectories: 'dir df0:*/*')
+
+|	  Directories always sorted.
+
+|	  Wild card expansions:
+|		?	match any single character
+|		*	match any string
+|		.../	recursive search down ALL sub directories
+|
+|          dir df0:.../           does a full (All) sorted directory
+|	   dir .../*.c		  start at current dir and go down looking
+|			          for all .c files.
+|
+| 
+|	  Exclude pattern matching specifier: !
+|          dir !*.info will 	  exclude all *.info files in current dir.
+|          dir df0:.../!*.info    full directory tree of df0: but exclude
+|                                 any ugly .info files.
+|          dir !*.o !*.c (will result in ALL files matching since what
+|          doesnt match the !*.o will match the !*.c)
+
+
+   DEVINFO [device: device:... ]
+ 
+      Display Device statistics for the current device (CD base), or
+      specified devices.
+|     Gives block used/free, % used, errs and volume name.
+
+ 
+   FOREACH varname ( strings ) command
+ 
+      'strings' is broken up into arguments.  Each argument is placed in
+      the variable 'varname' in turn and 'command' executed.  To execute
+      multiple commands, place them in quotes:
+ 
+      % foreach i ( a b c d ) "echo -n $i;echo \" ha\""
+      a ha
+      b ha
+      c ha
+      d ha
+ 
+      Foreach is especially useful when interpreting passed arguments in
+      an alias or source file.
+ 
+      NOTE: a GOTO inside will have indeterminate results.
+ 
+ 
+   FOREVER command
+   FOREVER "command;command;command..."
+ 
+      The specified commands are executed over and over again forever.
+ 
+      -Execution stops if you hit ^C
+      -If the commands return with an error code.
+ 
+      NOTE: a GOTO inside will have indeterminate results.
+ 
+ 
+   RETURN [value]
+ 
+      return from a source file.  The rest of the source file is
+      discarded.  If given, the value becomes the return value for the
+      SOURCE command.  If you are on the top level, this value is returned
+      as the exit code for the shell.
+ 
+ 
+   IF argument conditional argument ;
+   IF argument
+ 
+      If a single argument is something to another argument.  Conditional
+      clauses allowed:
+ 
+      <, >, =, and combinations (wire or).  Thus <> is not-equal, >=
+      larger or equal, etc...
+ 
+      If the left argument is numeric, both arguments are treated as
+      numeric.
+ 
+      usually the argument is either a constant or a variable ($varname).
+ 
+      The second form if IF is conditional on the existance of the argument.
+      If the argument is a "" string, then false , else TRUE.
+ 
+ 
+   ELSE ;
+ 
+      else clause.
+ 
+ 
+   ENDIF ;
+ 
+      the end of an if statement.
+ 
+ 
+   LABEL name
+ 
+      create a program label right here.
+ 
+ 
+   GOTO label
+ 
+      goto the specified label name.  You can only use this command from a
+      source file.
+ 
+ 
+   DEC var
+   INC var
+ 
+      decrement or increment the numerical equivalent of the variable and
+      place the ascii-string result back into that variable.
+ 
+ 
+   INPUT varname
+ 
+      input from STDIN (or a redirection, or a pipe) to a variable.  The
+      next input line is placed in the variable.
+ 
+ 
+   VER
+ 
+      display my name and the version number.
+ 
+ 
+   SLEEP timeout
+ 
+      Sleep for 'timeout' seconds.
+ 
+*  PS
+ 
+*    Gives the following info:
+*	  
+*	  Proc Command Name         CLI Type    Pri.  Address  Directory
+*	   1   SHELL                Initial CLI   0      97b0  Stuff:shell
+*	   2   sys:c/clockmem       Background  -10    2101a8  Workdisk:
+*	   3   c:emacs              Background    0    212f58  Stuff:shell
+*	   4   sys:c/VT100          Background    0    227328  Workdisk:
+*	
+*	   Address is the addres of the task, directory is the process
+*	   currently set directory.
+ 
+ 
+(H) SPECIAL SET VARIABLES
+ 
+|   _prompt
+|        This variable is set to the command you wish executed that will
+|        create your prompt. Under manx version set this to the string
+|	 for your prompt not a command to create the prompt. (Restriction
+|	 due to commandline editing support.
+ 
+   _history
+         This variable is set to a numerical value, and specifies how far
+         back your history should extend.
+ 
+   _debug
+         Debug mode... use it if you dare.  must be set to some value
+ 
+   _verbose
+         Verbose mode (for source files).  display commands as they are
+         executed.
+ 
+   _maxerr
+         The worst (highest) return value to date.  To use this, you usually
+         set it to '0', then do some set of commands, then check it.  
+ 
+   _lasterr
+         Return code of last command executed.  This includes internal
+         commands as well as external comands, so to use this variables
+         you must check it IMMEDIATELY after the command in question.
+ 
+   _cwd
+         Holds a string representing the current directory we are in from
+         root.  The SHELL can get confused as to its current directory if
+         some external program changes the directory.  Use PWD to rebuild
+         the _cwd variable in these cases.
+ 
+   _passed
+         This variable contains the passed arguments when you SOURCE a file
+         or execute a .sh file.  For instance:
+ 
+         test a b c d
+ 
+         -------- file test.sh ----------
+         echo $_passed
+         foreach i ( $_passed ) "echo YO $i"
+         --------------------------------
+ 
+ 
+   _path
+         This variable contains the search path when the shell is looking
+         for external commands.  The format is:  DIR,DIR,DIR  Each DIR must
+         have a trailing ':' or '/'.  The current directory is always
+         searched first.  The entire path will be searched first for the
+         <command>, then for <command>.sh (automatic shell script sourcing).
+ 
+*        The default _path is set to  "c:,df1:c/,df0:c/,ram:,ram:c/"
+*	 When using 'run' command Shell will now use it's own search
+*	 path first to find the command to run. If it fails to find
+*	 the command (but the Run command was found) it executes the
+*	 command line anyway to let amigaDos search path take over.
+
+*  _insert
+*        Set's the default for insert/overtype mode for command line
+*	 editing. ^A toggles between, but after <RET> the default is 
+*         set back as indicated by this variable. By default _insert is 1
+*        indicating insert mode on setting to zero will make overtype
+*	 the default.
+
+*  _width
+*	 Indicates the console window width, 77 if unset. 
+* 	 Will change automatically if the user resizes the window.
+	
+ 
+(I) EXAMPLE .login file.
+ 
+   from a CLI or the startup-script say 'SHELL filename'.  That file
+   is sourced first.  thus, 'SHELL .login' will set up your favorite
+   aliases:
+ 
+------------------------------------------------------------------------
+.LOGIN
+------------------------------------------------------------------------
+
+# -Steve's .login file- #
+
+echo -n    "Enter Date [DD-MMM-YY HH:MM] ";input new; DATE $new
+
+# ------My search path ------- #
+
+set   _path  ram:c/,ram:,c:,df0:c/,df1:c/,sys:system/,sys:utilities
+
+# -------Function keys-------- #
+
+set   f1     dir df0:
+set   f2     dir df1:
+set   F1     dir -s df0:
+set   F2     dir -s df1:
+set   f3     info
+set   f4     ps
+
+# ---------Quickies---------- #
+
+# -query delete- #
+#another favorite eg    qd *.c
+alias qd "%q foreach i ( $q ) \"echo -n Delete [n] ;input a;if $a = y;del $i;endif\""
+
+alias delete rm
+alias rename mv
+alias makedir mkdir
+alias type  cat
+alias print "%q copy $q prt:"
+alias info  "devinfo df0: df1: ram:"
+alias tosys "assign c: SYS:c"
+alias toram "assign c: RAM:c;"
+alias tomanx "assign c: MANX:c; manxinit"
+alias d     "dir -s"
+alias clr   "echo -n ^l"
+alias wb    "loadwb"
+alias pref  "sys:preferences"
+alias cal   "run sys:utilities/calculator"
+
+# ------Applications---------- #
+
+alias em    "run emacs"
+alias vt    "run sys:c/VT100"
+
+# --------Finish Up----------- #
+
+ver ;echo -n "Shell loaded on ";date
+
+
+------------------------------------------------------------------------
+MANXINIT.SH
+------------------------------------------------------------------------
+SET INCLUDE=AC:include CCTEMP=ram:
+makedir ram:lib;Set CLIB=RAM:lib/;copy AC:lib/$libfile ram:lib"
+alias	cleanup	"del >NIL: ram:lib/* ram:lib"
+
+#run make in background at lower priority:
+alias	make	"%q run ChangeTaskPri -5 +^J^J MAKE $q"
+
+

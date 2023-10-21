@@ -1,0 +1,397 @@
+.PP
+.EQ
+size 16 bold { Crash ~Recovery ~at ~CIRES }
+.EN
+.DS C
+.I
+the staff
+.DE
+.R
+.PP
+This is a step by step procedure for recovering  from a fatal disk
+crash,
+.I
+i.e.,
+.R
+one that has wiped out the normally resident disk files for one
+reason or another.  This procedure assumes that the rp05 pack
+is empty or scratchable, and rebuilds it completely.
+.PP
+This procedure is essentially the same as bringing up a Unix distribution
+for the first time, except that since the "distribution" style tape
+will be made locally, it will already have all the special files, etc.,
+that Unix needs to have in order to interface to its various devices.
+.PP
+.B
+Note:
+.R
+this procedure will have all the "magic numbers" that are appropriate
+for the PDP 11/70 as presently configured; any other use will necessitate
+some changes.
+.LP
+.B
+Booting the Standalone Tape
+.R
+.PP
+Perform the following bootstrap procedure to obtain a running standalone
+bootstrap system.
+.IP 1.
+Mount the distribution style tape on drive 0 at load point (BOT).
+.IP 2.
+Mount a formatted disk pack on drive 0.
+.IP 3.
+Load the beginning block of the tape into memory; load address:
+165744; key in 412, then hit start.
+.IP 4.
+The console should type
+.IP
+.I
+Boot
+:
+.PP
+.R
+Now the standalone bootstrap is running.  It is really a miniature
+operating system, with its own small set of commands.  As shown in this
+document, the machine's printouts are shown in italic; operator responses
+are in 
+.B boldface
+.R
+, and explanatory comments are parenthesized.   
+.PP
+The colon (:) is the bootstrap prompt; the usual kill and erase
+characters, "@" and "#", will still work if you make a typing mistake.
+.PP
+A file is included on the tape which describes the contents; to print out
+this file, type
+.IP 5.
+(bring in the program cat)
+.IP
+.I
+:
+.B ht(0,1)
+.IP
+.I Cat
+.IP
+.I
+file?
+.B ht(0,2)
+.IP
+.I ....
+.LP
+.B
+Making a Disk from the tape
+.R
+.IP 6.
+Copy the tape to disk
+.IP
+(bring in the program mkfs)
+.IP
+.I :
+.B ht(0,3)
+.IP
+.I
+Mkfs
+.IP
+.I
+file system size: 
+.B 10450
+.IP
+.I
+file system:
+.B hp(0,121638)
+.IP
+.I
+isize = xx
+.IP
+.I
+m/n = xx
+.R
+.IP
+(after a while)
+.IP
+.I
+exit called
+.IP
+.I
+Boot
+.IP
+.I
+:
+.R
+.PP
+Now you have an empty file system for root to reside in.  Next, we want to
+extract the contents of root from the tape.  To do this, you respond to the
+colon prompt left over from the last operation; if you've lost it, just boot
+it back in off the tape.
+.IP 7.
+(bring in the program restor)
+.IP
+.I
+:
+.B ht(0,4)
+.IP
+.I
+Restor
+.IP
+tape?
+.B ht(0,5)
+.IP
+.I
+disk?
+.B hp(0,121638)
+.IP
+.I
+Last chance before scribbling on disk.
+.R
+(you type a return)
+.IP
+(the tape moves, takes about 10-15 minutes)
+.IP
+.I
+end of tape
+.IP
+.I
+Boot
+.IP
+.I
+:
+.R
+.PP
+You now have a UNIX root file system; if everything is normal, you should
+be able to boot up the operating system.
+.LP
+.B
+Booting UNIX 
+.R
+.PP
+You probably still have the bootstrap running, left over from the last step
+above; if not, reboot the tape, then in response to the colon prompt type
+.IP
+.I
+:
+.B hp(0,121638)unix
+.R
+.PP
+The machine should type the following:
+.IP
+.I
+mem = 440896
+.IP
+#
+.R
+.PP
+The 
+.I mem
+message gives the memory available to user programs in bytes.
+.PP
+The normal boot procedure is the same, except that after you key in
+165744, hit load address; then you key in 256 (for the rp05), and hit
+start.  Then you would skip down to step 15 of this procedure (note that
+I cleverly avoided the use of the dreaded "go to").
+.PP
+UNIX is now running and everything in the "Unix Programmer's Manual" applies.
+If we were actually building everything from a new distribution,
+we would now proceed to make the special file entries in the dev directory,
+but if everything loaded correctly this will already be normal; do a "ls -l"
+on /dev to see if all the devices are there.
+.PP
+If not, do a "cd dev"; then "make cires", and all the special files will
+be created automatically.
+.PP
+Next, we need to make the file structures for the "/usr" and "/we" areas,
+so you type the following
+.IP 8.
+(make the empty file structures)
+.IP
+.B
+/etc/mkfs /dev/rp0 117458
+.IP
+.B
+/etc/mkfs /dev/rp3 39710
+.R
+.IP
+(the above commands take 4-6 minutes, setting up the empty file systems)
+.IP 9.
+.B
+dd if=/dev/nrmt0 of=/dev/null bs=20b files=6
+.R
+(skips the first six files on the tape; does not rewind; this positions the
+tape to load the contents of /usr)
+.IP 10.
+.B
+restor rf /dev/rmt0 /dev/rp3
+.R
+.IP
+(reply with a "return" to the "last chance" message)
+.IP
+(this restor will take 15-20 minutes)
+.PP
+After this restor is completed, all the contents of the tape have been
+extracted; all that remains is to reload the contents of the /we (real users)
+area.
+.PP
+At this point, we need to mount the "pseudo-disks", 
+.I
+i.e.,
+.R
+rp0 and rp3, so you type the following
+.IP 11.
+.B
+/etc/mount /dev/rp3 /usr
+.IP
+.B
+/etc/mount /dev/rp0 /we
+.R
+.PP
+This allows root to access the other disk areas normally (the mounting is
+done automatically when the system is taken to multi-user mode, via
+the file /etc/rc).
+.PP
+Before anything else is done, the bootstrap block on the disk (block 0)
+should be filled in.  This is done by typing in the following
+.IP 12.
+.B
+dd if=/usr/mdec/hpuboot of=/dev/rp0 count=1
+.R
+.PP
+At this point, the system still won't boot until there is an ordinary file
+named "boot" resident on /dev/rp0; this will be the only file under /we;
+all other entries will be subdirectories of /we once the user files are loaded.
+"Boot" is normally also kept as a binary in the / (root) directory, so you
+can copy it over to /we; don't mv it.  It will be automatically loaded onto
+/we with the other user files though, so you can skip this if you wish.
+.PP
+Now we are ready to load the user files back onto /we.  The normal procedure
+at CIRES is to dump the entire contents of /we about once a month(dump 0u /dev/rrp0), with
+incremental dumps (dump 9u /dev/rrp0) done tri-weekly.
+.PP
+All that is necessary to reload is to mount the first reel of the multi-reel
+0(zero) dump volume on tape unit 1, and type the following
+.IP 13.
+.B
+restor r /dev/rp0 
+.R
+.IP
+(this will take about an hour; it will prompt you to change tapes for the
+second or subsequent reel)
+.PP
+This will give you the disk posture as of the date of that 0 (zero) dump; all that
+is necessary now is to overlay that with the 
+.B last
+.R
+level 9 dump that you see noted on the calendar in the computer room.
+.PP
+To do that, dismount the second reel of the 0 dump and mount the level 9
+dump tape onto tape drive 1; type the following
+.IP 14.
+.B
+restor r /dev/rp0
+.R
+.PP
+That's it, except for the following very important steps, which ensure that
+the disk file health is okay once restored.
+.PP
+To get started with the disk checkout, type the following
+.IP 15.
+.B
+/etc/checkall
+.IP
+.R
+(this will start up a series of ichecks and dchecks on the various pseudo-disks;
+/usr and /we need to be mounted for this sequence)
+.PP
+Since the normal procedure at CIRES is to take the dumps of the user area
+during normal multi-user mode working hours, there will be a certain amount
+of disk house-keeping to be cleaned up once everything is restored onto
+the disk from the dump tapes.  This is because the dump program essentially 
+takes a "snap-shot" of what the disk looks like when the dump is started.
+.PP
+This means that there may be(and probably will) be file entries that will
+appear in the inode table that have no contents, or other mis-matches.  This
+sort of thing is what icheck and dcheck will tell you.
+.PP
+For details, see the appropriate manual page, but in general, the results
+of icheck should be just a summary of how that disk area is used; the 
+"missing" entry should be zero; if not it is a minor problem to fix.
+.PP
+The results of dcheck will be nil if all is well; if not, it will be obvious.
+.IP 16.
+.B
+What to do if there are problems
+.R
+.PP
+The results of a mismatch between the computer's cross reference of the
+file system, (which literally is a one to one correspondence between a 
+small positive integer, known in unixese as an "inode", and the more
+human oriented file names like "/we/harkins/file1"); mean that if left
+uncorrected, the operating system's disk file allocation scheme can
+(and most likely will) get confused and start garbaging out the whole works.
+.PP
+This file system patching must be done properly as well, or the same
+vicious circle can result.  If in doubt, consult any of the following:
+Ernie, Martin, Rich or Danny.
+.IP 17.
+.B
+Patching the file system
+.R
+.PP
+Note: A more comprehensive write-up of how to patch the file system appears
+in "CRASH(8)" in volume 1 of the UNIX manual; in particular, the following
+procedure engages in a bit of overkill regarding the freeing of inodes, but
+no harm will result.
+.PP
+Icheck and dcheck will print a notice of any inode vs. file mismatches.
+Some of these will go away simply by removing the file; the only thing is
+that icheck and dcheck don't give you file names.  That's what ncheck is
+for; it deciphers the cross-indexing.  For instance, if icheck complained
+about inode #'s 3246 and 3543 not having any link to a file, we could
+type the following to see what files were supposed to be linked up to those
+numbers(we'll assume that we are working on /we)
+.IP
+.B
+ncheck -i 3246 3543 /dev/rrp0
+.R
+.PP
+Ncheck will cogitate on the matter for a bit, and then come back with
+the answers.  Typically then, you would "rm" each file, and then do a
+"clri" to clear up those inodes(unix recycles the numbers when they are
+freed; that's why it is important to do the rm first).  For the preceding
+example, you would type
+.IP
+.B
+clri /dev/rp0 3246 3543
+.R
+.PP
+Then the system will notify you that those inodes are cleared.  Then to 
+rebuild the super-block(which has the inode to file-name cross reference), you
+would type
+.IP
+.B
+icheck -s /dev/rrp0
+.R
+.PP
+The "-s" flag is what does the trick; it will also recover any missing
+areas that showed up the first time you ran the icheck (via /etc/checkall).
+.LP
+.B
+Important Note
+.R 
+.PP
+Immediately after the normal "#" prompt returns from the "icheck -s",
+halt the CPU, hit start twice, and reboot.  Do not do a "sync" (ordinarily, you would always
+do a "sync" before halting the CPU; that shoots the current super-block
+out to disk, giving you the latest status).
+.PP
+Once you have the system re-booted, run the "/etc/checkall" sequence to
+see if you've succeeded in clearing up all the glitches.  The rm and
+clri on each offending file, followed by an icheck with the "-s" flag
+will be necessary on each pseudo-disk you have problems with.
+.PP
+After all the patching is done, a final /etc/checkall, check the date and
+time, reset if necessary and do a "control-d".  That will not only log you
+out, but will put the operating system into multi-user mode.   
+.PP
+Take a break; you've earned it.
+.sp 2
+.LP
+University of Colorado, CIRES, 3-26-80

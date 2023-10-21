@@ -1,0 +1,602 @@
+/*
+ * Copyright 1985, Todd Brunhoff.
+ *
+ * This software was written at Tektronix Computer Research Laboratories
+ * as partial fulfillment of a Master's degree at the University of Denver.
+ * This is not Tektronix proprietary software and should not be
+ * confused with any software product sold by Tektronix.  No warranty is
+ * expressed or implied on the reliability of this software; the author,
+ * the University of Denver, and Tektronix, inc. accept no liability for
+ * any damage done directly or indirectly by this software.  This software
+ * may be copied, modified or used in any way, without fee, provided this
+ * notice remains an unaltered part of the software.
+ *
+ * $Log:	serversyscall.c,v $
+ * Revision 2.0  85/12/07  18:22:44  toddb
+ * First public release.
+ * 
+ */
+static char	*rcsid = "$Header: serversyscall.c,v 2.0 85/12/07 18:22:44 toddb Rel $";
+#include	"server.h"
+#include	<sys/stat.h>
+#include	<sys/dir.h>
+#include	<sys/file.h>
+#include	<sys/user.h>
+#include	<errno.h>
+
+extern char	*syscallnames[];
+extern short	current_pid;
+extern short	gateway_server;
+extern boolean	i_am_gateway;
+extern boolean	in_root_directory;
+extern syscallmap	smap[];
+extern struct stat	filetypes[];
+extern hosts	*host;
+extern long	errno;
+
+s_fork(msg, proc)
+	register struct message	*msg;
+	register process	*proc;
+{
+	register process	*newproc;
+	register long	newpid = msg->m_args[ 0 ],
+				i, fd;
+	register short	syscall = msg->m_syscall;
+	boolean needtofork = FALSE;
+
+	if (newproc = findprocess(newpid, msg->m_uid))
+		debug1("%d = %sfork(%d), redundant\n",
+			newpid, syscall == RSYS_vfork ? "v" : "",
+			msg->m_args[ 1 ]);
+	else
+	{
+		debug1("%d = %sfork(%d)\n",
+			newpid, syscall == RSYS_vfork ? "v" : "",
+			proc->p_pid);
+		newproc = add_new_process(msg->m_uid, newpid);
+		for (i=0; i<NOFILE; i++)
+			if ((fd = proc->p_fds[ i ]) >= 0)
+				newproc->p_fds[ i ] = fd, needtofork = TRUE;
+
+		if (needtofork)
+			become_server(msg);
+		else if (! i_am_gateway)
+			say_something(S_NEWPROCESS, newpid);
+	}
+	/*
+	 * No return message is sent!
+	 */
+}
+
+s_read(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	clientfd = msg->m_args[0],
+			fd,
+			size = msg->m_args[1];
+	register char	*buf = get_data_buf(size);
+
+	fd = MAPFD(clientfd, proc);
+	proc->p_returnval = read(fd, buf, size);
+	proc->p_errno = fixdir(fd, buf, proc->p_returnval);
+	debug1("%d = read(%d->%d, 0x%x, %d);\n",
+		proc->p_returnval, clientfd, fd, buf, size);
+	sendreturn(proc, host->h_cmdfd, buf, 0);
+}
+
+s_write(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	clientfd = msg->m_args[0],
+			fd,
+			size = msg->m_args[1],
+			totlen = msg->m_totlen;
+	register char	*buf;
+
+	if (totlen > BIGBUF)
+		msg = (struct message *)getbuf(totlen);
+	buf = (char *)&msg->m_args[R_DATA];
+	gobble_last_msg(host->h_cmdfd, msg);
+	fd = MAPFD(clientfd, proc);
+	proc->p_returnval = write(fd, buf, size);
+	proc->p_errno = errno;
+	debug1("%d = write(%d->%d, 0x%x, %d);\n",
+		proc->p_returnval, clientfd, fd, buf, size);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+/*
+ * Open a file.  Also interface for creat().  Note that we pass back
+ * the current file offset.
+ */
+s_open(msg, proc)
+	struct message  	*msg;
+	register process	*proc;
+{
+#define mask		args[ 3 ]
+#define	clientfd	args[ 2 ]
+#define	mode		args[ 1 ]
+#define	flags		args[ 0 ]
+
+	register long	ourfd,
+			*args = msg->m_args;
+	register char	*path = path1addr(msg);
+
+	change_to_umask(mask);
+	ourfd = open(path, flags, mode);
+	proc->p_errno = errno;
+	proc->p_returnval =  allocate_fd(ourfd, proc, clientfd);
+	debug1("%d = open(\"%s\", 0%o, %d)\n",
+		proc->p_returnval, path, flags, mode);
+	sendreturn(proc, host->h_cmdfd, NULL, 1, lseek(ourfd, 0, L_INCR));
+
+#undef	mask
+#undef	clientfd
+#undef	mode
+#undef	flags
+}
+
+s_fd1(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	clientfd = msg->m_args[0],
+			fd,
+			syscall = msg->m_syscall;
+
+	fd = MAPFD(clientfd, proc);
+	/*
+	 * No return sent for close or fsync!
+	 */
+	if (syscall == RSYS_close || syscall == RSYS_fsync)
+		proc->p_returnval = deallocate_fd(proc, msg->m_args[0]);
+	else
+	{
+		proc->p_returnval = (*smap[ syscall ].s_syscall)(fd);
+		proc->p_errno = errno;
+		if (syscall != RSYS_fsync)
+			sendreturn(proc, host->h_cmdfd, NULL, 0);
+	}
+	debug1("%d = %s(%d->%d)\n",
+		proc->p_returnval, syscallnames[ syscall ], clientfd, fd);
+}
+
+s_fd1_plus(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+#define	arg1		msg->m_args[1]
+#define	arg2		msg->m_args[2]
+	register long	clientfd = msg->m_args[0],
+			fd;
+
+	fd = MAPFD(clientfd, proc);
+	proc->p_returnval = (*smap[ msg->m_syscall ].s_syscall)(fd, arg1, arg2);
+	proc->p_errno = errno;
+	debug1("%d = %s(%d->%d, %d(0%o), %d(0%o))\n",
+		proc->p_returnval, syscallnames[ msg->m_syscall ],
+		clientfd, fd, arg1, arg1, arg2, arg2);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+#undef	arg1
+#undef	arg2
+}
+
+/*
+ * link, symlink and rename
+ */
+s_path2(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+#define	mask	msg->m_args[0]
+	register char	*path1, *path2;
+	register short	syscall = msg->m_syscall;
+
+	change_to_umask(mask);
+	path2 = twopath2addr(msg);
+	path1 = twopath1addr(msg);
+	proc->p_returnval = (*smap[ syscall ].s_syscall)(path1, path2);
+	proc->p_errno = errno;
+	debug1("%d = %s(\"%s\", \"%s\")\n", syscallnames[ syscall ],
+		proc->p_returnval, path1, path2);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+#undef	mask
+}
+
+s_path1(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register char	*path;
+	register short	syscall = msg->m_syscall;
+	register long	mask = msg->m_args[0];
+	struct stat	statb;
+	extern struct stat	root;
+	register struct	stat *statp = &statb;
+
+	change_to_umask(mask);
+	path = path1addr(msg);
+	proc->p_returnval = (*smap[ syscall ].s_syscall)(path);
+	proc->p_errno = errno;
+	debug1("%d = %s(\"%s\")\n",
+		proc->p_returnval, syscallnames[ syscall ], path);
+	if (syscall == RSYS_chdir)
+		if (proc->p_returnval == -1)
+			debug1("can't chdir to %s\n", path);
+		else
+		{
+			if (stat(".", statp) == 0 && isroot(statp))
+				in_root_directory = TRUE;
+			else
+				in_root_directory = FALSE;
+			debug10("Now I'm %sin root\n",
+				!in_root_directory ? "not " : "");
+		}
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+s_access(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register char	*path;
+	register long	perm = msg->m_args[0];
+
+	path = path1addr(msg);
+	
+	/*
+	 * The kernel access is strange:  it first sets the effective uid
+	 * and gid to be the real uid/gid and THEN it does the access.
+	 * Well, our real uid is always 0 (so we can change our effective
+	 * uid at will), so the effect is different than a normal user
+	 * would expect.  i.e. access always succeeds no matter what
+	 * the arguments.  This is clearly not what we want, so we apply
+	 * an awful kludge here; change our real uid to be the user we
+	 * are pretending to be, and then call access.
+	 */
+	change_to_uid(0);
+	setreuid(proc->p_ruser->r_user->u_local_uid, 0);
+	proc->p_returnval = access(path, perm);
+	proc->p_errno = errno;
+	debug1("%d = access(\"%s\", 0%o\n", proc->p_returnval, path, perm);
+	setreuid(0, 0);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+s_path1_plus(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register char	*path;
+	register long	syscall = msg->m_syscall,
+			arg1 = msg->m_args[0],
+			arg2 = msg->m_args[1],
+			mask = msg->m_args[2];
+
+	path = path1addr(msg);
+	change_to_umask(mask);
+	
+	proc->p_returnval = (*smap[ syscall ].s_syscall)(path, arg1, arg2);
+	proc->p_errno = errno;
+	debug1("%d = %s(\"%s\", %d(0%o), %d(%o))\n",
+		proc->p_returnval,
+		syscallnames[ syscall ], path, arg1, arg1, arg2, arg2);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+s_stat(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	union a {
+		char	*path;
+		long	fd;
+	} arg;
+	register short	syscall = msg->m_syscall;
+	register long	clientfd = msg->m_args[0];
+	struct stat		statbuf;
+	register struct stat	*statp = &statbuf;
+
+	if (syscall == RSYS_fstat)
+		arg.fd = MAPFD(clientfd, proc);
+	else
+		arg.path = path1addr(msg);
+	proc->p_returnval = (*smap[ syscall ].s_syscall)(arg.path, statp);
+	proc->p_errno = errno;
+#ifdef RFSDEBUG
+	if (syscall == RSYS_fstat)
+		debug1("%d = fstat(%d->%d, 0x%x)\n",
+			proc->p_returnval, clientfd, arg.fd, &statbuf);
+	else
+		debug1("%d = %s(\"%s\", 0x%x)\n", proc->p_returnval,
+			syscallnames[ syscall ], arg.path, &statbuf);
+#endif RFSDEBUG
+	if (proc->p_returnval == -1)
+		sendreturn(proc, host->h_cmdfd, NULL, 0);
+	else
+		sendreturn(proc, host->h_cmdfd, NULL, 14,
+			statp->st_dev,
+			statp->st_ino,
+			statp->st_mode,
+			statp->st_nlink,
+			statp->st_uid,
+			statp->st_gid,
+			statp->st_rdev,
+			statp->st_size,
+			statp->st_atime,
+			statp->st_mtime,
+			statp->st_ctime,
+			statp->st_blksize,
+			statp->st_blocks,
+			isroot(statp));
+}
+
+s_lseek(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	clientfd = msg->m_args[0], fd;
+
+	fd = MAPFD(clientfd, proc);
+	proc->p_returnval = lseek(fd, msg->m_args[1], msg->m_args[2]);
+	proc->p_errno = errno;
+	debug1("%d = lseek(%d->%d, %d, %d)\n", proc->p_returnval,
+		clientfd, fd, msg->m_args[1], msg->m_args[2]);
+	if (msg->m_syscall == RSYS_lseek)
+		sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+s_dup(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	clientfd = msg->m_args[0], fd,
+			newclientfd = msg->m_args[1],
+			ourfd,
+			newfd;
+
+	fd = MAPFD(clientfd, proc);
+	if (msg->m_syscall == RSYS_dup2)
+	{
+		newfd = MAPFD(newclientfd, proc);
+		if (newfd >= 0)
+		{
+			proc->p_returnval = deallocate_fd(proc, newclientfd, 0);
+			debug1("%d = (dup2)close(%d->%d)... ",
+				proc->p_returnval, newclientfd, newfd);
+		}
+	}
+	if (fd >= 0)
+	{
+		ourfd = dup(fd);
+		proc->p_returnval =  allocate_fd(ourfd, proc, newclientfd);
+		proc->p_errno = errno;
+	}
+	else if (msg->m_syscall == RSYS_dup2 && newfd >= 0)
+		proc->p_returnval = newclientfd;
+	else
+	{
+		proc->p_returnval = -1;
+		proc->p_errno = EINVAL;
+	}
+	debug1("%d = dup(%d->%d)\n", proc->p_returnval, clientfd, fd);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+s_ioctl(msg, proc)
+	struct message  *msg;
+	process	*proc;
+{
+	long	fd = msg->m_args[0];
+}
+
+s_readlink(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	size = msg->m_args[0];
+	register char	*buf = get_data_buf(size),
+			*path = path1addr(msg);
+
+	proc->p_returnval = readlink(path, buf, size);
+	proc->p_errno = errno;
+	debug1("%d = readlink(\"%s\", 0x%x, %d);\n",
+		proc->p_returnval, path, buf, size);
+	sendreturn(proc, host->h_cmdfd, buf, 0);
+}
+
+/*
+ * Send exec information the remote host.
+ */
+s_execinfo(msg, proc)
+	register struct message  *msg;
+	register process	*proc;
+{
+	register long	hdrsize = msg->m_args[ 0 ],
+			red,
+			err = 0,
+			msglen = R_MINRMSG + sizeof(long)*R_EXECDATA;
+	register char	*path = path1addr(msg),
+			*p;
+	struct stat	st;
+	struct message	msgbuf;
+
+	errno = 0;
+	if (hdrsize > (R_MAXARGS - R_EXECDATA)*sizeof(long))
+	{
+		log("exec: hdrsize = %d!!\n", hdrsize);
+		err = EINVAL;
+		goto done;
+	}
+	/*
+	 * Start building the outgoing message... get header,
+	 * check permissions and open file.
+	 */
+	msg = &msgbuf;
+	if ((proc->p_execfd = open(path, O_RDONLY)) == -1)
+		goto done;
+	fstat(proc->p_execfd, &st);
+	if ((st.st_mode & S_IFMT) != S_IFREG
+	|| ! myaccess(&st, proc->p_ruser->r_user, X_OK))
+	{
+		err = ENOEXEC;
+		debug12("%s mode=0%o %sreg file, %sexecutable\n",
+			path, st.st_mode,
+			(st.st_mode & S_IFMT) != S_IFREG ? "not " : "",
+			myaccess(&st, proc->p_ruser->r_user, X_OK) ?
+			"" : "not ");
+		goto done;
+	}
+	msg->m_args[ R_EXECREADONLY ] =
+		(myaccess(&st, proc->p_ruser->r_user, W_OK) == FALSE);
+	msg->m_args[R_EXECDATA] = 0; /* for zero-length files */
+	red = read(proc->p_execfd, msg->m_args + R_EXECDATA, hdrsize);
+	if (red <= 0)
+	{
+		debug12("read on exec fd %d=%d\n", proc->p_execfd, red);
+		err = EINVAL;
+		goto done;
+	}
+	msglen += red;
+
+
+	/*
+	 * Check setuid/setgid info
+	 */
+	if (st.st_mode & S_ISUID)
+		msg->m_args[ R_EXECUID ] = htonl(st.st_uid);
+	else
+		msg->m_args[ R_EXECUID ] = htonl(-1);
+	if (st.st_mode & S_ISGID)
+		msg->m_args[ R_EXECGID ] = htonl(st.st_gid);
+	else
+		msg->m_args[ R_EXECGID ] = htonl(-1);
+
+done:
+	proc->p_execstarted = FALSE;
+	msg->m_hdlen = htons(msglen);
+	msg->m_totlen = htonl(msglen);
+	if (errno)
+		err = errno;
+	if (err)
+	{
+		debug12("execinfo: err=%d\n", err);
+		close(proc->p_execfd);
+		proc->p_execfd = -1;
+	}
+	debug1("%d = execve(\"%s\");\n", proc->p_returnval, path);
+	if (msg->m_errno = htons(err))
+		msg->m_args[ R_RETVAL ] = htonl(-1);
+	else
+		msg->m_args[ R_RETVAL ] = htonl(st.st_size);
+	msg->m_pid = htons(proc->p_pid);
+	msg->m_uid = htons(proc->p_uid);
+	sndmsg(host->h_cmdfd, msg, msglen, 0, 0);
+}
+
+/*
+ * Send exec text and data to remote host.
+ */
+s_execread(msg, proc)
+	struct message  *msg;
+	process	*proc;
+{
+	register long	fd = proc->p_execfd,
+			hdrsize = msg->m_args[0],
+			size = msg->m_args[1],
+			red;
+	register char	*buf = get_data_buf(size);
+
+	if (!proc->p_execstarted)
+	{
+		if (lseek(fd, hdrsize, 0) != hdrsize)
+		{
+			log("can't seek to %d on fd %d for exec\n",
+				hdrsize, fd);
+			proc->p_errno = EINVAL;
+		}
+		proc->p_execstarted = TRUE;
+	}
+	if (size)
+	{
+		proc->p_returnval = read(fd, buf, size);
+		proc->p_errno = errno;
+		debug1("%d = execread(%d)\n", proc->p_returnval, size);
+	}
+	else /* all done; send no return */
+	{
+		proc->p_returnval = close(proc->p_execfd);
+		proc->p_execfd = -1;
+		debug1("%d = execread(%d)\n", proc->p_returnval, size);
+		return;
+	}
+
+	sendreturn(proc, host->h_cmdfd, buf, 0);
+}
+
+s_utimes(msg, proc)
+	struct message  *msg;
+	process	*proc;
+{
+	char	*path;
+	struct timeval	tv[2];
+
+	path = path1addr(msg);
+	tv[0].tv_sec  = msg->m_args[0];
+	tv[0].tv_usec = msg->m_args[1];
+	tv[1].tv_sec  = msg->m_args[2];
+	tv[1].tv_usec = msg->m_args[3];
+	
+	
+	proc->p_returnval = utimes(path, tv);
+	proc->p_errno = errno;
+	debug1("%d = utimes(\"%s\", 0x%x\n", proc->p_returnval, path, tv);
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}
+
+/*
+ * Let a process exit.
+ */
+s_exit(msg, proc)
+	struct message  *msg;
+	process	*proc;
+{
+	long	otherprocs = 0;
+	process	*p2;
+
+	/*
+	 * No return message sent!
+	 */
+	debug1("exit()\n");
+	deletelist(&host->h_proclist, proc);
+	freeproc(proc);
+	if (! i_am_gateway)
+	{
+		for (proc=host->h_proclist; proc; proc=proc->p_next)
+			if (proc->p_handler == current_pid)
+				otherprocs++;
+		if (otherprocs == 0)
+		{
+			gobble_last_msg(host->h_cmdfd, msg);
+			say_something(S_ALLDONE, 0);
+			mourne();
+			exit(0);
+		}
+		else
+			say_something(S_PROCEXIT, msg->m_pid);
+	}
+}
+
+noop(msg, proc)
+	struct message  *msg;
+	process	*proc;
+{
+	extern long	errno;
+
+	log("*** FUNCTION IGNORED ***\n", proc->p_pid);
+	proc->p_returnval = -1;
+	proc->p_errno = EINVAL;
+	sendreturn(proc, host->h_cmdfd, NULL, 0);
+}

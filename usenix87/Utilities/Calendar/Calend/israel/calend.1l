@@ -1,0 +1,217 @@
+.TH CALENDAR 1 
+.SH NAME
+calend \- An appointment calendar maintainer
+.SH SYNOPSIS
+.B calend
+[
+.B \-c
+]
+[
+.B \-i
+]
+[
+.B \-r
+]
+[
+.B \-DdMMDD
+]
+[
+.B \-F <file>
+]
+.SH DESCRIPTION
+.IR calend
+is used to remind a user about appointments.
+When calend is called, it looks at the users appointments
+in the .calrc file in his home directory.  This file is made
+up of lines of the form:
+.sp
+.ce
+<opts> <start-date> <end-date> <message string>
+.sp
+where <opts> is a string made up of any of
+.B 'xma1rd+*'
+either contiguous or separated by commas,
+and <start-date> and <end-date> are either days of the week,
+(e.g. 'Wed'), dates of the year of the form:
+mm/dd (eg 11/20), month dd (eg Nov 20), or dd Month (eg 20 Nov),
+or a relative offset.  A relative offset is either an '*', which
+means replace this date by the other date, '*+<num>', which means
+add the number to the other date to get this date, or '*-<num>', which
+means that <num> should be subtracted from the other date to get this
+date.  Both dates must be of the same type, either both days, or both dates,
+and they cannot both be relative offsets.
+.PP
+If one of the dates is a relative offset, then the other can be a set
+specification.  For days of the week a set specification is a list or
+range of days within curly
+braces, (e.g. "{ sun tues thurs }" or "{tues - fri}").  For a date of
+the year specification, Any or all of the month and dates can be sets,
+(e.g. "{3 7 11}/1", "Jan {1 3 5}", or "{Jan - March} 1").  You can also
+have dates of the form "{1/3 2/14 11/22}" or "{jan 25, mar 3, sep 24}"
+but you cannot nest them.
+.PP
+When the current date is between any element of <start-date> and <end-date>
+inclusive (or if they are days then the day of the week is between
+them) then the message will be processed according to the specified
+options.  The meanings of the various options are as follows:
+.br
+.TP
+.I x
+execute the message as a process.  If the 'x' option is given, all other
+options except '1', 'a', '+', and 'd' will be ignored.  The 'd' option will
+act as normal, but the '1' and 'a' options will indicate whether to do
+the execution the first time in the period or always during the period.
+  [If neither is given, then always is assumed.]
+.TP
+.I <
+The rest of the line is expected to be a file name that
+.B calend
+will recursively process as a dates file.  This is useful for groups
+of people with many entries in common (i.e. meetings and talks announcements,
+paydays, etc.)
+.TP
+.I m
+mail the message to the user.  The first time that 'calend'
+is called during that period, send mail to the user using
+the message-string as mail-text.
+.TP
+.I a
+always print the message.  Every time 'calend' is called
+during that period, print the message string on the terminal.
+.TP
+.I 1
+print the message once.  Print the message on the terminal
+the first time 'calend' is run during that period.
+.TP
+.I r
+run the remind program.  The first four non-blank digits of the message
+string should be a time-of-day of the form 'hhmm' which remind can use.
+.TP
+.I d
+delete this entry from the file when 'calend' is finished
+with it.  When an entry is deleted, it is actually commented out
+from the file with a '#' flag.
+.TP
+.I +
+move the dates of this entry forward when done.  The first word of
+the message is the amount of months and days to move the message
+forward by (i.e. +14 or 14d (two weeks), +1/2 (one month and two days),
+ +3m2d (three months and two days) etc).  The dates are expected to
+be dates of the year (i.e. month and date of month) and can only be
+single dates or a '*' specification.  Sets of dates will not
+be moved.  If the period is specified in days of the week, then they
+will automatically be converted to dates the first time
+.B calend
+is run in that period.
+.sp
+.B calend
+uses a simple heuristic to decide when to move the dates of a line
+with the '+' option.  The dates of a line will be moved when the current
+date is in the first half of the inverse of the period.  For example,
+If you have the line:
+.sp
+.nf
+a+	sept 23	*	+14 Payday today
+.fi
+.sp
+then the dates will be moved to October 7 (or later) when
+.B calend
+is executed during the first half of the 364 day period from september 24
+through September 22.  If the current date was after October 7, the
+dates will continue to be moved until the current date is within or before
+that period.  This is used when
+.B calend
+is not run within the period.  If the -i option is not set, then each old
+message that was missed will be printed out (marked as such).
+.TP
+.I *
+\&'pending' flag used by the program internally to indicate
+that more processing needs to be done.
+.PP
+If a line in the .calrc flag starts with a '#' or a ':', that
+line is considered to be a comment and is not processed.
+.PP
+The '-c' (clean) option says to actually delete all lines beginning with
+a '#' rather than just ignoring them.  Comments beginning with ':' are
+still kept in the file.
+.PP
+The '-i' (ignore old messages) option says not to print out previously
+missed messages from the '+' option.
+.PP
+The '-r' (remind only) option says to only process lines that are
+remind calls, and not to process everything.
+.PP
+The '-f <file>' option instructs 
+.B calend
+to use an alternate file instead of using $HOME/.calrc.
+.PP
+The '-D' (set date) option is for debugging a .calrc.  It should be
+immediately followed by a decimal of the form: dMMDD where 'd' is
+a '1' - '7' meaning Monday thru Sunday, and MMDD is the month and
+date put together (e.g. -D31001 means run calend as if it were
+Wednesday, October first).  These dates are not checked for validity.
+.PP
+There are three variable specifications that can go in the message string.
+These are '%1', '%2' and '%c'.  Any occurrences of '%1' in the
+message string will be replaced by the starting  day or date.
+All occurrences of '%2' will be replaced by the ending day or date from the
+same line, and '%c' will be replaced by the current day or date.  If any
+of these have the letter 'm' as a modifier (e.g.  %m1, %m2, %mc) then the
+month name of that date will be substituted.  If the modifier is 'd', then
+the numeric day of the month will be used (note that the %d specification
+will print out the numeric version of the day if the date specification was
+in days of the week.)  If the modifier is 'r', then a relative (to the
+current date) term will be used.  The available relative terms are, the day
+before yesterday, yesterday, today, tomorrow, and the day after tomorrow.
+If none of these are applicable, the the regular date will be used.  In
+addition, '%%' will insert a '%' sign into that location in the message
+text.  All other two character pairs starting with '%' will be inserted as
+is.  An example .calrc is as follows:
+.sp
+.in +5
+.nf
+: temporary dates
+ad	*-7	7/21		Party at bill's on %2
+: permanent reminders
+am	*-7	{jan - dec} 1	%m2's Rent is due
+r	{mon wed fri}	*	1358 Go to math class
+1m	*-7	11/14		mother's birthday is %r2
+1m	*-7	{jan 12, apr 14, sept 15, dec 10}  insurance payment by %2
+.fi
+.in -5
+.sp
+which says to a) print out the message "Party at bill's on July 21" every time
+.B calend
+is called from July 14 through July 21 and then delete it after July 21, b)
+print out "<month>'s rent is due" the week before the first of the month,
+and also mail it to me, tell me to log off the system and go to my math
+class at 1:58 in the afternoon on Mondays, Wednesdays, and Fridays, d)
+inform me the week before my mother's birthday that it's coming up, and e)
+tell me the week before an insurance payment is due.
+.SH AUTHOR
+Bruce Israel
+.SH FILES
+\&.calrc which contains the file of dates.
+.br
+/tmp/cal-*
+.br
+remind, mail subprocesses
+.SH "SEE ALSO"
+mail(1), remind(1l)
+.SH BUGS
+.PP
+Poor error messages for illegal dates.
+.PP
+Leap years are not recognized, so if a date is moved past February 29
+of a leap year by the '+' option, that date will be off by one.
+.PP
+Deletes on a line with multiple dates, (e.g. {july 21, sept 10}) will not
+work properly.
+.PP
+The arguments of
+.IR Remind
+are not checked for validity.
+.PP
+.IR Remind
+processes don't delete themselves until just before they are ready to print
+out a message, so extra processes could be floating around.

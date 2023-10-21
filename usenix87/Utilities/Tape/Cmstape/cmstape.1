@@ -1,0 +1,134 @@
+.TH CMSTAPE 1 "Columbia University"
+.SH NAME
+cmstape \- manipulate an IBM VM/SP CMS dump tape
+.SH SYNOPSIS
+.B cmstape
+[ -tvcrxfiud ] tape [ -Fnn ] file ... 
+.SH DESCRIPTION
+.I Cmstape
+manipulates an IBM VM/SP CMS dump tape.  Flags are:
+.TP 5
+.B \-t
+(default) type tape directory of tape file.
+.TP
+.B \-v
+verbose
+.TP
+.B \-c
+create a CMS tape dump.
+.TP
+.B \-r
+append to a CMS tape dump ('r' is non-mnemonic but matches tar).
+.TP
+.B \-x
+extract files from
+.I tape.
+If no names given all are extracted.
+otherwise only those named are extracted.  Syntax for names is: 
+.I fn.ft.
+.TP
+.B \-f
+.I tape
+is in readtape(1) format:  each file block is preceded by a two byte
+block length with vax byte ordering.  If ommitted,  /dev/nrmt8 is
+used.
+.TP
+.B \-i
+image (no EBCDIC/ASCII translation or tacking on of newlines).  Handled
+differently under UNIX and CMS:  Under UNIX,  V-format files
+are extracted with a halfword length header preceding each
+record.  This makes image extracts and creates a reversible process
+for V as well as F format files under UNIX.  Under CMS, V-format
+files are written to the CMS filesystem which maintains the record
+length information,  so no length headers are needed in the data.
+.TP
+.B \-u
+don't convert filenames to lowercase and vice-versa.  By default,
+lowercase UNIX names become uppercase CMS names and vice-versa.
+.TP
+.B \-d
+debug (multiple occurences increase volume of output).
+.PP
+.I Cmstape
+reads and writes either a tape device or a file that has been
+read off a tape by readtape(l). (That is,  a file that contains
+a 2 byte vax order tape block size before each data block).
+This allows you to get the files off a tape with readtape(l)
+and transfer them over the network to the system where they will
+actually be extracted.  You can also do the opposite:  create
+a tape dump file,  transfer it over the network,  and write it
+to a tape device with writetape(l).
+.PP
+When writing a tape dump under UNIX,  file names preceded by
+.BI \-F "nn"
+cause those files to be written in fixed instead of the default variable 
+format. If
+.I nn
+is specified,  it will be used for the record length, otherwise 80 is assumed.
+Under CMS, this switch is ignored;  the actual record length and format
+maintained by the filesystem are used.
+.SH FILES
+.TP 25
+cms??????
+temporary UNIX work file.
+.TP
+CMSTAPE.CMSUT1
+temporary CMS work file.
+.SH EXAMPLES
+Get directory of a CMS tape mounted on your favorite UNIX system:
+.nf
+.sp
+    % cmstape -tv
+    F/80         46 Apr  2 17:51 EXPCPU   ASSEMBLE A1
+    V/70         43 Apr  2 18:07 AUTHORIZ EXEC     A1
+    V/34         40 Jun 11 12:40 SENDCTLS EXEC     A1
+    V/50         56 Apr 17 14:43 MKTOOLS  EXEC     A1
+    V/76         95 Jun 11 12:39 CW       EXEC     A1
+.fi
+.PP
+Extract all files from a CMS tape:
+.nf
+.sp
+    % cmstape -x
+.fi
+.PP
+Create a CMS tape dump on your UNIX system to give to your
+poor friend forced to use CMS:
+.nf
+.sp
+    % cmstape -c /dev/nrmt8 cmstape.c -F foo.assemble
+.fi
+.PP
+Read a CMS tape dump on your UNIX system,  send it over the network
+to your CMS system and extract the files there:
+.nf
+.sp
+    % readtape
+    Reading from /dev/nrmt0
+    Writing to file1    123456 bytes.
+    Writing to file2         0 bytes.
+    % telnet ibmhost
+    ftp vaxhost
+    ...
+    ftp> type i
+    ftp> get file1 file1.file
+    ftp> quit
+    cmstape -xfi file1    
+.fi
+.SH SEE ALSO
+readtape(1), writetape(1) by Jim Guyton, Rand Corp.
+.SH AUTHOR
+.nf
+E. Alan Crosswell
+Columbia University
+.fi
+.SH BUGS
+Due to the odd format of CMS tape files,  you will need twice the working
+space as that taken up by the final files.  Also,  even files you don't
+want to extract get copied to a temporary file and are then discarded
+since the name of the file is at the end of the data!
+.PP
+Only manipulates files under CMS;  use the CMS TAPE command for
+tape devices.
+.PP
+Does not know about CMS VMFPLC2 format.

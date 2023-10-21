@@ -1,0 +1,82 @@
+#!/bin/sh
+# Batch Queue command.
+#    batchqueue [-q reg_exp] [ -all ] [ userid ... ]
+# The command defaults to listing all users' jobs waiting in all queues.
+# "-all" means NOT all, i.e. only me.  Little arg checking is done.
+# This will mess up if you pass an arg that is not a valid
+# awk regular expression, e.g. batchqueue "*" or ""
+# I don't use FIND because this ls into awk is faster (!)
+# and because I can sort on queue order this way.  (The queue order
+# is based on the file name.  The third letter is priority.)
+# -IAN!
+
+PATH=/bin:/usr/bin:/usr/ucb
+
+dirs=*
+case "$1" in
+-q)
+	shift
+	case $# in
+	0)
+		echo batchqueue: queue list missing, default used
+		;;
+	*)
+		dirs=$1
+		shift
+		;;
+	esac
+	;;
+esac
+
+case "$1" in
+-a*)
+	who=${USER-`whoami`}
+	shift
+	;;
++a*)
+	shift
+	;;
+esac
+
+case $# in
+0)
+	case "$who" in
+	"")
+		who=".*"
+		;;
+	esac
+	;;
+*)
+	case "$who" in
+	"")
+		who="$1"
+		shift
+		;;
+	esac
+	for x do
+		who="$who|$1"
+		shift
+	done
+	;;
+esac
+
+cd /usr/spool/batch
+for dir in $dirs ; do
+	if [ ! -d "$dir" ]; then
+		continue
+	fi
+	cd $dir
+	echo ">>-- $dir queue --<<"
+	for file in `ls -l cf* 2>/dev/null | awk "/ ($who) /"' { print $8 }'`; do
+		ls -l $file | awk \
+			'{ printf("%-12s %s %s %s   %s\n", $3, $5, $6, $7, $8 ) }'
+		grep 2>/dev/null "JOB CANCELLED" $file || \
+			sed	-e "1,/set home=/d" -e "/^$/d" \
+				-e "s/'//g;s/  */ /g;s/^ */  /;" \
+				-e "/typeset/s;/tmp/typesetSTDIN_;#;" \
+				-e "/spice/s;/tmp/spiceSTDIN_;#;" \
+				2>/dev/null $file
+	done
+	cd ..
+done
+exit 0

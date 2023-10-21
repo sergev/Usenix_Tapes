@@ -1,0 +1,45 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!cbatt!clyde!caip!topaz!uwvax!harvard!bu-cs!bzs
+From: bzs@bu-cs.UUCP (Barry Shein)
+Newsgroups: net.sources.bugs
+Subject: Size bug in top(1)
+Message-ID: <895@bu-cs.UUCP>
+Date: 5 Jul 86 02:27:13 GMT
+Organization: Boston Univ Comp. Sci.
+Lines: 35
+Posted: Fri Jul  4 21:27:13 1986
+
+
+>In top(1), where it prints out the size of the job and the resident
+>size of the job, it assumes that clicks are 512 bytes.  It does a
+>right shift by 1 to convert to K and then prints out the numbers.  The
+>correct thing to do is to use the macro ctob() which is defined in
+>param.h.  I don't have the context diff for this but it should be easy
+>to find.  This only effects non-vax machines probably.
+>
+>Perry
+
+Thanks for pointing this out, you're right, it's wrong, I think
+the following fixes it: (slightly different than your suggestion)
+
+-------------begin fix----------
+/*
+ *	BZS@BU-CS.BU.EDU 7/4/86
+ *	 - fix suggested in net.sources.bugs, mostly for SUN
+    (pp->p_tsize + pp->p_dsize + pp->p_ssize) >> 1,
+    pp->p_rssize >> 1,
+ */
+#if PGSHIFT > 10
+      (pp->p_tsize + pp->p_dsize + pp->p_ssize) << (PGSHIFT-10),
+      pp->p_rssize << (PGSHIFT-10),
+#else
+      (pp->p_tsize + pp->p_dsize + pp->p_ssize) >> (10-PGSHIFT),
+      pp->p_rssize >> (10-PGSHIFT),
+#endif
+------------end fix---------------
+
+Note that the #if is necessitated by the fact that you can't
+use a negative shift quantity on the SUN. I tried the above
+fixed version on a VAX and it seemed fine. This should be as
+portable as something like the above can be.
+
+	-Barry Shein, Boston University

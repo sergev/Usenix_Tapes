@@ -1,0 +1,1812 @@
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                             ==========================
+                              CED - DOS Command Editor
+                                    User's Guide
+                                    Version  1.0
+                             ==========================
+
+
+
+
+
+
+                                 Copyright (c) 1985
+                               Christopher J. Dunford
+                              10057-2 Windstream Drive
+                              Columbia, Maryland 21044
+                                   (301) 992-9371
+
+
+
+
+
+
+                                    Contents
+
+               Purpose . . . . . . . . . . . . . . . . . . . .   1
+               System Requirements . . . . . . . . . . . . . .   1
+               Terminology . . . . . . . . . . . . . . . . . .   1
+               Installation  . . . . . . . . . . . . . . . . .   2
+               Command line editor . . . . . . . . . . . . . .   3
+                    Typeover and insert modes  . . . . . . . .   3
+                    Cursor movement keys . . . . . . . . . . .   3
+                    Text deletion keys . . . . . . . . . . . .   4
+               DOS command stack . . . . . . . . . . . . . . .   5
+               Application program command stack . . . . . . .   6
+               Pcall function  . . . . . . . . . . . . . . . .   6
+               Synonyms  . . . . . . . . . . . . . . . . . . .   7
+               Command chaining  . . . . . . . . . . . . . . .   9
+               Command parameters  . . . . . . . . . . . . . .  11
+               Ignoring commands . . . . . . . . . . . . . . .  13
+               Ignoring individual commands  . . . . . . . . .  13
+               Clearing ced objects  . . . . . . . . . . . . .  14
+               Configuration files . . . . . . . . . . . . . .  15
+               Changing default buffer sizes . . . . . . . . .  16
+               Status display  . . . . . . . . . . . . . . . .  17
+               Multiple definitions  . . . . . . . . . . . . .  18
+               User-installed commands . . . . . . . . . . . .  18
+                    Subfunction 0: Enqueue . . . . . . . . . .  19
+                    Subfunction 1: Dequeue . . . . . . . . . .  19
+                    Return registers . . . . . . . . . . . . .  20
+                    Command processor  . . . . . . . . . . . .  20
+               Problem reporting . . . . . . . . . . . . . . .  21
+               Copyright and Disclaimer  . . . . . . . . . . .  22
+               Future of ced . . . . . . . . . . . . . . . . .  23
+               Appendix A: Command summary . . . . . . . . . .  24
+               Appendix B: Order of Processing . . . . . . . .  26
+               Appendix C: Limitations . . . . . . . . . . . .  27
+               Appendix D: Versions  . . . . . . . . . . . . .  28
+               Appendix E: User Command Demo . . . . . . . . .  29
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          1
+
+          Purpose
+          -------
+
+          Ced (which stands for Command EDitor) provides the following
+          functions at the DOS prompt, or from within certain applications
+          programs:
+
+               -- Improved command line editing facility.
+
+               -- Recall of previously issued commands for re-entry.
+
+               -- Command synonyms, which may include "chaining" of a
+               series of commands.
+
+               -- Parameterization of synonym commands.
+
+               -- Recall of parameters for previously issued commands.
+
+               -- User-settable buffer sizes for all functions.
+
+               -- For programmers, a facility to add new "resident"
+               commands to the DOS shell.
+
+
+          System Requirements
+          -------------------
+
+          Ced was written for the IBM PC/XT/AT and true compatibles. 
+          However, it uses no hardware-specific functions, so it will
+          probably work with any MS-DOS machine; nonetheless, I cannot
+          promise that it will function on any machine other than those it
+          was written for.
+
+          Ced requires DOS Version 2.00 or later.  It increases the size of
+          resident DOS by about 16K bytes when installed.  Most of this
+          space is, however, used for data storage, and the amount of
+          storage can be reduced.  Thus, smaller versions of ced are
+          possible.
+
+
+          Terminology
+          -----------
+
+          This document will usually refer to "commands" or "DOS commands"
+          as ced targets; you should take this to mean either (a) actual
+          DOS commands, or (b) input to ced-compatible programs (for
+          example, DEBUG commands).
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          2
+
+          Key names are as follows:
+
+          <Up>           The up-arrow key on the numeric keypad.
+          <Down>         The down-arrow key on the numeric keypad.
+          <Left>         The left-arrow key on the numeric keypad.
+          <Right>        The right-arrow key on the numeric keypad.
+          <Backspace>    The large left-arrow key, next to NumLock.
+
+          A caret (^) means to press the Ctrl key in conjunction with a
+          named key; for example, <^End> means "press and hold the Ctrl
+          key, then press <End>".
+
+          Words in CAPS are ced keywords and must be typed exactly as shown
+          (they need not be capitalized when you use them).
+
+          Words in [brackets] are optional elements of a command.
+
+
+          Installation
+          ------------
+
+          Installation (in its simplest form) is accomplished by typing
+          "ced" at the DOS prompt, or including the statement "ced" in your
+          AUTOEXEC.BAT file.  There are optional parameters when installing
+          ced; these will be covered later.
+
+          After ced is installed, everything will appear to be normal, but
+          you now have many new features when entering DOS commands.  The
+          remainder of this document will describe these features.
+
+          Ced is active either at the DOS prompt, or when an application
+          program requests buffered keyboard input from DOS (DOS function
+          0AH).  There are a few such programs (DEBUG and EDLIN are two);
+          but the main use of ced is at the DOS prompt.  
+
+          Once ced has been installed, the command "CED" becomes an
+          internal DOS command.  Thus, when you want to issue ced commands
+          (as explained below), you will type "CED <command>", but the
+          program file (CED.COM) need NOT be available on disk.  Ced
+          becomes fully memory resident and is an extension to DOS after
+          installation.  In particular, this means that you should NOT
+          include a drive or path in issuing CED commands after initial
+          installation.  A command like "C:CED SYN d dir" will reload ced,
+          which is probably not what you intend.
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          3
+
+          Command line editor
+          -------------------
+
+          Ced provides a new "editor" for DOS commands.  You will use this
+          editor whenever you type a DOS command, or when you enter data to
+          a compatible program such as DEBUG.  Ced's editor replaces all of
+          the DOS editing keys, including F1-F5.
+
+          There are two big differences between the ced editor and the DOS
+          editor.  First, the ced editor always allows you to see all of
+          your data; where the DOS editor likes to "hide" characters, the
+          ced editor always displays all of the characters that it is
+          using.  Second, the ced editor allows you to move the cursor
+          around within a command, which makes correcting and altering
+          commands much easier.  The keystrokes that ced uses for editing
+          are very similar to those used by many word processors and text
+          editors; you will find command entry and editing to be much more
+          natural than with the DOS editor. 
+
+
+          TYPEOVER AND INSERT MODES
+
+          The Ced editor had two basic modes: the typeover mode and the
+          insert mode.  In typeover (the normal mode), anything you type
+          will add to or replace the text currently displayed.  In insert
+          mode, anything you type will be inserted into the text at the
+          current cursor position, moving any characters to the right of
+          the cursor out of the way.  The <Ins> key toggles between
+          typeover and insert modes.  
+
+          To demonstrate this, type some text at the DOS prompt, then use
+          the left-arrow key to move the cursor into the text you just
+          entered (note that the text is not erased; the arrow key simply
+          moves the cursor).  Now type a few characters and observe
+          that they replace the text already there; this is typeover.  Now
+          press the <Ins> key once to enter insert mode (note that the
+          cursor changes size to let you know that you're in insert mode),
+          and type some more text.  Note that the new text is inserted into
+          your "command", and the remaining text is moved right, out of the
+          way.  Press <Esc> to erase the command completely.
+           
+
+          CURSOR MOVEMENT KEYS
+
+          Ced uses the following keys to move the cursor around within the
+          command you are typing:
+
+          <Home>              Moves the cursor to the "home" position, that
+                              is, to the first character.
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          4
+
+          <End>               Moves the cursor to the end position (follow-
+                              ing the last character displayed).
+
+          <Left>              Moves the cursor left one character.  This
+                              does not erase any characters; it simply
+                              moves the cursor.  Remember that <Left> is
+                              the left-arrow key on the numeric keypad (key
+                              4), not the backspace key (the larger left
+                              arrow next to NumLock).
+
+          <Right>             Moves the cursor right one character.
+
+          <^Left>             Moves the cursor left one word.  A "word" is
+                              any sequence of characters bounded by one or
+                              more spaces; the cursor will be placed on
+                              the first character of the previous "word".
+
+          <^Right>            Moves the cursor right one word; it will be
+                              placed on the first character of the next
+                              word.
+
+
+          TEXT DELETION KEYS
+
+          You can use the following Ced editor keys to delete text:
+
+          <Del>               Deletes the character at the cursor position.
+
+          <Backspace>         Deletes the character to the left of the
+                              cursor position, and moves the cursor left. 
+                              This is known as a destructive backspace; it
+                              is exactly equivalent to keying <Left>
+                              followed by <Del>.
+
+          <^End>              Deletes all characters from the cursor
+                              position to end of the command.
+
+          <^Home>             Deletes all characters from the home position
+                              (first character) to the cursor position, not
+                              including the character at the cursor
+                              position.
+           
+          <Esc>               Cancel: erases the command completely and
+                              allows you to start over.
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          5
+
+          DOS command stack
+          -----------------
+
+          Ced keeps a record of each command you enter.  You can retrieve
+          and re-enter these commands by using the <Up> and <Down> keys to
+          display the old commands, then pressing <Enter> when the desired
+          command is displayed (the command can be edited, of course).
+
+          You can visualize the stored data as a "stack" of commands. 
+          Ced keeps a pointer to somewhere in this stack.  The pointer
+          always points to a location "between" two commands; when you
+          press <Up>, ced displays the command "above" the pointer, then
+          moves the pointer up one command.  When you press <Down>, ced
+          displays the command "below" the pointer, then moves the pointer
+          down one command.
+
+          For example, suppose you have entered commands A, B, and C. The
+          stack will appear as follows:
+
+                              +-------------+
+                              |      A      |
+                              +-------------+
+                              |      B      |
+                              +-------------+
+                              |      C      |
+                              +-------------+  <-- pointer
+
+          The stack is circular in nature; thus, if the pointer points
+          "below" the last command in the stack (as it does above), it is
+          actually between the last command (C) and the first command
+          (A).  In the situation above, pressing <Up> will display command
+          C and leave the pointer between B and C.  Pressing <Down> will
+          display command A, and leave the pointer between A and B.
+
+          When you recall an old command and re-enter it without editing,
+          the re-entered command is not added to the stack, and the pointer
+          will drop one level.  Suppose, for example, that you press <Up>
+          twice from the position above (pointer below C): B is displayed,
+          and the stack looks like this:
+
+
+                              +-------------+
+                              |      A      |
+                              +-------------+ <-- pointer
+                              |      B      |
+                              +-------------+
+                              |      C      |
+                              +-------------+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          6
+
+          If you now press <Enter> (without editing the command), command B
+          will be sent to DOS, and the pointer will drop to point between B
+          and C.  From there, <Up> will display B again, and <Down> will
+          display C.  Thus you can "recycle" a series of commands by
+          pressing <Up> until you see the first command, <Enter> to execute
+          it, then a series of <Down><Enter> sequences to re-execute the
+          commands in the original order.
+
+          If you retrieve an old command and edit it before execution, the
+          newly edited command is added to the bottom of the stack, and the
+          pointer will point just below it.
+
+          Ced will not stack any commands of two characters or less (the
+          theory being that it's easier to retype than to go searching
+          through the stack).
+
+          You can remove a command from the stack by displaying it and
+          pressing <^PgDn>, and you can clear the entire stack by pressing
+          <^PgUp>.
+
+          The actual number of commands which will be held in the stack is
+          a function of the length of the commands and the size of the
+          stack (which can be increased; see below for details).
+
+          This is one of those computer gizmos that's easier to use than it
+          is to explain.  Just play with <Up> and <Down>; you'll get the
+          idea.
+
+
+          Application program command stack
+          ---------------------------------
+
+          Ced actually keeps two complete command stacks: one is for DOS
+          commands, the other for commands entered into compatible appli-
+          cation programs (DEBUG, et al).  Thus, DOS commands will not
+          appear in the command stack while in DEBUG, and vice versa.
+
+
+          Pcall function
+          --------------
+
+          "Pcall" stands for parameter recall; this is a second way to
+          quickly retrieve old commands.  Pcall simply remembers old
+          parameters to specific commands.  For example, suppose you have
+          an editor called "edit", and the last time you executed it, you
+          used "edit c:\util\foo.doc".  If you now enter "edit" without any
+          parameters, ced will assume that you want to edit the same file
+          and will supply the "c:\util\foo.doc" for you.
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          7
+
+          You could, of course, scroll back through the command buffer to
+          find the old command, but it might take a while to find it (and
+          the command might be missing if it was too long ago).
+
+          Because many commands are best used WITHOUT parameter recall
+          (FORMAT and ERASE are good examples), ced will only use pcall on
+          commands that you specify.   To make a command "pcallable", type
+
+               CED PCALL <command>
+
+          at the DOS prompt.  For example, if you want to make "edit" a
+          pcall command, type
+
+               CED PCALL edit
+
+          (Remember that the ced diskette need not be available).
+
+          If you wish to issue a command for which pcall is enabled, but
+          you do not want it to have parameters, add a space after the
+          command.  For example, suppose you have issued a "CED PCALL dir"
+          command and your last dir was a "dir *.exe". If you now type
+          "dir", ced will add the "*.exe" automatically.  However, if you
+          type "dir " (note the space), ced will not add the "*.exe", and
+          you'll get a full directory. 
+
+          You may also bypass pcall processing through the use of the
+          ignore character; see below, under "Ignoring Individual
+          Commands".
+
+
+          Synonyms
+          --------
+
+          The synonym function allows you to define brief "synonyms" for
+          frequently used commands.  For example, suppose you invoke your
+          communications package by typing "talk rbbs /c63".  Ced allows
+          you to abbreviate this to a shorter command, say, "bb", by
+          typing at the DOS prompt:
+
+               CED SYN bb talk rbbs /c63
+
+          The exact syntax is:
+
+               CED SYN <synonym> <command>
+
+          The <synonym> is the command abbreviation (which you will type at
+          the DOS prompt), and <command> is the word or phrase which ced
+          will substitute when it sees <synonym>.  The synonym is always
+          the first word after the keyword "syn", and <command> is always
+          all of the remaining words.
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          8
+
+
+          For example, "ced syn d dir" allows you to type "d" instead of
+          "dir".  You may add parameters: "d *.exe" becomes equivalent to
+          "dir *.exe".
+
+          Many people define very short synonyms for frequently used
+          commands:
+
+               CED SYN d dir
+               CED SYN e edit
+               CED SYN g debug
+               CED SYN l link
+               CED SYN rbbs talk rbbs /c63
+               CED SYN cc1 cc1 -bpe
+
+          Note in the last example that you can use a synonym which is
+          identical to its associated phrase and simply use it to automat-
+          ically add parameters.
+
+          Also note that synonym processing takes place AFTER pcall
+          processing; thus if you use a command synonym and wish the
+          command to be "pcallable", use the synonym in the pcall command.
+          For example:
+
+               CED SYN e edit
+               CED PCALL e    (not PCALL edit)
+
+
+          User program synonyms
+          ---------------------
+
+          Because ced "knows" whether it is being used from the DOS prompt
+          or from an application program such as DEBUG, it is possible to
+          define separate sets of synonyms for DOS commands and for user
+          programs.  The syntax for a "user synonym" is
+
+               CED USERSYN <synonym> <command>
+
+          This is identical to the SYN command except for the new keyword
+          USERSYN.  For example, if you need to frequently type the DEBUG
+          command "d ds:1010 1200", you might use
+
+               CED USERSYN d1 d es:1010 1200
+
+          (Remember that DEBUG is a ced-compatible program; thus you can
+          type ced commands at the DEBUG prompt.)  Then you could simply
+          type "d1" to dump memory from the specified address.  Note
+          that  a "d1" USERSYN is separate from a "d1" SYN; at the DOS
+          prompt you'd get the SYN, in DEBUG or EDLIN you'd get the
+          USERSYN.
+
+                            === Ced User's Guide ===
+
+
+
+                                                                          9
+
+
+
+          Command chaining
+          ----------------
+
+          The command chaining feature allows you to place more than one
+          command in a SYN or USERSYN.  These commands would be passed to
+          DOS or to the user program one at a time, as input is requested. 
+          Suppose, for example, that in order to run your communications
+          package, you always type:
+
+               cd \talk
+               talk cis /c63
+               cd \
+
+          You could put this sequence into one synonym by typing
+
+               CED SYN cis cd \talk^talk cis /c63^cd \
+
+          The ^ character serves as a command separator.  When you type CIS
+          at the prompt, ced will output everything up to the ^ (in this
+          case, "cd \talk") and then simulate an <Enter>.  The next time
+          DOS requests input, it will get "talk cis /c63<Enter>", and so
+          on.
+
+          Note that ced will not pass DOS-chained commands to user
+          programs; thus, in
+
+               CED SYN bug cd \util^debug^cd \
+
+          DEBUG would not see the trailing "cd \", which would still be
+          held up until you return to the DOS prompt.
+
+          The first of the chained commands (e.g., the first 'cd \' above)
+          cannot itself be a synonym, but the remaining commands can.  That
+          is, if 'f' and 'g' are synonyms, the command
+
+               CED SYN h dir^f^g
+
+          will work as you expect.  Be careful, though.  A command like
+
+               CED SYN f dir^f
+
+          will put the computer into a loop from which there is no retreat.
+
+          It may be useful in some circumstances, however, to fool ced into
+          allowing the first command to be a synonym by simply inserting a
+          ^ as the first character of the chain:
+
+               CED SYN d dir
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         10
+
+               CED SYN f ^d^cd \
+
+          When "f" is keyed, ced will first pass a null string to DOS, then
+          "dir" and "cd \".  This trick will work OK at the DOS prompt, but
+          it may cause problems in some user programs (it would insert a
+          blank line, for example, if you were in EDLIN line-insert mode).
+
+          Limited "nesting" of chains is allowed.  Consider the following
+          definitions:
+
+               CED SYN 1 a^b^c
+               CED SYN 2 x^1^z
+
+          By executing "2", the commands issued will be x, a, b, c,and z. 
+          The limitation is that the stored commands ready for chaining
+          must not exceed 512 characters total.  In the above example,
+          after you have keyed "2" and the "x" is passed to the operating
+          system, the stored commands will be:
+
+               1^z
+
+          which requires 4 characters of storage (3 for the stored
+          commands, plus one for a terminating carriage return).  The next
+          time ced is called, it will note that "1" is a synonym; the
+          first "1" command ("a") is passed to the operating system, and
+          the new stored commands will be:
+
+               b^c^z
+
+          which requires 6 bytes of storage.  At no time can this list of
+          stored commands exceed 512 bytes; characters pushed beyond the
+          end of this storage will be lost.
+
+          For whatever it's worth, you can use chaining directly at the dos
+          prompt:
+
+               C> dir^cd \
+
+          will work as you'd expect.
+
+          You may alter the chain character (command separator) via the ced
+          command
+
+               CED CHAINCH <char>
+
+          So, for example, "CED CHAINCH &" would replace ^ with & as the
+          command separator.  The chain character can, but probably should
+          not, be a control character.  If you are typing the command
+          directly into ced, you can just type the control character:
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         11
+
+               CED CHAINCH <Ctrl-A>
+
+          However, if you are setting the chain character via configuration
+          files (below), it may not be possible to type in the control
+          character directly.  For this reason, you can also specify a
+          control character by typing the caret (^) and a letter key. 
+          Thus, if you wanted to use ^Y as the chain character, you
+          would use '^' and 'Y':
+
+               CED CHAINCH ^Y
+
+          Certain control characters should not be used as for this
+          purpose, because they are used for other functions by DOS; among
+          these are ^C (cancel), ^G (bell), ^H (backspace), ^I (tab),
+          ^J (linefeed), ^M (carriage return), ^P (printer on), and ^S
+          (stop).
+
+          The use of control characters as described has more meaningful
+          use in setting the "ignore" and "status request" characters
+          (below).
+
+
+          Command parameters
+          ------------------
+
+          This section describes how synonyms and command chaining interact
+          with command line parameters.
+
+          The simplest case is a single word synonym like
+
+               CED SYN d dir
+
+          which specifies no special parameter handling.  In this case, any
+          command line parameters are simply tacked on after the synonym
+          substitution: "d *.exe /w" becomes "dir *.exe /w".
+
+          If the synonym itself contains parameters:
+
+               CED SYN dw dir /w
+
+          a similar situation holds.  For example, "dw *.asm" becomes "dir
+          /w *.asm".  You might think of these simple nonchained synonyms
+          as just substitutions: when ced sees the synonym, it will simply
+          substitute the replacement text, leaving the rest of the command
+          line alone.
+
+          This simple substitution, however, means that your command line
+          parameters must always be the last text of the synonym.  There
+          would be no way, for example, to define a synonym that would
+          obtain a directory of <name>.exe, where <name> is some filename
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         12
+
+          entered on the command line and ".exe" is part of the synonym. 
+          That is, it would not be possible to define a synonym "d" such
+          that the command
+
+               d foo
+
+          would result in a "dir foo.exe" command.
+
+          However, ced does provide a way to substitute parameters into the
+          middle of a synonym.  Ced recognizes the "%n" dummy parameter
+          format used by DOS batch files.  %1 represents the first command
+          line parameter, %2 is the second, and so on, up to %9.  Refer to
+          your DOS documentation (batch file section) if this is unclear.
+
+          Thus, a synonym which would provide the example function is:
+
+               CED SYN d dir %1.exe
+
+          When "d foo" is executed, "foo" (the first command line
+          parameter) is substituted for the %1, resulting in the desired
+          command "dir foo.exe".
+
+          When a synonym contains chained commands, all parameter
+          substitution is performed at one time, before the chain is
+          started.  Thus,
+
+               CED SYN f a %1^b %2^c %3
+
+          when executed "f one two three" will result in three commands:
+
+               a one
+               b two
+               c three
+
+          If a chain-command synonym contains no dummy parameters (no %'s)
+          the command line parameters will be appended to the end of the
+          chain, i.e., as parameters to the last command.  So,
+
+               CED SYN f a^b^c
+
+          when executed "f foo" will result in the three commands:
+
+               a
+               b
+               c foo
+
+          You can change the dummy parameter character from '%' to another
+          character using the
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         13
+
+               CED PARAMCH <char>
+
+          command.  The rules described for CHAINCH apply here.
+
+
+          Ignoring commands
+          -----------------
+
+          There may be certain commands that you do not want ced to
+          process; for example, you might not want the ERASE command
+          stacked.  To instruct ced to ignore a command, use the ced
+          command
+
+               CED IGNORE <command>
+
+          For example:
+
+               CED IGNORE erase
+
+          When a command is set to IGNORE, ced will not place it in the
+          command stack, check for synonyms, or perform any pcall pro-
+          cessing (even if you have set PCALL for that command).
+
+
+          Ignoring individual commands
+          ----------------------------
+
+          You may sometimes want ced to ignore processing of a specific
+          command.  For example, you may have "dir" defined as a synonym
+          for an external program which will display a sorted directory,
+          but on occasion want to display a standard DOS directory.  To
+          force ced to suspend all processing of a command, precede it with
+          ^N (Ctrl-N).  If the first character of input is ^N, ced will
+          not stack the command, check for synonyms, or perform any pcall
+          processing (just as if it were IGNOREd).  The Ctrl-N, of course,
+          is not passed to DOS or to the application program.  For example:
+
+               ^Ndir
+
+          If you find ^N inconvenient, you can change the ignore character
+          to a different character by using the IGNORECH command:
+
+               CED IGNORECH ^T
+               CED IGNORECH !
+
+          See the section on command chaining (above) for more information
+          on how to enter control characters in this command.
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         14
+
+          Clearing ced objects
+          --------------------
+
+          From time to time it may be useful to clear a ced "object": a
+          pcall command, a synonym, or an ignore command.  The CLEAR
+          command allows you to do this.  The formal syntax is:
+
+               CED CLEAR <function> [[FROM] <name>]
+
+          This looks more complex than it is.  The <function> is one of
+          SYN, USERSYN, PCALL, and IGNORE.  Since the [[FROM] <name>] is
+          optional, the simplest form of the clear command is exemplified
+          by:
+
+               CED CLEAR SYN
+
+          which will clear all synonyms.  Similarly,
+
+               CED CLEAR PCALL
+
+          clears all pcall commands.
+
+          You may clear an individual item by including its name.  For
+          example:
+
+               CED CLEAR USERSYN foo
+
+          clears the user synonym "foo", leaving all others synonyms
+          undisturbed.
+
+          Finally, you can clear all items FROM a specified item through
+          the end of the list with the FROM option.  For example:
+
+               CED CLEAR USERSYN FROM foo
+
+          would clear the user synonym "foo" and all synonyms listed after
+          "foo".  This command is particularly useful if you have loaded a
+          temporary set of synonyms for some special purpose.  Suppose, for
+          example, that you have a set of synonyms already in memory, then
+          you load an additional set to be used temporarily.  When you are
+          done, the command
+
+               CED CLEAR SYN FROM foo
+
+          would delete all of the "temporary" synonyms, assuming that the
+          first of these was "foo".
+
+          Note that SYN and USERSYN objects share storage.  Thus, a
+          CLEAR SYN FROM <item> or CLEAR USERSYN FROM <item> will clear all
+          synonyms (of either type) FROM the named item.  Similarly, CLEAR
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         15
+
+          SYN and CLEAR USERSYN are functionally identical: all synonyms of
+          either type will be cleared.
+
+
+          Configuration files
+          -------------------
+
+          Obviously it would be inconvenient to have to type in all of
+          these commands every time you use your computer.  However, you
+          may put any ced command into a special ced configuration file,
+          and have them loaded all at once.
+
+          The configuration file is simply an ASCII text file (created by
+          your text editor, EDLIN, or word processor in nondocument mode)
+          which contains a series of ced commands.  Just leave out the
+          keyword "CED", but include the rest of the command:
+
+               Rem       Remarks are OK if preceded by "REM"
+               Rem
+               Rem       Set chain char to '&'
+               Chainch &
+               Rem       Set ignore char to '!'
+               Ignorech !
+               Rem       Set a few synonyms
+               Syn d dir
+               Syn e edit
+               Syn cis cd \talk & talk cis & cd \
+               Usersyn dd d ds:1017 L40
+               Rem       And a few pcall commands
+               Pcall e
+               Pcall debug
+               Rem       Ignore all DEL, ERASE, and FORMAT commands
+               Ignore erase
+               Ignore format
+               Ignore del
+
+          To read in your file, use the CED -f command line switch:
+
+               CED -F<filename>
+
+          For example, if your configuration file is call CED.CFG, you'd
+          use
+
+               CED -Fc:\boot\ced.cfg
+
+          If you load new configuration files during one computer session,
+          the PCALL, SYN, USERSYN, and IGNORE commands are added to those
+          already stored, without regard to duplication (see "Multiple
+          definitions" below).
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         16
+
+          Note that if you have several commands that you want to enter
+          into ced (but don't have them in a file), you can use
+
+               CED -Fcon
+
+          (which specifies CON: as the configuration file name) and then
+          type a series of ced commands from the keyboard.  Type ^Z when
+          you are done.
+
+
+          Changing default buffer sizes
+          -----------------------------
+
+          Ced maintains six separate internal buffers (regions of memory
+          where data is stored).  Each buffer is initially set to a default
+          size.  The buffers and their default sizes are:
+
+               1. DOS command stack (2048 bytes)
+               2. Application program command stack (1024)
+               3. Synonym list (2048)
+               4. Pcall list (1024)
+               5. Ignore command list (1024)
+               6. User command list (described below) (1024)
+
+          You may make these buffers larger or smaller by including a list
+          of buffer sizes the FIRST time you load ced during a session
+          (i.e., when you turn on the computer, or after a Ctrl-Alt-Del
+          reboot).  Use a -B switch as the FIRST ced command:
+
+               CED -Bn1,n2,n3,n4,n5,n6
+
+          where n1 is the desired size for buffer 1 (DOS command stack), n2
+          is the size for buffer 2 (App program command stack), etc.  You
+          need not specify all sizes, but if you skip one or more sizes
+          (telling ced to use the default) you must include the separating
+          commas.  Examples:
+
+               CED -B1000,2000,3000,4000,5000,6000  (Set all sizes)
+               CED -B1000,,3000  (Set sizes 1 and 3)
+               CED -B,,,,,6000 (Set size 6 only)
+
+          You cannot set any individual size less than 128 bytes, and the
+          total of all sizes must be not exceed 52K (53248) bytes.
+
+          Remember that the -B command must be the FIRST command used the
+          FIRST time you run ced during each session.  It is not valid any
+          other time.  If you wish to set sizes and read a configuration
+          file during autoexec, the syntax would be:
+
+               CED -Bn1,n2,n3,n4,n5,n6 -F<filename>
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         17
+
+
+          For your general information, here is what is stored in each of
+          the buffers, and what happens when they fill:
+
+          1. DOS Command stack: all non-ignored commands of 3 or more
+          characters entered at the DOS prompt.  The command is stored
+          before synonym and pcall processing.  Each stored command
+          requires one byte more than the length of the command. When the
+          buffer fills, the oldest command is deleted.
+
+          2. Application program command stack: same as above, except
+          commands entered at participating program prompts are stored
+          here.
+
+          3. Synonym list: the full list of synonyms (both DOS and user
+          synonyms) plus their meanings.  Each entry requires the combined
+          length of the synonym and its associated command plus three
+          bytes.  When the synonym list fills, no new synonyms will be
+          accepted unless a CLEAR is performed first.
+
+          4. Pcall command list: the list of all pcall commands plus the
+          most recent parameter list for each.  Each entry requires the
+          combined length of the command and its current parameters
+          (including leading separators) plus two bytes.  If the buffer is
+          full when a "CED PCALL" command is entered, the new pcall command
+          will not be accepted.  If the buffer is full when a pcallable
+          command is entered, its parameters will not be remembered.
+
+          5. Ignore command list: the list of all IGNORE commands.  Each
+          entry requires the command length plus one byte.  If the buffer
+          is full when a new "CED IGNORE" command is entered, the new
+          command will be rejected.
+
+          6. User-installed command list: the list of all user-installed
+          commands.  Requires the command length plus six bytes of storage
+          for each.  New commands will be rejected if the buffer is full.
+
+
+          Status display
+          --------------
+
+          You may obtain a partial display of ced status any time CED is
+          active (i.e., at the DOS prompt or in a compatible program
+          awaiting input).  Do this by hitting ^T (Ctrl-T).  Ced will first
+          display all SYNonyms and  USERSYNonyms, then a list of all
+          buffer sizes.  For each buffer ced will show the total bytes
+          allocated and the number of bytes free.
+
+          When the display is complete, ced will redisplay any partial
+          input that you typed before ^T, and you may continue data entry.
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         18
+
+
+          If ^T is not convenient, you can change the status request
+          character by using the ced command
+
+               CED STATCH <character>
+
+          as in "CED STATCH ^A" or "CED STATCH %".  See the section on
+          command chaining for more information on using control characters
+          in this command.
+
+
+          Multiple definitions
+          --------------------
+
+          It is possible to duplicate a definition within one of the ced
+          lists (SYN, USERSYN, PCALL, IGNORE).  For example, you may create
+          more than one synonym for "d".  In the event of multiple
+          definitions, ced will always use the newest.
+
+          Suppose, for example, that you have "d" defined as a SYN for
+          "dir".  If you subsequently issue the command "CED SYN d debug",
+          you will have two synonyms for "d".  When you enter "d", ced will
+          use the latest definition: "debug".  If you then issue a "CLEAR
+          SYN d", ced will again use the latest definition and clear the
+          "debug" synonym, at which point the "dir" definition again
+          becomes effective.
+
+          Multiple definitions have no real meaning for PCALL and IGNORE,
+          but they are supported nonetheless.
+
+
+          User-installed commands
+          -----------------------
+
+          This section describes how to add new resident commands to DOS
+          using ced.  It is an advanced topic, and is intended for
+          programmers only; you don't need to read this section to use ced.
+
+          Ced provides a means to enqueue new DOS commands, that is, to add
+          internal commands to DOS.  Once enqueued, ced will call a routine
+          that you specify whenever the user types the new command (at
+          the DOS prompt, or in a "participating" program).
+
+          Access to ced service is provided via a bogus DOS function,
+          0FFH.  This function behaves as a normal DOS function; that is,
+          you must set up the registers as needed by the call, place a 0FFH
+          in register AH, and execute an INT 21H.  The two subfunctions are
+          described below; the subfunction code is placed in register
+          AL.
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         19
+
+
+          SUBFUNCTION 0: ENQUEUE
+
+          This subfunction allows you to enqueue a new command.  Input
+          register use is as follows:
+
+               AH = 0FFH (ced service)
+
+               AL = 0 (ENQUEUE)
+
+               BL = MODE
+                    This is a bit flag which tells ced when to call your
+                    routine.  You have the option of being called if your
+                    command is typed at the DOS prompt, at a user program
+                    prompt, or both.  Bit 0, if set, specifies that you are
+                    to be called at the DOS prompt; Bit 1, if set,
+                    specifies that you are to be called at a user program
+                    prompt.
+
+               DS:SI = command name
+                    This is a dword pointer to your command (i.e., you are
+                    to be called when the user types this string).  The
+                    command must be from one to eight characters,
+                    terminated by a carriage return.  Ced is not case
+                    sensitive.
+
+               ES:DI = command processor entry point
+                    This is a dword pointer to the routine which is to be
+                    executed when the new command is entered.
+
+
+          SUBFUNCTION 1: DEQUEUE
+
+          This subfunction allows you to dequeue a user command; after a
+          command has been dequeued, ced will no longer call you if the
+          user types your command.  Input register use is:
+
+               AH = 0FFH (ced service)
+
+               AL = 1 (DEQUEUE)
+
+               DS:SI = command name
+                    A dword pointer to the name of the command to be
+                    dequeued (i.e., the same DS:SI as was used to enqueue
+                    the command).
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         20
+
+          RETURN REGISTERS
+
+          On return from ced service (DOS function 0FFH), all registers are
+          preserved except AX.  The carry flag, if set, indicates that an
+          error occurred; AX has the error code, which will be one of:
+
+               1:   Invalid function.  At present, only subfunctions 0
+                    and 1 are supported.  Subfunction 2 is reserved.
+
+               2:   Command not found (DEQUEUE only).
+
+               8:   Insufficient memory (ENQUEUE only).
+
+               13:  Invalid data. (ENQUEUE only; bad MODE flag, or invalid
+                    command length).
+
+          NOTE: In current versions of DOS, AH returns 0FFH if function
+          0FFH is requested and ced is not installed.  You may use the
+          reserved subfunction (2), at your own risk, to test for ced
+          installation.  If AH returns any value other than 0FFH, ced is
+          probably installed.
+
+
+          COMMAND PROCESSOR
+
+          Your command processor is entered via a far call from ced.  Entry
+          registers are as follows:
+
+               BL = MODE
+                    This is the same bit flag as is used in the ENQUEUE
+                    subfunction.  You may use it to test "where you are".
+
+               CL = MAXLEN
+                    This is the maximum allowed length of the user input
+                    string (i.e., the value of byte 0 of the DOS function
+                    0AH input buffer) less one.
+
+               DS:DX = Command tail pointer
+                    This is a dword pointer to the command tail of the
+                    user's input.  For example, if your command is "hello"
+                    and the user types "hello sam", DS:DX will point to the
+                    space after "hello".
+
+               DS:DI = Command pointer
+                    This is a dword pointer to the first byte of the actual
+                    user input.
+
+          Note that DS:DI and DS:DX point to buffer space within ced, not
+          to the actual DOS function 0AH input buffer.  There are no
+          length attribute bytes preceding the buffer; DS:SI points to the
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         21
+
+          first byte of the buffer, not the third.  Ced will copy the final
+          buffer, after all processing, to the actual input buffer.
+
+          You may manipulate the buffer to your heart's content.  It is 255
+          characters long, but ced will truncate the string if necessary
+          (if the final command is longer than the maximum allowed by the
+          function 0AH request).  In particular, note two things about the
+          ced buffer:
+
+               1.   The string MUST be terminated by a carriage return
+                    ASCII 13).
+
+               2.   If you null out the buffer (by putting a carriage
+                    return in relative byte 0) ced will return a null
+                    string to DOS or the user program.  This is probably
+                    what you will want to do.
+
+          There are few restrictions on what you can do within your service
+          routine.  You may request other DOS service (EXCEPTION: do not
+          request more buffered input via function 0AH!!), and you need not
+          preserve any registers except SS:SP.  The stack in effect on
+          entry will have about 200 bytes free; switch to a larger internal
+          stack if necessary.
+
+          Return to ced via a far RET.
+
+          Appendix E contains a sample assembler program to enqueue a
+          trivial command.
+
+
+          Problem reporting
+          -----------------
+
+          If you find any problems with ced, please report them to me,
+          preferably at CompuServe ID 76703,2002.  Before reporting
+          problems, however, please take the following steps:
+
+               1. Reread the documentation!
+
+               2. Install ced in a "clean" environment, i.e., without any
+               other resident utilities.  Temporarily rename your
+               AUTOEXEC.BAT and CONFIG.SYS files to other names; reboot,
+               reinstall ced, and test.  If it works correctly, there is a
+               conflict with some other program.  Try to isolate the
+               conflict by reinstalling your other programs one by one. You
+               may even be able to resolve the conflict by varying the load
+               order.  If you locate the conflict, let me know about it.  I
+               cannot guarantee that it will be resolved, but I will make
+               an attempt when time permits.
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         22
+
+               It would not be necessary to rename CONFIG.SYS if it only
+               contains FILES, BUFFERS, COUNTRY, FCBS, and ANSI.SYS
+               statements.
+
+          If the problem persists, please report the problem as accurately
+          and completely as possible.  Include the ced version number
+          (obtained by the command CED VER), and a listing of your
+          CONFIG.SYS and AUTOEXEC.BAT files if you think that might have
+          some bearing.
+
+
+          Copyright and Disclaimer
+          ------------------------
+
+          THIS VERSION of ced is hereby placed in the public domain.  Both
+          ced and this documentation are, however, copyrighted by the
+          author.  CED IS INTENDED FOR YOUR PRIVATE, NONCOMMERCIAL USE
+          ONLY.  You may make copies of the ced program and documentation
+          files for your own use, and you may copy the files for others. 
+          You may not, however, charge for such copies, or in any other way
+          sell the program or otherwise attempt to make money from it or
+          any modified version of it.  Please.
+
+          An exception to the above is, however, granted to recognized
+          user's groups, which are hereby authorized to charge a small
+          amount (not to exceed $6.00) for media, postage, handling,
+          and whatnot.
+
+          I do not warrant that the documentation is accurate, or that the
+          program operates as designed.  I will not be liable for any
+          damages of any kind sustained through the use of the program.  By
+          using the program, you agree to this.
+
+          Your comments, suggestions, and friendly criticisms are welcome. 
+          The best way to contact me is via CompuServe, either through
+          Easyplex or (better) at the IBM Novice Forum (PCS-129, SGIBMN). 
+          West Coast people, please don't call me at ridiculous hours.
+
+          IBM is a registered trademark of International Business Machines
+          Corporation. 
+
+          MS-DOS is a trademark of Microsoft Corporation.
+
+                           Both ced and this document are:
+
+                                Copyright (c) 1985 by
+                               Christopher J. Dunford   
+                              10057-2 Windstream Drive
+                              Columbia, Maryland 21044
+                              CompuServe ID 76703,2002
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         23
+
+
+          Future of ced
+          -------------
+
+          This will very likely be the final public domain version of ced. 
+          I have been encouraged by many people to make available as a
+          retail product an enhanced version of ced, and (somewhat against
+          my better judgement) I have determined to do so.  This was not my
+          intent when the project was begun, but the amount of time spent
+          responding to mail and phone calls about the program is out of
+          all proportion to what I can afford.
+
+          The commercial version will contain at least these enhancements
+          and new features, most suggested by 1.0B users:
+
+               -- Function key compatibility with DOS (for EDLIN).
+               -- PACK command deletes all duplicate definitions.
+               -- KILL command removes ced from memory.
+               -- SAVE command saves complete current context to disk.
+               -- STATUS command allows display of ced status from within a
+               synonym.
+               -- Access to environmental variables (PATH, etc., plus
+               any SET variables).
+               -- Predefined variables to allow use of current path, date,
+               etc., in synonyms.
+               -- Minimal synonyms to allow synonym processor to match any
+               of a variety of abbreviations.
+               -- Error message suppression on request.
+               -- Chained commands will not be stacked, making recall of
+               last typed command easier.
+               -- More powerful CLEAR command.
+               -- A few enhancements to the command editor, and several
+               other minor enhancements.
+
+          Other suggestions are welcome.  If you are interested in the new
+          version, contact me at the copyright address after July 1, 1985.
+          The price is EXPECTED to be about $25.
+
+          Version 1.0C, incidentally, contains no KNOWN bugs.
+
+          Date: June 14, 1985
+          Program version:  1.0C
+          Document version: 1.0C/2
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         24
+
+                             Appendix A: Command summary
+                             ---------------------------
+
+          The following is a complete summary of all ced commands.  These
+          commands may be included in a ced configuration file (with the
+          exception of -F and -B), or they may be typed in directly by
+          prefixing them with "CED ".
+
+          -Bn1,n2,n3,n4,n5,n6      Sets the sizes of the six internal
+                                   buffers.  Valid ONLY as FIRST command
+                                   when installing ced after boot or
+                                   reboot.
+
+          -F<Filename>             Loads a ced configuration file.  Not a
+                                   valid command within a config file.
+
+          SYN <synonym> <command>  Defines a synonym.  The first word is
+                                   the synonym, all remaining words are
+                                   substituted for the synonym.
+
+          USERSYN <synonym> <command>  Defines a user synonym.  Identical
+                                   to SYN, except that the synonym is
+                                   available within user programs rather
+                                   than at the DOS prompt.
+
+          PCALL <command>          Defines a command subject to pcall
+                                   processing.
+
+          IGNORE <command>         Defines a command to be ignored--ced
+                                   will not perform any processing on this
+                                   command at all.
+
+          CHAINCH <char>           Defines the command chaining character,
+                                   which is the character used to separate
+                                   commands in a multi-command synonym. 
+                                   Normally '^'.
+
+          IGNORECH <char>          Defines the keyboard-ignore character;
+                                   when this character is typed as the
+                                   first character of keyboard input, ced
+                                   will perform no further processing on
+                                   it.  Normally ^N.
+
+          STATCH <char>            Defines the status request character. 
+                                   When you type this character while ced
+                                   is active, ced will display its status. 
+                                   Normally ^T.
+
+          PARAMCH <char>           Defines the dummy parameter character. 
+                                   Normally '%'.
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         25
+
+
+          CLEAR <function> [[FROM] <name>]   Clears all or part of a
+                                   list of ced objects.  <function> is one
+                                   of SYN, USERSYN, PCALL, or IGNORE. 
+                                   Without arguments, clears all of the
+                                   specified list.  With a <name>, clears
+                                   that item only.  With a FROM <name>,
+                                   clears that item and all subsequent
+                                   items. 
+
+          VER                      Display ced version number and copyright
+                                   notice.
+
+
+          Commands may be abbreviated as follows:
+
+               USERSYN        USYN
+               PCALL          PC       
+               IGNORE         IG
+               CHAINCH        CC
+               IGNORECH       IC   
+               STATCH         SC
+               PARAMCH        PM   (NOT PC!)
+               CLEAR          CL
+
+          Note, however, that the arguments to CLEAR may NOT be
+          abbreviated; CLEAR USYN or CLEAR IG are not valid.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         26
+
+                           Appendix B: Order of Processing
+                           -------------------------------
+
+          Ced performs its basic processing in the following order:
+
+          1. Obtain input.  If there is a chained command pending, obtain
+          input from the chain; otherwise from keyboard.
+
+          2. Check for "ignore".  If command is an "ignore" command or if
+          the first character of input is the ignore character, skip all
+          further processing.
+
+          3. Stack the command (if longer than two characters) in the
+          appropriate command stack.
+
+          4. Perform pcall (parameter recall) processing and store the
+          result for pcall processing next time the same command is
+          entered.
+
+          5. Perform synonym processing and parameter substitution.
+
+          6. Check for CED command.  If input is a CED command, process and
+          clear the input (returning null string to caller).  Skip rest.
+
+          7. Check for command chaining.  If the chain character appears in
+          the input, store all commands after the first chain character for
+          later processing, and pass back the first command only.
+
+          8. Examine the resulting command and see if it's a user-installed
+          command.  If so, call user command processor.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         27
+
+                               Appendix C: Limitations
+                               -----------------------
+
+          There is a limit of 255 characters on any input line from a ced
+          configuration file.  DOS will limit you to 127 characters at the
+          DOS prompt.
+
+          For PCALL, SYN, USERSYN, and IGNORE to be effective, their
+          commands must begin in the first column of input and must be
+          separated from any parameters by one of the following characters:
+
+               ; , < > | = + [ ] / <Tab> <Space>
+
+          Thus, if you have "cd" defined for pcall processing, "cd\" will
+          not work correctly.  However, "cd \" will be OK.  Similarly, if
+          you have a synonym "d" for "debug", the command "c:\util\d" will
+          not work, nor will " d" (note leading space).
+
+          Remember that ced is active only at the DOS prompt or when a user
+          program requests input via DOS function 0AH.  This has several
+          effects:
+
+               Programs which allow you to execute DOS commands or other
+               programs as subtasks generally do not use DOS function 0AH
+               to input the name of the subtask or command; thus, ced is
+               not active, and synonyms are usually not effective.
+
+               Ced cannot operate on statements in batch files.  Thus,
+               synonyms and user-installed commands will not be recognized
+               if they are batch statements, and ced commands will cause
+               ced to be reloaded (which is probably not what you want).
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         28
+
+                                Appendix D: Versions
+                                --------------------
+
+          1.0A/B    PARAMCH added.  Fixed problem which caused unpre-
+          06/01/85  dictable results if DOS function 0AH called with
+                    8088 direction flag set.  Status display cleaned up. 
+                    Processing order altered to allow synonyms for CED SYN
+                    to process correctly.  Early ROM BIOS bug relating to
+                    cursor size trapped. Config file processing speeded
+                    up. Problems parsing -B command fixed.  Nesting
+                    chaining allowed, as well as direct entry of chained
+                    commands at the DOS/program prompt.  Some minor
+                    incompatibilities with other resident programs elim-
+                    inated.
+
+          1.1       Problem with immediate parameters to SYNs (e.g., "d/w",
+          06/03/85  where "d" is a SYN) corrected.  Problem with pcall list
+                    overflow corrected.  Fixed error with ^Z processing
+                    during configuration file read.  Added <^Bksp>,
+                    <^Home>, and function keys F1-F4.  Added redisplay of
+                    command passed in input buffer, if different from that
+                    last command entered.
+            
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         29
+
+                            Appendix E: User Command Demo
+                            -----------------------------
+
+          Comment *
+
+               userdemo.com - demo of ced user command enqueuing
+
+               Assembly: (M)ASM userdemo;
+                         LINK userdemo;   (ignore NO STACK message)
+                         EXE2BIN userdemo userdemo.com
+
+               Use:      Just type 'userdemo'.  You now have
+                         a new DOS command, "hello"
+
+               Author:   CJDunford
+                         05/28/85
+
+          *
+
+          CED       equ 0FFH            ; Special "DOS" fn for CED service
+
+          ENQUEUE   equ 0               ; Subfunction: enqueue
+          DEQUEUE   equ 1               ; Subfunction: dequeue
+
+          DOS       equ 1               ; Cmd to be active at DOS prompt
+          USER      equ 2               ; Cmd to be active at user prompt
+
+          CR        equ 13
+          LF        equ 10
+
+          code segment
+          assume cs:code,ds:code
+          org 100H
+          main proc far
+               jmp short Install        ; Go to installation
+
+          ; -----------------------------------------------------
+          ; This is the command processor.  It will be called
+          ; whenever the user types "hello" at the DOS prompt.
+          ; The routine simply prints the string "Hi there, ace".
+          ;
+          ; On entry:
+          ;    BL: mode flag
+          ;       1 = at DOS prompt
+          ;       2 = at user program prompt
+          ;    CL: max length of input
+          ;    DS:SI => user command
+          ;    DS:DX => user command tail
+          ;
+          ; Remember to null out the user string so that
+
+                            === Ced User's Guide ===
+
+
+
+                                                                         30
+
+          ; it is not passed on to DOS, then exit via a far
+          ; return to ced.  Not necessary to preserve any
+          ; registers.
+          ; ------------------------------------------------------
+          Hello proc far                ; Must be a far procedure
+               mov byte ptr [si],CR     ; Null out the user's input
+
+               mov ax,cs                ; Set up local addressing
+               mov ds,ax
+
+               mov dx,offset HiThere$   ; Display our message
+               mov ah,9
+               int 21H
+
+               ret                      ; No need to restore any regs
+          Hello endp
+
+          HiThere$ db 'Hi there, ace',CR,LF,'$'   ; Message to be displayed
+
+
+          ; -----------------------------------------------
+          ; This is the installation routine.  It sets up
+          ; the regs for a call to the ced command enqueuing
+          ; service, enqueues the command, and terminates,
+          ; leaving the command service routine resident
+          ; ------------------------------------------------
+          Install:
+               mov ah,CED               ; CED service request
+               mov al,ENQUEUE           ; Enqueue a new command
+               mov bl,DOS               ; To be active at DOS prompt
+               mov si,offset Hello$     ; DS:SI => command ("Hello")
+               mov di,offset Hello      ; ES:DI => service routine
+               int 21H                  ; Enqueue new command
+               jnc OK                   ; No carry, no error
+
+               mov dx,offset Error$     ; Only 1 error possible here
+               mov ah,9                 ; Print string
+               int 21H
+               int 20H                  ; Return to DOS
+
+          OK:
+               mov dx,offset Install    ; OK: terminate/resident
+               int 27H
+          main endp
+
+          Hello$    db 'hello',CR        ; New command
+          Error$    db 'ced user command list full',CR,LF,'$'
+
+          code ends
+          end main
+
+                            === Ced User's Guide ===
+

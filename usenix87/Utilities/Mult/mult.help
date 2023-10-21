@@ -1,0 +1,59 @@
+
+usage: mult [-a] [-d] [-fn] [-Fc] [file ...]
+	outputs 2nd, 3rd, ... of multiple lines
+	-a = also output 1st one of multiple lines
+	-d = debug
+	-fn = use field number n to compare instead of line, 1=1st field
+	      n is in decimal
+	-Fc = use character 'c' as the field separator instead of white space
+
+Mult reads the input (stdin or file(s)), comparing adjacent lines or
+comparing the same numbered field in adjacent lines when the -f flag
+is given, and outputing lines to stdout whose entire line (no -f flag)
+or whose field number n (yes -f flag given) are the same.
+
+In the normal case, the second, and succeeding copies of repeated
+lines are output to stdout, however the -a flag causes the first
+of multiples lines to be output.
+
+Note that repeated lines must be adjacent, see sort(1).
+This tool is sort of (pun intended) the opposite of uniq.
+
+Example:
+	Print all people who are using the same password on multiple logins.
+	sort -t: +1 /etc/passwd | mult -a -f2 -F:
+
+Notation in examples below:
+In the examples below, double quotes represent the beginning and end
+of the line respectively, and are shown to make the visibilty of trailing
+white space explicit. The text between angled brackets < and > represents
+the field, spaces are significant between angled brackets.  <> represents
+the field of zero characters, and can only happen when the -F flag is
+used.  <UNDEF> is a special way to mean that the field is not present
+in the line.
+
+If no -F flag is given, then the first field starts with the first
+non-white character in the line.  For example:
+"abc def"		# field 1 = <abc>, field 2 = <def>, field 3 = <UNDEF>
+" abc def"		# field 1 = <abc>, field 2 = <def>, field 3 = <UNDEF>
+"  abc  def   "		# same even when trailing white space after def
+
+However, if the -F flag is given, then the first field starts with
+the first character of the line.  If the -F character was not a space,
+then space characters are considered to be part of the field (5th example
+below). For example, given the input lines with the -F: flag:
+"abc:def:"	# field 1 = <abc>, field 2 = <def> field 3 = <UNDEF>
+" abc:def:"	# field 1 = <abc>, field 2 = <def> field 3 = <UNDEF>
+":def"		# field 1 = <>, field 2 = <def>, field 3 = <UNDEF>
+":def:"		# field 1 = <>, field 2 = <def>, field 3 = <UNDEF>
+":def: "	# field 1 = <>, field 2 = <def>, field 3 = < >, field 4 = <UNDEF>
+":def::"	# field 1 = <>, field 2 = <def>, field 3 = <>, field 4 = <UNDEF>
+
+
+If a field number whose value is <UNDEF> because it is past the end of
+the last field, then the comparison against any adjacent line will
+always fail.  However the comparison of <> to <> will succeeed, for example
+given -F: then field 1 of the two lines
+":ab"
+":cd"
+are both <>, so field 1 of both lines are equal.

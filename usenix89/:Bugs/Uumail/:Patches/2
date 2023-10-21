@@ -1,0 +1,142 @@
+Path: plus5!wucs1!mcdchg!clyde!rutgers!pyrnj!mirror!xanth!john
+From: john@xanth.UUCP (John Owens)
+Newsgroups: net.sources.bugs
+Subject: UUMAIL 4.2 bug fixes
+Message-ID: <762@xanth.UUCP>
+Date: 27 Mar 87 21:32:45 GMT
+Organization: Old Dominion University, Norfolk Va.
+Lines: 133
+
+I have uumail version 4.2 02/02/87, patchlevel 1, which I believe is
+the latest version.  In installing this for our own use, I needed to
+make a few changes, as we are using smail as our delivery agent, and
+only wanted the uumail code for address and uupath.  These changes
+aren't posted here - if anyone is interested in them, send me mail.
+
+However, there was one major bug in the resolve.c code, and a semi-bug
+in in address.  In isuucp() in resolve.c, islower() is used when
+tolower() is meant.  I also added a safe version of tolower, as BSD
+tolower's don't work on anything but upper case characters.
+
+In address.c, I force the addresses to lower case, since the lookup
+fails otherwise.  (We use -i on pathalias.)
+
+Here are the diffs, suitable for patch(1)-ing (I hope).
+
+*** /tmp/,RCSt1024373	Fri Mar 27 16:12:17 1987
+--- resolve.c	Fri Mar 27 15:33:59 1987
+***************
+*** 6,12 ****
+  **
+  */
+  #ifndef lint
+! static char 	*sccsid="@(#)$Header: resolve.c,v 1.1 87/03/27 15:29:53 john Exp $";
+  #endif
+  
+  #include	<ctype.h>
+--- 6,12 ----
+  **
+  */
+  #ifndef lint
+! static char 	*sccsid="@(#)$Header: resolve.c,v 1.2 87/03/27 15:33:33 john Exp $";
+  #endif
+  
+  #include	<ctype.h>
+***************
+*** 276,291 ****
+  /*
+   * Return 1 iff the string is "UUCP" (ignore case).
+   */
+  isuucp(str)
+  char *str;
+  {
+! 	if (islower(*str) != 'u') return 0;
+  	++str;
+! 	if (islower(*str) != 'u') return 0;
+  	++str;
+! 	if (islower(*str) != 'c') return 0;
+  	++str;
+! 	if (islower(*str) != 'p') return 0;
+  	++str;
+  	if (*str != '\0') return 0;
+  	return 1;
+--- 276,295 ----
+  /*
+   * Return 1 iff the string is "UUCP" (ignore case).
+   */
++ 
++ #undef tolower
++ #define tolower(c) ((islower(c))?(c):(c)-'A'+'a')
++ 
+  isuucp(str)
+  char *str;
+  {
+! 	if (tolower(*str) != 'u') return 0;
+  	++str;
+! 	if (tolower(*str) != 'u') return 0;
+  	++str;
+! 	if (tolower(*str) != 'c') return 0;
+  	++str;
+! 	if (tolower(*str) != 'p') return 0;
+  	++str;
+  	if (*str != '\0') return 0;
+  	return 1;
+
+*** /tmp/,RCSt1024395	Fri Mar 27 16:12:41 1987
+--- address.c	Fri Mar 27 16:01:00 1987
+***************
+*** 4,11 ****
+   *
+   * By E. Roskos 1/16/85
+   * $Log:	address.c,v $
+!  * Revision 4.0  87/03/27  15:56:58  john
+!  * *** empty log message ***
+   * 
+   * Revision 4.0  86/11/17  16:01:45  sob
+   * Release version 4.0 -- uumail
+--- 4,11 ----
+   *
+   * By E. Roskos 1/16/85
+   * $Log:	address.c,v $
+!  * Revision 4.0.1.1  87/03/27  15:57:18  john
+!  * convert addresses to lower case!!
+   * 
+   * Revision 4.0  86/11/17  16:01:45  sob
+   * Release version 4.0 -- uumail
+***************
+*** 39,45 ****
+  #define _DEFINE
+  #include "uuconf.h"
+  
+! static char rcsid[] = "$Header: address.c,v 4.0 87/03/27 15:56:58 john Locked $";
+  
+  EXTERN char *paths;
+  char *opath(), *oupath();
+--- 39,45 ----
+  #define _DEFINE
+  #include "uuconf.h"
+  
+! static char rcsid[] = "$Header: address.c,v 4.0.1.1 87/03/27 15:57:18 john Exp $";
+  
+  EXTERN char *paths;
+  char *opath(), *oupath();
+***************
+*** 73,78 ****
+--- 73,84 ----
+  			default:  printf("unknown switch: %c\n",*p);
+  				  continue;
+  			}
++ 		}
++ 		{
++ 		    register char *pp;
++ 		    for (pp=p;*pp;pp++)
++ 			if (isupper(*pp))
++ 			    *pp = tolower(*pp);
+  		}
+  	        resolve(p, user, domain);
+  		printf("%s: ",p);
+
+-- 
+John Owens		Old Dominion University - Norfolk, Virginia, USA
+john@ODU.EDU		old arpa: john%odu.edu@RELAY.CS.NET
++1 804 440 3915		old uucp: {seismo,harvard,sun,hoptoad}!xanth!john

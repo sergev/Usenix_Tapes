@@ -1,0 +1,191 @@
+
+			Changes in X.PC version 2.02
+ 
+	The changes made for X.PC revision 1 of release 2 consist of the
+	patches to revision 1, and changes to all interrupt code in the
+	system (XYS) and frame (FRM) levels.  Both timer and communication
+	interrupts we changed to use separate stacks, so that communication
+	could detect a nested comm interrupt.  Comm interrupts now use a
+	circular ring buffer which allows interrupts to be disabled for a
+	much shorter time: just long enough to store into the ring.  All
+	subsequent processing in the frame level is done with interrupts
+	enabled, except when a queue is manipulated or an I/O port is used.
+ 
+	Local echo was corrected for connection to a Tymnet host.  When an
+	application gives X.PC characters 1 byte at a time, they are com-
+	bined into packets until the packet maximum is reached or a timeout
+	occurs.  The default timeout for either mode is 1/6 of a second, so
+	interactive sending will be about the same speed, but file transfer
+	is improved by sending all bytes in full 128-byte frames.
+ 
+	The following files were changed:
+ 
+	LAYER	FILE	   ENTRY	     DESCRIPTION
+	     p_config.d     N.A.	new X.PC revision (2) for version 2
+	 pad p_driver.c   iostat_rep	allow output when in queue is full.
+			  data_write	(re)set send timeout local/remote echo
+	     p_utilio.c   pad_xoffprc	ignore extra XOFF recvd in char mode
+			  snd_asis	don't call write if timeout is set
+	     p_echoio.c   snd_echo	corrected to send multi-byte packets
+	     p_callio.c   rcv_qbitpkt	correct echoing logic
+	 pkt packin.c	   pack_in	after REJect sent, discard recvd pkts
+	 frm p_linkot.c    (all)	run with interrupts enabled
+	     p_chario.c    (all)	run with interrupts enabled
+	     p_linkin.c    (all)	run with interrupts enabled
+	     p_comint.asm  async_int	input to a ring buffer
+	     p_comutl.asm		initialize stack
+	 xys p_bqpool.c 		delete unused array
+	     p_timint.asm		new stack
+ 
+ 
+			Changes in X.PC version 2.03
+ 
+	Solved the problems with communication transmitter failure, and the
+	resulting failure of receiver.	Now we stop the transmitter as soon
+	as the interrupt following the last byte sent.	Also we no longer
+	wait for transmitter holding buffer empty bit to come on; as Na-
+	tional's 8250 data sheet says if it is not on, reading the Inter-
+	rupt ID Register is enough.
+ 
+	Improvements were made to the frame level input (to a ring buffer)
+	and subsequent processing with interrupts enabled.  Communication
+	interrupt requirements on the active task's stack were reduced from
+	5 to 4 (beyond the 3 of the interrupt) and timer interrupt require-
+	ments were reduced from 8 to 3 (beyond the 9 of the interrupt).
+ 
+	User timer interrupts (called by ROM BIOS), including X.PC's timer
+	now run with interrupts enabled.  This prevents loss of data and
+	over-run errors in communication receiving.  This technique re-
+	quires that the PC's ROM code (for INT 08) saves 3 registers (AX,
+	DX and DS), which it does on all IBM PCs, including the AT and very
+	close compatibles.  This may be a problem if you do your own INT 08
+	(timer) code, or your PC Clone's INT 08 is not compatible.
+ 
+	All X.PC processes now abort if they cannot proceed; e.g., an
+	invalid queue or buffer address found.	Since it calls XPC's CS:0,
+	which is the DOS program terminate (INT 20) in the Program Segment
+	Prefix (PSP), the DOS prompt will appear on the screen:
+	    C:\>
+	This allows Tymnet field support or the X.PC developer a chance to
+	check the contents of the PC's register and the stack, to determine
+	the cause of the error.  All you have to do is re-run the same
+	process using a debugger with a breakpoint at XPC's CS:0 address.
+ 
+	Tymnet echo logic was corrected to send a packet that tells the
+	host it is ready to enter local echo mode, after 1/6 to 1/3 of a
+	second, instead of after 8 seconds.  This allows the PC to return
+	to local echo, which it would not do before (unless there was 8
+	seconds of inactivity).
+ 
+	The following files were changed:
+ 
+	LAYER	FILE	   ENTRY	     DESCRIPTION
+	     p_config.d     N.A.	New revision (3) for version 2
+	 pad p_initdr.c     N.A.	New message: Tymnet's X.PC Driver, 1985
+	     p_callio.c   ball_timer	only send Red Ball if in def-echo mode
+			  io_check	only Green Ball if def-echo and no-ball
+			  prc_qbitpkt	send Green Ball, set Red-Ball-out false
+			  rcv_qbitpkt	new timeout values
+	     p_calldr.c   pkch_close	allow interrupts between end-time calls
+	     p_echoio.c   fwrd_timr	don't re-start same timeout
+			  snd_echo	start timeout if forward timeout set
+	     p_utilio.c   snd_asis	start timeout if forward timeout set
+			  writ_wrpkt	simplify logic
+			  out_flush	release q-bit packet to allow next call
+			  in_flush	release q-bit packet to allow next call
+	     p_driver.c   x_driver	remove argument from set/rst_intrup
+			  clear_dev	replace zero_dcb with zero_mem function
+			  chr_statset	add calls to send & wait for write data
+			  pkt_statset	add calls to send & wait for write data
+					allow interrupts during strt_pktmode
+			  iostat_rep	allow appl read when output is full
+	 pkt p_lcbdcl.c   ccb_init	set early reply (2 before full window)
+	     p_pkcomm.c   pack_read	no interrupts in change receive state
+			  pack_write	no interrupts in change send state
+	     packtim.c	  rnr_time	16 second timeout for retry send
+			  rr_time	test lost packet mode (no input 32 sec)
+			  rep_check	32 second idle timeout on channel 0
+	     packout.c	    all 	modulo 16 now a constant
+			  purge_rr	fix test for RR packet in reply queue
+			  pack_start	remove cancelation of receive timeout
+			  pack_wreply	fix REJ get packet from LCB's out_que
+			  pack_wreply	non-RNR restart send, if link has none
+	     packin.c	    all 	modulo 16 now a constant
+			  sseq_check	use early reply (2 before full window)
+			  pack_in	don't set receive-state bit if RR reply
+	 frm p_linkot.c   link_init	set timeout variable based on baud rate
+			  link_term	don't release out queue and buffer
+			  strt_ouframe	set/reset lcb flag for transmitter busy
+			  byte_out	stop transmittr after last byte is gone
+			  send_active	new; for transition to/from packet mode
+	     p_chario.c   chr_framend	test pointer; remove procin_byte test
+			  cbyte_in	interrupt off/on for stop_time call
+			  cont_linkout	no test for buffer, allows restart send
+	     p_linkin.c   pbyte_in	clear crc_one if aborting frame input
+			  strt_inframe	if no buffer, release queue (char mode)
+	     p_comint.asm   all 	use new DX macro
+			  async_int	use only 1 word on stack of intrpd task
+			  (xmit_ready)	if TX hold reg not empty, just return
+			  (recv_ready)	if ring buffer over-run, call abort
+	     p_comutl.asm   all 	use new DX macro, symbolic DOS calls
+	 xys p_bqpool.c   mak_bufpool	remove interrupt off/on (must be off)
+			  mak_quepool	remove interrupt off/on (must be off)
+	     p_bufque.c     all 	abort if interrupts on of bad pointer
+	     p_timint.asm		insert ROM return to forgrnd on stack
+ 
+ 
+		X.PC Changes for Version 3.02
+ 
+Changes for 3.00 consisted entirely of those to install the MCI-Pad code.
+A few related changes were made to existing code as required.
+ 
+   Several mods were affected while "mcipad.c" was created in pad layer.
+ 
+Change for 3.01 consisted primarily of that to aleviate the "driver lockup",
+NSR#727, by constricting the limit of packets the application may write ahead.
+ 
+   The change reduced short(CR) packet waste via percent of value "byt_cnt"
+   used defining limiter "dcb.bpnd_pkout". See mod=p_driver.c, rsrc_adjust.
+ 
+Changes for 3.02 include fixing NSR#528 and(, hopefully,) NSR#567. Problems
+in responding to server's REJs and logic skipping "first RRs" were relieved.
+ 
+Driver reloading has been limited to one such event, break (in character mode)
+has been extended greater 250ms, a modem status feature is fixed and DEFINEd
+retry counts (rather than a debugging constant) are installed for R25 and R27.
+Some of these features have been tested by limited release prior to the late-
+10/86 timeframe.
+
+In addition, all of the 'C' code for the driver and application has been
+reformatted, and many of the comments have been changed.  The include
+files have been consolidated as well.
+ 
+Modules containing change(s) since 2.03 are listed here with latest date.
+ 
+   04/17/86   xys\ p_asmutl.asm   mci
+   04/22/86   pad\ p_statup.c	  mci
+   04/27/86   pad\ p_apevnt.c	  mci
+   04/27/86   pad\ p_callio.c	  mci
+   04/27/86   pad\ p_echoio.c	  mci
+   04/29/86   pad\ p_mcipad.c	  mci	      << new module
+   04/29/86   pad\ p_utilio.c	  mci
+   04/30/86 * app\ abortc.asm	  mci
+   05/02/86   pad\ p_initdr.c	  mci
+ 
+   06/27/86 * app\ p_appfil.c	  improve screen output during filesend
+   06/30/86   pad\ p_driver.c	  lower queue char. volume from app (j.i.c CRs)
+   09/08/86   pad\ p_calldr.c	  correct range of "find channel pointer" to 16
+   09/08/86   pkt\ packout.c	  minor comment changed
+   09/17/86   pkt\ packin.c	  enable RR at "lower window bound" (1st RR)
+   09/22/86   xys\ p_xpcdrv.asm   code to regulate driver reloading
+   09/24/86   pad\ p_portst.c	  increase break signal to exceed 250ms
+   09/26/86 * app\ abortc.asm	  change for compatibility to 2.15 Lattice
+   10/14/86   pad\ p_apevnt.c	  fix an extra-segmental move for modem status
+   10/20/86   pad\ p_calldr.c	  fixed channel 0 I/O status report
+   10/21/86   pkt\ packtim.c	  changed timeout logic for pkt level lost
+   10/22/86   pkt\ packout.c	  deploy DEFINEd retry counts for R25 and R27
+   10/23/86   pkt\ crc16.c	  made entirely table-driven for speed
+   10/23/86   frm\ p_linkot.c	  changed timers from speed-dependent
+   10/29/86   pad\ p_driver.c	  fixed problem with extra data on pad read
+ 
+	    * = mod "app" isn't driver code, but a sample of user code

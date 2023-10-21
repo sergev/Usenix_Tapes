@@ -1,0 +1,206 @@
+		S C B   S E T   U P   A N D   O P E R A T I O N S
+
+
+	The following is a description of the steps to follow in setting up
+and running of the SCB. Detail information follows on the specifics of each step.
+
+Step1.		Create a directory /scb
+
+Step2.		Copy all files on the SCB media to the directory /scb
+
+Step3.		Create a config file which provides the mounted path names for
+		disk volumes and the path names for the tty lines
+
+
+Step4.		Prepare all disk volumes or partitions and all tty lines. Mount
+		the disk volumes or partitions to be used.
+
+
+Step5.		Execute the main shell script which will compile all the C
+		programs and make all the disk files on the partitions or volumes
+		specified in the config file
+
+
+Step6.		Execute the shell script which will run the SCB
+		and will send the output files subele and graph
+		to the printer. The raw data is left in file answers.
+		You may wish to save these output files as they will
+		be written over the next time the benchmark is run.
+
+
+	An example of the config file specified in Step 3. is shown below. The
+config file is used by the crun,xrun,drun,trun and makefiles programs. A # in
+the first colume of a line in the config file indicates that the line is a
+comment.
+
+
+		*** SAMPLE config FILE ***
+
+# number of main cpu Processors
+1
+# number of concurrent user processes(level of multiprocessing)
+8
+# number of disk volumes or partitions
+1
+# percent	mount name for volume or partition
+100	/mnt/files
+# number of tty controllers
+1
+# number of tty lines per controller
+8
+# path names for tty lines(at least one per concurrent user process)
+/dev/tty00
+/dev/tty01
+/dev/tty02
+/dev/tty03
+/dev/tty04
+/dev/tty05
+/dev/tty06
+/dev/tty07
+
+
+
+	The first line of the config file specifies the number of main CPU there
+are for the system. When there is more than one main processor crun uses this to
+estimate the efective processing power of the system. Must be specified even if there
+is only one.
+
+	The second line specifies the multiuser level or the number of conconcurent
+processes executing at the same time in the system.
+
+	THE third line specifies the number of disk volumes or partitions to be
+used in the SCB run. The program makefiles will place 200 (20K) files on each
+of the partitions or volumes specified. This means there must be 4 megabytes of space available
+on each volume used. The lines to follow specify the percent (may or maynot 
+have decimal point) of files to use from that volume and the path name where
+the volume or partition is mounted.  Up to 8 different volumes may be specified.
+
+	The next information in the config file deals with TTY subsystem.
+First the number of TTY controller boards in the system must be specified 
+followed on the next line by the number of tty lines handeled by each board.
+The next lines in the config file specify the unix path names for each tty line
+used. These tty path names should be unique and the number of path names must
+be the same as the multiuser level. Each work unit will use a unique tty line
+path name while it is executing.  Up to 64 different tty lines may be specified.
+
+	The information just described is all that is needed in the config file
+and is all the user must provide to run the SCB.
+
+	The SCB run uses disk files created by the benchmark on the volumes
+specified in the config file. For best results each disk volume or
+partition to be used should be prepared with a make file system(mkfs) in
+Step 4. If this is not possible because of a need to keep existing files
+then do an fsck with the capital S (-S) option on each partition. Each 
+volume or partition used must be able to hold 200 (20K) files or provide a
+file space of 4 megabytes for executing the SCB.
+
+	In Step 4. each tty line specified in the config file must be conected
+to a terminal or a bit bucket type plug. Each tty line will be run in non
+login mode at 9600 baud. The line conditions are set by the SCB.
+
+	The shell script in Step 5. main (shown below) compiles all the C programs
+and uses the program makefiles to create 200 files (4megabytes) on each volume
+or partition specified in the config file. These volumes or partitions should
+have been cleaned up and mounted in Step 4.
+
+
+		*** SHELL SCRIPT main ***
+
+
+: ' Copyright 1985 NCR Corporation - Dayton, Ohio, USA '
+: ' %W%  Delta Date: %U% %G% '
+set -x
+cc -O -s -o crun crun.c
+cc -O -s -o xrun xrun.c
+cc -O -s -o tplot tplot.c
+cc -O -s -o rplot rplot.c
+cc -O -s -o makefiles makefiles.c
+cc -O -s -o drun drun.c
+cc -O -s -o trun trun.c
+cc -O -s -o cpurun cpurun.c
+makefiles
+echo "compile and makefiles complete"
+
+
+	The shell script runscb in Step 6. first executes crun to estimate the speed
+of the main processor. crun also ask the name of the system to be benchmarked.
+This name should be entered with capital letters and a blank between letters as this 
+name will be placed at the bottom of the SCB graph.
+
+
+		*** SHELL SCRIPT runscb ***
+
+
+: ' Copyright 1985 NCR Corporation - Dayton, Ohio, USA '
+: ' %W%  Delta Date: %U% %G% '
+set -x
+rm answers subele
+crun
+drun 1 36
+trun 120 1
+for i in 0 30 60 90 120
+do
+	for j in 0 4 8 12 16 20 24 28 32 36
+	do
+		xrun $i $j
+	done
+done
+tplot answers >graph
+pr subele graph | lp
+echo "SCB process complete"
+
+
+	Once the system name has been entered the benchmark may be left to
+run unattended. It will take at least a few hours.  Good to leave and let run
+after working hours.
+
+
+	The programs crun drun and trun are executed to measure the CPU,tty and
+disk subsystem elements. The results are placed in the file subele. A sample of
+subele is shown as the last page of this help file.
+
+	Next the shell script runscb executes xrun 50 times covering the
+different disk and tty loads. The results of each execution of xrun is
+appended to a file answers. After all xruns have been executed, the file
+answers is used as input to tplot which produces a graph named graph.
+Finally subele and graph are sent to the printer.
+
+
+	The SCB user may compare different computer systems by entering the
+command
+
+		rplot answers1 answers2 >rgraph
+
+under directory /scb. answers1 and answers2 are answer files created by two
+seperate SCB runs. The comand will create a ratio graph rgraph that should be sent to 
+the printer.
+
+
+ S Y S T E M   U N D E R   T E S T              M A C H I N E  X 
+
+
+
+  C P U   S U B S Y S T E M 
+ Time to Execute CRUN     0.200
+ Realative speed of a Single CPU     1.328
+ Number of Main CPU Processors 1
+
+  D I S K   S U B S Y S T E M 
+ Effective Disk System rate   60.9395 K bytes per Second
+ Average Time per Disk Request    0.01641 Seconds
+ Total Disk Request  7200 Request Size  1  K bytes
+ Time for All Disk Request    118.150 Seconds
+ Number of Disk Units 1
+ Disk Unit 1 Percent   100.000
+ Disk Request per Job  36
+ Jobs per Minute    101.566
+
+  T T Y   S U B S Y S T E M
+ Total  Characters Written per Second  1710.978
+ Characters Written per Second per Line   213.872
+ Total Characters Written 768000 request size 32 
+ Total Time To Write Characters   448.866 Seconds
+ Number of TTY Controllers 1
+ Number of TTY Lines per Controller 8
+ Number of TTY Lines Used in Run 8
+ Jobs per Minute    26.734

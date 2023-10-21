@@ -1,0 +1,166 @@
+#!/bin/sh
+#
+# Shell to nroff files to printer or terminal
+# Written by Gary Puckering, COGNOS Inc.
+# January 20, 1987
+
+output="terminal"
+ROFF="nroff"
+EQN="neqn"
+COL="colcrt"
+macro="-mcognos"
+
+eqn=
+tbl=
+col=
+macro=
+test=
+infile=
+nflags=
+
+if test "$PAGER" 
+then pager="| $PAGER "
+else pager="| more "
+fi
+
+
+dofile() {
+
+# reset flags
+  eqnFile="$eqn"
+  tblFile="$tbl"
+  colFile="$col"
+  macroFile="$macro "
+
+  case $infile in
+	*.tbl*)
+		tblFile="yes"
+		colFile="yes"
+		;;
+	*.eqn*)
+		eqnFile="yes"
+		colFile="yes"
+		;;
+	*.eqn.tbl*)
+		eqnFile="yes"
+		tblFile="yes"
+		colFile="yes"
+		;;
+	*.let)
+		colFile="yes" ;;
+	*.[1-9l])
+		macroFile="-man " ;;
+	*.man)
+		macroFile="-man " ;;
+	*.nms)
+		macroFile="-ms " ;;
+	*.nme)
+		macroFile="-me " ;;
+	*.nroff)
+		macroFIle="" ;;
+	esac
+
+  file=""
+
+# Insert the file name into the first command (tbl, eqn, or *nroff)
+  if test "$tblFile" = ""
+  then if test "$eqnFile" = ""
+         then file="$infile "
+         else eqnFile="$EQN $infile | "
+	 fi
+  else 
+	 tblFile="tbl $infile | "
+	 if test "$eqnFile"
+	 then eqnFile="$EQN | "
+	 fi
+  fi
+
+  if test "$colFile"
+  then colFile="| $COL "
+  fi
+
+# When ptroff is requested, no post-processing is allowed.
+  if test "$ROFF" = "ptroff"
+  then 
+	colFile=
+	pager=
+  fi
+
+  if test "$output" != "terminal"
+  then pager=""
+  fi
+
+  cmd="$tblFile$eqnFile$ROFF $macroFile$nflags$file$colFile$pager" 
+
+  if test -t		# if output to terminal
+  then echo "	$cmd"
+  fi
+
+# In test mode, don't evaluate the command
+  if test "$test" 
+  then 
+	return
+  else
+	eval $cmd
+  fi
+}
+
+for i in $* 
+do case $i in
+	-test)
+		test="yes" 
+		if test -t	# if output to terminal
+		then echo "	*** Test Mode ***"
+		fi ;;
+	-m)
+		macro="" ;;
+	-mail)
+		nflags="$nflags -m " ;;
+	-m*)
+		macro="$i" ;;
+	-d)
+		output="disk"
+		if test -t
+		then echo "	=== Roff to disk (stdout) ==="
+		fi
+		EQN="neqn"
+		COL="col" 
+		ROFF="nroff"
+		;;
+	-p)
+		output="printer"
+		if test -t
+		then echo "	=== Roff to printer ==="
+		fi
+		EQN="eqn"
+		COL="col"
+		ROFF="ptroff" 
+		;;
+	-tbl)
+		tbl="yes"
+		col="yes" ;;
+	-eqn)
+		eqn="yes" 
+		col="yes" ;;
+	-colcrt)
+		COL="colcrt"
+		col="yes" ;;
+	-col)
+		COL="col"
+		col="yes" ;;
+	-?*)
+		nflags="$nflags $i " ;;
+	-)
+		infile=""
+		dofile ;;
+	[!-]*)
+		infile="$i"
+		if test -r "$infile"
+		then dofile
+		else echo roff: filename "$i" is invalid or unreadable >&2
+		fi 
+		;;
+  esac
+done
+
+exit

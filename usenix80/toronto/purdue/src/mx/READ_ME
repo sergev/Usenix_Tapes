@@ -1,0 +1,75 @@
+Installation of the mx software involves at least the following steps:
+
+conf.c.  Insert lines for character devices mx, pts, and ptc.
+
+mkdir /dev/mx and edit/run shell file "mknod" to setup mx device 
+pool.  You might use "od -c /dev" and "ln" to situate /dev/mx at
+the top of /dev (minimizes directory searching).
+
+setup the pseudoterminals in /dev.  Controlling device (ptc) should
+be called /dev/ptyX, slave device (pts) is called /dev/ttyX, where
+X = some unused tty letter.  You should mknod a pair of these for
+every virtual terminal desired.  We run with about 10 of them.
+Edit s_con.c, string ttys[], to indicate the search sequence for
+a free pty.
+
+mx.h.  Edit LHOST and NHOST (local host number and number of hosts).
+
+mxi.h.  Edit:
+	NDA	number of DA11-B lines
+	NDM	number of DMC11 lines
+	mihostline[]  this array maps host numbers to local line numbers
+		which are then used to index milinedev[].
+		Values in this array are:
+		-1	indicates the local host.
+		-2	this host is always considered dead
+		n	where n >= 0, is a local line number
+	milinedev[]  maps a local line number into info about that device.
+		fields are:
+		min	minor device number >= 0.  Must match the device
+			number in this device's vector.  This number
+			distinguishes between multiple units of the same
+			type device.
+		csr	csr address.  (for the da only:  the low order bit
+			of this entry is used as the primary/secondary flag.
+			one side only should have this set.)
+		task	task entry point.  Usually &mixxtask, where xx =
+			device name.  should be extern'ed above.
+		spl	spl function (e.g. &spl5) for this hardware.
+		dat	data pointer, always a 0 (plugged in at runtime)
+
+low.s.  Insert vectors and call code for each hardware line device.  The
+unit (or minor) device number in the cc bits of each vector must match that
+in milinedev[] table.  Entry points have names mixxint.  Change
+vector at 0240 (Program Interrupt Request) to call "mitask", at
+priority level 1 (was 7).
+
+install mx*.c and pty.c in device driver library and sysgen.
+
+change host name table in lmx.c to reflect your host names.  Archive
+lmx.o into libmx.a and place in /lib/libmx.a.
+
+use "make" shell file to compile con.c csh.c s_con.c s_csh.c l_csh.c.
+mv con and csh to /usr/bin.  mv s_con, s_csh, l_csh to /etc.
+
+insert line "/etc/s_csh&nohup /etc/s_con&" into /etc/rc.  This starts
+up the servers after a boot.
+
+edit /etc/ttys.  Add lines for pseudottys, turning them on and setting
+speed character to "%".  Our /etc/getty avoids doing an stty for
+speed "%".
+
+our /etc/init has some code to issue a special "stty BLITZ" upon
+logout.  This affects backround processes which still have a /dev/ttyx
+open upon logout.  The BLITZ causes those file descriptors that used
+to be /dev/ttyx to be instead /dev/null.  This code is thus useful
+for normal as well as network ttys.  It still is a bit buggy though
+and causes "con" to rarely stumble when its started (typing: "connect\n
+disconnect\n");  "con"ing a second time usually works.  The problem is
+somewhere in the processing of stty BLITZ;  we hope to fix it soon.
+
+boot your system.  You should be able to con and csh to yourself.
+After booting neighboring hosts, connects should work to them as well.
+
+This is still pretty sketchy;  if you have any questions call us at Purdue:
+(317) 494 7266 or 493 3890.

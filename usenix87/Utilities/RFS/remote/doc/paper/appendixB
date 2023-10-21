@@ -1,0 +1,202 @@
+.if "\*(.T"mag" \{\
+.	nr PS 12
+.	nr VS 14
+.	ps \n(PS
+.	vs \n(VS
+.	pl 9.5i
+.\}
+.ds LH \fBAppendix B\fP
+.BP
+.NH 1
+Appendix B
+.PP
+These two tables contain the functions that must be ``changed'' for a remote
+or distributed file system to work.
+The column headings have the same meaning for both tables,
+but since some system calls have no before and after necessities (column 4),
+it is clearer to put them by themselves in \fITable 1\fP.
+\fITable 2\fP has the rest of the system calls.
+The first column, \fBSystem Call\fP, is the name of the system call
+as found in section 2 of the UNIX User's Manual.
+.PP
+The second column,
+\fBInteresting Arguments\fP,
+lists the arguments that we are particularly interested in.
+For example, \fIaccess()\fP, has two arguments, one a flag and one is
+a path.
+The path is noteworthy because we must find out what portion of the path
+is on a remote host, and what remote host it is on.
+Other interesting arguments are those with two path names and those
+having file descriptors.
+Some may not have any arguments worth considering,
+but are included because of important side effects.
+.PP
+\fBFollow Symlinks\fP shows whether \fInamei()\fP must follow
+symbolic links when determining ``remoteness'' (and is not applicable
+to system calls that do not deal with path names).
+This is an important point,
+but only for an implementation like \fBRemotefs\fP.
+\fBRemotefs\fP uses another system call, \fIisremote()\fP,
+when determining what remote host a file is on and what portion
+of the path is on that host.
+Now, the authors of 4.2
+decided when \fInamei()\fP may or may not follow a symbolic link,
+and \fIisremote()\fP must do the same for whatever system call is
+in operation.
+.PP
+The last column, \fBSpecial Considerations Before & After the Syscall\fP,
+shows what preparation
+the local host must do before
+sending the system call to a remote host,
+such as doing a local open to allocate a file descriptor
+for a \fIdup()\fP system call.
+The fourth column shows the followup steps that should be taken
+after a successful remote system call.
+.PP
+These descriptions assume that the system call has already been identified
+as one that needs to be sent to a remote host.
+That is,
+at least one of the path names (for those system calls that deal with paths)
+is remote,
+or that the file descriptor passed as an argument to a system call is
+to a remote file,
+or even that there has been one or more remote system call requests
+of some kind
+(\fIfork()\fP, \fIvfork()\fP, \fIumask()\fP, \fIexit()\fP).
+.BP
+.TS
+tab(+) center box;
+c | c | c
+c | c | c
+l | l | c.
+\fBSystem+Interesting+Follow\fR
+\fBCall+Arguments+Symlinks\fR
+=
+\fIaccess()\fP+One Path Name+yes+
+\fIstat()\fP+\^+\^
+\fIutimes()\fP+\^+\^
+\fItruncate()\fP+\^+\^
+_
+\fIchmod()\fP+One Path Name+no
+\fIchown()\fP+\^+\^
+\fIlstat()\fP+\^+\^
+\fImkdir()\fP+\^+\^
+\fImknod()\fP+\^+\^
+\fIrmdir()\fP+\^+\^
+\fIunlink()\fP+\^+\^
+_
+\fIfchmod()\fP+File Descriptor+n/a+
+\fIfchown()\fP+\^+\^
+\fIfcntl()\fP+\^+\^
+\fIflock()\fP+\^+\^
+\fIfstat()\fP+\^+\^
+\fIfsync()\fP+\^+\^
+\fIftruncate()\fP+\^+\^
+\fIioctl()\fP+\^+\^
+\fIlseek()\fP+\^+\^
+_
+.TE
+.ce 1
+\fITable 1\fP
+.BP
+.TS
+tab(+) center box expand;
+c | c | c | cw(3.5i)
+c | c | c | cw(3.5i)
+l | l | c | lw(3.5i).
+\fBSystem+Interesting+Follow+Special Considerations\fR
+\fBCall+Arguments+Symlinks+Before & After the Syscall\fR
+=
+\fIchdir()\fP+One Path Name+yes+T{
+\fBAfter:\fP
+Make note of the system and path name of the \fIchdir()\fP argument.
+T}
+_
+\fIclose()\fP+File Descriptor+n/a+T{
+\fBAfter:\fP
+Close the local file descriptor
+T}
+_
+\fIcreat()\fP+One Path Name+yes+T{
+\fBBefore:\fP
+Allocate a local file descriptor as a place\-holder.
+\fIDup2()\fP always closes the file descriptor in
+its second argument in anticipation
+of putting the new file descriptor at that ordinate value.
+That file descriptor must be closed locally before sending
+the request to the remote host.
+.sp 1
+\fBAfter:\fP
+If the system call was not successful, close the local one.
+Also,
+there may need to be some mapping of file descriptors.
+For instance,
+the local file descriptor may be 5 while the remote may be 6.
+Hence, every request on fd 5 must be mapped to 6.
+Alternatively,
+the server may take care of the mapping if the local host sends
+the local file descriptor number to the remote host.
+T}
+\fIopen()\fP+One Path Name+\^+\^
+\fIdup()\fP+File Descriptor+\^+\^
+\fIdup2()\fP+File Descriptor+\^+\^
+_
+\fIexecv()\fP+One Path Name+yes+T{
+\fBAfter:\fP
+The text for the program to be run must be copied
+to the local swap space and executed from there.
+If it is just a shell file, then it could be run normally,
+with the shell causing a remote open.
+T}
+\fIexecve()\fP+\^+\^+\^
+_
+\fIexit()\fP+None+n/a+T{
+\fBAfter:\fP
+The \fIexit()\fP must be also run locally.
+T}
+_
+\fIfork()\fP+None+n/a+T{
+\fBBefore:\fP
+The \fIfork()\fP or \fIvfork()\fP should be run locally first
+to determine if the resources are available.
+T}
+\fIvfork()\fP+\^+\^+\^
+_
+\fIlink()\fP+Two Path Names+no+T{
+\fBBefore:\fP
+Both path names must be on the same remote (or local) host.
+If not, we can simulate failure locally.
+T}
+_
+\fIread()\fP+File Descriptor++T{
+\fBAfter:\fP
+The data that was actually read by the system call
+must be gotten from the remote host.
+T}
+\fIreadlink()\fP+One Path Name+no+\^
+\fIreadv()\fP+File Descriptor++\^
+_
+\fIrename()\fP+Two Path Names+yes+T{
+\fBBefore:\fP
+The two path names must both be on the same remote (or local)
+host.
+T}
+_
+\fIsymlink()\fP+Two Path Names+yes+T{
+\fBBefore:\fP
+Only the second path name should be checked for ``remoteness''.
+T}
+_
+\fIumask()\fP+None+n/a+T{
+\fBAfter:\fP
+\fIumask()\fP must also be run locally.
+T}
+_
+\fIwrite()\fP+File Descriptor+n/a+T{
+\fBBefore:\fP
+The data to be written must be sent to the remote host.
+T}
+\fIwritev()\fP+\^+\^+\^
+.TE
+.ce 1
+\fITable 2\fP

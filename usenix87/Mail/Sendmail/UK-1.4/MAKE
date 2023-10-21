@@ -1,0 +1,190 @@
+#!/bin/sh
+
+echo 'Sendmail initial configuration program  UK-1.1
+'
+
+ether=
+uucp=
+janet=
+bitnet=
+
+#
+#  site dependant information information about names and mailers
+#
+host=`(hostname) 2> /dev/null || (uuname -l) 2> /dev/null`
+site=$host
+
+echo -n "Enter name of host ($host): "
+read reply
+if [ "$reply" != "" ]
+then
+	host=$reply
+fi
+
+echo -n "Enter name of site ($site): "
+
+read reply
+if [ "$reply" != "" ]
+then
+	site=$reply
+fi
+
+if [ $site = $host ]
+then
+	echo -n "Complete host domain name: $host."
+	read domain
+	domain=$host.$domain
+else
+	echo -n "Complete host domain name: $host.$site."
+	read domain
+	domain=$site.$domain
+	echo -n "Is there a host \"$site\" in domain \"$domain\"? (y|n) "
+	read reply
+	if [ "$reply" != 'y' ]
+	then
+		multihost=true
+	else
+		domain=$host.$domain
+	fi
+fi
+
+echo -n "
+Site name = $site, Host name = $host, Domain name = $domain
+confirm? (y|n) "
+
+read reply
+if [ "$reply" != 'y' ]
+then
+	echo 'Start again'
+	exit 1
+fi
+
+echo "
+A list of available mailer configurations  will follow
+type 'y' at the prompt to include the specified mailer.
+"
+
+echo -n "ethernet? "
+read reply
+if [ "$reply" = 'y' ]; then ether=etherm.m4; fi
+
+echo -n "uucp? "
+read reply
+if [ "$reply" = 'y' ]
+then
+	uucp="luucpm.m4 uucpm.m4";
+	uucpname=`uuname -l`
+	echo -n "Enter uucp name ($uucpname): "
+	read reply
+	if [ -n "$reply" ]
+	then
+		uucpname=$reply
+	fi
+fi
+
+echo -n "janet? "
+read reply
+if [ "$reply" = 'y' ]; then janet=hhcpm.m4; fi
+
+echo -n "bitnet? "
+read reply
+if [ "$reply" = 'y' ]; then bitnet=bitnetm.m4; fi
+
+#
+#  now start creating the files
+#
+echo -n "
+Making directory $host... "
+if mkdir $host
+then
+	cd $host
+else
+	echo mkdir failed, aborted
+	exit 1
+fi
+
+echo -n '
+creating rules... '
+ar x ../Rules.a
+echo -n '
+creating mailers... '
+ar x ../Mailers.a localm.m4 $ether $uucp $janet $bitnet
+
+echo -n '
+creating Makefile... '
+cat >Makefile <<EOF
+#######################################################################
+#
+#	Makefile for Sendmail configuration files
+#
+#	@(#)Makefile	UK-1.1 sendmail configuartion		22/4/85
+#
+#######################################################################
+HOST=$host
+SITE=$site
+RULES=base.m4 rules.m4 rules1.m4 version.m4
+MAILERS=localm.m4 $ether $uucp $janet $bitnet
+
+EOF
+
+cat >>Makefile <<'EOF'
+.SUFFIXES: .mc .cf
+
+.mc.cf:
+	m4 $*.mc > $*.cf
+
+$(HOST).cf:	$(RULES) $(MAILERS) $(SITE).dom $(HOST).chn
+
+$(SITE).dom:	../dom/$(SITE).dom
+		cp ../dom/$(SITE).dom $(SITE).dom
+
+$(HOST).chn:	../chn/$(HOST).chn
+		cp ../chn/$(HOST).chn $(HOST).chn
+
+install:	$(HOST).cf
+	sed -e '/^#/d' -e '/^$$/d' $(HOST).cf > /usr/lib/sendmail.cf
+	-if [ -f /usr/lib/sendmail.fc ]; then /usr/lib/sendmail -bz; fi
+EOF
+
+echo -n "
+creating $host.mc... "
+cat >$host.mc <<EOF
+define(\`HOST',\`$host')
+define(\`SITE',\`$site')
+define(\`DOMAIN',\`$domain')
+EOF
+
+if [ -n "$multihost" ]
+then
+	echo "define(\`MULTIHOST')" >> $host.mc
+fi
+
+if [ -n "$ether" ]
+then
+	echo "define(\`ETHER')" >> $host.mc
+fi
+
+if [ -n "$uucp" ]
+then
+	echo "define(\`UUCPNAME',\`$uucpname')" >> $host.mc
+fi
+
+if [ -n "$janet" ]
+then
+	echo "define(\`JANET')" >> $host.mc
+fi
+
+if [ -n "$bitnet" ]
+then
+	echo "define(\`BITNET')" >> $host.mc
+fi
+
+echo 'include(base.m4)' >> $host.mc
+
+echo "
+Initial configuration complete.
+
+You now have to make the $site.dom and $host.chn files.
+"
+
+exit

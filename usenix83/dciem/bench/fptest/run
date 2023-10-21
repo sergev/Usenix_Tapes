@@ -1,0 +1,56 @@
+: command file to setup/run/cleanup floating point component of exercise package
+: Martin Tuori, DCIEM, Toronto, Feb 1982.
+
+COMM=$1
+COUNT=$2
+CHECK=$3
+
+case $COMM in
+	se*)
+:		setup
+		cc -O fptest.c; mv a.out fptest; fptest>fpoutput;
+		while test $COUNT != 0
+		do
+			mkdir fp$COUNT
+:			echo fp$COUNT made
+			COUNT=`expr $COUNT - 1`
+		done
+		;;
+	cl*)
+:		cleanup
+		rm fptest fpoutput;
+		while test $COUNT != 0
+		do
+			rm fp$COUNT/*
+			rmdir fp$COUNT
+:			echo fp$COUNT emptied and removed
+			COUNT=`expr $COUNT - 1`
+		done
+		;;
+	ru*)
+:		run
+		case $CHECK in
+		check)
+			while test $COUNT != 0
+			do
+				(cd fp$COUNT; ../fptest>fpoutput; cmp fpoutput ../fpoutput)&
+:				echo fp$COUNT running with check
+				COUNT=`expr $COUNT - 1`
+			done
+			wait
+			;;
+		*)
+			while test $COUNT != 0
+			do
+				(cd fp$COUNT; ../fptest>fpoutput)&
+:				echo fp$COUNT running without check
+				COUNT=`expr $COUNT - 1`
+			done
+			wait
+		;;
+		esac
+		;;
+	*)
+		echo command $COMM not understood, try again.
+		;;
+esac

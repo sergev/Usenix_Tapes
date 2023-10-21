@@ -1,0 +1,134 @@
+.th TM IV 23-February-1979
+.sh NAME
+tm \*- TM-11/TU-10 magtape interface
+.sh DESCRIPTION
+The files
+.it "mt0, ..., mt7"
+refer to the DEC TU10/TM11 magtape.
+When closed, it is rewound;
+if it was open for writing, an end-of-file is written first.
+The end-of-file consists of two file marks.
+The files
+.it "nrw_mt0, ..., nrw_mt7"
+are similar except that when they are closed after reading
+the tape is not rewound.
+Instead, the tape advances to just after the next file mark,
+ready to read the next file.
+Hence, to skip a file,
+simply open the non-rewinding device for reading and then close it.
+When closed after writing,
+two file marks are written and the tape is backed up over the last one,
+just after the first,
+in position to be opened to write another file.
+.s3
+A standard tape consists of a
+series of 512 byte records terminated by an
+end-of-file.
+To the extent possible, the system makes
+it possible, if inefficient, to treat
+the tape like any other file.
+Seeks have their usual meaning and it is possible
+to read or write a byte at a time.
+Writing in very small units is inadvisable,
+however, because it tends to create monstrous record
+gaps.
+.s3
+The
+.it mt
+files discussed above are useful
+when it is desired to access the tape in a way
+compatible with ordinary files.
+When foreign tapes are to be dealt with, and especially
+when long records are to be read or written, the
+``raw'' interface is appropriate.
+The associated files are named
+.it "rmt0, ..., rmt7."
+The corresponding non-rewinding files are named
+.it "nrw_rmt0, ..., nrw_rmt7."
+Each
+.it read
+or
+.it write
+call reads or writes the next record on the tape.
+In the write case the record has the same length as the
+buffer given.
+During a read, the record size is passed
+back as the number of bytes read, provided it is no greater
+than the buffer size;
+if the record is long, an error is indicated.
+In raw tape I/O, the buffer
+.it must
+begin on a word boundary.
+However,
+the buffer length may be odd or even.
+Seeks are allowed on the raw device.
+Each block is treated
+as though it were exactly 512 bytes (including tape marks),
+so that a seek-by-blocks system call will do the desired operation.
+During a seek on the raw device, tape marks are counted as one block.
+On the cooked device,
+an error will be returned if the seek tries to cross a tape mark.
+On the raw device, an error is only returned
+if the seek tries to cross a double tape mark,
+leaving the tape positioned after the first of the pair.
+.s1
+An end-of-file may be written on the raw device by specifying
+a write buffer length of zero.
+Such a file mark also counts as 512 bytes when
+repositioning the file.
+The buffer address must be on a word boundary
+within the user's assigned area.
+.s1
+The files
+.it "nrw_mt0, ..., nrw_mt7"
+and
+.it "nrw_rmt0, ..., nrw_rmt7"
+are also named
+.it "smt0, ..., smt7"
+and
+.it "srmt0, ..., srmt7."
+.sh DIAGNOSTICS
+When the cooked device tries to cross a file mark
+or the raw device tries to pass a pair of file marks
+the error number EFBIG (27) is returned to the
+.it read
+request.
+.sh FILES
+/dev/mt?
+.br
+/dev/rmt?
+.br
+/dev/nrw_mt?
+.br
+/dev/nrw_rmt?
+.br
+/dev/smt?
+.br
+/dev/srmt?
+.sh "SEE ALSO"
+tp (I), dd (I)
+.sh BUGS
+If any non-data error is encountered,
+it refuses to do anything more until closed.
+In raw I/O, there should be a way to perform backward file spacing.
+.s1
+After specifying tape repositioning with a seek on the raw files,
+the next I/O request locks the requesting process in core
+while moving the tape.
+This can prevent other processes from using the CPU
+for an unnecessarily long period.
+.s1
+A write buffer length of 2 bytes is converted to a length of 4 bytes
+to avoid conflicts with the writing of file marks.
+However, the user process is only told that 2 bytes were written.
+This extended buffer must fit within the users area.
+.s1
+Unmodified tape drivers round up the bytes read to an even number,
+do not support forward file spacing,
+and do not support writing end-of-files in raw mode.
+Furthermore, unmodified tape drivers do not support tape controllers
+(like Digi-Data)
+which give to logical names to the same physical unit.
+.s1
+The optional stty commands are not installed to save core
+and discourage incompatibilities.

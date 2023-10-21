@@ -1,0 +1,646 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA00492; Wed, 18 Mar 87 12:29:20 CST
+Path: plus5!wucs1!mcdchg!clyde!cbatt!ucbvax!CLUTX.BITNET!bh01
+From: CLUTX.BITNET!bh01 (Russell Nelson)
+Newsgroups: comp.emacs
+Subject: uEmacs compiled on many machined
+Message-Id: <8703171402.AA25789@clutx.clarkson.edu>
+Date: 17 Mar 87 14:02:31 GMT
+Sender: ucbvax.BERKELEY.EDU!daemon
+Distribution: world
+Organization: The ARPA Internet
+Lines: 632
+Apparently-To: hokey
+
+Clarkson University's Heath Users group has brought microEmacs ver 3.8f up on
+these machines from the source:
+
+machine         os                      switches        notes/linking
+---------------------------------------------------------------------
+vax 11/780      vms                     vms             easy
+gould 9080      BSD 4.3                 bsc termcap     -ltermcap
+Z-248           bata Zenith xeniex 3    v7 termcap      -ltermcap
+Z-248           Micro Port's Sys V.2    usg termcap     -lcurses
+Z-248/opus      w/32032 sys V.2         usg termcap     -lcurses
+pc clone        MSDOS 3.1               msc (v4) EGA    no 'peek' and 'poke'
+Z-100           MSDOS 2.21              msc (v4) z100   new files
+TI-PRO          MSDOS 3.2               msc (v4) tipc   easy
+
+changes we have done to uEmacs 3.8f
+
+------------------ termio.c --------------------------
+
+line 263:       add  <| MSC>  and <asmputc>
+
+ttputc()
+  :                              _____
+#if     MSDOS & (LATTICE | AZTEC | MSC) & ~IBMPC & ~(Z100 & MSC)
+        bdos(6, c, 0);
+#endif
+
+#if     MSC & Z100
+extern  int     asmputc();
+asmputc();
+#endif
+
+-------------------- vt52.c --------------------------
+
+line 60-76:          no more '&'
+
+TERM    term    = {
+        NROW-1,
+        NROW-1,
+        NCOL,
+        NCOL,
+        MARGIN,
+        SCRSIZ,
+        NPAUSE,
+        vt52open,
+        ttclose,
+        vt52kopen,
+        vt52kclose,
+        ttgetc,
+        ttputc,
+        ttflush,
+        vt52move,
+        vt52eeol,
+        vt52eeop,
+        vt52beep,
+        vt52rev,
+        vt52cres
+#if     COLOR
+        , vt52fcol,
+        vt52bcol
+#endif
+};
+
+line 139:                 add '| UGS' to the #if
+
+vt52open()
+{
+#if     V7 | BSD | UGS
+        register char *cp;
+
+------------ st520.c and vmsvt.v --------------------
+
+kill the '&' in term struct. just like you did
+in vt52.c
+
+------------------ estruct.h ------------------------
+
+line 62:                add the Z100 switch
+
+#define VT100   0                       /* Handle VT100 style keypad.   */
+#define Z100    1                       /* Zenith Z-100.                */
+#define LK201   0                       /* Handle LK201 style keypad.   */
+
+------------------ ebind.h ---------------------------
+
+line 142:                       add Z100 key bindings.
+
+#if     BSD
+        {META|'S',              bktoshell},
+#endif
+        {META|'U',              upperword},
+        {META|'V',              backpage},
+        {META|'W',              copyregion},
+        {META|'X',              namedcmd},
+        {META|'Z',              quickexit},
+        {META|0x7F,             delbword},
+
+#if     Z100
+        {0x7F,                  backdel},       /*      Delete  */
+        {0x8D,                  namedcmd},      /*      Enter   */
+        {0x95,                  help},          /*      Help    */
+        {0x96,                  gotoeob},       /*      F0      */
+        {0x97,                  showcpos},      /*      F1      */
+        {0x98,                  showcpos},      /*      F2      */
+        {0x99,                  showcpos},      /*      F3      */
+        {0x9A,                  showcpos},      /*      F4      */
+        {0x9B,                  showcpos},      /*      F5      */
+        {0x9C,                  showcpos},      /*      F6      */
+        {0x9D,                  showcpos},      /*      F7      */
+        {0x9E,                  showcpos},      /*      F8      */
+        {0x9F,                  showcpos},      /*      F9      */
+        {0xA0,                  showcpos},      /*      F10     */
+        {0xA1,                  showcpos},      /*      F11     */
+        {0xA2,                  showcpos},      /*      F12     */
+        {0xA3,                  insspace},      /*      Ichar   */
+        {0xA4,                  openline},      /*      Iline   */
+        {0xA5,                  backline},      /*      Up      */
+        {0xA6,                  forwline},      /*      Down    */
+        {0xA7,                  forwchar},      /*      Right   */
+        {0xA8,                  backchar},      /*      Left    */
+        {0xA9,                  showcpos},      /*      Home    */
+        {0xAA,                  ctrlg},         /*      Break   */
+        {0xAD,                  quit},          /*      Kp-     */
+        {0xAE,                  filefind},      /*      Kp.     */
+        {0xB0,                  filewrite},     /*      Kp0     */
+        {0xB1,                  showcpos},      /*      Kp1     */
+        {0xB2,                  showcpos},      /*      Kp2     */
+        {0xB3,                  showcpos},      /*      Kp3     */
+        {0xB4,                  showcpos},      /*      Kp4     */
+        {0xB5,                  showcpos},      /*      Kp5     */
+        {0xB6,                  showcpos},      /*      Kp6     */
+        {0xB7,                  showcpos},      /*      Kp7     */
+        {0xB8,                  showcpos},      /*      Kp8     */
+        {0xB9,                  showcpos},      /*      Kp9     */
+
+        {0xCD,                  showcpos},      /*      sEnter  */
+        {0xD5,                  ctrlg},         /*      sHelp   */
+        {0xD6,                  gotobob},       /*      sF0     */
+        {0xD7,                  showcpos},      /*      sF1     */
+        {0xD8,                  showcpos},      /*      sF2     */
+        {0xD9,                  showcpos},      /*      sF3     */
+        {0xDA,                  showcpos},      /*      sF4     */
+        {0xDB,                  showcpos},      /*      sF5     */
+        {0xDC,                  showcpos},      /*      sF6     */
+        {0xDD,                  showcpos},      /*      sF7     */
+        {0xDE,                  showcpos},      /*      sF8     */
+        {0xDF,                  showcpos},      /*      sF9     */
+        {0xE0,                  showcpos},      /*      sF10    */
+        {0xE1,                  showcpos},      /*      sF11    */
+        {0xE2,                  showcpos},      /*      sF12    */
+        {0xE3,                  forwdel},       /*      Dchar   */
+        {0xE4,                  killtext},      /*      Dline   */
+        {0xE5,                  backpage},      /*      sUp     */
+        {0xE6,                  forwpage},      /*      sDown   */
+        {0xE7,                  gotoeol},       /*      sRight  */
+        {0xE8,                  gotobol},       /*      sLeft   */
+        {0xE9,                  showcpos},      /*      sHome   */
+        {0xEA,                  showcpos},      /*      sBreak  */
+        {0xED,                  showcpos},      /*      sKp-    */
+        {0xEE,                  showcpos},      /*      sKp.    */
+        {0xF0,                  nextbuffer},    /*      sKp0    */
+        {0xF1,                  showcpos},      /*      sKp1    */
+        {0xF2,                  showcpos},      /*      sKp2    */
+        {0xF3,                  showcpos},      /*      sKp3    */
+        {0xF4,                  showcpos},      /*      sKp4    */
+        {0xF5,                  showcpos},      /*      sKp5    */
+        {0xF6,                  showcpos},      /*      sKp6    */
+        {0xF7,                  showcpos},      /*      sKp7    */
+        {0xF8,                  showcpos},      /*      sKp8    */
+        {0xF9,                  showcpos},      /*      sKp9    */
+#endif
+
+#if     MSDOS & (HP150 == 0) & (WANGPC == 0) & (HP110 == 0)
+        {SPEC|CTRL|'_',         forwhunt},
+
+-------------- new files -------------------
+
++++++++++++++++ z100.c ++++++++++++++++++++
+/*
+ * The routines in this file
+ * provide support for Zenith Z100 and Heath H-100 (vt52/h19)
+ * It compiles into nothing if not a Z100 style device.
+ */
+#define termdef 1                       /* don't define "term" external */
+
+#include        <stdio.h>
+#include        "estruct.h"
+#include        "edef.h"
+
+#if     Z100
+
+#define NROW    24                      /* Screen size.                 */
+#define NCOL    80                      /* Edit if you want to.         */
+#define MARGIN  8                       /* size of minimim margin and   */
+#define SCRSIZ  64                      /* scroll size for extended lines */
+#define NPAUSE  100                     /* # times thru update to pause */
+#define BIAS    0x20                    /* Origin 0 coordinate bias.    */
+#define ESC     0x1B                    /* ESC character.               */
+#define BEL     0x07                    /* ascii bell character         */
+
+#define BLACK   0x30                    /* Z100 attribute for Black     */
+#define BLUE    1+BLACK                 /* Z100 attribute for Blue      */
+#define RED     2+BLACK                 /* Z100 attribute for Red       */
+#define MAGENTA 3+BLACK                 /* Z100 attribute for Magenta   */
+#define GREEN   4+BLACK                 /* Z100 attribute for Green     */
+#define CYAN    5+BLACK                 /* Z100 attribute for Cyan      */
+#define YELLOW  6+BLACK                 /* Z100 attribute for Yellow    */
+#define WHITE   7+BLACK                 /* Z100 attribute for White     */
+
+extern  int     ttopen();               /* Forward references.          */
+extern  int     ttclose();
+extern  int     z100open();
+extern  int     z100close();
+extern  int     z100kopen();
+extern  int     z100kclose();
+extern  int     ttgetc();
+extern  int     ttputc();
+extern  int     ttflush();
+extern  int     z100move();
+extern  int     z100eeol();
+extern  int     z100eeop();
+extern  int     z100beep();
+extern  int     z100rev();
+extern  int     z100cres();
+
+#if     COLOR
+extern  int     z100fcol();
+extern  int     z100bcol();
+
+int     cfcolor = -1;           /* current forground color */
+int     cbcolor = -1;           /* current background color */
+int     ctrans[] =              /* ansi to Z100 color translation table */
+        {BLACK, RED, GREEN, YELLOW, BLUE, MAGENTA, CYAN, WHITE};
+#endif
+
+/*
+ * Dispatch table. All the
+ * hard fields just point into the
+ * terminal I/O code.
+ */
+TERM    term    = {
+        NROW-1,
+        NROW-1,
+        NCOL,
+        NCOL,
+        MARGIN,
+        SCRSIZ,
+        NPAUSE,
+        z100open,
+        z100close,
+        z100kopen,
+        z100kclose,
+        ttgetc,
+        ttputc,
+        ttflush,
+        z100move,
+        z100eeol,
+        z100eeop,
+        z100beep,
+        z100rev,
+        z100cres
+#if     COLOR
+        , z100fcol,
+        z100bcol
+#endif
+};
+
+z100move(row, col)
+{
+        ttputc(ESC);
+        ttputc('Y');
+        ttputc(row+BIAS);
+        ttputc(col+BIAS);
+}
+
+z100eeol()
+{
+        ttputc(ESC);
+        ttputc('K');
+}
+
+z100eeop()
+{
+#if     COLOR
+        z100fcol(gfcolor);
+        z100bcol(gbcolor);
+#endif
+        ttputc(ESC);
+        ttputc('J');
+}
+
+z100rev(status) /* set the reverse video state */
+
+int status;     /* TRUE = reverse video, FALSE = normal video */
+
+{
+        if (status == 0)
+          {
+                ttputc(ESC);
+                ttputc('q');
+        } else {
+                ttputc(ESC);
+                ttputc('p');
+          }
+}
+
+z100cres()      /* change screen resolution - (not here though) */
+
+{
+        return(TRUE);
+}
+
+spal()          /* change palette string */
+
+{
+        /*      Does nothing here       */
+}
+
+#if     COLOR
+z100fcol(color) /* set the forground color */
+
+int color;      /* color to set */
+
+{
+        cfcolor = ctrans[color];
+        ttputc(ESC);
+        ttputc('m');
+        ttputc(cfcolor);
+        ttputc(cbcolor);
+}
+
+z100bcol(color) /* set the background color */
+
+int color;      /* color to set */
+
+{
+        cfcolor = ctrans[color];
+        ttputc(ESC);
+        ttputc('m');
+        ttputc(cfcolor);
+        ttputc(cbcolor);
+}
+#endif
+
+z100beep()
+{
+#ifdef  BEL
+        ttputc(ESC);
+        ttflush();
+#endif
+}
+
+z100open()
+{
+#if     V7 | BSD | USG
+        register char *cp;
+        char *getenv();
+
+        if ((cp = getenv("TERM")) == NULL) {
+                puts("Shell variable TERM not defined!");
+                exit(1);
+        }
+        if (strcmp(cp, "z100") != 0 && strcmp(cp, "z19") != 0) {
+                puts("Terminal type not 'z100'or 'z19' !");
+                exit(1);
+        }
+#endif
+        ttputc(ESC);
+        ttputc('y');
+        ttputc('?');
+        revexist = TRUE;
+        ttopen();
+}
+
+z100close()
+{
+#if     COLOR
+        z100fcol(7);
+        z100bcol(0);
+#endif
+        ttclose();
+}
+
+z100kopen()
+
+{
+}
+
+z100kclose()
+
+{
+}
+
+#if     FLABEL
+fnclabel(f, n)          /* label a function key */
+
+int f,n;        /* default flag, numeric argument [unused] */
+
+{       /* on machines with no function keys...don't bother */
+        return(TRUE);
+}
+#endif
+#else
+
+z100hello()
+
+{
+}
+
+#endif
+
+++++++++++++++++ z100bios.asm ++++++++++++++++
+;History:46,1
+
+_TEXT   SEGMENT  BYTE PUBLIC 'CODE'
+_TEXT   ENDS
+_DATA   SEGMENT  WORD PUBLIC 'DATA'
+_DATA   ENDS
+CONST   SEGMENT  WORD PUBLIC 'CONST'
+CONST   ENDS
+_BSS    SEGMENT  WORD PUBLIC 'BSS'
+_BSS    ENDS
+
+bios_seg segment at 40h
+        org     9
+bios_conout     label   far
+bios_seg ends
+
+DGROUP  GROUP   CONST,  _BSS,   _DATA
+        ASSUME  CS: _TEXT, DS: DGROUP, SS: DGROUP, ES: DGROUP
+
+parm            equ     ss:[bp]
+
+_TEXT   SEGMENT
+
+ public         _asmputc
+
+putc_stack              struc
+ putc_bp        dw      ?
+ putc_return    dd      ?
+ char           db      ?
+putc_stack              ends
+
+_asmputc        proc    far
+                push    bp
+                mov     bp,sp
+                mov     al,parm.char
+                call    bios_conout
+                pop     bp
+                ret
+_asmputc        endp
+
+_TEXT           ends
+                end
+
+------------------- tcap.c -------------------------
+
+line 235:               no 'TERMCAP' after #endif
+
+#endif
+
+------------------- vmsvt.c------------------------
+
+line 356:               no 'VMSVT' after #endif
+
+#endif
+
+-------------------- dolock.c ---------------------
+
+line 210                no 'bsdunix' after #endif
+
+#endif
+
+-------------------- line.c -------------------------
+
+line 105:               This came from net.sources
+
+/*
+ * This routine gets called when a character is changed in place in the current
+ * buffer. It updates all of the required flags in the buffer and window
+ * system. The flag used is passed as an argument; if the buffer is being
+ * displayed in more than 1 window we change EDIT to HARD. Set MODE if the
+ * mode line needs to be updated (the "*" has to be set).
+ * Modified by Walter Bright to reduce update times.
+ * From: Walter Bright <BRIGHT@DATAIO.DATA-IO.COM>
+ */
+
+lchange(flag)
+register int    flag;
+{
+        register WINDOW *wp;
+
+        if ((curbp->b_flag&BFCHG) == 0)        /* First change, so     */
+    {    flag |= WFMODE;            /* update mode lines.   */
+                curbp->b_flag |= BFCHG;
+        }
+        for (wp = wheadp; wp; wp = wp->w_wndp)
+    {
+                if (wp->w_bufp == curbp)
+        {
+            wp->w_flag |= flag;
+            if (wp != curwp)
+            wp->w_flag |= WFHARD;
+        }
+        }
+}
+
+--------------------- basic.c ----------------------------
+
+line 428:               add function from net.sources
+
+/*********************************
+ * Search for the next occurence of the character at dot.
+ * If character is a (){}[]<>, search for matching bracket, taking
+ * proper account of nesting.
+ * Written by Walter Bright.
+ * From: Walter Bright <BRIGHT@DATAIO.DATA-IO.COM>
+ */
+
+int searchparen(f, n)
+    {
+    register LINE *clp;
+    register int cbo;
+    register int len;
+    register int i;
+    char chinc,chdec,ch;
+    int count;
+    int forward;
+    static char bracket[][2] = {{'(',')'},{'<','>'},{'[',']'},{'{','}'}};
+
+    clp = curwp->w_dotp;        /* get pointer to current line    */
+    cbo = curwp->w_doto;        /* and offset into that line    */
+    count = 0;
+
+    len = llength(clp);
+    if (cbo >= len)
+    chinc = '\n';
+    else
+    chinc = lgetc(clp,cbo);
+
+    forward = TRUE;            /* assume search forward    */
+    chdec = chinc;
+    for (i = 0; i < 4; i++)
+    if (bracket[i][0] == chinc)
+    {    chdec = bracket[i][1];
+        break;
+    }
+    for (i = 0; i < 4; i++)
+    if (bracket[i][1] == chinc)
+    {    chdec = bracket[i][0];
+        forward = FALSE;    /* search backwards        */
+        break;
+    }
+
+    while (1)
+    {
+    if (forward)
+    {
+        if (cbo >= len)
+        {    /* proceed to next line */
+        clp = lforw(clp);
+        if (clp == curbp->b_linep)    /* if end of buffer    */
+            break;
+        len = llength(clp);
+        cbo = 0;
+        }
+        else
+        cbo++;
+    }
+    else /* backward */
+    {
+        if (cbo == 0)
+            {
+        clp = lback(clp);
+        if (clp == curbp->b_linep)
+            break;
+        len = llength(clp);
+        cbo = len;
+            }
+        else
+        --cbo;
+    }
+
+    ch = (cbo < len) ? lgetc(clp,cbo) : '\n';
+    if (eq(ch,chdec))
+    {   if (count-- == 0)
+        {
+        /* We've found it    */
+            curwp->w_dotp  = clp;
+            curwp->w_doto  = cbo;
+            curwp->w_flag |= WFMOVE;
+            return (TRUE);
+        }
+    }
+    else if (eq(ch,chinc))
+        count++;
+    }
+    mlwrite("Not found");
+    return (FALSE);
+}
+
+------------------- efunc.h ----------------------------
+
+line 38:                new function binding.
+
+extern  int     swapmark();             /* Swap "." and mark            */
+extern  int     searchparen();          /* searches for (){}[]<>         */
+extern  int     forwsearch();           /* Search forward               */
+
+line 361:               new function binding.
+
+        {"search-forward",              forwsearch},
+        {"search-parenthesis",          searchparen},
+        {"search-reverse",              backsearch},
+
+-------------------------------------------------------------
+
+I don't suspect you will want to include the .asm we did for the z100.
+If you remove the '~(Z100 & MSC)' and the whole '#if MSC & Z100' in
+termio.c, it will work fine, but will not be as fast as the .asm ver.
+You should note that the z100 now is the most 'intelligent' hard coded
+terminal that will work over a rs-232 line..  if you compile it on for
+your sysV machine with a z100 on line you can have full color and
+everyting!! With the same code you can also compile a 'native' version
+that either uses hyper bios or normal int 21h calls to the screen.
+
+MSC ver 4 was used on all MSDOS ports.
+
+We have also done a TeX version of the manual.
+
+                        Clarkson's Heath Users Group
+-------------------------
+        Rob Logan

@@ -1,0 +1,535 @@
+Path: plus5!wuphys!wucs!abstl!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!bellcore!decvax!ittatc!dcdwest!sdcsvax!noscvax!medin
+From: medin@noscvax.UUCP (Ted Medin)
+Newsgroups: net.sources
+Subject: APPLE DOS KERMIT correction to part 4 & 6.
+Message-ID: <217@noscvax.UUCP>
+Date: 18 Feb 86 17:35:13 GMT
+Reply-To: medin@.UUCP (Ted Medin)
+Distribution: usa
+Organization: Naval Ocean Systems Center, San Diego
+Lines: 522
+Keywords: apple kermit dos bug_fix
+Posted: Tue Feb 18 11:35:13 1986
+
+.TITLE	KERMIT-65 Super serial com card - interupt driven
+.SBTTL	6502 version - Ted Medin
+
+;	Version 1.0
+;	Warning interupts must be allowed by card.
+;	This means sw2-6 MUST be on.
+
+;	Based on the KERMIT Protocol.
+
+.SBTTL	Define start address for assembly
+
+       .=$1003			;[39] Start assembly here
+
+.SBTTL	Revision History
+
+;
+; Edit #	Description
+; ------	-----------
+;
+
+;
+;
+;
+;	Vector for com cards starts here 
+;		location $1003 for data
+;		location $1020 for routine jumps
+;		location $1040 for main routines
+;
+sscdbd:	.blkb	1  ;[54]contains baud index(ala super serial card) used by init
+			;		6 - 300 baud
+			;		7 - 600 
+			;		etc
+	.blkb	1	;
+crdnam:	.word	herld	;[54] null terminated string of who we are
+kersli:	.blkb	1	;[54] com slot $n0
+kerins:	.blkb	1	;[54] force initialization flag-when 0
+endker:	.blkb	2	;[54] address of end of main kermit
+flowfg:	.blkb	1	;[57] flow flag for xon/xoff controll b7=1 yes
+	.=sscdbd+29		;[54] future expansion
+tlinit:	jmp	tl2int		;[54] initialize com card
+tl0cmd:	jmp	tl2cmd		;[54] command in A reg
+			;
+			;[54] 0 - hang up 
+			;[54] $0b - set baud
+			;[54] $0c - set break on the line
+			;[57] $91 - turn remote on (xon)
+			;[57] $93 - turn remote off(xoff)
+			;
+			;[54] routine will return false(0) if unable
+tl0cp:	jmp	tl2cp		;[54] check for input ch ready-0 false
+tl0gpc:	jmp	tl2gpc		;[54] get input ch
+tl0ppc:	jmp	tl2ppc		;[54] put output character
+tl0exi:	jmp	tl2exi		;[54] reset card and restore initialized
+	.=sscdbd+29+32		;[54] futures
+wait:	.blkb	3	;[54] wait routine-a reg contains milliseconds
+prstr:	.blkb	3	;[54] print string x=lsb,y=msb x&y->null terminated string
+rdkey:	.blkb	3	;[54] read keyboard
+prcrlf:	.blkb	3	;[54] print cr and lf
+telcnc:	.blkb	3	;[54] check for keyboard character
+telspa:	.blkb	3	;[57] set character parity
+
+	.=$6500	;[54] place to start com card assembly
+start	=	.		;need a label at begining
+kr2pch	=	$c088		;[22] Port character base (Super Serial card)
+kr2pst	=	$c089		;[22] Port strobe base (Super Serial card)
+kr2pcr	=	$c08a		;[41] Base for prot control register (SSC)
+kr2pcc	=	$c08b	;[47] Com control
+mncinb	=	$18	;[47] Control port init(8 bit,no par,1-stop,1200 baud)
+mnminb	=	$1	;[51] Master port init(DTR, IRQ interups)
+mssinb	=	$8	;[51] status bit for input ready
+moutb	=	$c	;[51] mask for the output bits of command
+moutnt	=	$4	;[51] command to start output with interupts
+inptr	.byte	0	;[51] input q pointer
+pinptr	.byte	0	;[51] p "
+outptr	.byte	0	;[51] output q pointer
+poutpt	.byte	0	;[51] p "
+hdirq	.word		;[51] hold area for dos IRQ
+xon:	.byte	0	;[57] flow controll
+xoff:	.byte	0	;[57] "
+xofcnt	.byte	0	;count of times buffer overran
+hxon	=	$91	;^Q with high bit on
+hxoff	=	$93	;^S  "
+ctrlq	=	$11	;xon ^Q
+ctrls	=	$13	;xoff ^S
+irqsva	=	$45	;place dos saves a reg
+dirq	=	$3fe	;[51] interupt address
+sscstp	=	$578	;[47] +slot,bit 7 on turns off commands to ssc
+herld	nasc	<SUPER SERIAL> 1	;tell who we are
+bad	nasc	<*****ERROR***** COM ROUTINES ASSEMBLED TOO LOW IN MEMORY> 1
+
+;
+;	Super Serial Card I/O Device support - These routines support the
+;		Apple Super Serial Card.
+;
+
+tl2rpt: 		;[51] a is already saved in irqsva
+	txa		;[51] save x
+	pha		;[51]
+	ldx	kersli	;[51]
+	lda	kr2pst,x	;[51] get status
+	bpl	tl2nts	;[51] not our interupt
+	and	#mssinb	;[51] look at input bit
+	bne	tl2inp	;[51] this is input ready
+	bit	flowfg	;[57] is flow controll on?
+	bpl	tl2out	;[57] no
+	lda	xoff	;[57] have we given the ^S ?
+	beq	tl2ou0	;[57] maybe
+	lda	xon	;[57] yes
+	bne	tl2out	;[57] is it time to give the xoff ?
+	lda	#ctrls	;[57] yes
+	sta	xon	;[57] tatle
+	bne	tl2ou2	;[57] always jump
+tl2ou0:	lda	xon	;[57] how about giving the xon ?
+	beq	tl2out	;[57] no
+	lda	#0	;[57] turn off xoff
+	sta	xon	;[57]
+	lda	#ctrlq	;[57] now for the xon
+tl2ou2:	jsr	telspa	;[57] set parity correctly
+	sta	kr2pch,x	;[57] stop this flood
+	bne	tl2com	;[57] always jump
+tl2out:
+	lda	outptr	;[51] see if any to output
+	cmp	poutpt	;[51]
+	beq	tl2noo	;[51] no more to output
+	ldx	poutpt	;[51] pointer to next ch to output
+	lda	outbuf,x	;[51] get next ch
+	ldx	kersli	;[51] now for the port
+	sta	kr2pch,x	;[51] give it to card
+	inc	poutpt	;[51] bump to next ch to output
+	jmp	tl2com	;[51] common return
+tl2nts:	pla		;[51] restore x
+	tax		;[51]
+	jmp	(hdirq)	;[51] and pass it on sans a reg
+tl2noo:	lda	kr2pcr,x	;[51] turn off the output interupt
+	and	#~moutb	;[51] clear RTS and inturups
+	sta	kr2pcr,x	;[51]
+	jmp	tl2com	;[51] common return from interupt
+tl2inp:	lda	kr2pch,x	;[51] we have an input character
+	ldx	pinptr	;[51] pointer to next input character
+	sta	inbuf,x	;[51] save ch
+	inc	pinptr	;[51] ready for next input
+	bit	flowfg	;[57] are we flow controll
+	bpl	tl2com	;[57] no we may overun the buffers
+	lda	xoff	;[57] have we already asked for ^S ?
+	bne	tl2com	;[57] yes no need for another
+	inx		;[57]
+	inx		;[57]
+	inx		;[57]
+	cpx	inptr	;[57] are we about to overrun ?
+	bne	tl2com	;[57] no
+	jsr	tl2suo	;[57] yes,start up output
+	sta	xoff	;[57] turn on xon(non 0)
+	inc	xofcnt	;just for debug 
+tl2com:	pla		;[51] get x
+	tax		;[51]
+	lda	irqsva	;[51] get a
+	rti		;[51] return from interupt
+
+tl2suo:
+	ldx	kersli		;[22] Get I/O location offset
+	lda	kr2pcr,x	;[51] get command
+	and	#moutb	;[51] get xmit bits
+	bne	tl2su0	;[51] already on
+	lda 	kr2pcr,x	;[51] get current command
+	ora	#moutnt	;[51] turn on xmit and interupt
+	sta	kr2pcr,x	;[51] tell card about it
+tl2su0:	rts		;
+
+tl2int:	lda	hdirq	;see if we already saved
+	bne	init0	;yes
+	lda	hdirq+1	;maybe
+	bne	init0	;sure thing
+	lda	dirq	;[51] save dos IR for exit
+	sta	hdirq	;[51]
+	lda	dirq+1	;[51]
+	sta	hdirq+1	;[51]
+	lda	#start^
+	cmp	endker+1	;are we loaded above main
+	beq	dontno		;cant tell yet
+	bcc	trble		;yes we are in trouble
+	bcs	setnm		;ok 
+dontno	lda	#start\		;well lets check 16 bits
+	cmp	endker
+	beq	setnm		;whee just exactly right
+	bcs	setnm		;ok
+trble	ldx	#bad\		;got to tell someone
+	ldy	#bad^
+	jsr	prstr		;print the message
+	jsr	prcrlf		;and terminate it properly
+setnm:
+init0:	lda	kerins		;[47] initialize slot
+	bne	tl2prr	;[47] already initialized
+	lda	#0	;[51] clear pointers etc
+	sta	inptr	;[51]
+	sta	pinptr	;[51]
+	sta	outptr	;[51]
+	sta	poutpt	;[51]
+	lda	#tl2rpt\	;[51]
+	sta	dirq	;[51] setup inturpt address
+	lda	#tl2rpt^	;[51]
+	sta	kerins	; tell weve been here
+	sta	dirq+1	;[51]
+	ldx	kersli	;[47] get slot number
+	lda	#mnminb	;[47] Master port init
+	sta	kr2pst,x	;[47] Com port status
+	sta	kr2pcr,x	;[47] Com master port
+	lda	#mncinb	;[47] Control port init
+	and	#$f0	;[47] drop baud
+	ora	sscdbd	;[47] and add default baud
+	sta	kr2pcc,x	;[47]
+	cli		;[51] allow the interurpts to happen
+tl2prr:	rts			;[22] Return
+
+
+tl2cp:	sei		;[51] lockout inturpts
+	lda	inptr	;[51] check input for chs
+	cmp	pinptr	;[51]
+	cli		;[51] allow interupts
+	rts			;[22]		...
+
+tl2gpc:	sei		;[51] lockout interupts
+	ldx	inptr	;[51] get input character
+	lda	inbuf,x	;[51]
+	inc	inptr	;[51] bump in pointer
+	ldy	xon	;[57] are we flow controlling ?
+	beq	tl2gp0	;[57] no
+	inx		;[57]
+	inx		;[57]
+	inx		;[57]
+	cpx	pinptr	;[57] have we about caught up ?
+	bne	tl2gp0	;[57] no
+	pha		;[57] save ch
+	lda	#0	;[57] turn off xon
+	sta	xoff	;[57]
+	jsr	tl2suo	;[57] now start up output with a ^Q
+	pla		;[57] restore ch
+tl2gp0:
+	cli		;[51] allow interupts
+;	ldx	parity		;[22] Check parity
+;	cpx	#nparit		;[22] No parity
+;	beq	tl2rtc		;[22] Go return the character
+;	and	#$7f		;[22] There is parity, so strip it off
+tl2rtc:	rts			;[22]	and return
+
+tl2ppc:	pha			;[22] Hold the byte to send
+	sei		;[51] lockout interupts
+	jsr	tl2suo	;[57] start up output
+	pla			;[22] Fetch the data byte off the stack
+;	jsr	telspa		;[22] Go set the parity appropriately
+	ldx	outptr	;[51] get output pointer
+	sta	outbuf,x	;[51] save in buffer for interupt
+	inc	outptr	;[51] ready for next output
+	cli		;[51] allow interupts
+	rts			;[22]	and return
+
+tl2exi:	lda	hdirq	;have we alredy done this?
+	bne	exit0	;nope
+	lda	hdirq+1	;maybe
+	beq	exit9	;definitly
+exit0:	lda	hdirq	;[51] restore dos IRQ address
+	sta	dirq	;[51]
+	lda	hdirq+1	;[51]
+	sta	dirq+1	;[51]
+	lda	#0	;tell we did this
+	sta 	hdirq
+	sta	hdirq+1
+	ldx	kersli	;[47] get slot number
+	sta	kr2pst,x	;shut it down
+	sta	kr2pcr,x	
+exit9:	rts
+tl2cmd:			;find out what command
+	beq	tl2rts	;its drop line and we cant
+	cmp	#$0c
+	beq	break	;its a break command
+	cmp	#$0b
+	beq	baud   	;its a set baud command
+	cmp	#hxon	
+	beq	txon	;its a turn xon
+	cmp	#hxoff
+	beq	txoff	;its a turn xoff
+tl2fls:			;a false return
+	lda	#0	;unknown command
+tl2rts:	rts		;que passo ? return false(0)
+txon:	bit	flowfg	;do we have flow control
+	bpl	tl2fls	;no can do
+	sei		;protect ourselves from interupts
+	jsr	tl2suo	;[57] now start up output 
+	lda	#0	
+	sta	xoff	;tell interupt to start up 
+	lda	#1	;give a true return
+	cli
+	rts
+txoff:	bit	flowfg	;do we have flow control ?
+	bpl	tl2fls	;no 
+	sei
+	jsr	tl2suo	;[57] now start up output 
+	lda	#1	;we need xoff
+	sta	xoff	;this also gives a true return
+	cli
+	rts
+baud:	ldx	kersli	;[47] get slot number
+	lda	kr2pcc,x	;[47] get com control 
+	and	#$f0	;[47] and clear baud
+	ora	sscdbd	;[47] enter
+	sta	kr2pcc,x	;[47] and set new baud rate
+	rts		;return true(non 0)
+break:
+	sei		;lock out interupts
+	ldy	kersli		;[47] ss card routine is not on
+	lda	kr2pcr,y	;[47] get current command
+	pha			;[47]
+	lda	#$c		;[47]
+	sta	kr2pcr,y	;[47] start the break
+	lda	#233		;[47] for 233 millseconds
+	jsr	wait		;[47] the y reg is not clobered
+	pla			;[47] restore command
+	sta	kr2pcr,y	;[47]
+	cli		;allow interupts
+	lda	#1	;return true
+	rts
+inbuf	.blkb	256	;input buffer
+outbuf	.blkb	256	;output buffer
+==========================================================================
+==========================================================================
+==========================================================================
+==========================================================================
+==========================================================================
+==========================================================================
+==========================================================================
+.TITLE	KERMIT-65 Microtek SV-622 serial com card
+.SBTTL	6502 version - Ted Medin
+
+;	Version 1.0
+
+;	Based on the KERMIT Protocol.
+
+.SBTTL	Define start address for assembly
+
+       .=$1003			; Start assembly at hex 1003
+
+.SBTTL	Revision History
+
+;
+; Edit #	Description
+; ------	-----------
+;
+
+;
+;
+;
+;	Vector for com cards starts here 
+;		location $1003 for data
+;		location $1020 for routine jumps
+;		location $1040 for main routines
+;
+sscdbd:	.blkb	1  ;contains baud index(ala super serial card) used by init
+			;		6 - 300 baud
+			;		7 - 600 
+			;		etc
+	.blkb	1	
+crdnam:	.word	herld	; null terminated string of who we are
+kersli:	.blkb	1	; com slot $n0
+kerins:	.blkb	1	; force initialization flag-when 0
+endker:	.blkb	2	; address of end of main kermit
+flowfg:	.blkb	1	; flow flag for xon/xoff controll b7=1 yes
+	.=$1020		; future expansion
+tlinit:	jmp	tl2int		; initialize com card
+tl0cmd:	jmp	tl2cmd		; command for ACIA in A
+			;
+			; 0 - hang up 
+			; $0b - set baud
+			; $0c - set break on the line
+			; $91 - xon
+			; $93 - xoff
+			;
+			; routine will return false(0) if unable
+tl0cp:	jmp	tl2cp		; check for input ch ready-0 false
+tl0gpc:	jmp	tl2gpc		; get input ch
+tl0ppc:	jmp	tl2ppc		; put output character
+tl0exi:	jmp	tl2exi		; reset card and restore initialized
+	.=$1040		; futures
+wait:	.blkb	3	; wait routine-a reg contains milliseconds
+prstr:	.blkb	3	; print string x=lsb,y=msb x&y->null terminated string
+rdkey:	.blkb	3	; read keyboard
+prcrlf:	.blkb	3	; print cr and lf
+telcnc:	.blkb	3	; check for keyboard character
+telspa:	.blkb	3	; set character parity
+
+	.=$6500	; place to start com card assembly
+start	=	.		;need a label at begining
+kr2pch	=	$c088		;data port
+kr2pst	=	$c089		;status port
+kr2pcr	=	$c08a		;command port
+kr2pcc	=	$c08b		;control port
+mncinb	=	$18	; Control port init(8 bit,no par,1-stop,1200 baud)
+mnminb	=	$b	; Master port init(DTR, RTS, no interrupts)
+mssinb	=	$8	; status bit for input ready
+mssoub	=	$10	;status bit for output busy
+moutb	=	$c	; mask for the output bits of command
+moutnt	=	$4	; command to start output with interupts
+pinptr:	.byte		; input buffer pointer
+inptr:	.byte		; input buffer pointer for get
+irqsva	=	$45	;place dos saves a reg
+hctrlq	=	$91	;^Q with high bit on
+hctrls	=	$93	;^S "
+dirq	=	$3fe	; interupt address
+sscstp	=	$578	; +slot,bit 7 on turns off commands to ssc
+herld	nasc	<MICROTEK SV-622> 1	;tell who we are
+bad	nasc	<*****ERROR***** COM ROUTINES ASSEMBLED TOO LOW IN MEMORY> 1
+
+;
+;	Microtek serial interface support - These routines support the
+;		SV-622 card
+;
+
+
+tl2int:
+	lda	#start^
+	cmp	endker+1	;are we loaded above main
+	beq	dontno		;cant tell yet
+	bcc	trble		;yes we are in trouble
+	bcs	setnm		;ok 
+dontno	lda	#start\		;well lets check 16 bits
+	cmp	endker
+	beq	setnm		;whee just exactly right
+	bcs	setnm		;ok
+trble	ldx	#bad\		;got to tell someone
+	ldy	#bad^
+	jsr	prstr		;print the message
+	jsr	prcrlf		;and terminate it properly
+setnm:
+	lda	kerins
+	bne	tl2prr	; already initialized
+	lda	#0	; clear pointers etc
+	sta	pinptr	; buffer starts at 0
+	sta	inptr	; buffer starts at 0
+	ldx	kersli	;now for the slot $n0
+	lda	#mnminb	; Master port init
+	sta	kerins	; tell weve been here
+	sta	kr2pst,x	; Com port status
+	sta	kr2pcr,x	; Com master port
+	lda	#mncinb	; Control port init
+	and	#$f0	; drop baud
+	ora	sscdbd	; and add default baud
+	sta	kr2pcc,x	;
+tl2prr:	rts			; Return
+
+
+tl2cp:	ldx	kersli		; Offset into I/O locations
+tl2cp1:	lda	kr2pst,x	; Try for a character
+	and	#$08		; Check for receive register full
+	beq	tl2cp7		; no we dont have a ch
+	lda	kr2pch,x	; yes get ch
+	ldy	pinptr		; where to put it in buf
+	sta	inbuf,y		; save it
+	inc	pinptr		; ready for next ch
+tl2cp7:
+	lda	pinptr
+	cmp	inptr
+	rts			;return with false(0) or true(non 0)
+
+tl2gpc:	ldx	inptr		; get where it is in buf
+	lda	inbuf,x		; get the ch
+	inc	inptr		; ready for next get
+tl2rtc:	rts			;	and return
+
+tl2ppc:	pha			; Hold the byte to send
+	ldx	kersli		; Get I/O location offset
+tl2pp1:	lda	kr2pst,x	; Get the status byte
+	and	#$10		; Isolate the flag we want (TRE)
+	beq	tl2pp2		; Transmit register is NOT empty, try again
+	pla			; Fetch the data byte off the stack
+	sta	kr2pch,x	; Stuff it at the proper loc to send it
+	rts			;	and return
+tl2pp2:	jsr	tl2cp1		; see if there is an input ch
+	jmp	tl2pp1		;and try again
+
+tl2exi:
+	lda	#0	;tell we did this
+	sta	kerins		;just in case init gets called
+	ldx	kersli	; get slot number
+	sta	kr2pst,x	;shut it down
+	sta	kr2pcr,x	
+exit9:	rts
+tl2cmd:			;find out what command
+	beq	tl2rts	;its drop line and we cant
+	cmp	#$0c
+	beq	break	;its a break command
+	cmp	#$0b
+	beq	baud   	;its a set baud command
+	cmp	#hctrlq
+	beq	tl2sac	;its a xon command
+	cmp	#hctrls
+	beq	tl2sac	;its a xoff command
+tl2fls:	lda	#0	;unknown command
+tl2rts:	rts		;que passo ? return false(0)
+tl2sac:	ldx	flowfg	;do we have flow control
+	bpl	tl2fls	;no return false
+	and	#$7f	;drop high bit and send the ch
+	jsr	telspa	;set parity
+	jsr	tl2ppc	;output the ch
+	lda	#1	;set true return
+	rts
+baud:	ldx	kersli	; get slot number
+	lda	kr2pcc,x	; get com control 
+	and	#$f0	; and clear baud
+	ora	sscdbd	; enter
+	sta	kr2pcc,x	; and set new baud rate
+	rts		;return true(non 0)
+break:
+	ldy	kersli		; ss card routine is not on
+	lda	kr2pcr,y	; get current command
+	pha			;
+	lda	#$c		;
+	sta	kr2pcr,y	; start the break
+	lda	#233		; for 233 millseconds
+	jsr	wait		; the y reg is not clobered
+	pla			; restore command
+	sta	kr2pcr,y	;
+	lda	#1	;return true
+	rts
+inbuf	.blkb	256		;input buffer

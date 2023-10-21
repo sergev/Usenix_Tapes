@@ -1,0 +1,102 @@
+Relay-Version: version B 2.10.2 9/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site sask.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!alberta!sask!glenn
+From: glenn@sask.UUCP (Glenn Hollinger)
+Newsgroups: net.sources.bugs
+Subject: bug in chat.c (with fix)
+Message-ID: <182@sask.UUCP>
+Date: 14 Mar 85 02:48:09 GMT
+Date-Received: 17 Mar 85 00:43:12 GMT
+Organization: U of Saskatchewan, Canada
+Lines: 90
+
+Sender: Glenn Hollinger (ihnp4!sask!glenn)
+Location: University of Saskatchewan
+
+
+For all of you other people who have tried to put up chat,
+I have a bug report for you.  The bug arises when you try
+to page another user who's login name is exactly 8 characters
+long.  On our system, 90% of the accounts fall into this
+category, so here's the fix.
+					Glenn.
+
+
+*** chat.old	Wed Mar 13 14:19:58 1985
+--- chat.c	Wed Mar 13 20:21:33 1985
+***************
+*** 181,187
+  			break;
+  		case 'p':
+  			if (page(1) == EOF)
+! 				fputs("Page(1) ML: unscuessful.\r\n",stderr);
+  			break;
+  		case 's':
+  			send(0);
+
+--- 181,187 -----
+  			break;
+  		case 'p':
+  			if (page(1) == EOF)
+! 				fputs("Page(1) ML: unsuccessful.\r\n",stderr);
+  			break;
+  		case 's':
+  			send(0);
+***************
+*** 269,275
+  	struct	utmp	ubuf;
+  
+  	FILE	*fp;
+! 	char	hisname[32],
+  		_name[20][10],
+  		*timein = "00:00am",
+  		inp[256];
+
+--- 269,275 -----
+  	struct	utmp	ubuf;
+  
+  	FILE	*fp;
+! 	char	hisname[99],	/* now won't overflow */
+  		_name[20][10],
+  		*timein = "00:00am",
+  		inp[256];
+***************
+*** 277,283
+  	int i = 0, ttyn;
+  
+  
+! 	printf("\r\nUSERS LOGGED IN->\r\n");
+  	if ((fd=open(FNAME, 0))== EOF) {
+  		error("Page can't open /etc/utmp",1);
+  		quit();
+
+--- 277,283 -----
+  	int i = 0, ttyn;
+  
+  
+! 	printf("\r\nUsers logged in ->\r\n");
+  	if ((fd=open(FNAME, 0))== EOF) {
+  		error("Page can't open /etc/utmp",1);
+  		quit();
+***************
+*** 286,293
+  	while (read(fd, (char *) &ubuf, sizeof(ubuf))==sizeof(ubuf)) {
+  		if (ubuf.ut_line[0]=='\0' || ubuf.ut_name[0]=='\0')
+  			continue;	/* skip unused entries */
+! 		strcpy(_name[i],ubuf.ut_name);
+! 		printf("Job%d %-8.8s %-7.7s in @ ", i+1,ubuf.ut_name, ubuf.ut_line);
+  		prtime(localtime(&ubuf.ut_time), timein);
+  		printf("%s\r\n", timein);
+  		i++;
+
+--- 286,294 -----
+  	while (read(fd, (char *) &ubuf, sizeof(ubuf))==sizeof(ubuf)) {
+  		if (ubuf.ut_line[0]=='\0' || ubuf.ut_name[0]=='\0')
+  			continue;	/* skip unused entries */
+! 		strncpy(_name[i],ubuf.ut_name,8);
+! 		_name[i][8] = '\0';
+! 		printf("Job %d %-8.8s %-7.7s in @ ", i+1,ubuf.ut_name, ubuf.ut_line);
+  		prtime(localtime(&ubuf.ut_time), timein);
+  		printf("%s\r\n", timein);
+  		i++;
+

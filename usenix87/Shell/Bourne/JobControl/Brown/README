@@ -1,0 +1,114 @@
+System V Bourne Shell with additional sxt job-control features:
+
+There are several pre-processor flags that you can set at the top of "defs.h".
+These are:
+	JOB		If you have this defined, then the shell will use
+			clever job-oriented data-structures. It doesn't produce
+			code that manipulates them - but it means that the
+			commands that look at job-stuff will work better -
+			things like "jobs" or "kill %job", etc...
+	JOBSXT		If you have this defined, in addition to JOB, then
+			you have access to sxt drivers to manipulate job
+			control. 
+	JOBSXT_HUP	If this is defined, then the shell will do lots
+			of cleaning up if it should ever receive a SIGHUP
+			signal. This is sometimes necessary because the
+			kernel can get very confused about what processes
+			belong to what groups.
+	SXT_SUSPEND	If this is defined, then the shell will leave the
+			file-descriptor to the controlling sxt device open
+			in its children, so they can do "suspend()" calls
+			to suspend themselves - this is the only way that
+			programs that use RAW (ie, ~ICANON) mode can be
+			subject to job-control. The environment variable
+			"SXT_CONTROL" will contain the numeric value of
+			this descriptor. To suspend yourself, just do
+				fd = atoi(getenv("SXT_CONTROL"));
+				ioctl(fd,SXTIOCSWTCH,0);
+			(see <sys/sxt.h> for details).
+	ERCC_SIGCONT	Usually it is not possible for programs to know
+			if they have been suspended (unless they did it
+			to themselves). If ERCC_SIGCONT is defined, then
+			the shell will send SIGCONT to jobs whenever they
+			are resumed. This assumes that you have SIGCONT
+			defined in <signal.h> (SIGUSR2 is quite good for
+			this). It will set SIGCONT to be ignored by
+			children unless they explicitly trap it, so any
+			programs that use SIGCONT for any other purpose
+			will stop working if you have this.
+	BLK_BOTTOM	This causes the cursor to be moved to the bottom
+			of your screen whenever a foreground process becomes
+			suspended. In fact, it uses termcap/terminfo in my
+			full-modifications version of the shell, but that's
+			not available here, so it does it in a stupid way.
+			You might well not want this.
+	SSHLIBRARY	This should be the directory-name for the place
+			where the "sxtalloc" program is to be kept. Since
+			these modifications to the shell are just a subset
+			of a larger set of modifications forming the "ssh"
+			shell, the directory "/usr/lib/ssh" is normal.
+			Note that this must be given with unmatched quotes -
+			one at the start but NOT at the end; ie,
+				"/usr/lib/ssh
+	sysV		You will almost certainly have this already
+			pre-defined by cpp, but define it if you don't. This
+			is pretty important.
+
+
+Sxtalloc:
+	In order to guarentee availability (and security) of sxt terminals,
+	a setuid-root allocator is provided - "sxtalloc". This should be
+	placed in the SSHLIBRARY directory. This is used for two purposes:
+	    1. to chown groups of sxt terminals so that they can be used
+	       solely by the intended user and not hijacked midway by
+	       someone else, and
+	    2. to stamp a new entry into /etc/utmp to reflect the fact
+	       that the user's controlling terminal has changed into an sxt.
+	       The old terminal is put back again when the shell has finished
+	       with the sxt.
+	On allocation, it returns the real tty-name on the standard output, and
+	this is stored in the shell-parameter $REALTTY, which is automatically
+	exported if set in this way. Subshells check to see if it is set and
+	don't bother trying to inititate job-control if it is. It is then
+	passed back to sxtalloc when the shell de-allocates the sxt.
+	See the manual entry for details.
+
+
+DISCLAIMER:
+	I am fully aware that most of the code to implement this is 
+	incredibly badly written. This reflects the fact that it consists
+	of little pieces hacked out of a larger shell in a very simple-minded
+	way (the larger shell also not being exactly the most beautifully-
+	written program ever). But it seems to work, sort-of'ish ....
+
+	If you find any important bugs, please send a summary (and a bug-fix
+	would be nice) to me at
+		ARPA: simon@its63b.ed.ac.uk
+		ARPA: simon@cstvax.ed.ac.uk	(alternative address)
+		UUCP: seismo!mcvax!ukc!{its63b,cstvax}!simon
+		JANET: simno@uk.ac.ed.{its63b,cstvax}
+
+	Finally, I'd better copyright this so some bastard doesn't sell it
+	for thousands of dollars :-) so:
+
+		These modifications are Copyright (c) Simon Brown, 
+		February 1987.
+		You may use or change them for personal use as much as you
+		like, but don't try to sell them or pretend that they're
+		yours ('cos that's not too impressive).
+
+
+FURTHER DISCLAIMER:
+	This has only been tested on a GEC 63/40 super-mini, running UX63.
+	It is *not* guarenteed to work properly on anything else (though it'd
+	be quite nice if it did).
+
+
+AUTHOR:
+		Simon Brown
+
+			Department of Computer Science
+			University of Edinburgh,
+			Scotland,
+			UK.
+

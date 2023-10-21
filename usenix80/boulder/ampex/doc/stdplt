@@ -1,0 +1,973 @@
+.RP
+.ND
+.TL
+The Standard Plot Package
+.AU
+Mark Rodal
+John Nickolls
+.AI
+Ampex Corporation
+401 Broadway, Redwood City, CA. 94061
+.AB
+.sp -1
+.PP
+.I Stdplt
+is a library of device-independent plotting procedures available
+under the
+UNIX\(dg
+time-sharing system.
+.FS
+\d\(dgUNIX is a Trademark of Bell Laboratories.\u
+.FE
+The library procedures emit canonical plotting instructions which are
+piped to an appropriate interpreter.
+Each interpreter translates the coordinates and instructions
+for its plotting device.
+The canonical plotting instructions are described in
+.I vplot(5)
+and provide a small but complete set of primitive
+plotting functions that virtually any graphics device can support.
+The instructions may be intermixed with normal text produced by
+.I printf(3S).
+.PP
+.I Vplot
+instructions are interpreted by a graphics filter for the
+desired graphics device, such as
+.I tek(1)
+for Tektronix terminals or
+.I mp(1)
+for matrix plotters like a Versatec.
+The filter
+.I vplotdb(1)
+prints the vplot instructions for debugging purposes.
+The user plotting program need not know what device its output is
+destined for.
+.PP
+The stdplt routines offer hierarchical named coordinate frames,
+cascaded origin, scale, and rotation for each coordinate frame,
+adjustable line thickness and dashing, windows, adjustable
+character size and rotation, printf-style text plotting, and
+linear or logarithmic data graphing with automatic scaling,
+axes, grids, and labels.
+.PP
+The algorithms are efficient both in space and time,
+so there is never an issue of convenience versus speed.
+The routines are simple, with each one requiring a minimal
+number of arguments.
+Calling conventions are compatible with C, Fortran 77, and the
+.I stdio(3S)
+I/O package.
+The current set of routines is callable only from C, but can
+be extended to Fortran 77 easily.
+.sp
+.AE
+.NH 1
+Introduction
+.PP
+The
+.I stdplt
+library provides device-independent plotting routines;
+this manual describes the use of each routine.
+The stdplt routines emit plotting instructions on the standard output
+stream; these instructions must be interpreted by a plot interpreter
+for the desired plotting device.  See
+.I tek(1), 
+.I mp(1),
+.I vplotdb(1),
+etc. for device-specific information.
+.NH 1
+General Usage
+.PP
+Each C program using the stdplt library must begin with the lines
+.DS
+#include <stdio.h>
+#include <stdplt.h>
+.DE
+This defines certain macros and variables used
+by the routines.  The library containing the routines is
+`/usr/lib/libP.a', and the math functions are sometimes used,
+so the command to compile is\(dg
+.DS
+cc prog.c -lP -lm
+.DE
+.FS
+\(dgOn version 6, say cc prog.c -lP -lS to obtain the stdio library.
+.FE
+Typical usage when using the Tektronix 4012 is then
+.DS
+a.out|tek
+.DE
+(note that this must be typed at the Tektronix).
+All names in the include file not intended for general use begin with
+an underscore `_' to reduce the possibility of collision with a user
+name.  This is also true in the Standard I/O Package.
+The external variable `stdplt' is declared to be a
+Standard I/O Package FILE pointer:
+.DS
+FILE *stdplt = stdout;
+.DE
+All \fIvplot(5)\fR commands are written on this file, which has a default
+value of `stdout'.  The user may change `stdplt' using
+.I fopen(3S) ,
+but since it is possible to mix printed output and plot output,
+the default is usually adequate.
+Do not use \fIwrite(2)\fR to print on the `stdplt' file, as it will
+mangle the vplot instruction stream; use the Standard I/O Package
+functions
+.I "putc(3S), puts(3S), printf(3S),"
+etc.
+Printing on the `stderr' file will cause trouble when the graphics
+device is the standard error file.
+.NH 1
+Structure
+.PP
+The Standard Plot Package provides a hierarchical set of coordinate
+\fIframes\fR for drawing different portions of a picture.
+Each frame has a \fIframe name\fR, which may be up to 14 characters long.
+The coordinate system of each frame may be scaled, rotated, or translated
+relative to its parent frame;  the frames form a rooted tree structure
+identical to the tree of directories in the UNIX file system.
+The \fIcurrent frame\fR may be referred to with the frame name ".".
+The \fIroot frame\fR has the name "/".
+The parent of the current frame has the name ".."; the parent of "/" is itself.
+A \fIpathname\fR is a sequence of frame names separated by slashes `/'.
+A pathname may be specified absolutely from the root by beginning with
+a `/', or relative to the current frame by beginning with a
+name that has been defined in it.
+.KS
+.PP
+.I
+The root frame "/" may not be rotated, scaled, or translated.
+.R
+It defines a
+.I fixed
+Cartesian coordinate system upon which all other
+frames are based.  The root coordinate frame is a \fIunit square\fR
+with the origin in the lower left corner:
+.DS B
+    (0.,1.)                            (1.,1.)
+        \(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br         ROOT COORDINATE        \(br
+        \(br             FRAME              \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br                                \(br
+        \(br\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(br
+    (0.,0.)                            (1.,0.)
+.DE
+.KE
+This unit square is \fIguaranteed\fR to fit on every graphics device.
+The graphics filter for each device scales the unit square to occupy the
+.I largest
+possible square physical area by default,
+and allows a physical distance in inches or
+centimeters to be optionally specified for the length of the unit square.
+It is permissible to draw outside of the unit square, but this
+is inherently device-dependent.
+Each graphics filter windows all lines outside the physical plotting area,
+so nothing disastrous happens if all or part of a plot is outside
+the unit square.
+.PP
+The basic functions provided by the plot package allow one
+to change to a different coordinate frame (creating it if necessary),
+rotate the frame
+relative to its parent, scale the frame relative to its parent,
+set an origin for the frame relative to its parent, move the
+plotting "pen", draw with the pen, and draw text.
+All plotting coordinates are interpreted in the coordinate system of the
+current frame.
+Each frame is represented internally by a data structure of type `_frame'.
+The macro `FRAME' expands to `struct _frame' for use in declaring pointers.
+User programs usually don't need to manipulate FRAMEs directly.
+.PP
+Each coordinate frame remembers certain pieces of state information,
+such as its current pen position.
+Changing to a frame causes the pen to move to that frame's current
+pen position.
+The items that are remembered by each frame follow:
+.DS
+coordinate system origin
+coordinate system scale
+coordinate system rotation
+coordinate transformation matrices
+coordinate window boundaries
+current pen position
+line fatness
+specifications for dashed lines
+character width and rotation
+.DE
+Examine the file /usr/include/stdplt.h for more details.
+.NH 1
+Calls
+.PP
+The C function declarations are given below.
+The header file <stdplt.h> declares those functions which return a value.
+When debugging, note that some functions are actually macros, and
+therefore breakpoints cannot be set for them; they are marked with \(sc below.
+Since most drawing functions are passed constant arguments, macros are used
+to force `(double)' type conversions for coordinates.
+This avoids problems of the sort caused by passing `0' instead of `0.'.
+The actual function name called is usually the macro name with `_' prefixed.
+.NH 2
+Coordinate Frame Operations
+.PP
+These routines manipulate coordinate frames.
+.LP
+\fIFRAME *
+.br
+frame(framename)
+.br
+  char *framename;\fR
+.br
+changes the current frame to the one named by the pathname `framename'.
+If necessary, it is created; new frames are \fIidentical\fR to
+their parent.  The framename syntax is the same as UNIX filename
+syntax.  The returned value is a pointer to the FRAME structure
+for the new coordinate frame, which is normally not used by user programs.
+Each frame has a coordinate transformation relative to its parent, and also
+has some memory, as indicated above.
+The current "pen" position in each frame is
+remembered, as is the current text size.  Changing to an existing
+frame causes an implicit move to its current pen position.
+When a frame is created the physical pen position is unchanged, since
+the new frame inherits its parent's position.
+The initial stdplt call is usually a call to frame to obtain
+a coordinate system that can be scaled, rotated, etc.
+.LP
+\fIrmframe(framename)
+.br
+  char *framename;\fR
+.br
+removes the named frame and all its child frames, freeing the memory
+associated with each.
+It is an error to remove the current frame or the root frame.
+.LP
+\fIorigin(xo, yo) \(sc
+.br
+  double xo, yo;\fR
+.br
+sets the origin of the current frame to (xo, yo) where xo and yo
+are evaluated in the current frame.
+The point (xo, yo) becomes the (0, 0) point in the resulting coordinate system.
+The current physical pen position is unchanged.
+.LP
+\fIscale(sx, sy) \(sc
+.br
+  double sx, sy;\fR
+.br
+scales the current frame (relative to its current scale) by `sx' in
+the x-direction, and `sy' in the y-direction.
+All subsequent coordinates will be multiplied by these scale factors,
+so scales smaller than 1 will shrink the plot, and scales larger than 1
+will magnify the plot.
+Negative scales are allowed, and will cause mirror images.
+The current physical pen position is unchanged.
+.LP
+\fIrotate(theta) \(sc
+.br
+  double theta;\fR
+.br
+rotates the current frame `theta' \fIradians\fR in the counter-clock-wise
+direction about the origin.
+The current physical pen position is unchanged.
+The macro DEG expands to the double constant \(*p/180 for converting degrees
+to radians.  The macro PI expands to the double constant \(*p.
+.LP
+NOTE that the order in which origin, scale, and rotate are called
+makes a big difference.  They may be called as often as desired, but
+are always evaluated with respect to the \fIcurrent\fR frame.
+Thus the operations concatenate to form any desired linear transformation
+between the current coordinate system and the parent coordinate system.
+The transformations between coordinate frames concatenate until the
+root frame is reached.
+The implementation is such that deeply nested coordinate systems
+incur no speed penalty when plotting.
+The operations are \fInot\fR commutative (i.e. rotation followed by origin
+is not the same as origin followed by rotation).
+.LP
+\fIwindow(xmin, xmax, ymin, ymax) \(sc
+  double xmin, xmax, ymin, ymax;\fR
+.br
+specifies a rectangular window in the current coordinate frame.
+Subsequent lines and text drawn in this frame which fall outside the window
+will be clipped at the boundary.
+The window is initially disabled when a frame is created.
+Windows do not cascade; only the window of the current frame is active.
+The window boundaries are remembered in terms of the current coordinates,
+so origin, scale, and rotate have no effect on the window's action.
+.LP
+.I rmwindow() \(sc
+.br
+removes any window active in the current frame.
+.LP
+\fIrwindow(xmin, xmax, ymin, ymax) \(sc
+  double xmin, xmax, ymin, ymax;\fR
+.br
+specifies a global rectangular window in terms of the
+.I root
+coordinate system.
+Subsequent lines and text which fall outside this window
+will not be drawn.  The initial window is set to the maximum
+device-independent boundaries (0. - 4. by 0. - 4.).
+Each graphics filter
+restricts the actual window to the physical device boundaries.
+This global window is always active in addition to the optional
+window of the current coordinate frame.
+.NH 2
+Line Drawing
+.PP
+The following routines move or draw with the plotting pen, or change
+some aspect of the pen characteristic.
+.LP
+\fImove(x, y) \(sc
+.br
+  double x, y;\fR
+.br
+moves the "pen" to the position (x, y) evaluated in the current frame.
+Nothing is drawn.  Changing frames causes an implicit move to that frame's
+current pen position.
+.LP
+\fIdraw(x, y) \(sc
+.br
+  double x, y;\fR
+.br
+draws a line from the current position to the point (x, y) evaluated in
+the current frame.
+.LP
+\fIrmove(dx, dy) \(sc
+.br
+  float dx, dy;\fR
+.br
+moves the pen relative to the current pen position (xpos, ypos), i.e.
+to the point (xpos + dx, ypos + dy).
+The macros xpos and ypos yield the current x and y position in the
+current frame.
+.LP
+\fIrdraw(dx, dy) \(sc
+.br
+  double dx, dy;\fR
+.br
+draws a line from the current point (xpos, ypos) to
+(xpos + dx, ypos + dy).  "rdraw" means relative draw.
+.LP
+\fIpmove(r, theta) \(sc
+.br
+  float r, theta;\fR
+.br
+moves the pen to the polar coordinate point (r, theta) where theta
+is in \fIradians\fR.  The point is therefore (r*cos(theta), r*sin(theta))
+in cartesian coordinates.
+The macro DEG expands to the double constant \(*p/180. for converting
+degrees to radians.
+.LP
+\fIpdraw(r, theta) \(sc
+.br
+  double r, theta;\fR
+.br
+draws a line from the current position (xpos, ypos) to
+the polar coordinate (r, theta), or (r*cos(theta), r*sin(theta))
+in cartesian coordinates.
+.LP
+\fIrpmove(dr, theta) \(sc
+.br
+  double dr, theta;\fR
+.br
+moves the pen to the polar coordinate (dr, theta) relative to the
+current pen position (xpos, ypos), i.e. to
+(xpos +dr*cos(theta), ypos + dr*sin(theta)).
+.LP
+\fIrpdraw(dr, theta) \(sc
+.br
+  double dr, theta;\fR
+.br
+draws a line from the current position (xpos, ypos) to
+(xpos + dr*cos(theta), ypos + dr*sin(theta)).
+.LP
+\fIplot(x, y, code) \(sc
+.br
+  double x, y;
+.br
+  int code;\fR
+.br
+moves to (x, y) if code is 0, otherwise it draws to (x, y).
+.LP
+\fIrplot(dx, dy, code) \(sc
+.br
+  double dx, dy;
+.br
+  int code;\fR
+.br
+rmoves to (dx, dy) if code is 0, otherwise it rdraws to (dx, dy).
+.LP
+\fIvector(x1, y1, x2, y2) \(sc
+.br
+  double x1, y1, x2, y2;\fR
+.br
+draws a line starting at (x1, y1) and ending at (x2, y2).
+The pen is left at (x2, y2).
+.LP
+\fIfat(extra)
+.br
+  int extra;\fR
+.br
+causes subsequent lines drawn in the current frame to be `extra' lines
+thick.  The thickness of a line is device-specific.  Each frame
+remembers its line fatness, and passes it on to its children.
+.LP
+\fIdash(ddef)
+.br
+  float ddef[4];\fR
+.br
+causes subsequent lines drawn in the current frame to be dashed
+as defined in `ddef'.
+The 4 elements of `ddef' specify the lengths of prototype dashline segments
+consisting of a dash, a space, a dash, and a space:
+.DS B
+\(br\(<- ddef[0] \(->\(br\(<- ddef[1] \(->\(br\(<- ddef[2] \(->\(br\(<- ddef[3] \(->\(br
+\u\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru           \(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru\(ru           \(ru\(ru\(ru\d
+.DE
+The lengths are evaluated in the root frame.
+If the integer 0 is passed to \fIdash\fR instead of `ddef',
+dashed lines are deactivated, and solid lines ensue.
+The state of a dashed line is retained when changing between frames.
+This permits a sequence of draws interrupted by temporary frame
+changes to yield an uninterrupted dashed line.
+A move resets the state of dashed lines; the next draw will begin
+a new dashed line.
+.NH 2
+Text Drawing
+.PP
+The following routines deal with drawing text or changing
+the nature of characters.
+.LP
+\fItextf(format, arg1, arg2, ... )
+  char *format;\fR
+.br
+draws formatted text starting from the current pen position.
+The intersection of the text baseline and the left edge of the
+first character is placed at the current pen position.
+The syntax is identical to the
+.I printf(3S)
+routine of the
+Standard I/O Package.
+The current pen position is unchanged, except that consecutive calls
+to textf (with no intervening calls to other routines) will
+continue from where the previous call finished.
+The usual ASCII control characters newline, return, tab, and backspace
+are correctly interpreted.  The left margin (for newline) is set only by a
+call to one of the move routines.
+.LP
+\fIdouble
+.br
+cwidth(width, framename)
+  double width;
+  char *framename;\fR
+.br
+sets the character width for future textf calls in the current frame.
+The named frame provides the coordinate system used to evaluate `width'
+(`width' is evaluated as a distance along the x-axis.
+The width along the x-axis in the current frame is returned.
+Each frame remembers its
+character width until explicitly changed.
+Calls to scale do not affect the character width,
+since the width is remembered as a distance in the root coordinate system.
+The height of a character is approximately 1.5 times its width.
+The initial character width in the root frame is .015.
+The macros charh and charw return the height and width of characters
+in the current frame.
+.LP
+.I
+double
+.br
+crotate(theta, framename)
+  double theta;
+  char *framename;
+.R
+.br
+sets the rotation of the character baseline for future textf calls
+in the current frame.
+The named frame provides the coordinate system used to evaluate `theta';
+the baseline is rotated counter-clock-wise `theta' radians from its
+x-axis.
+The baseline rotation in the current frame is returned.
+Subsequent calls to rotate affect the character baseline angle,
+as it is remembered as a rotation relative to the current x-axis.
+The initial baseline rotation in the root frame is 0., i.e. along
+the x-axis.
+The macro charrot yields the current baseline rotation
+relative to the x-axis in radians.
+.LP
+.I
+char
+.br
+cfont(font)
+  char font;
+.R
+.br
+sets the character font for future textf calls in the current frame.
+The previous font is returned.
+The initial font is '\e0', which always means full ASCII.
+Currently no graphics filters support fonts other than this.
+.NH 2
+Plotter Control Routines
+.PP
+The following routines perform various control functions.
+.LP
+.I erase()
+.br
+erases the screen.
+On hardcopy plotters, the paper is moved a short distance beyond
+the furthest point drawn in the current plot (i.e. the root coordinate
+frame is moved down the paper).
+The current pen position (with respect to the root frame) is unchanged.
+.LP
+.I erasea()
+.br
+is the same as erase, but on hardcopy plotters, the paper is
+moved only to the furthest point drawn so that the next plot
+.I abuts
+the current one.
+The current pen position is unchanged.
+.LP
+.I purge()
+.br
+forces any buffered
+.I vplot(5)
+instructions to be written out, along
+with an instruction that causes an interactive graphics filter to
+write its buffered data to the graphics device.
+.LP
+\fIint
+.br
+xhair(px, py, framename)
+  float *px, *py;
+  char *framename;\fR
+.br
+is used \fIonly\fR with the graphics filter \fItek(1)\fR.  It turns on
+the thumbwheel-movable crosshair of a Tektronix 4012 terminal, and
+waits for the user to type a single key.
+The ASCII code of this key is returned as the value of xhair, unless
+it is CTRL-d (end of file), in which case the value -1 is returned.
+The position of the crosshairs when the key is typed is evaluated
+as a position in the frame `framename', and the resulting (x,y) pair
+is stored in the float variables pointed to by `px' and `py'.
+.NH 2
+Coordinate Frame Inquiries
+.PP
+The following routines are helpful in obtaining information
+about the status of coordinate frames and the relationships
+between them.
+.LP
+\fIchar *
+.br
+pathname(buf) \(sc
+  char buf[];\fR
+.br
+places the null-terminated full pathname of the current frame into the
+character array `buf', which must be large enough.
+The address of `buf' is returned for convenience.
+.LP
+.I
+float xpos, ypos; \(sc
+.R
+.br
+are macros which yield the current pen position in the current
+coordinate system.
+.LP
+.I
+float charw, charh, charrot; \(sc
+.R
+.br
+are macros which yield the current character width, height, and rotation
+in the current coordinate system.
+.LP
+\fIwhere(px, py, framename)
+  float *px, *py;
+  char *framename;\fR
+.br
+evaluates the current pen position of the current frame
+as a position in the
+coordinate system of the named frame `framename', and stores
+the resulting (x, y) pair in the \fIfloat\fR variables pointed to
+by `px' and `py'.
+Either pointer may be NULL if the corresponding result is not desired.
+.LP
+\fIfwhere(px, py, framename)
+  float *px, *py;
+  char *framename;\fR
+.br
+evaluates the current pen position of the named frame `framename'
+as a position in the current frame, and stores
+the resulting (x, y) pair in the \fIfloat\fR variables pointed to
+by `px' and `py'.
+Either pointer may be NULL if the corresponding result is not desired.
+.LP
+\fIeval(x, y, framename, pnx, pny, nframename)
+  double x, y;
+  float *pnx, *pny;
+  char *framename, *nframename;\fR
+.br
+evaluates the point (x, y) in frame `framename' as a position in
+the frame `nframename', and stores the resulting (nx, ny) pair in the
+\fIfloat\fR variables pointed to by `pnx' and `pny'.
+Either pointer may be NULL if the corresponding result is not desired.
+.LP
+\fIdouble
+.br
+xdist(dx, framename)
+  double dx;
+  char *framename;\fR
+.br
+returns the distance along the x-axis in the current frame that is
+equivalent to the distance `dx' along the x-axis in frame `framename'.
+Note that these distances are measured independently of the
+rotations of the two coordinate frames.
+.LP
+\fIdouble
+.br
+ydist(dy, framename)
+  double dy;
+  char *framename;\fR
+.br
+returns the distance along the y-axis in the current frame that is
+equivalent to the distance `dy' along the y-axis in frame `framename'.
+Note that these distances are measured independently of the
+rotations of the two coordinate frames.
+.NH 2
+Data Graphing
+.PP
+The following routines facilitate graphing data arrays with
+axes, scaling, tic marks, etc.
+The only essential routine is graph, but the internal routines
+it calls are user-callable to allow unforseen variations.
+.LP
+.I
+graph(format, arg1, arg2, ... )
+  char *format;
+.R
+.br
+graphs data in the 1 by 1 box of the current frame
+as specified by a format string similar to that of textf.
+Each argument is specified by a token in the format string. Each token begins
+with a  `%' character, an optional `*' character,
+and a single specification character. The optional `*' indicates that
+the argument is not in the argument list but immediately follows
+the specification character until the next `%'.
+The first token in the string MUST be either a
+.I %X
+or a 
+.I %Y.
+All tokens after an 
+.I %X
+or 
+.I %Y
+up to the next 
+.I %X
+or 
+.I %Y
+refer to that axis or set of data. After graph returns, the current frame has
+been scaled so that the 1 by 1 box fits inside the data plotting region
+(not the area occupied by the tic marks and labels). This makes
+it easy to make later calls to axis or saxis and have the axis line up with
+the already drawn graph.
+To graph a set of X-Y data the minimum tokens required
+are:
+.IP [1]
+A %X and a %Y token.
+.IP [2]
+A %n token which may follow either the %X or %Y token.
+.LP
+To draw multiple sets of data call graph with 
+multiple %X and %Y specifiers; each data line will be dashed differently.
+The first %X specifier will be paired with the first %Y specifier, the second
+with the second and so on. If there are more %X specifiers than %Y the last
+%Y specifier will be used for the remaining %X plots and vice versa.
+.LP
+The specification characters and their meanings are:
+.RS
+.IP \fI%X\fP
+.sp -1
+.IP \fI%Y\fP
+The argument is a pointer to an array of data to be plotted, either X or Y.  The
+pointer is assumed to be type (double\ *) by default.
+If the `*' modifier is used
+there is no data for that particular plot for that axis.  Instead the data 
+minimum and maximum must be set with %m and %M and equal increments from
+min to max are used.
+.IP \fI%x\fP
+.sp -1
+.IP \fI%y\fP
+The argument is a data pointer like 
+.I %X
+or 
+.I %Y ,
+but when doing multiple data plots
+this data array is not used to set the data minimum or maximum.
+.IP \fI%n\fP
+The integer argument is the number of points in the current data array.
+.IP \fI%l\fP
+The argument is a pointer to a null-terminated array of characters
+used to label that particular axis.
+Multiple labels for a given axis are not handled.
+.IP \fI%L\fP
+The argument is a pointer like the one in %l except that the label is placed
+above or to the right of the axis instead of the min side as usual.
+.IP \fI%m\fP
+The double argument specifies the graph data minimum.
+This token is normally used together with %M when there is no data array
+for the current axis; for example a graph of
+.I "y\ =\ f(x)"
+has no data for the X-axis.
+If there is a data array,
+any data less than the specified minimum will be windowed.
+.IP \fI%M\fP
+The double argument specifies the graph data maximum.
+Any data greater than this maximum will be windowed.
+.IP \fI%d\fP
+.sp -1
+.IP \fI%i\fP
+The current data pointer is interpreted to be of type (int\ *) (decimal).
+There is no argument.
+.IP \fI%D\fP
+.sp -1
+.IP \fI%I\fP
+The current data pointer is interpreted to be of type (long\ *). There is no argument.
+.IP \fI%h\fP
+The current data pointer is interpreted to be of type (short\ *).
+There is no argument.
+.IP \fI%u\fP
+The current data pointer is interpreted to be of type (unsigned\ *). There is no argument.
+.IP \fI%f\fP
+The current data pointer is interpreted to be of type (float\ *). This is the
+default setting.  There is no argument.
+.IP \fI%F\fP
+The current data pointer is interpreted to be of type (double\ *).
+There is no argument.
+.IP \fI%s\fP
+The argument is the amount of axis 'shift'.  The current axis will be drawn at 
+the argument in the 1 by 1 box, i.e. a shift of 1. on a Y-axis will cause the 
+Y-axis to cross the X-axis at the maximum X value, instead of the default
+minimum.
+A shift of .5 will cause the axis to be drawn in the middle of the 1 by 1 box.
+.IP \fI%S\fP
+The same as %s above except that the user supplied value is in data coordinates.
+For example, if the X min was 1 and the X max was 6 a value of six would
+place the Y axis at 6, the maximum X coordinate.
+.IP \fI%t\fP
+The integer argument specifies the type of tics on the current axis. 
+A 0 causes the tics to go in the
+min direction. (down for an X-axis, left for a Y-axis).
+A 1 causes the tics to go in the max direction (up and to the right),
+a 2 causes the tic to go both ways,
+and a 3 suppresses tics. 0 is the default case.
+.IP \fI%T\fP
+The integer argument specifies the type of tic labels on the current axis. 
+A 0 causes the labels to 
+be placed on the min side of the axis.
+(down for an X-axis, left for a Y-axis).
+A 1 causes the labels to be placed in the max direction (up and to the right), 
+a 2 or 3 supreses labels.
+The default is 0.
+.IP \fI%b\fP
+The integer argument specifies line fatness (blubber) to be used when
+plotting data (see fat() above).
+.IP \fI%B\fP
+The argument is a pointer to a float array containing 4 floats which
+are passed to the routine dash()
+(see dash() above) before the data is plotted.
+The `*' modifier indicates that the 4 floats follow immediately in the
+format string.
+The default for %B is to use a different line dashing for each data
+array in a multiple-line graph.  The first line is always solid.
+The %e token may be used to obtain a labeled table entry for each data line.
+.IP \fI%G\fP
+The integer argument specifies the type of grid to be used.  A 0 (the default
+case) is a grid with solid lines, a solid line at the data maxima,
+and a  thick line at the zero point of the grid.
+A 1 causes dotted grid lines, a solid line at the maxima, and a thick line at
+zero.  A 2 causes no grid, but a line at the data maxima, forming a box with 
+the axis. A 3 causes no grid at all.
+.IP \fI%c\fP
+The integer argument specifies a data point label.
+The argument should be a lowercase character
+which is centered on each data point of the plot; this is useful for
+multi-plot graphs. Uppercase characters are not centered properly because
+of size differences, but characters like '+' and '#' center ok.
+.IP \fI%o\fP
+Specifies a log axis.
+The current axis and all data will be plotted logarithmically in that direction.
+There is no argument.
+.IP \fI%e\fP
+Causes a table entry to be made on the left margin with the character
+string argument printed next to a sample line type for this plot.
+Useful for determining which data line represents what.
+A null string just draws the sample line.
+.LP
+.RE
+.IP "Example [1]"
+.DS L
+float xdata[500], ydata[500];
+graph("%X %Y %*n 500", xdata, ydata);
+.DE
+Draws a graph using xdata as a pointer of type (float\ *) (by default) to an
+array of data to be graphed, and similarly for ydata.
+Since there is a `*' modifier,
+the number of data points in the Y array is read from the string.  The
+X array is assumed to have the same number of points as the Y array.
+.IP "Example [2]"
+.DS L
+double xdatamin;
+char *xlabel;
+float *ydata;
+int npts;
+graph("%*X %*M 700. %m %l %Y %n %*l Phase",
+      xdatamin, xlabel, ydata, npts);
+.DE
+The %X token has a `*' so it has no data array associated with it;
+instead equal increments from the user-set xmin to the user set xmax will
+be used for the xdata. Note the ylabel is given in the string.
+.IP "Example [3]"
+.DS L
+double *ydata1
+float *ydata2
+int *ydata3;
+graph("%*X %*m0 %*M100 %Y%F %*n100 %Y%f %*n200 %Y%i %*n500",
+      ydata1, ydata2, ydata3);
+.DE
+Draws a multiple plot graph with the three ydata arrays and a dummy xdata
+array using equal increments from 0 to 100, the user-set min and max.
+Note the three ydata arrays have a different number of points and 
+different types of data pointers.
+.LP
+.I
+saxis(format, arg1, arg2, ... )
+  char *format;
+.R
+.LP
+Draws an axis in the one by one box of the current frame similar to graph().
+The size of the axis is determined by user supplied min and max, or a data
+array, in which case the routine finds the min and max of the data. 
+It adjusts
+these values to the nearest nice values and scales the current frame in the 
+direction
+of the axis and draws it accordingly. The current pen position is used to
+determine the offset of the axis, i.e. the Y value for the location of an X axis
+and vice versa. This is useful for drawing two axes that intersect at a point
+other than 0,0 in the 1 by 1 box because the pen position does not change
+from calls to scale or saxis.
+.LP
+The specifiers for this routine are:
+
+.IP \fI%X\fP
+This specifier declares an X axis;
+if the optional `*' modifier is used with this
+specifier then the min and max of the axis will be determined by min %m and
+max %M arguments as in graph(). Note the `*' must be used if no data is
+to be passed in the argument list.
+.IP \fI%Y\fP
+Same as above except in the Y direction.
+.IP \fI%m\fP
+Set the minimum value of the axis as in graph().
+.IP \fI%M\fP
+Set the maximum value of the axis as in graph().
+.IP \fI%l\fP
+This token declares a label for the axis as in graph().
+.LP
+The following tokens are the same as those used in graph() and are described 
+there.
+.IP \fI%t\fP
+.IP \fI%T\fP
+.IP \fI%L\fP
+.IP \fI%o\fP
+.LP
+The following tokens are used only if a data array is passed to the saxis routine.
+.IP \fI%d\fP
+.sp -1
+.IP \fI%i\fP
+.IP \fI%D\fP
+.sp -1
+.IP \fI%I\fP
+.IP \fI%h\fP
+.IP \fI%u\fP
+.IP \fI%f\fP
+.IP \fI%F\fP
+.IP \fI%n\fP
+.LP 
+.I
+axis(format, arg1, arg2, arg3, ... )
+  char *format;
+.R
+.LP
+Does the same thing as saxis except that it does not do any scaling
+before it draws the axis; it assumes that the user has done it.
+.LP
+.I
+dispts(format, arg1, arg2, arg3, ... )
+  char *format;
+.R
+.LP
+Dispts uses a format string like graph(), and simply draws the data passed to
+it in the same manner as graph, except that no scaling or axis drawing
+is done.
+It assumes the current frame is scaled so that moves and draws to data
+coordinates fall in the desired physical graph region.
+The tokens below are the same as in graph.
+.IP \fI%X\fP
+.IP \fI%Y\fP
+.IP \fI%n\fP
+.IP \fI%c\fP
+.IP \fI%m\fP
+Windows the data drawn.
+.IP \fI%M\fP
+Windows the data drawn.
+.IP \fI%d\fP
+.sp -1
+.IP \fI%i\fP
+.IP \fI%D\fP
+.sp -1
+.IP \fI%I\fP
+.IP \fI%h\fP
+.IP \fI%u\fP
+.IP \fI%f\fP
+.IP \fI%F\fP
+.IP \fI%o\fP
+.LP
+.I
+grid(format,arg1,arg2,arg3...)
+  char *format;
+.R
+.LP
+Draws a grid in the data area scaled by previous calls
+to saxis and or axis. The minimum arguments this routine can use are an X
+min and max, (either by passing a data array or %m and %M tokens) and the same
+for Y.  These should be the same arguments as passed to saxis or axis.
+
+The specifiers allowed are as follows:
+.IP \fI%X\fP
+.IP \fI%Y\fP
+.IP \fI%m\fP
+.IP \fI%M\fP
+.IP \fI%d\fP
+.sp -1
+.IP \fI%i\fP
+.IP \fI%D\fP
+.sp -1
+.IP \fI%I\fP
+.IP \fI%h\fP
+.IP \fI%u\fP
+.IP \fI%f\fP
+.IP \fI%F\fP
+.IP \fI%o\fP
+.IP \fI%G\fP
+.LP

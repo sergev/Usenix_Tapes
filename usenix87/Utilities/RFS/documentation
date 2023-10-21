@@ -1,0 +1,266 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 (Tek) 9/28/84 based on 9/17/84; site tekcrl.UUCP
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!alberta!ubc-vision!uw-beaver!tektronix!tekcrl!toddb
+From: toddb@tekcrl.UUCP (Todd Brunhoff)
+Newsgroups: net.unix-wizards,net.sources
+Subject: RFS design summary
+Message-ID: <439@tekcrl.UUCP>
+Date: 13 Jan 86 18:39:28 GMT
+Date-Received: 16 Jan 86 01:02:34 GMT
+Reply-To: toddb@tekcrl.UUCP (Todd Brunhoff)
+Organization: Tektronix, Beaverton OR
+Lines: 252
+Xref: plus5 net.unix-wizards:8263 net.sources:2750
+
+The following is a summary of the implementation details for RFS, a public
+domain distributed file system which was posted recently to mod.sources
+along with an announcement to net.sources and net.unix-wizards.  This
+is being posted at the request of Mike Muuss (a very reasonable request,
+indeed) who is the moderator for Unix-Wizards at BRL.
+
+I will be at the Usenix Conference (I am 6'4', medium build, with graying
+brown hair) for Wednesday and Thursday attending the Window tutorial and
+technical session if anyone has more questions.  I will also be carrying
+one copy of an RFS tape for those of you that do not receive mod.sources.
+Be sure to bring your own tape: you are responsible for making arrangements
+to copy it.  I currently do not have any plans for starting a tape distribution
+service or for fixing any major bugs in the current distribution because
+of the present demands on my time at work, but I would very much like to
+receive all bug fixes so that I may review and redistribute them.
+
+So far there has been no confusion, but I want to emphasize that although
+I work at Tektronix, this software has nothing whatsoever to do with an
+excellent, but proprietary distributed file system, called DFS, available
+on the 6000 series Tektronix workstation.  The work I did on RFS is for
+my masters degree at University of Denver.
+
+I might also note that RFS is not product-quality (grad students are soooo
+sloppy, aren't they?).  I believe that it works very well, but neither
+Tektronix, the University of Denver nor myself accept any responsibility
+for any damage done directly or indirectly by this software.  Read the
+disclamer included in all the source files.  Send no money.  Modify it
+to your hearts content (except for the disclaimers).
+
+
+				Thanks for all the interest,
+
+				Todd Brunhoff
+				toddb%crl@tektronix
+				tektronix!crl!toddb
+
+
+Design Goals
+------------
+There were three:
+	1. Very installable on 4.2/4.3 flavor unix.  Small localized
+	   changes.  No changes in basic 4.2 design.
+	2. Extremely low overhead.  No large code segments inserted into
+	   the normal path of 4.2 execution.
+	3. Complete transparancy.
+
+Installation
+------------
+Because I was able the meet goal #1 and #2 above, I was able to make
+installation in 4.2/4.3 and Pyramid 2.5 unix completely automatic...
+just run a shell script, and you end up with complete RFS kernel
+sources, either modified where they lie in /usr/sys or kept in a
+private directory with the bulk symbolically linked in.
+
+RFS depends heavily on the 4.2 kernel implementation of sockets, and so
+is not easily portable to System V.
+
+List of System Calls Which Gain ``Remote'' Capability
+-----------------------------------------------------
+  One path name     Two path names     File descriptor      Other
+  *************     **************     ***************      *****
+    access()          link()              close()           fork()
+    chdir()           readname()          dup()             vfork()
+    chmod()           symlink()           dup2()            exit()
+    chown()                               fchmod()
+    creat()                               fchown()
+    execv()                               fcntl()
+    lstat()                               flock()
+    mkdir()                               fstat()
+    mknod()                               ftruncate()
+    open()                                ioctl()
+    rmdir()                               lseek()
+    stat()                                readv()
+    readlink()                            readv()
+    truncate()                            select()
+    unlink()                              write()
+    utimes()                              writev()
+
+Profile of Remote Access
+------------------------
+  Pathname access:
+	- Process ``A'' makes a one or two path system call.
+	- the normal system call runs, and at some point calls namei()
+	  to translate the path into an inode.
+	- Namei() discovers that the file is ``remote'' (see Namei Changes
+	  below), and returns a NULL to the kernel level system call
+	  with u.u_error = EISREMOTE.  As a side effect of determining
+	  the file's remoteness, the portion of the path falling after
+	  the remote mount point is saved in an mbuf (chain, if necessary).
+	  Also, at this point, the process has been marked as having made
+	  a remote access, and which system was accessed.
+	- The syscall() routine (kernel dispatcher of system calls) sees
+	  this and starts up the remote version of the system call.
+	- The system call is packaged and sent (see Transport Mechanism)
+	  to the server.  The client process is not allowed to be interrupted
+	  (but may sleep) until the reply arrives.
+	- The return value or error number obtained by the server is
+	  returned to the process.
+
+  File descriptor access:
+	- A file descriptor returned by a remote version of creat(), open(),
+	  or fcntl() is passed to one of the File Desciptor system calls.
+	  Since the process is marked as having made a remote access(),
+	  the remote version of the system call is tried first.
+	- Again, the system call is sent to the server.  If it is a write
+	  or a writev, the data is sent along with it.  If a read or readv,
+	  the data is read along with the reply.  Currently, the entire
+	  data associated with the read or write is sent before any other
+	  operation to that host can happen.  Typically, its not bad, but
+	  potentially, the connection could become rather slow.
+
+  Other system calls:
+	- fork(), vfork(), and exit() are also sent to the server so that
+	  it can fork (for the sake of file descriptors and current
+	  directories), or throw away state information for the that
+	  process.
+
+Remote Pathname Syntax
+----------------------
+  While almost all distributed file systems allow the use of symbolic
+  links to relocate a ``remote'' file, the final syntax is important to
+  know.  Some implementations of distributed file systems choose to place
+  the burden for deciding remoteness of a file on the pathname syntax
+  itself.  Some examples are:
+
+	host:/etc/passwd
+	//host/etc/passwd
+	/../host/etc/passwd
+
+  Others place the burden in attributes associated with a ``mount point''
+  similar the traditional mount(2) system call.  This, of course,
+  provides more natural pathnames, and is used by RFS, et. al.:
+
+	/net/host/etc/passwd
+	/host/etc/passwd
+
+  I believe that the special path names or the special attributes or
+  anything other than a plain directory is needed partly because no UNIX
+  program should ever find these gateways through normal perusal of a
+  file system.  Imagine how long the command ``find / -print'' would take
+  if it traversed every remote host as well as itself!
+
+Namei Changes and Mount Points
+------------------------------
+  RFS uses a plain file as a mount point because
+	- the simplicity of the code changes to namei()
+	- don't have to add another file type for UNIX utilities to learn
+	- The test for ``remoteness'' doesn't happen in namei() unless
+	  we are considering a plain file with a trailing ``/'', which
+	  means that the overhead to processes not using RFS is
+	  virtually none!
+	- find, et. al., will not ``descend'' a mount point which is
+	  a plain file.
+
+  The path name ``/host'' still remains a valid local filename, but
+  /host/ or anything longer results in a special case, which namei
+  labels with the error EISREMOTE
+
+  When hosts are mounted (by convention, on /hostname), the mount command,
+  /etc/rmtmnt, provides the internet address found in /etc/hosts.
+
+Generic Mount Points
+--------------------
+  In addition to mounting a specific host, say foovax, on the mount point
+  /foovax, you can have a generic mount point, say /net.  Typically, a
+  reference to a pathname like ``/net/foovax/etc/passwd'' will cause the
+  kernel to wake up the nameserver and pass him ``/foovax'' for
+  translation to an internet address.  If ``foovax'' is a valid host name
+  in /etc/hosts, the nameserver will pass this to the kernel.  After
+  receiving the address to call, the remote access to that machine is
+  just the same as with /host.
+
+Transport Mechanism
+-------------------
+  On first access, the server host is called using the internet information
+  supplied by /etc/rmtmnt or the nameserver, and using a boiled down version
+  of the connect() system call.  Hence, RFS depends entirely upon socket
+  level IPC communication;  any host you can call with rlogin, you can set
+  up to use RFS.
+
+Permissions Across RFS
+----------------------
+  Be careful not to confuse the words ``client'' and ``server''.  A
+  client is the process making a remote access to machine ``x''.  The
+  server is the process running on machine ``x'' which performs the
+  system calls on behalf of the client.
+
+  When the server is started (which also acts as the nameserver, by the
+  way), it digests /etc/passwd, /etc/group and .rhosts files associated
+  with every user.  In addition, whenever a client does an /etc/rmtmnt
+  command, that command sends its /etc/passwd file to the server.
+  Similarly, if a server receives a call from a client, but has not
+  received an /etc/passwd file, then the server calls the client's
+  server, and asks for it.
+
+  When a server receives a message from a client process whose uid number
+  is ``n'', it consults the client's /etc/passwd file (which it already
+  received).  If it finds a matching uid number, then it checks to see if
+  the uid name is allowed login privileges in some user's .rhosts file on
+  the server's host.  If a user allows it, then the server for that
+  process sets the effective user id to that user's uid number (with
+  seteuid(2)) and sets the groups associated with that user (with
+  setgroups(2)).
+
+  Most of the checking and searching is done when server first starts up,
+  and is kept in LRU lists for fast access.  Mappings from client uid to
+  server uid are already done by the time a client makes a connection.
+
+  If more than one user on the server host allows login access to that
+  client's user, then the last user in the server's /etc/passwd takes
+  precedence.  However, if the one of the users on the server hosts has
+  the same uid name as that on the client, that mapping takes precedence
+  over all other mappings.  Note that this means the user ``x'' may have
+  remote login privileges for users ``y'' and ``z'' on some other host,
+  but his access permissions over RFS will be for one or the other, never
+  both.
+
+  If a user changes his .rhosts file on a server, that change is not
+  noticed until the server is restarted.  Fortunately, restarting the
+  server is simple.
+
+  If the server host on which the user wanted to change his .rhosts file
+  is currently connected to the client, that connection must be severed
+  and a new one started.
+
+Changing Directory to a Remote Host
+-----------------------------------
+  This is done by simply making the current directory inode (u_cdir) for
+  the process to be that mount point file inode described above.  This
+  means that paths beginning with ``/'' are handled normally, but
+  relative pathnames ``fail'' immediately with EISREMOTE.
+
+Speed Improvements
+------------------
+  Most system calls are synchronous, i.e. information must pass both ways
+  or it is important to wait for the outcome.  This means that a remote
+  system call cannot go any faster than a full duplex message takes to
+  travel from one host to another.  However, some system calls, like
+  close(), fork(), vfork, exit() and sometime lseek() can be done
+  asynchronously, or half-duplex, because the outcome is known ahead of
+  time by the client or we just don't care.  This tends to add a
+  suprising amount of speed to some programs using RFS, particularly ones
+  that use lseek() heavily.
+
+Significant Shortfalls
+----------------------
+  Ioctl() and select() are not implemented.  Simple tape access (i.e. open,
+  read, write, close) will probably work, but that's it.
+
+  Other, less impacting bugs, from my perspective, are listed in the
+  installation document supplied in mod.sources.  All bugs that I am aware
+  of are listed there.

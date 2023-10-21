@@ -1,0 +1,359 @@
+.so /usr/lib/tmac.d
+.th M7 I
+.sh NAME
+M7-pattern matching filter (version 2.0)
+.sh SYNOPSIS
+M7 [-n] [-t] [-p] [-a "<legal macfile entry>"] <macfile>
+.sh DESCRIPTION
+.ul
+M7 
+will replace any string that matches a given pattern
+with the appropriate replacement text.
+
+.ul
+Macro file.
+Macfile contains the matching and replacement information.
+This information may also be passed to M7 through
+the argument list using the -a option. A
+typical entry in macfile is of the form:
+
+.ti +4
+ '<pattern>' = '<replacement text>';
+
+This is the basic form of a macro definition. However, there
+are other forms of this basic structure which will be
+discussed later.
+
+A simple example of a macro definition is the following:
+
+.ti +4
+ 'dog' = 'cat';
+
+This would instruct M7 to replace any occurrence of the
+string "dog" with the string "cat".
+
+.ul
+Patterns. 
+A pattern can consist of any sequence of characters,
+but certain characters have special meanings.
+
+1.  '?' matches any single character.
+
+2.  '*' matches any number of characters.
+
+3.  "[c1c2.....cn]" matches any character from the specified
+class of characters.
+
+4.  "[~c1c2.....cn]" matches any character which is not in
+the specified class of characters.
+
+5.  '^' matches the null string at the beginning of the line.
+
+6.  '$' matches the null string at the end of the line.
+
+7.  '\\' escapes the special meaning of a character.
+
+8.  "{....}" tags the text which is matched in between the
+braces.
+
+9.  "&(i)" matches the text currently pointed to in stack 'i'
+where 'i' is any lower case letter.
+
+10. "#(i)" matches the current value of counter 'i'
+where 'i' is the same as for 9.
+
+The special meaning of a character in a text pattern is
+lost when escaped, inside [...], or for:
+
+.in +5
+.nf
+^ not at the beginning
+$ not at the end
+* at the beginning or the end
+.fi
+.in -5
+
+An example of a pattern using some of these
+special characters would be:
+
+.ti +5
+^?A{*}B[:,]$
+
+This would match any  line beginning with
+any character followed by "A" followed by any number
+of characters terminated by 'B' and with the line
+ending with a ':' or a ','.
+
+.ul
+Replacement text.
+The replacement text can consist of any sequence
+of characters. The special characters recognized
+in the replacement text are as follows:
+
+1.  "{n}" inserts the text matched by tag number n where n
+is a number from 1 to 9.
+The digits reference the corresponding occurrence
+of a tag structure in a pattern.
+
+2. '\\' escapes the special meaning of a character.
+
+3. "&(i)" inserts the text pointed to in stack 'i'
+where 'i' is any lower case letter.
+
+4. "#(i)" inserts the current value of the counter 'i'
+where 'i' was defined previously.
+
+The following is an example of a pattern and
+its replacement text utilizing some of the special
+symbols.
+
+.ti +4
+ 'A{*}B'='({1})';
+
+This would match any text beginning with 'A'
+and terminated by 'B' and replace it with the
+text matched between 'A' and 'B' enclosed in parentheses.
+
+.ul
+Line continuation.
+Macro definitions may be continued across logical
+line limits by using the special symbol '/'.
+When the preprocessor encounters a '/' it will ignore
+all text until another '/' is encountered. Processing will
+then be continued from that point.
+The following is an example of a line continuation:
+
+.in +4
+.nf
+ 'FIND THIS TEXT' = ' AND REPLACE IT WITH/
+                    / THIS TEXT ';
+.fi
+.in -4
+
+.ul
+Stacks.
+M7 supports 26 user stacks; each is identified by using
+a lower case letter.
+The purpose of the stacks is to save text
+so that it can later be used in the matching
+or replacement part of other macro definitions.
+There are several different constructions
+which use the special symbol '&'. They are
+as follows:
+
+1. "&(i)" is replaced by what is currently being
+pointed to in the stack identified by 'i'.
+
+2. "&(n,i)" puts the text matched by tag number
+n into stack 'i'.
+
+3.  "&(0<text>,i)" puts the indicated text into stack 'i' at the
+position currently being pointed to by the stack pointer.
+[Note: this contruction is not yet implemented]
+
+4. "&(i=n)" sets the stack pointer to n.
+
+There are two stack operators. They are '+' and '-'.
+Their functions are as follows:
+
+1. '-' decrements the stack pointer.
+
+2. '+' increments the stack pointer.
+
+
+These operators operate on a stack through the
+stack identifier. An operator preceding or following a stack
+identifier indicates that the operation should be
+done before or after the particular function is
+performed.
+
+Here are some example macro definitions using
+stacks.
+
+.in +4
+.nf
+ 'call doit({*},{*})' = 'doit({1},{2})\\;',&(1,a+),&(2,b+);
+.fi
+
+.in -4
+.fi
+This macro would take a Fortran type subroutine call and
+change it to a C type subroutine call. Then, the
+arguments would be saved on stacks a and b, and the stack
+pointers for both stacks would be incremented.
+.in +4
+
+ 'dump &(a)' = '&(a+)';
+
+.in -4
+.fi
+This macro will search a line for an occurrence of the
+keyword "dump". Then, it will try to match the following
+text with what is currently being pointed to in stack 'a'.
+If the match is successful then the contents of the stack
+will replace the text and the stack pointer to stack 'a' 
+will be incremented.
+
+.ul
+Counters.
+M7 allows the user to have 26 general purpose counters.
+They are useful for doing things such as, line numbering
+or counting the number of times a pattern was matched.
+The counters are identified by using a lower case letter
+in the same manner as stacks.
+The special counter symbol is '#'. There are several
+constructions which utilize this symbol. They are as follows:
+
+1. "#(i)" is replaced by the current value of counter 'i'.
+
+2. "#(i=n)" set counter 'i' to n where n can be
+any legal integer. The default initialization is 1.
+
+3. "#(i,n)" sets the increment to n where n is the same as in 2.
+The default increment is 1.
+
+
+The counters are incremented and decremented in the same manner
+as the stack pointers are incremented and decremented.
+Here are some examples to clarify how counters can be used.
+
+.in +4
+ '^{[~0-9]*\\;}$' = '#(a+) {1}';
+
+.in -4
+This macro would match any line 
+not beginning with a number and 
+ending with a ';' and
+replace it with the same line with a line number
+in front of it. The counter is then incremented.
+
+.in +4
+ 'RESET COUNTER' = '',#(i=1);
+
+.in -4
+This macro would search for the string "RESET COUNTER" in the
+input line and delete it. Then the counter would
+be set to 1.
+
+.ul
+Rescan feature.
+M7 will repetitively match and replace the text on
+an input line
+according to the macro definitions until no more matches
+can be found. The algorithm for the matching
+and replacement of the input text is as follows:
+
+.in +5
+.nf
+1) Read next the next line from standard input
+2) If end of file then stop
+3) Try to match first pattern
+4) If successful then do replacement and goto step3
+5) Else try to match the next pattern
+6) If end of macro file then output line and goto step 1
+7) Else if successful do replacement and goto step 3
+8) Else goto step 5
+.fi
+.in -5
+
+The rescan feature can be turned off for a particular
+macro by putting '<' between the pattern and the
+replacement text. The macro definition then looks
+like the following:
+
+.in +4
+ '<pattern>' < '<replacement text>';
+.in-4
+
+If the pattern is matched, this tells M7 not to
+try to rematch the line.
+[Note: this feature is not yet implemented]
+
+.ul
+Comments.
+Comments may be inserted into the macro file by surrounding
+the text with quotation marks.
+The preprocessor will ignore any text found between quotation
+marks.
+Comments may not be placed in the actual macro
+definition (i.e. between single quotes).
+
+.ul
+Control character.
+[Note: this feature is not yet implemented]
+The character '%' is a special control character. If this
+character is found in the first column of the input text,
+it instructs M7 to perform a special function.
+The functions fall into two categories.
+
+.in +5
+1. Macro generation
+
+2. Global program flag alteration
+
+.in -5
+Macros can be generated from the input text by typing
+
+.ti +5
+%MACRO <pattern> = <replacement text>%
+
+Program flags can be set by typing
+
+.ti +5
+%<flagname> 1(or 0)
+
+
+where 1 and 0 mean ON and OFF respectively and "flagname" can
+be "TRACE" or "RESCAN".
+
+.ul
+Options.
+M7 has several calling options. Any one or all of them
+may be specified.
+The following is a list of the options and what they do.
+
+1. The -t option will print a trace of the pattern
+matching and replacement on standard output.
+
+2. The -n option prints only the matched lines on standard
+output.
+
+3. The -p option suppresses the prompt for initial input.
+
+4. The -a option takes the character string which follows as
+a macro definition. The macro definition must be surrounded
+by quotations marks.
+.sh DIAGNOSTICS
+
+.nf
+"M7: cannot open pattern file"   pattern file does not exist 
+"OMATCH: can't happen"           bad pattern file entry
+"GETPROCPAT:error in macro file" macro file entry is too large
+.fi
+
+.sh BUGS
+
+It is possible to get in an indefinite replacement
+loop. For example, a file containing the following
+
+.in +4
+.nf
+ 'A' = 'B';
+ 'B' = 'A';
+.fi
+.in -4
+
+would cause M7 to loop indefinitely. Use the -t option to
+catch this.
+
+.sh FILES
+
+M7_WKS.tmp  temporary file which contains the processed patterns.
+
+.sh "SEE ALSO"
+
+.nf
+"M7 user's manual", Marriott, Hardgrave & Salazar
+"SOFTWARE TOOLS", Kernighan & Plauger
+grep(I),m6(II)
+.fi

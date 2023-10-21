@@ -1,0 +1,80 @@
+These changes are the primary hook into the operating system for detecting
+a "remote" file.
+***************
+*** 97,102
+  	struct inode *pdp;		/* saved dp during symlink work */
+  	int i;
+  	int lockparent;
+  
+  	lockparent = flag & LOCKPARENT;
+  	flag &= ~LOCKPARENT;
+
+--- 97,105 -----
+  	struct inode *pdp;		/* saved dp during symlink work */
+  	int i;
+  	int lockparent;
++ #ifdef REMOTEFS
++ 	long	remote;
++ #endif REMOTEFS
+  
+  	lockparent = flag & LOCKPARENT;
+  	flag &= ~LOCKPARENT;
+***************
+*** 145,150
+  	 * Check accessiblity of directory.
+  	 */
+  	if ((dp->i_mode&IFMT) != IFDIR) {
+  		u.u_error = ENOTDIR;
+  		goto bad;
+  	}
+
+--- 148,169 -----
+  	 * Check accessiblity of directory.
+  	 */
+  	if ((dp->i_mode&IFMT) != IFDIR) {
++ #ifdef REMOTEFS
++ 		remote = isremote(dp, cp, nbp->b_un.b_addr);
++ 		/*
++ 		 * If it is really local, then start again at the root.
++ 		 */
++ 		if (remote < 0) {
++ 			iput(dp);
++ 			dp = rootdir;
++ 			ilock(dp);
++ 			dp->i_count++;
++ 			fs = dp->i_fs;
++ 			cp = nbp->b_un.b_addr;
++ 			goto dirloop2;
++ 		}
++ 		else if (! remote)
++ #endif REMOTEFS
+  		u.u_error = ENOTDIR;
+  		goto bad;
+  	}
+***************
+*** 382,387
+  					iput(u.u_pdir);
+  					goto bad;
+  				}
+  			}
+  		}
+  		brelse(nbp);
+
+--- 401,417 -----
+  					iput(u.u_pdir);
+  					goto bad;
+  				}
++ #ifdef REMOTEFS
++ 				/*
++ 				 * don't allow anyone to remove a remote mount
++ 				 * point.
++ 				 */
++ 				if (rmt_host(dp, &i)) {
++ 					iput(u.u_pdir);
++ 					u.u_error = EBUSY;
++ 					goto bad;
++ 				}
++ #endif REMOTEFS
+  			}
+  		}
+  		brelse(nbp);

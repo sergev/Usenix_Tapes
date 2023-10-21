@@ -1,0 +1,151 @@
+Received: from wucs by plus5.uucp (UIUC-5.31/03Jun86-09:31:46) with UUCP
+	id AA07506; Mon, 16 Jun 86 01:01:22 EDT
+Received: from seismo by wucs.UUCP with UUCP; Sun, 15 Jun 86 23:59:18 CDT
+Received: by seismo.CSS.GOV; Sun, 15 Jun 86 21:52:16 EDT
+Received: from bboards by ICS.UCI.EDU id a000751; 13 Jun 86 12:42 PDT
+Received: from nrtc-gremlin by ICS.UCI.EDU id a000724; 13 Jun 86 12:37 PDT
+Received: from localhost by NRTC-GREMLIN.NORTHROP.COM id a027747;
+          13 Jun 86 12:37 PDT
+To: ICS.UCI.EDU!mh-workers
+Subject: Fixes for MH#6.5: scan & show
+Reply-To: wucs!seismo!ICS.UCI.EDU!mh-workers
+Date: Fri, 13 Jun 86 12:37:14 -0700
+Message-Id: <27745.519075434@nrtc-gremlin.northrop.com>
+From: John Romine <seismo!nrtc-gremlin.arpa!jromine>
+
+Here are a few fixes for MH-6.5.
+
+fix 1:	scan and show take a -form argument.  If you specify a relative path
+	to the -form switch (e.g., -form ./formname), it is unable to find
+	the file.
+	(uip/scan.c, uip/show.c, conf/config/config.c)
+
+fix 2:	the ">>" string was missing from the scan line (it appears if the
+	complete body fits on the scan line) in the default scan string, 
+	as well as 3 scan library templates.
+	(h/scansbr.h, support/general/scan.{time,timely,size})
+
+Be sure to reconfigure as well as recompile after installing these fixes,
+since conf/config/config.c changed.
+
+/JLR
+
+*** conf/config/:config.c	Fri Jun 13 12:24:42 1986
+--- conf/config/config.c	Fri Jun 13 12:24:46 1986
+***************
+*** 70,76 ****
+  #endif	MHRC
+  
+  	default: 
+! 	    if (access ((cp = m_maildir (file)), 04) != NOTOK)
+  		return cp;
+      }
+  
+--- 70,76 ----
+  #endif	MHRC
+  
+  	default: 
+! 	    if (access ((cp = m_mailpath (file)), 04) != NOTOK)
+  		return cp;
+      }
+  
+*** uip/:scan.c	Tue May 20 19:09:29 1986
+--- uip/scan.c	Fri Jun 13 12:12:53 1986
+***************
+*** 170,175 ****
+--- 170,177 ----
+  	folder = m_getfolder ();
+      maildir = m_maildir (folder);
+  
++     nfs = new_fs (form, format, FORMAT);	/* must be before chdir() */
++ 
+      if (chdir (maildir) == NOTOK)
+  	adios (maildir, "unable to change directory to");
+      if (!(mp = m_gmsg (folder)))
+***************
+*** 185,192 ****
+      m_replace (pfolder, folder);
+      m_sync (mp);
+      m_update ();
+- 
+-     nfs = new_fs (form, format, FORMAT);
+  
+      ontty = isatty (fileno (stdout));
+  
+--- 187,192 ----
+
+*** uip/:show.c	Tue May 20 23:36:20 1986
+--- uip/show.c	Fri Jun 13 12:21:27 1986
+***************
+*** 136,141 ****
+--- 136,147 ----
+  		    continue;
+  
+  		case FORMSW:
++ 		    vec[vecp++] = --cp;
++ 		    if (!(cp = *argp++) || *cp == '-')
++ 			adios (NULLCP, "missing argument to %s", argp[-2]);
++ 		    vec[vecp++] = getcpy (libpath(cp));
++ 		    continue;
++ 
+  		case PROGSW:
+  		case LENSW:
+  		case WIDSW:
+
+*** h/:scansbr.h	Fri Jun 13 12:27:38 1986
+--- h/scansbr.h	Fri Jun 13 10:30:22 1986
+***************
+*** 15,19 ****
+  %02(mon{date})/%02(mday{date})%<{date} %|*%>\
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}%>"
+  #else UK
+  #define	FORMAT	\
+--- 15,19 ----
+  %02(mon{date})/%02(mday{date})%<{date} %|*%>\
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}>>%>"
+  #else UK
+  #define	FORMAT	\
+***************
+*** 21,25 ****
+  %02(mday{date})/%02(mon{date})%<{date} %|*%>\
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}%>"
+  #endif	UK
+  
+--- 21,25 ----
+  %02(mday{date})/%02(mon{date})%<{date} %|*%>\
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}>>%>"
+  #endif	UK
+  
+*** support/general/zscan.time	Sun Apr 27 17:55:49 1986
+--- support/general/scan.time	Fri Jun 13 10:31:04 1986
+***************
+*** 5,6 ****
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}%>
+--- 5,6 ----
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}>>%>
+
+*** support/general/zscan.timely	Tue Apr 29 23:20:50 1986
+--- support/general/scan.timely	Fri Jun 13 10:31:10 1986
+***************
+*** 8,9 ****
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}%>
+--- 8,9 ----
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}>>%>
+
+*** support/general/zscan.size	Tue Apr 29 23:20:49 1986
+--- support/general/scan.size	Fri Jun 13 10:30:53 1986
+***************
+*** 4,5 ****
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}%>
+--- 4,5 ----
+  %<(mymbox{from})To:%14(friendly{to})%|%17(friendly{from})%>  \
+! %{subject}%<{body}<<%{body}>>%>

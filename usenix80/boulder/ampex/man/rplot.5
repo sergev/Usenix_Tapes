@@ -1,0 +1,71 @@
+.TH RPLOT 5 AMPEX
+.SH NAME
+\fBrplot\fR \- raster plot file format
+.SH DESCRIPTION
+.I "Raster plots"
+are made up of rows of dots.
+Raster or scan-line plotting devices expect a raster plot file as input,
+which consists of a sequence of dot
+row \fBimages\fR, each preceded by a word of header information
+about the row.  The dot row images are in \fBword\fR order, with
+the left-most bit in each 16-bit word representing the leftmost dot of 16 dots.
+A \fB1\fR\-bit indicates the dot is intensified.
+.LP
+The low byte (right byte) of the row header word is a
+.ul
+\fBcount\fR
+of the raster data \fBwords\fR in the row.
+The high byte (left byte) contains the number of \fBwords\fR to
+.ul
+\fBoffset\fR
+the row data when it is plotted.  Thus the row data words need not contain
+leading or trailing zeros.  The format for one row is shown below:
+.LP
+ __________________________________________________________
+.br
+| offset : count |    word  0     |    word  1     |       |
+.br
+|15 ... 8:7 ... 0|................|................|  ...  |
+.br
+|__header_word___|____________row_dot_image________________|
+.LP
+A blank raster row is represented by just a header word with a count of 0.
+The count may range from 0 to 254 words, and the offset from 0 to 254 words.
+Various plotting devices will use as much of the raster data as is
+physically possible.
+.LP
+If the count is 255 (not a valid count), the offset is interpreted as
+an ASCII function character, and there is no raster data.
+Not all devices support all the function codes given below.
+.IP \&'\fBf\fR' 6
+formfeed - move the paper to the top of a new form.
+.IP \&'\fBh\fR' 6
+home - move the paper out of the toner wash area.
+.IP \&'\fBc\fR' 6
+cut - cut the paper here.
+.IP \&'\fBt\fR' 6
+text - interpret the following bytes as ASCII characters
+to be printed until a NUL character '\0' is found.  An additional byte
+after the NUL will be discarded if necessary to get to an even byte boundary.
+The control characters newline, return, formfeed, tab, and backspace are
+all properly interpreted.  Backspace acts as it does on most CRT terminals.
+If the last line of text does not contain a newline, one is forced out (i.e. it
+is not possible to use several '\fBt\fR' commands to construct a line).
+.IP \&'\fBT\fR' 6
+simultaneous text and raster - interpret the following
+bytes as ASCII characters to be printed, as with the '\fBt\fR' command.
+Immediately after the NUL character(s), a series of raster data lines
+must appear.  These will be inclusively-ored with the dots produced
+for each character.
+Enough raster lines to completely print the text line must follow, or
+unpredictable results will occur.  See
+.I mp(4)
+for specifications.
+.SH FILES
+*.rp     standard naming convention for rplot files
+.SH "SEE ALSO"
+vplot(5), mp(4), mp(1).
+.SH AUTHOR
+John Nickolls, Ampex Corp.
+.SH BUGS
+The raster header should be 2 words long to accommodate wide plotters.

@@ -1,0 +1,200 @@
+
+
+
+                                       Table of Contents
+             0.1.  New commands                                                       1
+             0.2.  Syntax of the commands                                             1
+             0.3.  Vt52 emulation                                                     2
+             0.4.  Problems with loosing characters.                                  3
+             0.5.  Com card drivers                                                   3
+             0.6.  Loading kermit 3                                                   4
+
+
+                                 UPDATES FOR APPLE DOS KERMIT
+
+       0.1.  New commands
+
+            These new commands have been added:
+            1. LOG
+            When connected to a remote site, log the remote sessions  printing  to  the
+       specified file. The file type and file warning protocols are observed. This com-
+       mand is dependent upon the flow control (xon&xoff) working. Without flow control
+       there  is  little possibility of getting a correct copy of the terminal session.
+       The loging begins when you connect to the remote and is terminated when you  es-
+       cape back to the local kermit with the ESCAPE character followed by the "C" com-
+       mand.
+            2. SET PRINTER
+            This allows one to turn the printer on for printing what  is  displayed  on
+       the  screen.  With  all the different printers and printer cards there will be a
+       lot of variability here but flow control (xon&xoff) is  probably  required  when
+       you  are  connected to a remote site. The printer can also be toggled on/off via
+       the ESCAPE character followed by the command "P"
+            3. SET FLOW
+            This allows one to use the xon&xoff protocol when you are  connected  to  a
+       remote site. Delay timings and wake up timings are part of this command. Setting
+       the  timings will have to be set by experience.  Perhaps the best way to set the
+       timings is to bring the values down until you get failures and then  double  the
+       timing figure.  Both LOG and SET PRINTER will probably depend on flow control.
+            4. SET DISPLAY 80-COLUMN
+            This allows one to specify a 80 column display. Several  commands  are  re-
+       quired for the 80 column display to work correctly:
+           $0a - line feed, move cursor down one line
+           $0b - vt, clear screen from cursor down
+           $0c - form feed, clear screen and position to top left
+           $16 - syn, reverse scroll the screen
+               - this command necessary only for vt52 emulation
+           $1c - nak, move cursor right one
+           $1d - gs, clear line from cursor to the right
+           $1e,ch,cv - 3 chs in a row position cursor to ch & cv
+                     - ch & cv each have a bias of 32
+            5. SET BAUD
+            This command allows you to set the baud rate of your com card  if  the  com
+       card allows it.
+       0.2.  Syntax of the commands
+
+            1. LOG filespec
+            Filespec is the name  of  a  file  on  the  micro  that  will  receive  the
+       characters  received from the remote. All the characters from the remote will be
+                                               1
+
+                                 UPDATES FOR APPLE DOS KERMIT
+
+       recorded in the file except carrage return followed by line feed which  will  be
+       reduced to a carrage return.
+            2. SET PRINTER {on/off/slot} number
+                 ON - turn the printer on, slot number is required
+                 OFF - turn the printer off
+                 SLOT number - printer card is in slot "number"
+            3. SET FLOW {off/xon/delay/wakeup} number
+                 OFF - turn off flow control
+                 XON - turn on xon&xoff flow control with the remote
+                 DELAY number - delay the micro til xoff takes effect
+                 WAKEUP number - restart the remote with a xon
+            Delay followed by number(including 0) delays the program  for  number  mil-
+       liseconds  after  the xoff is given to the remote. This delay allows the xoff to
+       take effect before the program continues. Wakeup followed by a  number(including
+       0) is used to wake the remote up number milliseconds after the xoff has been gi-
+       ven by giving the remote a xon.
+            4. ESCAPE {p/c/s/?/0/b/d/ESCAPE}
+            While connected to the remote the ESCAPE character followed by one  of  the
+       following produces:
+            ? - display this list of options
+            B - transmit a break signal to the remote
+            C - close the connection with the remote and return to micro
+            D - drop the phone line to the remote
+            P - toggle the printer on/off
+            S - give status of current connect
+            0 - transmit a null to the remote
+            ESCAPE - transmit the ESCAPE character to the remote
+            5. SET DISPLAY 80-COLUMN number
+            Number is the slot the 80 column card is in.
+            6. SET BAUD number
+            Number is the baud rate for your com card. For the super serial it  can  be
+       300 to 19200.  Notice the com card is handled from within kermit for most every-
+       thing we can think of.
+       0.3.  Vt52 emulation
+
+            Vt52 emulation has been reworked and should work much better,though slower.
+       One thing that is required is your 80 column card must handle the $16 command in
+       order for reverse scrolling to work. The //e 80 col handles this fine.
+            If you are on a un*x system then it would be better and faster to  use  one
+       of the following termcaps and leave vt52 emulation off.
+       -------
+
+       #From: decvax!cbosgd!cbdkc1!mww Mike Warren
+       Mm|aepro|apple-aepro|Apple II+ running ASCII Express Pro--vt52:\
+               :bs:co#80:li#24:up=\EA:nd=\EC:ce=\EK:cl=300^L:cd=\EJ:ho=\EH:\
+                                               2
+
+                                 UPDATES FOR APPLE DOS KERMIT
+
+               :cm=\EY%+ %+ :
+       # The following six apple entries submitted by jtjones@nosc
+       A0|apple|Apple ][+ with a Videx Ultraterm card in 80x24 mode:\
+          :bs:co#80:li#24:up=^_:nd=^\\:ho=^Y:ce=2^]:cd=20^K:cl=35^L:cm=^^%r%+ %+ :
+       A1|app96|Apple ][+ with a Videx Ultraterm card in 96x24 mode with extras:\
+          :bs:co#96:li#24:up=^_:nd=^\\:ho=^Y:ce=2^]:cd=2*^K:cl=40^L:cm=^^%r%+ %+ :\
+          :am:bw:so=^O:se=^N:
+       A2|app48|Apple ][+ with a Videx Ultraterm card in 80x48 mode:\
+          :co#80:li#48:tc=app96:
+       A8|app128|Apple ][+ with a Videx Ultraterm card in 128x32 mode:\
+          :co#128#li#32:tc=app96:
+       A4|aepro2|Apple ][+ with a Videx Ultraterm card running Ascii Express Pro:\
+          :bs:co#80:li#24:up=\EA:nd=\EC:ho=\EH:ce=2\EK:cd=2*\EJ:cl=2*^L:cm=\EY%+ %+ :
+       A5|app80|Apple ][+ with a Videx Ultraterm card --  same as 'apple' with extras:\
+          :am:bw:so=^O:se=^N:tc=apple:
+       #From medin@nosc for Franklin and a Apple super serial card
+       fr|franklin|franklin 1000/1200 with ace display and apple super serial:\
+          :am:so=^O:se=^N:do=^J:\
+          :cl=2^Z0:\
+          :cm=\036%r%+ %+ :\
+          :bs:co#80:li#24:up=\037:nd=^U:ho=^Y:ce=2^]:cd=2^K:
+       #Hayes micro modem(for lower case "poke 1784+slot,0" befor calling)"medin@nosc"
+       fm|framm|Franklin 1000/1200 with Hayes micro modem:\
+          :am:up=20\037:nd=20^U:so=20^O:se=20^N:tc=apple:
+       -------
+       Here is a termcap that I received, we have not had a chance to use it yet.
+
+       --------------------------------------------------------------------------------
+       #From stoner@qumix but untried.
+       ab|apple2e|Apple //e:\
+               :bl=^G:bw:cd=4*^K:ce=4^]:cl=100^L:co#80:ho=^Y:is=^R^N:kd=^J:kl=^H:\
+               :kr=^U:ku=^K:li#24:me=^N:mr=^O:ms:nw=100\r:rs=^R^N:se=^N:sf=^W:so=^O:\
+               :sr=^V:up=^_:\
+               :bs:nc:
+       ap|apple2e-p|Apple //e via Pascal:\
+               :cm=^^%r%+ %+ :tc=apple2e:
+       --------------------------------------------------------------------------------
+       0.4.  Problems with loosing characters.
+
+            Interupt driven com cards have the best chance of working without  loss  of
+       characters.  However,  due to the way apple handles the writing of diskettes and
+       the many unthinking programers who have written proms that  lock  out  interupts
+       for  all kinds of peripheral cards xon&xoff flow control is almost a requirement
+       for the higher baud rates. The //e is especialy vulnerable, I  have  seen  ][+'s
+       with  non  apple  80  col  displays that work fine at 9600 baud without fail and
+       without flow control.
+       0.5.  Com card drivers
+
+            Kermit 3 has now been separated into two assemblies. The main routines  and
+       the com card routines. A vector has been set up in low memory for the two assem-
+       blies  to communicate. Look at the working com drivers for tips on how to incor-
+       porate your version of the com driver. some things to note: It is probably  best
+                                               3
+
+                                 UPDATES FOR APPLE DOS KERMIT
+
+       to  buffer the input from the remote and to get input characters from the remote
+       every chance you get. Note the Microtek VS-622 driver,  whenever  the  input  is
+       checked for a character and has a character the character is put into the buffer
+       immeadiatly. Also when the output is checked for ready to output, if the card is
+       not ready to output then it is checked for a character to input. All this should
+       help prevent loosing character.
+       0.6.  Loading kermit 3
+
+            The main problem exists in getting the hex files onto your  disketts  as  a
+       text file. But again that is a test of your creativity. If you have a version of
+       kermit  running then GET or RECIEVE the file as a text file and you are in busi-
+       ness.  We have separated the main routine into two separate files for mail  pur-
+       poses so EXEC each of the main routines. Use ctrlC cr to get out of monitor back
+       to  basic  for  each  EXEC.  Your apple (or compatable) will go into monitor and
+       show you *'s for several minutes. This is  the  monitor  loading  the  hex  into
+       binary.  If  you get beeps from the monitor its probably because you didnt get a
+       good copy of the text file.  Now EXEC the com card driver you are going to  use.
+       You  will  have to get back into basic(aha another test for you,try-ctrlC cr) to
+       do this. And you will see the monitor loading  the  com  driver.  The  order  of
+       EXEC's  is  important.   The com card should be loaded last.  Next get back into
+       basic and do a "BSAVE kermitname,A$1000,L$5800" You  may  have  to  specify  the
+       drive  to  do this binary save, with a slot or drive on the end of the BSAVE(aha
+       another test).  You now run kermit via "BRUN kermitname"
+            If you want to customize kermit for your equipment. Do all your "set's" etc
+       and then do an "exit". Now you should be back in  basic.  At  this  point  do  a
+       "BSAVE  name,A$1000,L$5800" and when you do a "BRUN name" all your setup will be
+       remembered.
+            Since the org is now $1000 if you have been using kermit and then went back
+       to basic for some trivial thing (like catalog) a "CALL  4096"  should  start  up
+       kermit without having to reload it.
+            Appreciate bug reports, problems and comments.
+                                    Ted
+                                    milnet address "medin@nosc-shark"
+                                               4

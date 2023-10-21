@@ -1,0 +1,104 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site ames.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!panda!talcott!harvard!seismo!hao!ames!jaw
+From: jaw@ames.UUCP (James A. Woods)
+Newsgroups: net.sources.bugs
+Subject: compress update
+Message-ID: <994@ames.UUCP>
+Date: 19 May 85 00:06:26 GMT
+Date-Received: 21 May 85 09:34:21 GMT
+Distribution: net
+Organization: NASA-Ames Research Center, Mtn. View, CA
+Lines: 91
+
+# "When in danger, or when in doubt,
+   Run in circles, scream and shout."  -- Uncle Schuapp
+
+     compress.c, after being stable for some months, is about to
+transmogrify before BSD 4.3 release.  Changes reflect:
+
+     (a) mods for portability to a wider class of machines
+	 (PC XT, Z8000, Cray, etc.)
+
+     (b) a 5-10% speedup to 'uncompress'.
+
+     (c) several minor bug fixes and option flag changes, largely
+	 invisible to users.  one recently-repaired gaffe, discussed below,
+	 acknowledges the possibility of corrupted files under
+	 (presumably) rare conditions.
+
+     (d) a more succinct manual page.
+
+     (e) NO file format change.
+	 
+The compress special-interest group is now testing the new version,
+to be distributed also with 2.10.3 news.
+
+     Now for the only hard bug we've seen with the RCS 3.0 release.
+This only affects files compressed sub-optimally on large machines
+via a multi-file command line, e.g. with
+
+	compress -b12 file1 file2
+
+Ignore this matter unless all the conditions below are met.
+
+     (a) You have a 32-bit machine with over 2.5 megabytes of user space.
+	 PDP 11s and most 68K boxes need not apply.
+
+     (b) compress.c RCS 3.0 was compiled with -DUSERMEM set.
+
+         (This may be hard to determine, because the shell script
+	 to aid with this, distributed after RCS 3.0 was posted (along
+	 with readnews 2.10.2), may fail on systems with protected /dev/kmem.
+	 If this is the case, you have another reason NOT to worry.)
+
+     (c) Users may have had motive to compress multiple files
+	 using a single command using the non-default -b flag.
+
+	 -b was made visible largely for compatible file xfer
+	 from 32-bit machines to 16-bit ones because of differences
+	 in the algorithm.  However assuming (a) + (b), it also may
+	 elicit a 20% (or so) speedup for files at the expense of
+	 compression rate -- since the applications for this are
+	 rather specialized, this is not recommended, and in fact the
+	 flag may be hidden from the general user in this form come
+	 the next distribution.
+
+Candidates for corrupt files may be found using:
+
+	find / -name '*.Z' -print |
+	while
+		read x
+	do		# test 3rd byte of magic number against 16
+		dd if=$x ibs=1 obs=1 skip=2 count=1 2>/dev/null | \
+ 		   od | grep -v -s '20$' \
+	        || echo $x
+	done
+
+(that's a Bourne/McCarthy "OR" cmd before the echo), or with the 'find' line
+replaced by the swifter
+
+	find .Z
+
+if you run the Ames fast file finder.  Any files listed may just be ones
+uploaded from a smaller machine (safe), or ones safely compressed
+suboptimally with a larger -b which doesn't trigger the USERMEM code
+(oh, nevermind).  Anyhow, the true bad news test is:
+
+	compress -c -d file > /dev/null
+
+and if this core dumps, I hope you have a backup tape with a pure file.
+Yes, you're right, few things are worse than a bug in a data compressor,
+but I really doubt you'll find files like this.  News compression is
+immune, by the way, since the standard 'cbatch' script uses stdin rather
+than multiple files.
+
+     After all this, the immediate bug fix and preventive tonic is to
+re-compile compress.c with the unadorned
+
+	cc -O compress.c -o /usr/bin/compress
+
+Send mail to me if you're desparate for a real bug fix, or, better yet,
+wait for the new release.
+
+     --James A. Woods   {dual,ihnp4}!ames!jaw     or, jaw@riacs

@@ -1,0 +1,92 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: GC,v 1.25 86/06/22 18:11:33 dick Exp $
+
+#
+#		G a r b a g e   C o l l e c t i o n
+#	Collects garbage, dust & dead wood.  Should be called after
+#	crashes while a CVS-program was running, and other mishaps.
+#
+Name=GC; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+Tmp1=CVS.adm/GC.1
+Tmp2=CVS.adm/GC.2
+
+# are there duplicates in the CVS.adm/Entries file?
+cat CVS.adm/Entries |
+sed 's/.* \(.*\)|/\1/' |
+sort |
+uniq -c |
+grep -v ' 1 ' >$Tmp1
+if	# this yielded something
+	[ -s $Tmp1 ]
+then	# report
+	echo $Name: duplicates in CVS.adm/Entries:
+	cat $Tmp1
+fi
+
+# try to find garbage in CVS.adm
+ls CVS.adm |
+sed '
+	/^Entries$/d
+	/^Entries.Backup$/d
+	/^Files$/d
+	/^Mod$/d
+	/^Repository$/d
+	/^GC.[12]$/d
+' >$Tmp1
+if	# this yielded something
+	[ -s $Tmp1 ]
+then	# report
+	echo $Name: garbage in directory CVS.adm:
+	cat $Tmp1 |
+	sed 's/^/	CVS.adm\//'
+	echo ''
+fi
+
+# try to find locked files in the repository
+(
+	cd $Repository
+	$RCSBIN/rlog -Lh *,v
+)
+
+# try to find garbage left-over by RCS
+ls -d ,* $Repository/,* |
+sed '
+	/not found/d
+' >$Tmp1
+if	# this yielded something
+	[ -s $Tmp1 ]
+then	# report
+	echo $Name: RCS left-overs found:
+	cat $Tmp1 |
+	sed 's/^/	/'
+	echo ''
+fi
+
+# try to find left-over locks & flags
+echo $Repository/\#cvs.* |
+grep -v '\*' >$Tmp1
+if	# this yielded something
+	[ -s $Tmp1 ]
+then	# such garbage exists
+	echo $Name: left-over flags and locks found:
+	cat $Tmp1 |
+	sed 's/^/	/'
+	echo ''
+fi
+
+rm -f $Tmp1 $Tmp2

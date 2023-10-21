@@ -1,0 +1,447 @@
+.\"	This file is part of the Concurrent Versions System CVS.
+.\"	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+.\"	$Header: cvs.1,v 1.18 86/06/22 18:15:13 dick Exp $
+.TH CVS 1 86/06/14 "Vrije Universiteit"
+.SH NAME
+cvs \- concurrent-versions system
+.SH SYNOPSIS
+.B CV
+RCS-directory
+.br
+.B UV
+[
+.B \-n
+] [ filename ... ]
+.br
+.B CM
+[
+.B \-n
+] 'log-message' [ filename ... ]
+.br
+.B AE
+[ \-... ] filename ...
+.br
+.B RM
+filename ...
+.br
+.B LS
+filename ...
+.br
+.B DF
+[ \-... ] [ filename ... ]
+.br
+.B GC
+.br
+.B SV
+.br
+.B RV
+RCS-directory SV-record
+.SH DESCRIPTION
+.I CVS
+supports the concurrent use of independent versions of an RCS directory,
+and as such acts as a front end for RCS.  The user is not required
+to know RCS commands or ever give them.  The original files of a
+project reside in an RCS directory, called the
+.I repository,
+and are handled by the above commands only. The casual user uses
+.I UV
+and
+.I CM
+and may use
+.I CV,
+.I DF
+and
+.I LS;
+the other commands are for maintenance only.
+.PP
+Each participant in the project has his own private copy of the
+files; such a copy is called a
+.I version.
+Each participant can work on his copy at his convenience since it
+is totally his; the command
+.I UV
+(Update Version)
+will merge updates to the repository into his files without
+disturbing his own modifications; he can merge his own modifications back
+into the repository with the command
+.I CM
+(commit).  Concurrency conflicts, which turn out to be rare anyway,
+are almost always detected.  The repository is protected by
+multi-reader single-writer locks.  There is a simple facility for
+subdirectories; see below.
+.PP
+.B Commands.
+.br
+.B CV
+(Create Version) creates a "version" of an RCS repository.  This version
+is owned totally by the user and is actually an independent
+copy, to be dealt with as seen fit.  Once
+.I CV
+has been called
+in a given directory, it never needs to be called again.  The
+user can keep up-to-date by calling
+.I UV
+when he feels like it;
+this will supply him with a merge of his own modifications
+and the changes made in the RCS original.  See
+.I UV
+for details.
+.PP
+When the user is satisfied with his own modifications, the
+present version can be committed by
+.I CM
+(ComMit); this keeps the present
+version in tact.
+.PP
+The call is
+.br
+	CV
+.I repository-name
+.br
+with preferably the full path name of the RCS repository.
+.I CV
+will then make the initial copy (at RCS speed).  Files in the
+working directory with names that also occur in the repository are
+supposed to derive already from the RCS files.
+.PP
+.I CV
+creates a directory
+.I ./CVS.adm,
+in which
+.I CVS
+keeps its administration, in two files,
+.I Repository
+and
+.I Entries.
+The first contains the name
+of the repository.  The second contains one line for each
+registered file, consisting of the version number it derives from,
+its time stamp at derivation time and its name.  Both files
+are normal files and can be edited by the user, if need be (when
+the repository is moved, e.g.).
+.I CVS
+maintains two more files, for user information;
+.I ./CVS.adm/Files
+contains the names of the files in the present version;
+.I ./CVS.adm/Mod
+contains information about files modified between the latest
+.I CM
+and the latest
+.I UV.
+The user can consult these files but modifying them has no effect.
+.PP
+.B UV
+(Update Version) updates the version in the present directory with respect to
+the RCS repository.  The present version must have been created by
+.I CV.
+The call is
+.br
+	UV [ \-n ]
+.br
+for a general update, or
+.br
+	UV [ \-n ]
+.I file ...
+.br
+for a partial update.
+.PP
+Modified or new RCS files are checked out.
+Modified user files are reported on standard output
+as
+.I "M\ user_file."
+If both the
+RCS file and the user file have been modified, the user file
+is replaced by the result of
+.I rcsmerge.
+If this throws up irreconcilable differences, the file is reported as
+.I "C\ user_file,"
+and as
+.I "M\ user_file"
+otherwise.
+Files added but not yet committed are reported as
+.I "A\ user_file."
+Files removed but not yet decommitted are reported as
+.I "R\ user_file."
+.PP
+If the present directory contains subdirectories that hold
+concurrent versions, these are updated as well.  (See, however,
+.IR CM .)
+.PP
+The
+.B \-n
+option restricts the actions to reporting only.
+.PP
+.B CM
+(ComMit) commits the present version to the RCS repository, AFTER
+having done a test on conflicts.  The call is
+.br
+	CM [ \-n ]
+.I log-message
+.br
+for a general commit, and
+.br
+	CM [ \-n ]
+.I "log-message file ..."
+.br
+for a (dangerous) partial commit. The
+.I log-message
+is obligatory, and
+will be stored in the repository.
+.PP
+If the present directory contains subdirectories that hold
+concurrent versions, these are NOT committed.  (See, however,
+.IR UV .)
+.PP
+The
+.B \-n
+option restricts the actions to reporting only.
+.PP
+.B AE
+(Add Entries) adds new entries to the
+present version; the options
+.I \-...
+will be passed on
+to
+.I rcs \-i
+(see RCS manual).  For each file it asks for a
+description, in RCS fashion.
+The entries will be added to the RCS repository upon the
+next call of
+.I CM.
+The user files must already exist.
+.I AE
+on a file removed with
+.I RM
+will resurrect the file, unless its removal has already been
+committed.
+.PP
+.B RM
+(ReMove) marks the entries as removed on purpose from the present version.
+The RCS files will be actually removed from the RCS repository upon the
+next
+.I CM;
+they will be moved to a directory
+.I Attic
+in the repository.
+.PP
+.B LS
+prints three lines of information for each of its arguments,
+one for the user file (line 1), one for the newest RCS file
+(line 3) and one for the RCS file both derive from (line 2).
+.PP
+.B DF
+does a nice form of diff(1) on each of its arguments and the
+RCS file that argument derives from.
+If there are options, these are passed to diff(1) and the diff
+format is adhered to; otherwise a more readable format is produced.
+Standard diff(1) format can also be forced by a single \-.
+If there are no file names, the names of the interesting files
+are taken from
+.I CVS.adm/Mod
+(which is updated every time
+.I UV
+is called).  If the option is
+.B \-n,
+diff(1) will not be called, but the contents of
+.I CVS.adm/Mod
+will be listed instead.
+.PP
+.B GC
+(Garbage Collection) collects garbage, dust & dead wood.  Should be called
+after crashes while a
+.IR CVS -program
+was running, and other mishaps.
+It is up to the user to remove (or not!) the files
+.I GC
+complains about.
+.PP
+.B "Saved versions."
+.br
+The structure of a version, i.e., the revision numbers of its
+component files, can be saved on a normal file, a
+.I save-record;
+the save-record can be used at another time to reconstruct the
+described version.
+.PP
+.B SV
+(Save Record)
+writes a record about the present version (i.e. collection of
+revisions) to standard output. This record can, at a later date, be
+fed to
+.I RV,
+which will then restore the present version; this process
+requires the repository again (or still) to be present, though not
+necessarily with the same path name.
+.I SV
+requires the directory to be quiescent.
+.PP
+.B RV
+(Restore Record) reads the recording made by
+.I SV
+and restores the version described therein. The call is
+.br
+	RV
+.I "repository-name save-record"
+.br
+The repository has to exist, but
+.I repository-name
+needs not be the same as the one that pertained when
+.I save-record
+was made. The files will be
+reconstructed with the correct revision number, even if they have
+been removed by
+.I RM
+and
+.I CM
+in the meantime.
+.PP
+If a save-record is kept of each distribution sent to a client, the
+following scenario is useful when the client sends in some
+corrections.  In an empty directory, call
+.I RV
+to reconstruct the client's files.  Apply his corrections.  Call
+.I UV
+to integrate them with your own innovations.  Call
+.I DF
+and test, to see if they still make sense.  If satisfied, call
+.I CM
+and remove the directory.
+.PP
+.B Subdirectories.
+.br
+Since there is no generally accepted structure for RCS directories
+with subdirectories, the user is required to set up his own set of
+subdirectories and to call
+.I CV
+in each of them (note that the structure of the user directories
+need not be the same as that of the RCS directories).  As long as
+his directories form a tree,
+.I UV
+in the top will update the whole tree.  A corresponding
+.I CM,
+however, will
+.B not
+commit the whole tree; each directory will have to be committed
+separately.
+.PP
+.B "Setting up"
+.br
+To set up a repository
+.I repos,
+make an empty directory of that name, call
+.I "CV repos,"
+do
+.I AE
+for each file to go into the repository and finally call
+.I CM
+to commit the initial version.
+.PP
+To participate in an existing repository
+.I repos,
+just call
+.I "CV repos".
+.PP
+To turn an existing RCS directory into a repository, you can likewise call
+.I "CV repos",
+since no administration is kept in the RCS directory.
+This works even if both the user files and
+the RCS directory already exist (this is useful if you want to start using
+.I CVS
+for an existing project).
+.PP
+.B Remarks.
+.br
+To forcibly stop a running
+.I UV
+or
+.I CM,
+send signal 15 to the top process (\fIkill \-15 <proc-num>\fP); after some
+seconds it will stop in a more or less reasonable state.
+.PP
+If either has succumbed to a system crash, act as follows.
+Call
+.I GC
+and act on its messages until it shuts up.  You can
+unlock an RCS file that may have been left locked by calling
+.I "rcs -u".
+Then call
+.I UV
+and act on its messages until it shuts up.  And then call
+.I UV
+again (this is necessary to get the time stamps right in some cases).
+.PP
+Since
+.I CVS
+does not keep any information in the repository, it can coexist with
+other systems or users using raw RCS commands, provided that each
+alien user leaves the repository consistent.
+.PP
+If the user version is quiescent (i.e.,
+.I UV
+gives no output), the user can remove his files with impunity; a
+subsequent call of
+.I UV
+will restore the full version.
+.SH ENVIRONMENT
+.IP RCSBIN 8
+If defined: the name of the directory where the RCS programs reside.
+Default: as determined in the
+.I Makefile.
+.IP CVSPATH 8
+If defined: the search path for non-RCS programs.  Default:
+.I /bin:/usr/bin.
+.SH FILES
+.ta 30n
+\&./CVS.adm/Repository	holds name of repository
+.br
+\&./CVS.adm/Files	list of file names in the version
+.br
+\&./CVS.adm/Entries	version number and time stamp for each file
+.br
+\&./CVS.adm/Entries.Backup
+.br
+\&./CVS.adm/Mod	names of files modified since last
+.I CM
+(or since
+.IR CV )
+.br
+\&./*,[pt]	options and text for
+.I AE
+.br
+\&Attic	attic for removed files, in the repository
+.br
+\&#cvs.*	multi-reader single-writer locks, in the repository
+.br
+rcs, ci, co, rcsmerge, rlog	RCS programs
+.SH SEE ALSO
+RCS documentation; rcsintro(1)
+.SH AUTHOR
+Dick Grune, Vrije Universiteit, Amsterdam
+.SH DIAGNOSTICS
+Both
+.I UV
+and
+.I CM
+attempt first to make sure that all required actions are possible before
+doing any of them.
+.SH DISADVANTAGES
+If
+.I N
+users participate, there will be
+.I N
+copies on disk.
+.br
+It's all shell files and slow.
+.br
+.SH BUGS
+There is not (yet) a way to work with branches.
+.br
+Funny file names (e.g. containing spaces or *) will give trouble.
+.br
+Weird things happen if the RCS programs cannot be found.
+.br
+Do not run two of the
+.I CVS
+programs simultaneously in the same user
+directory; there is no lock-out on the user directory, for
+efficiency reasons (though there is on the repository).

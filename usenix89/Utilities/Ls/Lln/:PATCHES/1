@@ -1,0 +1,372 @@
+Path: plus5!wucs1!cuae2!clyde!watmath!utzoo!dciem!tim
+From: tim@dciem.UUCP (Tim Pointing)
+Newsgroups: net.sources.bugs
+Subject: Re: lln - a routine to list all links to a file
+Keywords: lln V7 patch
+Message-ID: <2055@dciem.UUCP>
+Date: 8 Jan 87 16:12:57 GMT
+References: <263@bsdpkh.UUCP> <659@instable.UUCP> <933@sphinx.UChicago.UUCP> <309@rlgvax.UUCP>
+Reply-To: tim@dciem.UUCP (Tim Pointing)
+Distribution: world
+Organization: D.C.I.E.M., Toronto, Canada
+Lines: 358
+Posted: Thu Jan  8 11:12:57 1987
+
+Despite the comment near the top of the source for the new version on lln.c
+recently posted, lln does not run under V7. Below is a patch to allow lln
+to run under V7. It will also allow lln to find files on the root filesystem
+on systems which do not have an entry for the root filesystem in the
+mount table. There are also some fixes which cause lln to gracefully bypass
+directories which allow read (i.e. open) but not search (i.e. chdir).
+
+-------------CUT-HERE------------------------------CUT-HERE---------------
+*** lln.c.dist	Thu Jan  8 09:02:23 1987
+--- lln.c	Thu Jan  8 10:33:04 1987
+***************
+*** 1,6
+  /* define your OS type:
+   * USG			S3 or S5
+!  * BSD4X		V7 or 4.2 or 4.3
+   * CCI632		Sys5 r2 on CCI Power 6/32
+   */
+  #define CCI632	1
+
+--- 1,7 -----
+  /* define your OS type:
+   * USG			S3 or S5
+!  * BSD4X		4.2 or 4.3
+!  * V7			V7
+   * CCI632		Sys5 r2 on CCI Power 6/32
+   */
+  
+***************
+*** 3,9
+   * BSD4X		V7 or 4.2 or 4.3
+   * CCI632		Sys5 r2 on CCI Power 6/32
+   */
+- #define CCI632	1
+  
+  /* the OS type, in turn, defines the lower level #defines that
+   * are typical for that system.  If your system is usual,
+
+--- 4,9 -----
+   * V7			V7
+   * CCI632		Sys5 r2 on CCI Power 6/32
+   */
+  
+  /* the OS type, in turn, defines the lower level #defines that
+   * are typical for that system.  If your system is usual,
+***************
+*** 20,25
+  #	define MTAB 1		/* have /etc/mtab and mtab.h instead of /etc/mnttab and mnttab.h */
+  #	define BSD_FILESYS 1	/* have BSD4_2 file system */
+  #else	/* !BSD4X && !CCI632 && !USG */
+  	Unknown System.  This causes a compiler error.
+  #endif /* BSD4X */
+  #endif /* USG */
+
+--- 20,28 -----
+  #	define MTAB 1		/* have /etc/mtab and mtab.h instead of /etc/mnttab and mnttab.h */
+  #	define BSD_FILESYS 1	/* have BSD4_2 file system */
+  #else	/* !BSD4X && !CCI632 && !USG */
++ #if defined(V7)
++ #	define MTAB 1		/* have /etc/mtab but no mtab.h */
++ #else	/* !BSD4X && !CCI632 && !USG && !V7 */
+  	Unknown System.  This causes a compiler error.
+  #endif /* V7 */
+  #endif /* BSD4X */
+***************
+*** 21,26
+  #	define BSD_FILESYS 1	/* have BSD4_2 file system */
+  #else	/* !BSD4X && !CCI632 && !USG */
+  	Unknown System.  This causes a compiler error.
+  #endif /* BSD4X */
+  #endif /* USG */
+  
+
+--- 24,30 -----
+  #	define MTAB 1		/* have /etc/mtab but no mtab.h */
+  #else	/* !BSD4X && !CCI632 && !USG && !V7 */
+  	Unknown System.  This causes a compiler error.
++ #endif /* V7 */
+  #endif /* BSD4X */
+  #endif /* USG */
+  
+***************
+*** 29,34
+  #include <sys/dir.h>
+  #include <sys/stat.h>
+  #include <stdio.h>
+  #include <fcntl.h>
+  #if defined(MTAB)
+  #include <fstab.h>
+
+--- 33,39 -----
+  #include <sys/dir.h>
+  #include <sys/stat.h>
+  #include <stdio.h>
++ #if !defined(V7)
+  #include <fcntl.h>
+  #else
+  #define O_RDONLY	(0)
+***************
+*** 30,35
+  #include <sys/stat.h>
+  #include <stdio.h>
+  #include <fcntl.h>
+  #if defined(MTAB)
+  #include <fstab.h>
+  #include <sys/param.h>	/* NMOUNT */
+
+--- 35,43 -----
+  #include <stdio.h>
+  #if !defined(V7)
+  #include <fcntl.h>
++ #else
++ #define O_RDONLY	(0)
++ #endif /* V7 */
+  #if defined(MTAB)
+  #if !defined(V7)
+  #include <fstab.h>
+***************
+*** 31,36
+  #include <stdio.h>
+  #include <fcntl.h>
+  #if defined(MTAB)
+  #include <fstab.h>
+  #include <sys/param.h>	/* NMOUNT */
+  #include <mtab.h>
+
+--- 39,45 -----
+  #define O_RDONLY	(0)
+  #endif /* V7 */
+  #if defined(MTAB)
++ #if !defined(V7)
+  #include <fstab.h>
+  #include <sys/param.h>	/* NMOUNT */
+  #include <mtab.h>
+***************
+*** 34,39
+  #include <fstab.h>
+  #include <sys/param.h>	/* NMOUNT */
+  #include <mtab.h>
+  #define	MNTTAB	mtab
+  #define MT_FILSYS	m_path
+  /* MT_FILSYS is field in mtab with directory name */
+
+--- 43,56 -----
+  #include <fstab.h>
+  #include <sys/param.h>	/* NMOUNT */
+  #include <mtab.h>
++ #else /* V7 */
++ #	define NAMSIZ	32
++ #	define NMOUNT	16
++ struct mtab {
++ 	char m_path[NAMSIZ];
++ 	char m_dev[NAMSIZ];
++ };
++ #endif /* V7 */
+  #define	MNTTAB	mtab
+  #define MT_FILSYS	m_path
+  /* MT_FILSYS is field in mtab with directory name */
+***************
+*** 119,124
+  #else
+  	int	dirfd;		/* 14 char fixed length directory entries */
+  #endif
+  
+  	if (argc < 2) exit(0);
+  
+
+--- 136,142 -----
+  #else
+  	int	dirfd;		/* 14 char fixed length directory entries */
+  #endif
++ 	int nread, mount_found;
+  
+  	if (argc < 2) exit(0);
+  
+***************
+*** 155,160
+  	seeking a match on device number...
+  */
+  
+  		for (x = 0; x < NMOUNT; ++x)
+  		{	if (read(mth,&mte,MTE_SIZE) != MTE_SIZE)
+  			{	fprintf(stderr,"%s: errno %d reading mnttab\n",argv[0],errno);
+
+--- 173,180 -----
+  	seeking a match on device number...
+  */
+  
++ 		mount_found = 0;	/* haven't fount the mount dir yet */
++ 
+  		for (x = 0; x < NMOUNT; ++x)
+  		{	nread = read(mth,&mte,MTE_SIZE);
+  			if (nread != MTE_SIZE && nread != 0)
+***************
+*** 156,163
+  */
+  
+  		for (x = 0; x < NMOUNT; ++x)
+! 		{	if (read(mth,&mte,MTE_SIZE) != MTE_SIZE)
+! 			{	fprintf(stderr,"%s: errno %d reading mnttab\n",argv[0],errno);
+  				exit(32);
+  			}
+  			STAT(mte.MT_FILSYS,&ssfs);	/* name of directory mounted as */
+
+--- 176,185 -----
+  		mount_found = 0;	/* haven't fount the mount dir yet */
+  
+  		for (x = 0; x < NMOUNT; ++x)
+! 		{	nread = read(mth,&mte,MTE_SIZE);
+! 			if (nread != MTE_SIZE && nread != 0)
+! 			{
+! 				fprintf(stderr,"%s: errno %d reading mnttab\n",argv[0],errno);
+  				exit(32);
+  			}
+  			STAT(mte.MT_FILSYS,&ssfs);	/* name of directory mounted as */
+***************
+*** 165,171
+  			printf("lln: debug: Looking at mounted dir %s\n", mte.MT_FILSYS);
+  			printf(" st_dev=%d, st_rdev=%d, want dev # = %d\n", ssfs.st_dev, ssfs.st_rdev, curdev);
+  #endif	/* debug */
+! 			if (ssfs.st_dev == ssfil.st_dev) break;
+  #ifdef DEBUG
+  			else printf("debug: wrong dir (%d != %d)\n", 
+  			ssfs.st_dev, ssfil.st_dev);
+
+--- 187,197 -----
+  			printf("lln: debug: Looking at mounted dir %s\n", mte.MT_FILSYS);
+  			printf(" st_dev=%d, st_rdev=%d, want dev # = %d\n", ssfs.st_dev, ssfs.st_rdev, curdev);
+  #endif	/* debug */
+! 			if (ssfs.st_dev == ssfil.st_dev)
+! 			{
+! 				mount_found = 1;
+! 				break;
+! 			}
+  #ifdef DEBUG
+  			else printf("debug: wrong dir (%d != %d)\n", 
+  			ssfs.st_dev, ssfil.st_dev);
+***************
+*** 171,176
+  			ssfs.st_dev, ssfil.st_dev);
+  #endif
+  		}
+  
+  #ifdef DEBUG
+  		printf("lln: debug: found mounted dir starting point\n");
+
+--- 197,218 -----
+  			ssfs.st_dev, ssfil.st_dev);
+  #endif
+  		}
++ 		if (!mount_found)
++ 		{
++ 			strcpy(mte.MT_FILSYS, "/");
++ 			STAT(mte.MT_FILSYS,&ssfs);
++ #ifdef DEBUG
++ 			printf("lln: debug: Looking at mounted dir %s\n", mte.MT_FILSYS);
++ 			printf(" st_dev=%d, st_rdev=%d, want dev # = %d\n", ssfs.st_dev, ssfs.st_rdev, curdev);
++ #endif	/* debug */
++ 			if (ssfs.st_dev == ssfil.st_dev)
++ 			{
++ 				mount_found = 1;
++ 			}
++ #ifdef DEBUG
++ 			else printf("debug: wrong dir (%d != %d)\n", 
++ 			ssfs.st_dev, ssfil.st_dev);
++ #endif
+  
+  		}
+  		if (!mount_fount)
+***************
+*** 172,177
+  #endif
+  		}
+  
+  #ifdef DEBUG
+  		printf("lln: debug: found mounted dir starting point\n");
+  #endif
+
+--- 214,226 -----
+  			ssfs.st_dev, ssfil.st_dev);
+  #endif
+  
++ 		}
++ 		if (!mount_fount)
++ 		{
++ 			fprintf(stderr, "lln: cannot find mount point of file system containing file '%s'\n", argv[i]);
++ 			continue;
++ 		}
++ 
+  #ifdef DEBUG
+  		printf("lln: debug: found mounted dir starting point\n");
+  #endif
+***************
+*** 298,304
+  			*pathend = '/';
+  #ifdef BSD_FILESYS
+  			strncpy(pathend + 1,cd->d_name,cd->d_namlen + 1);
+! 			chdir(cd->d_name);
+  #else /* !bsd_filsys */
+  			strncpy(pathend + 1,cd.d_name,14);
+  			chdir(cd.d_name);
+
+--- 347,353 -----
+  			*pathend = '/';
+  #ifdef BSD_FILESYS
+  			strncpy(pathend + 1,cd->d_name,cd->d_namlen + 1);
+! 			if (chdir(cd->d_name) < 0)
+  #else /* !bsd_filsys */
+  			strncpy(pathend + 1,cd.d_name,14);
+  			if (chdir(cd.d_name))
+***************
+*** 301,307
+  			chdir(cd->d_name);
+  #else /* !bsd_filsys */
+  			strncpy(pathend + 1,cd.d_name,14);
+! 			chdir(cd.d_name);
+  #endif
+  #ifdef DEBUG
+  			printf("lln: debug: visiting %s\n", pathbuf);
+
+--- 350,356 -----
+  			if (chdir(cd->d_name) < 0)
+  #else /* !bsd_filsys */
+  			strncpy(pathend + 1,cd.d_name,14);
+! 			if (chdir(cd.d_name))
+  #endif
+  			{
+  				fprintf(stderr, "lln: cannot chdir to %s\n",
+***************
+*** 303,308
+  			strncpy(pathend + 1,cd.d_name,14);
+  			chdir(cd.d_name);
+  #endif
+  #ifdef DEBUG
+  			printf("lln: debug: visiting %s\n", pathbuf);
+  #endif /* debug */
+
+--- 352,367 -----
+  			strncpy(pathend + 1,cd.d_name,14);
+  			if (chdir(cd.d_name))
+  #endif
++ 			{
++ 				fprintf(stderr, "lln: cannot chdir to %s\n",
++ 				pathbuf);
++ #ifdef BSD_FILESYS
++ 				CLOSEDIR(newdfd);
++ #else
++ 				close(newdfd);
++ #endif
++ 				continue;
++ 			}
+  #ifdef DEBUG
+  			printf("lln: debug: visiting %s\n", pathbuf);
+  #endif /* debug */
+-- 
+	Tim Pointing, DCIEM
+	   {decvax|ihnp4|watmath}!utzoo!dciem!tim
+	or uw-beaver!utcsri!dciem!tim
+        or seismo!mnetor!lsuc!dciem!tim

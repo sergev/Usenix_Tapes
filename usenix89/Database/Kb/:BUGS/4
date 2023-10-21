@@ -1,0 +1,95 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!jpusa1!stu
+From: stu@jpusa1.UUCP (Stu Heiss)
+Newsgroups: net.sources.bugs
+Subject: fix for kb/search/fsindex
+Message-ID: <132@jpusa1.UUCP>
+Date: 18 Jun 86 17:16:53 GMT
+Reply-To: stu@jpusa1.UUCP (Stu Heiss)
+Organization: JPUSA - Chicago, IL
+Lines: 84
+Posted: Wed Jun 18 12:16:53 1986
+
+kb - nice...  search - good for huge files.  Problem with fsindex on
+machines with signed chars.  The following diff should make it work
+properly on any machine.
+
+------------cut-here--------------------------
+% rcsdiff -r1.1 -r1.2 -c fsindex.c
+RCS file: RCS/fsindex.c,v
+retrieving revision 1.1
+retrieving revision 1.2
+diff -c -r1.1 -r1.2
+*** /tmp/,RCSt1a05725	Wed Jun 18 11:59:10 1986
+--- /tmp/,RCSt2a05725	Wed Jun 18 11:59:17 1986
+***************
+*** 1,5
+  /*# -- cut here: fsindex.c : just cc -o fsindex.o it*/
+  #include <stdio.h>
+  
+  #define MIN(a,b)	( (a) < (b) ? (a) : (b) )
+  #define	TSIZE		128
+
+--- 1,6 -----
+  /*# -- cut here: fsindex.c : just cc -o fsindex.o it*/
+  #include <stdio.h>
++ typedef unsigned char uchar_t;
+  
+  #define MIN(a,b)	( (a) < (b) ? (a) : (b) )
+  #define	TSIZE		128
+***************
+*** 12,18
+    register int *p;
+  
+    slength = strlen(s);
+!   for ( i = 0 ; i < 128 ; i++ ) t[i] = slength;
+  
+    for ( i = 0 ; i < slength -1 ; i++ ) {
+     p = &t[s[i]];
+
+--- 13,19 -----
+    register int *p;
+  
+    slength = strlen(s);
+!   for ( i = 0 ; i < TSIZE ; i++ ) t[i] = slength;
+  
+    for ( i = 0 ; i < slength -1 ; i++ ) {
+     p = &t[s[i]];
+***************
+*** 16,22
+  
+    for ( i = 0 ; i < slength -1 ; i++ ) {
+     p = &t[s[i]];
+!    *p = MIN( *p, slength-i-1 );
+    }
+  }/*initfsindex*/
+  
+
+--- 17,24 -----
+  
+    for ( i = 0 ; i < slength -1 ; i++ ) {
+     p = &t[s[i]];
+!    if (p - t < TSIZE)
+!      *p = MIN( *p, slength-i-1 );
+    }
+  }/*initfsindex*/
+  
+***************
+*** 51,57
+  
+  l2: 
+       if ( *pb != *ps ) {	/* then not found so skip */
+!        pb += ( *pb < (char)TSIZE ? pos[*pb] : slength );
+         goto l1;
+       }
+       if ( ps != small) {	/* then not full small found yet */
+
+--- 53,59 -----
+  
+  l2: 
+       if ( *pb != *ps ) {	/* then not found so skip */
+!        pb += ((uchar_t)*pb < (uchar_t)TSIZE ? pos[*pb] : slength );
+         goto l1;
+       }
+       if ( ps != small) {	/* then not full small found yet */
+-- 
+Stu Heiss {ihnp4!jpusa1!stu}

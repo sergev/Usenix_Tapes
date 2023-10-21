@@ -1,0 +1,1286 @@
+Path: plus5!wucs1!cuae2!ihnp4!cbatt!ucbvax!okamoto
+From: okamoto@ucbvax.BERKELEY.EDU (The New Number Who)
+Newsgroups: net.sources.games
+Subject: Trek73 Bug Fixes
+Message-ID: <16667@ucbvax.BERKELEY.EDU>
+Date: 19 Dec 86 20:53:10 GMT
+Organization: University of California at Berkeley
+Lines: 1277
+
+This article consists of some fixes to problems mailed to me
+since trek73 has been posted.  The source files included here
+should replace their original couterparts.
+
+Bugs fixed include:
+	parsit.c - a fix that I had long ago thought corrected
+		is in the loop that frees up the array.  SYSV
+		and BSD handle this loop differently.  This fix
+		should clear up segmentation violations that
+		occur upon typing the second command.
+	save.c - Some of the BSD-specific things have ben fixed.
+		It may not work the same, and for that I apologize.
+		I culled the save routines from rogue.
+	Makefile - Fixed and added stuff so parsit should compile
+		correctly.
+
+The New Number Who,	okamoto@ucbvax.berkeley.edu
+Jeff Okamoto		..!ucbvax!okamoto
+
+-----Cut here-----
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	Makefile
+#	dist.c
+#	parsit.c
+#	save.c
+#	shipyard.c
+#	subs.c
+# This archive created: Fri Dec 19 12:15:50 1986
+# By:	Jeff Okamoto ()
+export PATH; PATH=/bin:$PATH
+if test -f 'Makefile'
+then
+	echo shar: will not over-write existing file "'Makefile'"
+else
+cat << \SHAR_EOF > 'Makefile'
+#
+# Makefile for TREK73
+#
+
+#
+# Select which operating system you are using.
+# Acceptable flags are BSD and SYSV.
+#
+OS =	BSD
+
+#
+# Select method of installing the binaries into the system
+# NOTE: UNIX System V Release 2.0 does not have install
+# and should therefore use either mv or cp.
+#
+INSTALL = install
+
+#
+# Select destination directory in the system.
+# This option need only be set when actually ready to install
+# the binaries.
+#
+DESTDIR = /usr/games
+
+#
+# Select whether you wish to use symbolic debugger or not.
+# NOTE: UNIX System V Release 2.0 cannot do profiling on programs
+# compiled with -g.  Also, sdb will not be very useful if the
+# symbols are stripped from the load module. (See STRIP)
+#SDB =	-g
+SDB =
+
+#
+# Select whether code optimization is to be done.
+OPT =	-O
+#OPT =
+
+#
+# Select whether profiling is to be done.
+# NOTE: In System V Relase 2.0, this is incompatible with
+# both SDB and STRIP.
+# PROF =	-p
+PROF =
+
+#
+# Select whether or not the load module is to be stripped.
+# This is incompatible with both SDB and PROF.
+# Note: In BSD Unix, this option should always be blank
+# STRIP =	-s
+STRIP =
+
+#
+# Select whether or not tracing mode is to be turned on.
+# This is useful when testing new strategies.
+#TRACE =	-DTRACE
+TRACE =
+
+
+DEFINES = -D${OS}
+CFLAGS = ${DEFINES} ${SDB} ${OPT} ${PROF} ${STRIP}
+
+T73OBJECTS = cmds1.o cmds2.o cmds3.o cmds4.o damage.o dist.o endgame.o\
+	enemycom.o firing.o globals.o init.o main.o misc.o mission.o\
+	moveships.o parseopts.o parsit.o save.o ships.o special.o\
+	strat1.o subs.o vers.o
+
+T73CFILES = cmds1.c cmds2.c cmds3.c cmds4.c damage.c dist.c endgame.c\
+	enemycom.c firing.c globals.c init.c main.c misc.c mission.c\
+	moveships.c parseopts.c pXrsit.c save.c ships.c special.c\
+	strat1.c subs.c vers.c
+
+BPVOBJECTS = bpv.o ships.o
+
+BPVFILES = bpv.c ships.c
+
+DYOOBJECTS = shipyard.o
+
+DYOFILES = shipyard.c
+
+HEADS= structs.h defines.h externs.h
+
+RDIST = ${T73CFILES} ${BPVFILES} ${DYOFILES} ${HEADS}
+
+LIBS= -lm
+
+FLUFF = parsit.o make.out errs core lint.errs a.out tags\
+	shar.1 shar.2 shar.3 shar.4
+
+BINS = trek73 bpv shipyard
+
+
+all:	${BINS}
+
+trek73:	${T73OBJECTS} parsit.o
+	cc ${CFLAGS} ${T73OBJECTS} parsit.o ${LIBS}
+	mv a.out trek73
+
+bpv:	${BPVOBJECTS}
+	cc ${CFLAGS} ${BPVOBJECTS}
+	mv a.out bpv
+
+shipyard:	${DYOOBJECTS}
+	cc ${CFLAGS} ${DYOOBJECTS} -lm
+	mv a.out shipyard
+
+install:	${BINS}
+	${INSTALL} trek73 ${DESTDIR}
+	${INSTALL} bpv ${DESTDIR}
+	${INSTALL} shipyard ${DESTDIR}
+
+${T73OBJECTS}: ${HEADS}
+
+${BPVOBJECTS}: ${HEADS}
+
+${DYOOBJECTS}: ${HEADS}
+
+tags: ${T73CFILES}
+	ctags ${T73CFILES} ${HEADS}
+
+count:
+	wc ${T73CFILES} ${HEADS}
+
+lint:
+	lint -abchx ${DEFINES} ${T73CFILES} > lint.errs
+
+clean:
+	rm -f ${BINS} ${T73OBJECTS} ${DYOOBJECTS} ${BPVOBJECTS} ${FLUFF}
+
+shar: shar.1 shar.2 shar.3 shar.4
+
+shar.1: Makefile defines.h externs.h options.h structs.h cmds1.c cmds2.c
+	shar Makefile defines.h externs.h options.h structs.h cmds1.c cmds2.c >$@
+
+shar.2: cmds3.c cmds4.c damage.c dist.c endgame.c enemycom.c
+	shar cmds3.c cmds4.c damage.c dist.c endgame.c enemycom.c >$@
+
+shar.3: firing.c globals.c init.c main.c misc.c mission.c bpv.c shipyard.c
+	shar firing.c globals.c init.c main.c misc.c mission.c bpv.c shipyard.c >$@
+
+shar.4: moveships.c parseopts.c parsit.c save.c ships.c special.c strat1.c subs.c vers.c 
+	shar moveships.c parseopts.c parsit.c save.c ships.c special.c strat1.c subs.c vers.c >$@ 
+SHAR_EOF
+chmod +x 'Makefile'
+fi # end of overwriting check
+if test -f 'dist.c'
+then
+	echo shar: will not over-write existing file "'dist.c'"
+else
+cat << \SHAR_EOF > 'dist.c'
+/*
+ * TREK73: dist.c
+ *
+ * Power distribution routines
+ *
+ * distribute
+ *
+ */
+
+#include "externs.h"
+
+
+distribute(sp)
+struct ship *sp;
+{
+	register int i;
+	register float fuel;
+	register int load;
+	register int effload;
+	register int drain;
+	register int loop;
+	float shield;
+	struct ship *fed;
+
+	fed = shiplist[0];
+	/*
+	 * Granularity of 1 second as far as this loop is concerned
+	 */
+	for (loop = 0; loop < (int)timeperturn; loop++) {
+
+		fuel = sp->energy + sp->regen;	/* Slightly unrealistic */
+		/*
+		 * Calculate negative phaser drains
+		 */
+		for (i=0; i<sp->num_phasers; i++) {
+			load = sp->phasers[i].load;
+			drain = sp->phasers[i].drain;
+			if ((sp->phasers[i].status & P_DAMAGED)
+			    || (drain >= 0) || (load <= 0))
+				continue;
+			/*
+			 * Drain the lesser of either the current load if the
+			 * load is less than the drain, or the drain value
+			 */
+			effload = max(load + drain, 0);
+			fuel += load - effload;
+			sp->phasers[i].load = effload;
+		}
+		/*
+		 * Calculate shield drains
+		 */
+		shield = 0.0;
+		for (i=0; i<SHIELDS; i++)
+			shield += sp->shields[i].attemp_drain;
+		drain = ceil((double) shield);
+		/*
+		 * If all attempted drains are zero, or we have no
+		 * fuel, our shields are down!
+		 */
+		if ((shield * fuel == 0) && !shutup[SHIELDSF]
+		    && sp == shiplist[0]) {
+			printf("%s: %s, our shields are down!\n",engineer, title);
+			shutup[SHIELDSF]++;
+		}
+		/*
+		 * If there's not enough fuel to sustain the drains, then
+		 * ration it out in proportion to the attempted drains and
+		 * say that shields are fluctuating.
+		 */
+		if (drain <= fuel) {
+			fuel -= drain;
+			for (i=0; i<SHIELDS; i++)
+				sp->shields[i].drain = sp->shields[i].attemp_drain;
+		} else {
+			if (!shutup[SHIELDSF] && sp == shiplist[0]) {
+				printf("%s: %s, our shields are fluctuating!\n",
+				    engineer, title);
+				shutup[SHIELDSF]++;
+			}
+			for (i=0; i<SHIELDS; i++)
+				sp->shields[i].drain =
+				    sp->shields[i].attemp_drain *
+				    fuel / drain;
+			fuel = 0.;
+		}
+		/*
+		 * Calculate cloaking device drains.  If there is
+		 * in sufficient energy to run the device, then
+		 * it is turned off completely
+		 */
+		if (cantsee(sp)) {
+			if (fuel < sp->cloak_energy) {
+				if (sp == shiplist[0]) {
+					sp->cloaking = C_OFF;
+					printf("%s:  %s, there's not enough energy to",
+					    engineer, title);
+					puts("    keep our cloaking device activated.");
+				} else
+					(void) e_cloak_off(sp, fed);
+			} else
+				fuel -= sp->cloak_energy;
+		}
+		/*
+		 * Calculate positive phaser drains
+		 */
+		for (i=0; i<sp->num_phasers && fuel > 0; i++) {
+			if (fuel <=0.)
+				break;
+			load = sp->phasers[i].load;
+			drain = sp->phasers[i].drain;
+			if ((sp->phasers[i].status & P_DAMAGED)
+			    || load >= MAX_PHASER_CHARGE || drain <= 0)
+				continue;
+			/*
+			 * Load phasers either enough to top them off, or
+			 * the full drain
+			 */
+			effload = min(MAX_PHASER_CHARGE,
+			    load + min(drain, fuel));
+			fuel -= effload - load;
+			sp->phasers[i].load = effload;
+		}
+		/*
+		 * Now balance the level of energy with the numer of pods
+		 */
+		sp->energy = min(fuel, sp->pods);
+	}
+}
+SHAR_EOF
+chmod +x 'dist.c'
+fi # end of overwriting check
+if test -f 'parsit.c'
+then
+	echo shar: will not over-write existing file "'parsit.c'"
+else
+cat << \SHAR_EOF > 'parsit.c'
+/*
+ * TREK73: parsit.c
+ *
+ * Parse and get input
+ *
+ * Gets, parsit (courtesy, P. Lapsley)
+ *
+ */
+
+#ifdef SYSV
+#define index strchr
+#endif
+
+#include <stdio.h>
+extern void free();
+extern char *gets(), *malloc(), *strcpy(), *index();
+
+static int gindx;
+static char **argv;
+
+char *
+Gets(buf, len)
+char *buf;
+int len;
+{
+	register char *tmp;
+
+	if (argv[gindx] == NULL) {
+		(void) fgets(buf, len, stdin);
+		if (tmp = index(buf, '\n'))
+			*tmp = '\0';
+		return(buf);
+	}
+	++gindx;
+	if (argv[gindx] == NULL) {
+		(void) fgets(buf, len, stdin);
+		if (tmp = index(buf, '\n'))
+			*tmp = '\0';
+		return (buf);
+	}
+	(void) strcpy (buf, argv[gindx]);
+	puts (buf);
+	return (buf);
+}
+
+/*
+** parsit.c  23 September 1984  P. Lapsley (phil@Berkeley.ARPA)
+**
+** Parse a string of words separated by spaces into an
+** array of pointers to characters, just like good ol' argv[]
+** and argc.
+**
+** Usage:
+**
+** char line[132];
+** char **argv;
+** int argc;
+**
+**	argv = (char **) NULL;
+**	argc = parsit(line, &argv);
+**
+** returns the number of words parsed in argc.  argv[argc] will
+** be (char *) NULL to indicate end of list, if you're not
+** happy with just knowing how many words you have.
+**
+** Note that setting argv = (char **) NULL is only done the first
+** time the routine is called with a new "argv" -- it tells
+** parsit that "argv" is a new array, and parsit shouldn't free
+** up the elements (as it would do if it were an old array).
+*/
+
+
+parsit(line, array)
+char *line;
+char ***array;
+{
+	char *malloc();
+	char word[132];
+	char *linecp;
+	int i, j, num_words;
+
+	gindx = 0;
+	argv = *array;
+	if (argv != (char **) NULL) {  /* Check to see if we should */
+		/* free up the old array */
+		for (i=0; argv[i] != (char *) NULL; i++) {
+			free(argv[i]);	/* If so, free each member */
+		}
+		free((char *)argv);		/* and then free the ptr itself */
+	}
+
+	linecp = line;
+	num_words = 0;
+	while (1) {	/* count words in input */
+		for (; *linecp == ' ' || *linecp == '\t'; ++linecp)
+			;
+		if (*linecp == '\0')
+			break;
+
+		for (; *linecp != ' ' && *linecp != '\t' && *linecp != '\0'; ++linecp)
+			;
+		++num_words;
+		if (*linecp == '\0')
+			break;
+	}
+
+	/* Then malloc enough for that many words plus 1 (for null) */
+
+	if ((argv = (char **) malloc((unsigned)((num_words + 1) * sizeof(char *)))) ==
+		(char **) NULL) {
+		fprintf(stderr, "parsit: malloc out of space!\n");
+		return(0);
+	}
+
+	j = i = 0;
+	while (1) {	/* Now build the list of words */
+		for (; *line == ' ' || *line == '\t'; ++line)
+			;
+		if (*line == '\0')
+			break;
+
+		i = 0;
+		for (; *line != ' ' && *line != '\t' && *line != '\0'; ++line)
+			word[i++] =  *line;
+		word[i] = '\0';
+		argv[j] = malloc(strlen(word) + 1);
+		if (argv[j] == (char *) NULL) {
+			fprintf(stderr, "parsit: malloc out of space!\n");
+			return(0);
+		}
+
+		(void) strcpy(argv[j], word);
+		++j;
+		if (*line == '\0')
+			break;
+	}
+	argv[j] = (char *) NULL;  /* remember null at end of list */
+	*array = argv;
+	return(j);
+}
+
+
+SHAR_EOF
+chmod +x 'parsit.c'
+fi # end of overwriting check
+if test -f 'save.c'
+then
+	echo shar: will not over-write existing file "'save.c'"
+else
+cat << \SHAR_EOF > 'save.c'
+/*
+ * TREK73: save.c
+ *
+ * save and restore routines
+ *
+ * @(#)save.c	4.15 (Berkeley) 5/10/82
+ */
+
+#include <stdio.h>
+#include <pwd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <signal.h>
+#include <stdio.h>
+
+#define MAXSTR	256
+
+typedef struct stat STAT;
+
+extern char *sys_errlist[], version[], encstr[];
+extern int errno;
+
+char *sbrk();
+
+STAT sbuf;
+
+set_save()
+{
+	register char		*env;
+	register struct passwd	*pw;
+	char			*getpass();
+	extern char		home[];
+	extern char		savefile[];
+	char			*getenv();
+
+	if ((env = getenv("HOME")) != NULL)
+		strcpy(home, env);
+	else if ((pw = (struct password *)getpwuid(getuid())) != NULL)
+		strcpy(home, pw->pw_dir);
+	else
+		home[0] = '\0';
+	strcat(home, "/");
+
+	strcpy(savefile, home);
+	strcat(savefile, "trek73.save");
+}
+
+/*
+ * save_game:
+ *	Implement the "save game" command
+ */
+save_game()
+{
+    register FILE *savef;
+    register int c;
+    char buf[MAXSTR];
+    extern char savefile[];
+
+    /*
+     * get file name
+     */
+
+over:
+    if (savefile[0] != '\0')
+    {
+	for (;;)
+	{
+	    printf("Save file (%s)? ", savefile);
+	    c = getchar();
+	    if (c == 'n' || c == 'N' || c == 'y' || c == 'Y')
+		break;
+	    else
+		printf("\nPlease answer Yes or No");
+	}
+	if (c == 'y' || c == 'Y')
+	{
+	    strcpy(buf, savefile);
+	    goto gotfile;
+	}
+    }
+
+    do
+    {
+	stdin->_cnt = 0;
+	printf("File name: ");
+	buf[0] = '\0';
+	gets(buf);
+gotfile:
+	/*
+	 * test to see if the file exists
+	 */
+	if (stat(buf, &sbuf) >= 0)
+	{
+	    for (;;)
+	    {
+		stdin->_cnt = 0;
+		printf("\nFile exists.  Do you wish to overwrite it?");
+		if (c == 'y' || c == 'Y')
+		    break;
+		else if (c == 'n' || c == 'N')
+		    goto over;
+		else
+		    printf("\nPlease answer Y or N");
+	    }
+	}
+	strcpy(savefile, buf);
+	if ((savef = fopen(savefile, "w")) == NULL)
+	    perror("Trek73: Save problems");
+    } while (savef == NULL);
+
+    /*
+     * write out encrpyted file (after a stat)
+     * The fwrite is to force allocation of the buffer before the write
+     */
+    save_file(savef);
+    exit(0);
+}
+
+/*
+ * save_file:
+ *	Write the saved game on the file
+ */
+save_file(savef)
+register FILE *savef;
+{
+    /*
+     * close any open score file
+     */
+    fstat(fileno(savef), &sbuf);
+    /*
+     * DO NOT DELETE.  This forces stdio to allocate the output buffer
+     * so that malloc doesn't get confused on restart
+     */
+    fwrite("junk", 1, 5, savef);
+
+    fseek(savef, 0L, 0);
+    encwrite(version, sbrk(0) - version, savef);
+    fclose(savef);
+    exit(0);
+}
+
+/*
+ * restore:
+ *	Restore a saved game from a file with elaborate checks for file
+ *	integrity from cheaters
+ */
+restore(file, envp)
+register char *file;
+char **envp;
+{
+    register int inf, (*func)();
+    register char syml;
+    extern char **environ;
+    char buf[MAXSTR];
+    STAT sbuf2;
+
+#ifdef BSD
+    func = signal(SIGTSTP, SIG_IGN);
+#endif
+#ifdef SYSV
+    func = signal(SIGQUIT, SIG_IGN);
+#endif
+
+    if ((inf = open(file, 0)) < 0)
+    {
+	perror(file);
+	return 0;
+    }
+    fstat(inf, &sbuf2);
+#ifdef BSD
+    syml = symlink(file);
+#endif
+#ifdef SYSV
+    syml = link(file);
+#endif
+    if (unlink(file) < 0)
+    {
+	printf("Cannot unlink file\n");
+	return 0;
+    }
+
+    fflush(stdout);
+    encread(buf, (unsigned int) (strlen(version) + 1), inf);
+    if (strcmp(buf, version) != 0)
+    {
+	printf("Sorry, saved game is out of date.\n");
+	return 0;
+    }
+
+    fflush(stdout);
+    brk(version + sbuf2.st_size);
+    lseek(inf, 0L, 0);
+    encread(version, (unsigned int) sbuf2.st_size, inf);
+    /*
+     * we do not close the file so that we will have a hold of the
+     * inode for as long as possible
+     */
+	if (sbuf2.st_ino != sbuf.st_ino || sbuf2.st_dev != sbuf.st_dev)
+	{
+	    printf("Sorry, saved game is not in the same file.\n");
+	    return 0;
+	}
+#ifdef NOTDEF
+    /*
+     * defeat multiple restarting from the same place
+     */
+	if (sbuf2.st_nlink != 1 || syml)
+	{
+	    printf("Cannot restore from a linked file %d %d\n", sbuf2.st_nlink, syml);
+	    """"""Cb""""b#pP"BqC"p""""""""2 """""""""""""""b"""""""""""""""""""""""""""""""""bu""""""""""""""""BP """"Q"Q#a""0
+	}
+#endif
+    signal(SIGTSTP, SIG_DFL);
+
+    environ = envp;
+    stdin->_cnt = 0;
+    playit();
+    /*NOTREACHED*/
+}
+
+/*
+ * encwrite:
+ *	Perform an encrypted write
+ */
+encwrite(start, size, outf)
+register char *start;
+unsigned int size;
+register FILE *outf;
+{
+    register char *ep;
+
+    ep = encstr;
+
+    while (size--)
+    {
+	putc(*start++ ^ *ep++, outf);
+	if (*ep == '\0')
+	    ep = encstr;
+    }
+}
+
+/*
+ * encread:
+ *	Perform an encrypted read
+ */
+encread(start, size, inf)
+register char *start;
+unsigned int size;
+register int inf;
+{
+    register char *ep;
+    register int read_size;
+
+    if ((read_size = read(inf, start, size)) == -1 || read_size == 0)
+	return read_size;
+
+    ep = encstr;
+
+    while (size--)
+    {
+	*start++ ^= *ep++;
+	if (*ep == '\0')
+	    ep = encstr;
+    }
+    return read_size;
+}
+
+SHAR_EOF
+chmod +x 'save.c'
+fi # end of overwriting check
+if test -f 'shipyard.c'
+then
+	echo shar: will not over-write existing file "'shipyard.c'"
+else
+cat << \SHAR_EOF > 'shipyard.c'
+/*
+ * TREK73: shipyard.c
+ *
+ * Design your own ship
+ *
+ */
+
+#include <stdio.h>
+#ifdef BSD
+#include <strings.h>
+#endif
+#ifdef SYSV
+#include <string.h>
+#endif
+#include <fcntl.h>
+#include "externs.h"
+
+char buf[20];
+char class[3];
+char cloak;
+double bpv;
+struct {
+	char description[30];
+	char race[30];
+	char empire[30];
+} stuff;
+
+struct ship_stat design;
+
+main()
+{
+	double regen, efficiency, atof(), floor(), round();
+	int crew, phasers, torps, pods, max_speed, turn, p_div, t_div;
+	int done, atoi();
+
+	printf("Class identifier           :");
+	gets(class);
+	class[2] = '\0';
+	printf("Class description          :");
+	gets(stuff.description);
+	stuff.description[29] = '\0';
+	printf("Race name                  :");
+	gets(stuff.race);
+	stuff.race[29] = '\0';
+	printf("Empire name                :");
+	gets(stuff.empire);
+	stuff.empire[29] = '\0';
+	done = 0;
+	while (!done) {
+		printf("Regeneration               :");
+		gets(buf);
+		regen = atof(buf);
+		if (regen >= 0)
+			done = 1;
+		else
+			printf(">>> Be reasonable.\n");
+	}
+	done = 0;
+	while (!done) {
+		printf("Pods                       :");
+		gets(buf);
+		pods = atof(buf);
+		if (pods >= 0)
+			done = 1;
+		else
+			printf(">>> Be reasonable.\n");
+	}
+	done = 0;
+	while (!done) {
+		printf("Number of phasers          :");
+		gets(buf);
+		phasers = atoi(buf);
+		if ((phasers >= 0) && (phasers < MAXWEAPONS))
+			done = 1;
+		else
+			if (phasers < 0)
+				printf(">>> Be reasonable.\n");
+			else
+				printf(">>> Can't have more than %d.\n",
+				    MAXWEAPONS-1);
+	}
+	done = 0;
+	while (!done) {
+		printf("Number of tubes            :");
+		gets(buf);
+		torps = atoi(buf);
+		if ((torps >= 0) && (torps < MAXWEAPONS))
+			done = 1;
+		else
+			if (torps < 0)
+				printf(">>> Be reasonable.\n");
+			else
+				printf(">>> Can't have more than %d.\n",
+				    MAXWEAPONS-1);
+	}
+	done = 0;
+	while (!done) {
+		printf("Shield divisor for phasers :");
+		gets(buf);
+		p_div = atof(buf);
+		if (p_div > 0)
+			done = 1;
+		else
+			printf(">>> Be reasonable.\n");
+	}
+	done = 0;
+	while (!done) {
+		printf("Shield divisor for torps   :");
+		gets(buf);
+		t_div = atof(buf);
+		if (t_div > 0)
+			done = 1;
+		else
+			printf(">>> Be reasonable.\n");
+	}
+	done = 0;
+	while (!done) {
+		printf("Crew                       :");
+		gets(buf);
+		crew = atoi(buf);
+		if (crew > 0)
+			done = 1;
+		else
+			printf(">>> Be reasonable.\n");
+	}
+	printf("Can the ship cloak         ?");
+	gets(buf);
+	if (buf != NULL && (buf[0] == 'y' || buf[0] == 'Y'))
+		cloak = 1;
+	else
+		cloak = 0;
+
+	bpv = 0.;
+	bpv += regen * 12;
+	bpv += pods / 2;
+	bpv += p_div * 30;
+	bpv += t_div * 40;
+	bpv += (phasers + torps) * 10;
+	bpv += crew / 15;
+	printf("%s: BPV = %.2f\n", class, bpv);
+
+	efficiency = round(4 * (0.0034 * bpv - 0.78)) / 4;
+	if (efficiency < 0.25)
+		efficiency = 0.25;
+	turn = 10 - floor(bpv / 100);
+	if (turn < 1)
+		turn = 1;
+	max_speed = (int) round(-0.004 * bpv + 11);
+	if (max_speed < 1)
+		max_speed = 1;
+
+	printf("Efficiency = %.2f\n", efficiency);
+	printf("Turn = %d\n", turn);
+	printf("Max speed = %d\n", max_speed);
+
+	strcpy(design.abbr, class);
+	design.num_phaser = phasers;
+	design.num_torp = torps;
+	design.o_warpmax = max_speed;
+	design.e_warpmax = max_speed + 2;
+	design.o_eff = efficiency;
+	design.e_eff = efficiency;
+	design.regen = regen;
+	/* XXXX */
+	design.energy = pods * 3 / 4;
+	design.pods = pods;
+	design.o_crew = crew;
+	design.e_crew = crew * 5 / 4;
+	design.ph_shield = p_div;
+	design.tp_shield = t_div;
+	design.turn_rate = turn;
+	design.cloaking_energy = 4;
+	/* XXXX */
+	design.t_blind_left = 135;
+	design.t_blind_right = 225;
+	design.p_blind_left = 125;
+	design.p_blind_right = 235;
+	design.p_firing_delay = 4;
+	design.t_firing_delay = 4;
+
+	save_design();
+}
+
+double round(x)
+double x;
+{
+	return( floor(x + 0.5));
+}
+
+save_design()
+{
+	int fd, bytes;
+	char path[BUFSIZ];
+	char *home, *getenv();
+
+	if ((home = getenv("HOME")) != NULL)
+		strcpy(path, home);
+	else
+		strcpy(path, ".");
+	
+	strcat(path, "/.trek");
+	strcat(path, design.abbr);
+	printf("Saving to file %s\n", path);
+	
+	if ((fd = open(path, O_WRONLY|O_CREAT, 0644)) < 0) {
+		perror("open");
+		exit(1);
+	}
+	bytes = write(fd, (char *)&design, sizeof(struct ship_stat));
+	if (bytes != sizeof(struct ship_stat)) {
+		fprintf(stderr, "Wrote only %d, not %d bytes\n", bytes,
+		    sizeof(struct ship_stat));
+		unlink(path);
+		exit(1);
+	}
+	bytes = write(fd, &stuff, sizeof(stuff));
+	bytes = write(fd, &cloak, 1);
+	bytes = write(fd, (char *)&bpv, sizeof(int));
+	close(fd);
+}
+SHAR_EOF
+chmod +x 'shipyard.c'
+fi # end of overwriting check
+if test -f 'subs.c'
+then
+	echo shar: will not over-write existing file "'subs.c'"
+else
+cat << \SHAR_EOF > 'subs.c'
+/*
+ * TREK73: subs.c
+ *
+ * Miscellaneous Subroutines
+ *
+ * ship_name, newitem, delitem, rangefind, bearing, phaser_hit,
+ * torpedo_hit, antimatter_hit, round, rectify
+ */
+
+#include "externs.h"
+#include <ctype.h>
+
+
+struct ship *ship_name(name)
+char *name;
+{
+	register int i;
+	register int j;
+	register int len;
+
+	if (isascii(*name) && islower(*name))
+		*name = toupper(*name);
+	j = shipnum;
+	len = strlen(name);
+	for (i=1; i<=j; i++) {
+		if (shiplist[i]->complement < 0)
+			continue;
+		if (!strncmp(name, shiplist[i]->name, len))
+			return shiplist[i];
+	}
+	printf("%s: I am unable to find the %s\n", science, name);
+	return NULL;
+}
+
+
+struct list *newitem(item)
+int item;
+{
+	register struct	list *new;
+	register struct	list *newtail;
+
+	/*
+	 * if there's no "tail" node, make one (only happens at init)
+	 */
+	if (tail == NULL) {
+		new = MKNODE(struct list, *, 1);
+		if (new == (struct list *)NULL) {
+			fprintf(stderr, "newitem: malloc failed\n");
+			exit(2);
+		}
+		new->back = &head;
+		new->fwd = NULL;
+		new->data.tp = NULL;
+		head.fwd = new;
+		tail = new;
+	}
+	new = tail;
+	/*
+	 * now make the new tail node
+	 */
+	newtail = MKNODE(struct list, *, 1);
+	if (newtail == (struct list *)NULL) {
+		fprintf(stderr, "newitem: malloc failed\n");
+		exit(2);
+	}
+	newtail->back = new;
+	newtail->fwd = NULL;
+	newtail->data.tp = NULL;
+	newtail->type = 0;
+	tail = newtail;
+	/*
+	 * link the old tail node to the new one
+	 */
+	new->type = item;
+	new->fwd = newtail;
+	return new;
+}
+
+
+int delitem(item)
+struct list *item;
+{
+	register struct list *bp;
+	register struct list *fp;
+
+	bp = item->back;
+	fp = item->fwd;
+	if (item->data.tp != NULL)
+		free((char *) item->data.tp);
+	/*
+	 * re-arrange pointers on both the next and the previous
+	 * nodes; if no forward pointer, we were the tail so make
+	 * the bp the new tail node.
+	 */
+	if (fp != NULL) {
+		bp->fwd = fp;
+		fp->back = bp;
+	} else {
+		tail = bp;
+		bp->fwd = NULL;
+	}
+	free((char *) item);
+}
+
+int rangefind(xfrom, xto, yfrom, yto)
+int xfrom;
+int xto;
+int yfrom;
+int yto;
+{
+	register double x, y;
+
+	x = xto - xfrom;
+	y = yto - yfrom;
+	if (x == 0.0 && y == 0.0)
+		return 0;
+	else
+	return (int) hypot(x, y);
+}
+
+/*
+ * This routine finds the bearing of (xto,yto) from (xfrom,yfrom)
+ */
+float bearing(xfrom, xto, yfrom, yto)
+int xfrom;
+int xto;
+int yfrom;
+int yto;
+{
+	register double x, y;
+	register float bear;
+
+	x = xto - xfrom;
+	y = yto - yfrom;
+	if (x == 0.0 && y == 0.0)
+		bear = 0.0;
+	else
+		bear = todegrees(atan2(y, x));
+	bear = rectify(bear);
+	return bear;
+}
+
+int phaser_hit(sp, x, y, bank, true_bear)
+struct ship *sp;
+int x;
+int y;
+struct phaser *bank;
+float true_bear;
+{
+	register int hit;
+	int	i;
+	float	spread;
+	float	bear;
+	double	d1;
+	double	d2;
+
+	hit = 0;
+	i = rangefind(sp->x, x, sp->y, y);
+	if (i < MAX_PHASER_RANGE) {
+		bear = bearing(sp->x, x, sp->y, y);
+		spread = rectify(true_bear - bear);
+		/*
+		 * Check if a target is within the phaser spread
+		 */
+		if (betw(spread, sp->p_spread, 360-spread))
+			return 0;
+		d1 = 1.0 - (float)i/MAX_PHASER_RANGE;
+		d2 = (float)bank->load * sqrt(d1) * sp->p_percent / 100;
+		/* XXXX */
+		/*
+		 * This may have to be changed if phaser spread or maximum
+		 * phaser load is changed
+		 */
+		d2 = (float)bank->load * d2 * 45.0/(float)sp->p_spread * sp->p_percent / 100;
+		hit = d2/10.0;
+	}
+	return hit;
+}
+
+int torpedo_hit(fuel, x, y, tx, ty)
+int fuel;
+int x;
+int y;
+int tx;
+int ty;
+{
+	register int hit;
+	int	i;
+	double	d1;
+	double	d2;
+	float	f1;
+	float	f2;
+
+	hit = 0;
+	i = rangefind(x, tx, y, ty);
+	f1 = fuel * HIT_PER_POD;
+	f2 = fuel * PROX_PER_POD;
+	if (i < f2) {
+		d1 = 1.0 - (float)i/f2;
+		d2 = (float)f1 * sqrt(d1);
+		hit = d2;
+	}
+	return hit;
+}
+
+
+antimatter_hit(ptr, x, y, fuel)
+char *ptr;
+int x;
+int y;
+int fuel;
+{
+	register struct list *lp;
+	register int hit;
+	int	tarx, tary;
+	int	s;
+	float	bear;
+	struct 	torpedo *tp;
+	struct	ship *sp;
+
+	for (lp = &head; lp != tail; lp = lp->fwd) {
+		if (lp->type == 0)
+			continue;
+		sp = NULL;
+		tp = NULL;
+		if (lp->type == I_SHIP) {
+			sp = lp->data.sp;
+			tarx = sp->x;
+			tary = sp->y;
+		} else {
+			tp = lp->data.tp;
+			tarx = tp->x;
+			tary = tp->y;
+		}
+		if (sp == (struct ship *) ptr || tp == (struct torpedo *) ptr)
+			continue;
+		hit = torpedo_hit(fuel, x, y, tarx, tary);
+		if (hit <= 0)
+			continue;
+		if (sp) {
+			/* 
+			 * Determine which shield is hit
+			 */
+			bear = rectify(bearing(tarx, x, tary, y) - sp->course);
+			if (bear <= 45.0 || bear >= 315.0)
+				s = 1;
+			else if (bear <= 135.0)
+				s = 2;
+			else if (bear < 225.0)
+				s = 3;
+			else
+				s = 4;
+			(void) damage(hit, sp, s, &a_damage, D_ANTIMATTER);
+		} else {
+			if (tp->timedelay <= segment)
+				continue;
+			tp->timedelay = segment;
+			switch (lp->type) {
+				case I_TORPEDO:
+					printf("hit on torpedo %d\n", 
+						tp->id);
+					break;
+				case I_PROBE:
+					printf("hit on probe %d\n", 
+						tp->id);
+					break;
+				case I_ENG:
+					printf("hit on %s engineering\n",
+						tp->from->name);
+					break;
+				default:
+					printf("hit on unknown item %d\n",
+					    tp->id);
+			}
+		}
+	}
+}
+
+float round(x)
+float x;
+{
+	return(floor(x + 0.5));
+}
+
+float rectify(x)
+float x;
+{
+	while (x < 0.0) {
+		x += 360.0;
+	}
+	while (x >= 360.0){
+		x -= 360.0;
+	}
+	return x;
+}
+SHAR_EOF
+chmod +x 'subs.c'
+fi # end of overwriting check
+#	End of shell archive
+exit 0

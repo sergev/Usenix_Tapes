@@ -1,0 +1,192 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site nsc-pdc.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!vax135!cornell!uw-beaver!tektronix!reed!nsc-pdc!mark
+From: mark@nsc-pdc.UUCP (Mark Nudelman)
+Newsgroups: net.sources,net.sources.bugs
+Subject: bug in "less"
+Message-ID: <203@nsc-pdc.UUCP>
+Date: 5 Jun 85 17:45:14 GMT
+Date-Received: 8 Jun 85 03:07:20 GMT
+Reply-To: mark@nsc-pdc.UUCP (Mark Nudelman)
+Organization: NSC Portland Development Center, Portland Oregon
+Lines: 178
+Xref: plus5 net.sources:1728 net.sources.bugs:371
+
+Thanks to the many people who have already written to me about
+the program "less" I posted a few days ago.  Most of the comments
+have been very favorable.  There is one bug which causes less
+to fail on terminals which require the termcap ti/te strings.
+Below is a fix for this problem.  Thanks to Mike Kersenbrock 
+for first pointing out (and fixing) the problem.
+
+Mark Nudelman			nsc!nsc-pdc!mark
+National Semiconductor		tektronix!reed!nsc-pdc!mark
+
+
+*** main.c.OLD	Wed Jun  5 08:04:43 1985
+--- main.c	Wed Jun  5 08:06:07 1985
+***************
+*** 412,417
+  	raw_mode(1);
+  	get_term();
+  	start_getc();
+  
+  	if (setjmp(main_loop) == 0)
+  	{
+
+--- 412,418 -----
+  	raw_mode(1);
+  	get_term();
+  	start_getc();
++ 	init();			/* Mike Kersenbrock modification 6/3/85 */
+  
+  	if (setjmp(main_loop) == 0)
+  	{
+***************
+*** 457,462
+  	lower_left();
+  	clear_eol();
+  	lower_left();
+  	flush();
+  	raw_mode(0);
+  	exit(0);
+
+--- 458,464 -----
+  	lower_left();
+  	clear_eol();
+  	lower_left();
++ 	deinit();		/* Mike Kersenbrock modification 6/3/85 */
+  	flush();
+  	raw_mode(0);
+  	exit(0);
+
+
+*** screen.c.OLD	Wed Jun  5 08:04:52 1985
+--- screen.c	Wed Jun  5 08:06:16 1985
+***************
+*** 1,6
+  /*
+   * Routines which deal with the characteristics of the terminal.
+   * Uses termcap to be as terminal-independent as possible.
+   *
+   * {{ Someday this should be rewritten to use curses. }}
+   */
+
+--- 1,7 -----
+  /*
+   * Routines which deal with the characteristics of the terminal.
+   * Uses termcap to be as terminal-independent as possible.
++  * Terminal initialization/deinitialization added 6/3/85 by Mike Kersenbrock
+   *
+   * {{ Someday this should be rewritten to use curses. }}
+   */
+***************
+*** 27,33
+  	*sc_enter_standout,	/* Enter standout (highlighted) mode */
+  	*sc_exit_standout,	/* Exit standout mode */
+  	*sc_visual_bell,	/* Visual bell (flash screen) sequence */
+! 	*sc_backspace;		/* Backspace cursor */
+  static int dumb;
+  static int hard;
+  
+
+--- 28,36 -----
+  	*sc_enter_standout,	/* Enter standout (highlighted) mode */
+  	*sc_exit_standout,	/* Exit standout mode */
+  	*sc_visual_bell,	/* Visual bell (flash screen) sequence */
+! 	*sc_backspace,		/* Backspace cursor */
+! 	*sc_init,		/* Startup terminal initialization */
+! 	*sc_deinit;		/* Exit terminal de-intialization */
+  static int dumb;
+  static int hard;
+  
+***************
+*** 189,194
+  	if (sc_pad != NULL)
+  		PC = *sc_pad;
+  
+  	sc_clear_eol = (dumb) ? NULL : tgetstr("ce", &sp);
+  	if (hard || sc_clear_eol == NULL || *sc_clear_eol == '\0')
+  	{
+
+--- 192,205 -----
+  	if (sc_pad != NULL)
+  		PC = *sc_pad;
+  
++ 	sc_init = (dumb) ? NULL : tgetstr("ti", &sp);
++ 	if (sc_init == NULL)
++ 		sc_init = "";
++ 
++ 	sc_deinit= (dumb) ? NULL : tgetstr("te", &sp);
++ 	if (sc_deinit == NULL)
++ 		sc_deinit = "";
++ 
+  	sc_clear_eol = (dumb) ? NULL : tgetstr("ce", &sp);
+  	if (hard || sc_clear_eol == NULL || *sc_clear_eol == '\0')
+  	{
+***************
+*** 304,309
+   * terminal-specific screen manipulation.
+   */
+  
+  
+  /*
+   * Home cursor (move to upper left corner of screen).
+
+--- 315,338 -----
+   * terminal-specific screen manipulation.
+   */
+  
++ 
++ /*
++  * Initialize terminal
++  */
++ 	public void
++ init()
++ {
++ 	tputs(sc_init, screen_height, putc);
++ }
++ 
++ /*
++  * Deinitialize terminal
++  */
++ 	public void
++ deinit()
++ {
++ 	tputs(sc_deinit, screen_height, putc);
++ }
+  
+  /*
+   * Home cursor (move to upper left corner of screen).
+
+*** version.c.OLD	Wed Jun  5 08:04:58 1985
+--- version.c	Wed Jun  5 08:06:18 1985
+***************
+*** 51,56
+   *	v21: Fixed some first_cmd bugs.			5/23/85   mark
+   *	v22: Added support for no RECOMP nor REGCMP.	5/24/85   mark
+   *	v23: Miscellanous changes and prettying up.	5/25/85   mark
+   *	-----------------------------------------------------------------
+   */
+  
+
+--- 51,57 -----
+   *	v21: Fixed some first_cmd bugs.			5/23/85   mark
+   *	v22: Added support for no RECOMP nor REGCMP.	5/24/85   mark
+   *	v23: Miscellanous changes and prettying up.	5/25/85   mark
++  *      v24: Added ti,te terminal init & de-init       6/3/85 Mike Kersenbrock
+   *	-----------------------------------------------------------------
+   */
+  
+***************
+*** 54,57
+   *	-----------------------------------------------------------------
+   */
+  
+! char version[] = "@(#) less  version 23";
+
+--- 55,58 -----
+   *	-----------------------------------------------------------------
+   */
+  
+! char version[] = "@(#) less  version 24";

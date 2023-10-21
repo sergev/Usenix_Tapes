@@ -1,0 +1,145 @@
+Brief installation instructions for version 1.0 of smail.
+
+What it does:
+
+  Smail is capable of handling UUCP syntax (bang paths, bang
+  domains, and at domains are supported) mail transportation
+  over UUCP/uux/rmail channels.  It will support machines that
+  only have UUCP connections, and machines with UUCP links to
+  the outside world plus a small number of local machines that
+  are reached via SMTP.  The domain intelligence is embedded
+  in the smail database (e.g. the pathalias output), not the
+  sendmail.cf file, so if you have a fancier domain structure
+  that involves SMTP or anything other than uux in the domain
+  structure, you'll want to modify the sendmail.cf file here or
+  merge pieces of the enclosed sendmail.cf into your own.
+
+  Smail runs under 4.2BSD and System V, as a back end to sendmail;
+  and under System V without sendmail.  It also replaces rmail, which
+  becomes a link to smail.  In a sendmail environment, smail depends on
+  sendmail to crack the headers, as smail just deals with the
+  envelope.  If you don't have sendmail, smail will not add or generate
+  any of the required RFC822 headers (Date:, From:, Message-ID:, Received:)
+  but your old system didn't generate these either, so you don't lose
+  anything you already had.
+
+  Features of smail include:
+
+  (1) Using pathalias data to choose the best route to your destination.
+  (2) Handling of user@domain, domain!user, and host!user syntax.
+  (3) Generation of domain!user syntax to be forwarded by other systems.
+  (4) Logging of traffic through your machine, by sender, recipient, and
+      size of message, so you can detect abuses of your machine.
+  (5) Mail being forwarded through your machine to another uux link is
+      passed from rmail directly to uux, so there's less overhead on
+      your machine (sendmail stays out of the loop.)
+  (6) Simiplicity.
+
+Prerequisites:
+
+  You need a copy of a recent posting of pathalias.  (The one posted
+  by Peter Honeyman in January 1986 is recommended.)  You'll also
+  need a current copy of the UUCP map, or at least a copy of the
+  appropriate part of it that you're interested in.  You can get pathalias
+  from the mod.sources Usenet archive (contact sources-request@mirror.UUCP)
+  and you can get a UUCP map each month from Usenet newsgroup mod.map.
+  The UUCP map is quite large (currently about 1.6MB) so please don't ask
+  to have a copy mailed to you - get a copy from a nearby Usenet site.
+
+Overall structure:
+
+  Smail is installed in /bin/smail with a link in /bin/rmail.  Uuxqt
+  calls rmail, which either forwards the message on to the next hop
+  directly or calls sendmail.  Sendmail may decide the message should
+  be delivered by UUCP, and invoke smail, which will look up a route
+  and invoke uux.  (Note that the choice about when to invoke sendmail
+  and when to process a message directly can be configured in smail.)
+
+  smail uses a database which is generated from pathalias.  You take the
+  current UUCP map, add some local information and topology data (to tell
+  it about the domain tree) and run pathalias.  The result is sorted and
+  installed in /usr/lib/uucp/paths.  There is no hashing done on this
+  file - when smail looks up a name it uses a binary search.
+
+Installation Instructions:
+
+  See the file INFO.INSTALL for step by step instructions.
+
+  If you are cbosgd.ATT.COM, you would set
+	DDATT.COM
+  If you are a one-machine organization named WIDGET, you might set
+	DDWIDGET.COM
+  If you are a PC at the fourth level, named cbpavo.cbosgd.ATT.COM,
+  sending all your mail to the outside through cbosgd.ATT.COM, set
+	DDcbosgd.ATT.COM
+  Of course, the top level might not be COM, other possibilities
+  include EDU, GOV, or the ISO 3166 2 letter name for your country.
+
+  If you want to do any hacking up of sendmail.cf, put the resulting
+  sendmail.cf in the current directory so it will be copied to /usr/lib.
+
+  Save your /bin/rmail and /usr/lib/sendmail.cf somewhere safe, in case
+  of disaster.  If you already have a /bin/smail or /usr/lib/uucp/paths,
+  you might want to save them too.
+
+  Generate /usr/lib/uucp/paths.  To do this, edit the Makefile to point
+  to the directory in which you keep your UUCP map, and type "make paths."
+  You may want to make local changes first by creating a new "u.Path.*" file
+  or files.  All the u.Path.* and $(UUMAP) files are basically appended
+  (the order doesn't matter) so you can divide them up into local pieces
+  of information maintained by different places.  Be sure you have the
+  files u.Path.top and u.Path.uucp in your $(UUMAP) directory.
+
+  Compile smail.  To do this, type "make".
+
+  If you have the logging turned on, you should arrange that something
+  out of crontab erases the logs regularly, or your disk may overflow.
+  One line per message is created in /usr/lib/uucp/mail.log.  If you
+  log full messages, they get put in /tmp/mail.log.  (Note that full
+  message logging is considered anti-social if you use it to snoop;
+  it is recommended that this feature only be used if you are running
+  software that you don't completely trust, so you can reproduce any
+  problem that might turn up.)
+
+Configuration considerations:
+
+  You'll note two configuration options in defs.h: HANDLE and ROUTING.
+  These control which sorts of addresses smail/rmail will handle, and
+  which type of routing they will do.  The HANDLE define only affects
+  rmail, since smail is set by the first executable code, or by the
+  option from sendmail.cf.  In any case, we recommend that you leave
+  HANDLE alone, unless you are making major changes.
+
+  ROUTING has three choices: JUSTDOMAIN, ALWAYS, and REROUTE.  rmail
+  will run as JUSTDOMAIN, the defs.h default.  This means rmail will
+  only apply routing if it sees "rmail user@domain", and will just call
+  uux if it sees "rmail host!user".  (If the latter fails, it will call
+  sendmail, which will in turn call smail -r, which will apply ALWAYS
+  routing to get the mail there anyway.  This has the advantage of being
+  low overhead on your system, not second guessing a route someone else
+  asked for, and still recovering nicely from the mistakes of another
+  system.  Your host becomes a "smart host" that can get mail anywhere.)
+
+  smail is only called from sendmail, which will call it with the -r
+  option (see smail.cf.form.)  This changes ROUTING to ALWAYS, so that
+  mail to host!user will look up the best path to host.  This is considered
+  a good, conservative strategy.
+
+  Many people will note huge paths going through their machine.  These
+  paths are generated by replies to netnews messages, and tend to be 10
+  or 20 hops long - far longer than necessary.  If you are a bit aggressive,
+  you can change -r to -R, which will cause such failed mail to be rerouted,
+  thus, mail to a!b!c!d!e!f!g!user will look up a route to g, and send the
+  mail to route!g!user.  (If it can't find g, it will try f, then e, and
+  so on until it finds someone it recognizes.)  If you are REALLY aggressive,
+  you can change ROUTING to REROUTE in defs.h, to get the same effect for
+  ALL rmail being passed through your machine.  This may help cut phone
+  bills, but it has some disadvantages.  It can lengthen a path sometimes,
+  e.g. mail to tektronix!user might turn into ihnp4!tektronix!user if your
+  routing database says mail to tektronix goes through ihnp4.  It makes it
+  hard to route around a dead host, or to redirect traffic from a mailing
+  list to several different directions.  It may also make mail go a different
+  path than what your user thought it was, and it affects other hosts that
+  route mail through you if you set ROUTING to REROUTE in defs.h.  So only
+  do this if you know what you are doing, and are willing to live with the
+  disadvantages.

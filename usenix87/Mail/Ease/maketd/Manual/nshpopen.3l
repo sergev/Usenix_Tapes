@@ -1,0 +1,87 @@
+.TH NSHPOPEN 3 "local"
+.SH NAME
+nshpopen, nshpclose \- initiate I/O to/from a process
+.SH SYNOPSIS
+.B #include <stdio.h>
+.PP
+.SM
+.B FILE
+.B *nshpopen(command, type)
+.br
+.B char *command, *type;
+.PP
+.B nshpclose(stream)
+.br
+.SM
+.B FILE
+.B *stream;
+.SH DESCRIPTION
+The arguments to 
+.I nshpopen
+are pointers to null-terminated strings containing respectively
+a shell command line and an I/O mode, either "r" for reading or
+"w" for writing.
+It creates a pipe between the calling process and the command
+to be executed.
+The value returned is a stream pointer that can be used (as
+appropriate) to write to the standard input of the command or
+read from its standard output.
+.PP
+A stream opened by
+.I nshpopen
+should be closed by
+.IR nshpclose ,
+which waits for the associated process to terminate
+and returns the exit status of the command.
+.PP
+Because open files are shared, a type "r" command may be used
+as an input filter, and a type "w" as an output filter.
+.PP
+.I Nshpopen
+breaks up the
+.I command
+argument string at spaces and tabs for the child process.
+However, it does not invoke a shell, and does not
+attempt any shell shell meta character parsing.
+In particular, quoted white space will still cause argument seperation.
+By avoiding calling a shell, pipe creation is a great deal quicker.
+Also, by avoiding the (rather complicated) shell meta character
+parsing, some types of bugs may be avoided.
+This is important where the security of setuid programs is involved.
+.SH "SEE ALSO"
+pipe(2),
+popen(3),
+fopen(3S),
+fclose(3S),
+system(3),
+wait(2),
+sh(1)
+.SH DIAGNOSTICS
+.I Nshpopen
+returns a null pointer if files or processes cannot be created,
+or the shell cannot be accessed.
+.PP
+.I Nshpclose
+returns \-1 if
+.I stream
+is not associated with an `nshpopened' command.
+.SH BUGS
+Buffered reading before opening an input filter
+may leave the standard input of that filter mispositioned.
+Similar problems with an output filter may be
+forestalled by careful buffer flushing, for instance, with
+.I fflush,
+see
+.IR fclose (3).
+.LP
+.I Nshpopen
+does not call a shell to do it's work.
+It does not attempt to process shell meta characters.
+Thus, it does not treat quotes, I/O redirects, or file
+name wildcard characters specially.
+This is it's incompatibility with
+.I popen(3).
+.LP
+This type of function should have been included with
+.I popen(3)
+in the standard I/O library.

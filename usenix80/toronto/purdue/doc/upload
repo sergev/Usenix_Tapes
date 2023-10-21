@@ -1,0 +1,114 @@
+PROGRAM NAME:  upload
+
+AUTHOR:  Geo. Goble
+
+DATE WRITTEN:  07/04/77
+
+SOURCE LANGUAGE:  C
+
+LOCATION OF SOURCE:  /src/s2/upload.c
+
+LOCATION OF BINARY:  /usr/bin/upload
+
+SYNTAX:
+% upload [timeout] >outfile
+
+
+DESCRIPTION:
+	Upload allows input of 8 bit data bytes to the PDP-11/70 over
+high speed serial (DH-11) lines at speeds upto 9600 baud.  Since
+all 256 ASCII characters are treated as binary data, it is  not
+possible to send an end-of-file to upload.  Instead  a  timeout
+mechanism is used.  Upload recognizes one optional argument, a
+number between 1 and 30 specifying the number of seconds  of  no
+data transfer before terminating input.  If timeout is not specified,
+5 seconds is used.  Data read from the serial line is written onto
+standard output and should be redirected to some output file with
+a ">" in the shell command line.
+
+	Very little hand shaking is required to use upload.  Once
+upload has locked itself into memory and is ready to accept data,
+a control-q (ASCII 21 octal) will be sent to the terminal.  The
+microprocessor or other device may then send data down the line
+at full speed with no more handshaking.  The normal Unix control
+characters (rubout, quit, backspace, etc) will be treated strictly
+as data and not be interpreted by the operating system.  Once the
+microprocessor has terminated its data transfer, an interval of
+timeout seconds (default 5) will elapse and the upload program
+will terminate.  Upon termination of upload, a control-s (ASCII
+23 octal) will be sent to the terminal.  If the data transfer is
+resumed anytime during the timeout interval, upload resumes and
+resets its timeout counter as if there had been no pause in the
+transfer.  Other than the initial control-q and the terminating
+control-s, no data is sent or echoed back to the terminal.
+
+EXAMPLES:
+
+	% upload >memfile
+	(start data to 11/70 here, xfer ends after 5 seconds of no data)
+
+	% upload 15 >6800mem
+	(same as above, xfer ends 15 seconds after no input data)
+
+NOTES:
+	During periods of very heavy system (disk) load, it may be
+possible for the disk to become "locked out" for periods of several
+seconds.  Lockouts are a rare occurance but can be caused by hung
+devices, or several jobs impacting the system.  Upload currently
+has an internal buffer which will hold 4000 characters, to allow
+it to keep accepting data for periods of up to several seconds when
+the system is busy.  However, just to be safe, it is the user's
+resposibility to know how many characters should have been sent
+and do a "ls -l" on the data file just received.  If a buffer overrun
+did occur, the byte count of this file will be several thousand
+less than expected and the transfer should be done over.  You should
+not have to worry about this if the transfer is less than 4 or 5
+thousand bytes.
+
+	Unlike most other Unix programs, upload cannot accept input
+data until it has been loaded into memory.  Regular Unix commands
+can be typed as quickly as one can enter them because the tty driver
+buffers up the keyboard input into a "type ahead" buffer.  Upload
+does not use the standard tty driver and no type-ahead is possible.
+For this reason, upload sends out a control-q when it is ready for
+input. Unlike the normal tty driver, upload can read input, full
+blast, for an almost indefinate period of time.  If you don't want
+to bother with looking for the control-q, you can (under normal
+system load) just type "% upload >file", wait about 3 seconds to
+give upload time to get itself into memory, and start the transfer.
+
+MESSAGES & DIAGNOSTICS:
+"bad timeout value, must be between 1 and 30"
+
+The optional parameter specified on the upload command was either non numeric
+or was not in the range of 1 to 30.
+
+
+"no tty defined on standard input"
+
+The standard input for upload is not a tty device.  The most likely cause is
+trying to put the upload command in a shell command file, where the command
+file is the standard input.  If you wish to put the upload command in a shell
+file, its standard input should be redirected with a "<". (upload </dev/ttyf)
+For complicated reasons, "/dev/tty" cannot be used, an explicit tty must be
+specified.
+
+
+"another upload or other xfer in progress"
+
+It is possible to have only 1 high speed input transfer going on for any
+particular port at any given time.  Another transfer is already taking
+place on this port.
+
+
+"this terminal not capable of uploading"
+
+In order to use upload, there must be a special file entered into the system
+/dev directory.  If you have a need to use upload, contact the system manager
+to put the special file in the /dev directory.
+
+FILES USED:
+/dev/tty?	determined by a ttyn() call on standard input
+/dev/xx?	high speed special device driver (last char of name and minor
+		device number is same as that for /dev/tty? for this port)
+

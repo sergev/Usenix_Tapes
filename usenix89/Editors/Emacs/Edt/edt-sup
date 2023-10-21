@@ -1,0 +1,812 @@
+	; edt-sup   Jim Boland Tek/CBI  12-Dec-85
+	; functions to make emacs emulate EDT
+
+	; global declarations
+	 (declare-global desired-string)
+	 (declare-global last-buffer-name)
+	 (declare-global main-buffer-name)
+	 (declare-global main-file-name)
+	 (declare-global changed-buffer)
+	 (declare-global repetitions)
+ 	 (declare-global selected)
+	
+	; repeating a command : easier and simpler to do with keyboard 7
+	; rather than GOLD
+	(defun
+		(getting-repetitions
+			(setq repetitions (arg 1 "REPEAT? : "))
+		)
+	)
+
+	; arrow keys
+	  (bind-to-key "delete-previous-character" "\177")
+	  (bind-to-key "forward-character" "\e[C")
+	  (bind-to-key "backward-character" "\e[D")
+	  (bind-to-key "previous-line" "\e[A")
+	  (bind-to-key "scroll-one-line-up" "\e\e[A")
+	  (bind-to-key "next-line" "\e[B")
+	  (bind-to-key "scroll-one-line-down" "\e\e[B")
+	  (bind-to-key "forward-word" "\e\e[C")
+	  (bind-to-key "backward-word" "\e\e[D")
+	
+	; definitions for moving cursor a section :  keyboard 8
+	
+	(defun
+	    (section-up count
+		(while (> repetitions 0)
+	           (setq count 17)
+	           (while (> count 1)
+		       (previous-line)
+		       (setq count (- count 1))
+		   )
+		   (setq repetitions (- repetitions 1))
+		)
+		(setq repetitions 1)
+	    )
+	)
+	
+	(defun
+	    (section-down count
+		(while (> repetitions 0)
+	           (setq count 17)
+	           (while (> count 1)
+		      (next-line)
+		      (setq count (- count 1))
+		   )
+		   (setq repetitions (- repetitions 1))
+		)
+		(setq repetitions 1)
+	    )
+	)
+	
+	; definitions for cut and paste
+	
+	; keyboard 6
+	
+	(defun
+	    (cut-region 
+			(delete-region-to-buffer "cut-and-paste")
+		        (set "selected" 0)
+			(send-string-to-terminal "\033[m")
+		)
+	)
+	
+	; keyboard GOLD 6
+	
+	(defun
+	    (paste-region
+			(yank-buffer "cut-and-paste")
+		)
+	)
+	
+	; keyboard . (period)
+	
+	(defun
+		(select-region
+			(set-mark)
+		        (set "selected" 1)
+		)
+	)
+	
+	; keyboard 9
+	
+	(defun
+		(lets-append-it
+			(append-region-to-buffer "cut-and-paste")
+		        (set "selected" 0)
+			(delete-to-killbuffer)
+		)
+	)
+	
+	; keyboard GOLD 9
+	
+	(defun
+		(lets-replace-it
+			(delete-to-killbuffer)
+		        (set "selected" 0)
+			(yank-buffer "cut-and-paste")
+		)
+	)
+	
+	(defun
+	    (edt-cut-to-buffer reply
+			(setq reply (get-tty-string "CUT TO WHICH BUFFER? ")) 
+			(delete-region-to-buffer reply)
+		        (set "selected" 0)
+			(send-string-to-terminal "\033[m")
+		)
+	)
+	
+	(defun
+	    (edt-copy-buffer reply
+			(setq reply (get-tty-string "COPY FROM WHICH BUFFER? "))
+			(yank-buffer reply)
+		)
+	)
+	
+	(defun
+		(edt-append-it reply
+			(setq reply (get-tty-string "APPEND TO WHICH BUFFER? "))
+			(append-region-to-buffer reply)
+		        (set "selected" 0)
+			(delete-to-killbuffer)
+		)
+	)
+	
+	(defun
+		(edt-replace-it reply
+			(setq reply (get-tty-string "REPLACE FROM WHICH BUFFER? "))
+			(delete-to-killbuffer)
+		        (set "selected" 0)
+			(yank-buffer reply)
+		)
+	)
+	
+	; change case : keyboard GOLD 1
+	(defun
+	     (doit-forward
+	         (set-mark)
+	         (forward-character)
+	         (case-region-invert)
+	     )
+	)
+	
+	  (defun
+	     (case-char-invert
+	         (if (= selected 1)
+	             (case-region-invert)
+	         )
+	         (if (= selected 0)
+		    (while (> repetitions 0)
+	               (doit-forward)
+		       (setq repetitions (- repetitions 1))
+		    )
+	         )
+	         (set "selected" 0)
+	         (setq repetitions 1)
+	     )
+	   )
+	(defun
+	  (doit-reverse
+	     (set-mark)
+	     (backward-character)
+	     (case-region-invert)
+	  )
+	)
+	
+	  (defun
+	     (reverse-case-char-invert
+	         (if (= selected 1)
+	             (case-region-invert)
+	         )
+	         (if (= selected 0)
+		    (while (> repetitions 0)
+	               (doit-reverse)
+		       (setq repetitions (- repetitions 1))
+		    )
+	         )
+	         (set "selected" 0)
+		 (setq repetitions 1)
+	     )
+	   )
+	
+	; some file i/o
+	
+	(defun
+ 		(add-from-file reply1
+			(setq reply1 (get-tty-string "APPEND FROM FILE: "))
+			(insert-file reply1)
+		)
+	)
+
+	(defun
+		(backto-main-buffer 
+			(switch-to-buffer main-buffer-name)))
+
+	(defun
+		(return-to-last-buffer
+			(switch-to-buffer last-buffer-name)
+		)
+	)
+
+	(defun
+		(read-in-a-file reply1 reply2
+			(setq last-buffer-name  (current-buffer-name))
+			(if (= changed-buffer 0)
+			    (setq main-buffer-name (current-buffer-name)))
+			(setq reply1 (get-tty-string "INPUT FILE: "))
+			(setq reply2 (get-tty-string "INTO BUFFER: "))
+			(setq changed-buffer 1)
+			(switch-to-buffer reply2)
+			(read-file reply1)
+		)
+	)
+	
+	(defun
+		(write-out-a-file reply1 reply2 
+			(setq last-buffer-name  (current-buffer-name))
+			(if (= changed-buffer 0)
+			    (setq main-buffer-name (current-buffer-name)))
+			(setq reply1 (get-tty-string "OUTPUT FILE: "))
+			(setq reply2 (get-tty-string "FROM BUFFER: "))
+			(setq changed-buffer 1)
+			(switch-to-buffer reply2)
+			(write-named-file reply1)
+		)
+	)
+	
+	; switch to a named buffer
+	
+	(defun
+		(switch-buffers reply2
+			(setq last-buffer-name  (current-buffer-name))
+			(if (= changed-buffer 0)
+			    (setq main-buffer-name (current-buffer-name)))
+			(setq reply2 (get-tty-string "SWITCH TO BUFFER: "))
+			(setq changed-buffer 1)
+			(switch-to-buffer reply2)
+		)
+	)
+	
+	
+	; insert and find special marker : GOLD .  /  GOLD /
+	
+	(defun
+		(insert-the-marker
+			(insert-string "~~/\~~")
+		)
+	)
+	
+	(defun
+		(find-marker-forward
+			(search-forward "~~/\~~")
+			(set-mark)
+			(search-reverse "~~/\~~")
+			(delete-to-killbuffer)
+		)
+	)
+	
+	(defun
+		(find-marker-reverse
+			(search-reverse "~~/\~~")
+			(set-mark)
+			(search-forward "~~/\~~")
+			(delete-to-killbuffer)
+		)
+	)
+	
+	; substitute : Gold Enter
+	
+	(defun
+		(substitute-it-forward
+		(while (> repetitions 0)
+			(backward-character)
+			(search-forward desired-string)
+			(set-mark)
+			(search-reverse desired-string)
+			(delete-to-killbuffer)
+			(yank-buffer "cut-and-paste")
+			(search-forward desired-string)
+			(search-reverse desired-string)
+			(setq repetitions (- repetitions 1))
+		)
+		(setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(substitute-it-reverse
+		(while (> repetitions 0)
+			(forward-character)
+			(search-reverse desired-string)
+			(backward-character)
+			(search-forward desired-string)
+			(set-mark)
+			(search-reverse desired-string)
+			(delete-to-killbuffer)
+			(yank-buffer "cut-and-paste")
+			(search-reverse desired-string)
+			(setq repetitions (- repetitions 1))
+		    )
+		    (setq repetitions 1)
+		)
+	)
+	
+	; gold find  : Gold Find
+	
+	(defun
+		(find-it-forward 
+		    (while (> repetitions 0)
+			(forward-character)
+			(search-forward desired-string)
+		        (set-mark)
+			(search-reverse desired-string)
+		        (setq repetitions (- repetitions 1))
+		    )
+		    (setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(find-it-reverse 
+		    (while (> repetitions 0)
+			(search-reverse desired-string)
+			(backward-character)
+			(search-forward desired-string)
+			(set-mark)
+			(search-reverse desired-string)
+		        (setq repetitions (- repetitions 1))
+		    )
+		    (setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(getting-it-reverse 
+			(setq desired-string (get-tty-string "Search for: "))
+			(find-it-reverse)
+		)
+	)
+	
+	(defun
+		(getting-it-forward 
+			(setq desired-string (get-tty-string  "Search for: "))
+			(find-it-forward)
+		)
+	)
+	
+	; save file and exit  : Gold E
+	
+	(defun
+		(write-buffer-exit
+			(if (= changed-buffer 1)
+			    (backto-main-buffer)
+			)
+			(set-mark)
+			(end-of-file)
+			(if (! (bolp))
+			    (newline)
+			)
+			(exchange-dot-and-mark)
+			(set "backup-before-writing" 1)
+			(write-current-file)
+			(set "backup-before-writing" 0)
+			(exit-emacs)
+		)
+	)
+	
+	; go to next eol   : keypad 2
+	
+	(defun
+		(eol-forward
+		(while (> repetitions 0)
+			(if (eolp)
+	  			(next-line)
+			)
+			(end-of-line)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; go to previous eol   :  keypad 2
+	
+	(defun
+		(eol-backward
+		(while (> repetitions 0)
+			(previous-line)
+			(end-of-line)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; word movement : keypad 1
+
+	(defun
+		(fix-it-first
+			(forward-word)
+			(backward-word)
+			(if (! (bolp))
+				(backward-word)
+			)
+		)
+	)
+
+	(defun
+		(the-previous-word
+		    (while (> repetitions 0)
+		        (backward-word)
+		        (setq repetitions (- repetitions 1))
+		    )
+	 	    (setq repetitions 1)
+		)
+	)
+
+	(defun
+		(the-next-word
+		(while (> repetitions 0)
+			(if (bobp)
+			    (forward-character))
+			(if  (eolp)
+			    (backward-word))
+			(if  (bolp)
+			    (fix-it-first))
+			(forward-word)
+			(forward-word)
+			(backward-word)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+
+	; character movement : keypad 3
+	(defun 
+		(the-previous-character
+		    (while (> repetitions 0)
+			(backward-character)
+			(setq repetitions (- repetitions 1)))
+		    (setq repetitions 1)
+		)
+	)
+
+	(defun 
+		(the-next-character
+		    (while (> repetitions 0)
+			(forward-character)
+			(setq repetitions (- repetitions 1)))
+		    (setq repetitions 1)
+		)
+	)
+
+	; line movement : keypad 0
+	; go forward one line	
+	(defun
+		(line-forward
+		(while (> repetitions 0)
+			(next-line)
+			(beginning-of-line)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; go backwards one line 
+	(defun
+		(line-backward
+		(while (> repetitions 0)
+			(if (bolp)
+				(previous-line)
+			)
+			(beginning-of-line)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; kill character  : keyboard ,
+	
+	(defun
+		(character-kill
+		(while (> repetitions 0)
+			(set-mark)
+			(forward-character)
+			(delete-region-to-buffer "deleted-character")
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(restore-character
+		(while (> repetitions 0)
+			(set-mark)
+			(yank-buffer "deleted-character")
+			(exchange-dot-and-mark)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+
+	; kill word  : keyboard -
+	
+	(defun
+		(word-kill
+		(while (> repetitions 0)
+			(set-mark)
+			(forward-word)
+			(forward-word)
+			(if (! (eobp))
+			    (backward-word))
+			(if (eobp)
+			    (eol-backward))
+			(delete-region-to-buffer "deleted-word")
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(restore-word
+		(while (> repetitions 0)
+			(set-mark)
+			(yank-buffer "deleted-word")
+			(exchange-dot-and-mark)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; kill line  : PF4
+	
+	(defun
+		(line-kill
+		(while (> repetitions 0)
+			(beginning-of-line)
+			(set-mark)  
+			(next-line)
+		        (beginning-of-line)
+			(delete-region-to-buffer "deleted-line")  
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	(defun
+		(restore-line
+		(while (> repetitions 0)
+			(set-mark)
+			(yank-buffer "deleted-line")
+			(exchange-dot-and-mark)
+		(setq repetitions (- repetitions 1)))
+		(setq repetitions 1)
+		)
+	)
+	
+	; help facility : keypad PF2
+	
+	(defun
+		(going-back-to-editor 
+			(set "read-only" 0)
+			(remove-all-local-bindings)
+			(switch-to-buffer last-buffer-name)
+			(delete-buffer "help")
+		)
+	)
+	
+	(defun
+		(help-openline
+			(set "read-only" 0)
+			(read-file "help-openline")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-word
+			(set "read-only" 0)
+			(read-file "help-word")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-eol
+			(set "read-only" 0)
+			(read-file "help-eol")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-char
+			(set "read-only" 0)
+			(read-file "help-char")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-forward
+			(set "read-only" 0)
+			(read-file "help-forward")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-reverse
+			(set "read-only" 0)
+			(read-file "help-reverse")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-cut
+			(set "read-only" 0)
+			(read-file "help-cut")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-command
+			(set "read-only" 0)
+			(read-file "help-command")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-sect
+			(set "read-only" 0)
+			(read-file "help-sect")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-append
+			(set "read-only" 0)
+			(read-file "help-append")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-cutword
+			(set "read-only" 0)
+			(read-file "help-cutword")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-cutchar
+			(set "read-only" 0)
+			(read-file "help-cutchar")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-select
+			(set "read-only" 0)
+			(read-file "help-select")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-enter
+			(set "read-only" 0)
+			(read-file "help-enter")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-find
+			(set "read-only" 0)
+			(read-file "help-find")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-cutline
+			(set "read-only" 0)
+			(read-file "help-cutline")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-gold
+			(set "read-only" 0)
+			(read-file "help-gold")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-help
+			(set "read-only" 0)
+			(read-file "edt-help")
+			(set "read-only" 1)))
+	
+	(defun
+		(help-me 
+			(setq last-buffer-name  (current-buffer-name))
+			(switch-to-buffer "help")
+			(remove-all-local-bindings)
+			(read-file "edt-help")
+			(local-bind-to-key "going-back-to-editor"  "\040")
+			(local-bind-to-key "help-openline" "\eOp")
+			(local-bind-to-key "help-word" "\eOq")
+			(local-bind-to-key "help-eol" "\eOr")
+			(local-bind-to-key "help-char" "\eOs")
+			(local-bind-to-key "help-forward" "\eOt")
+			(local-bind-to-key "help-reverse" "\eOu")
+			(local-bind-to-key "help-cut" "\eOv")
+			(local-bind-to-key "help-command" "\eOw")
+			(local-bind-to-key "help-sect" "\eOx")
+			(local-bind-to-key "help-append" "\eOy")
+			(local-bind-to-key "help-cutword" "\eOm")
+			(local-bind-to-key "help-cutchar" "\eOl")
+			(local-bind-to-key "help-select" "\eOn")
+			(local-bind-to-key "help-enter" "\eOM")
+			(local-bind-to-key "help-find" "\eOR")
+			(local-bind-to-key "help-cutline" "\eOS")
+			(local-bind-to-key "help-gold" "\eOP")
+			(local-bind-to-key "help-help" "\eOQ")
+			(set "read-only" 1)
+		)
+	)
+	
+	; go in forward direction   : keypad 4
+	
+	(defun
+		(forward-definition
+			(bind-to-key "line-forward" "\eOp")
+			(bind-to-key "the-next-word" "\eOq")
+			(bind-to-key "section-down"    "\eOx")
+			(bind-to-key "the-next-character" "\eOs")
+			(bind-to-key "case-char-invert" "\eOP\eOq")
+			(bind-to-key "eol-forward"  "\eOr")
+			(bind-to-key "find-it-forward" "\eOR")
+			(bind-to-key "getting-it-forward" "\eOP\eOR")
+			(bind-to-key "find-marker-forward" "\eOP/")
+			(bind-to-key "substitute-it-forward" "\eOP\eOM")
+		)
+	)
+	
+	; go in reverse direction    :  keypad 5
+	
+	(defun
+		(backward-definition
+			(bind-to-key "line-backward" "\eOp")
+			(bind-to-key "the-previous-word" "\eOq")
+			(bind-to-key "section-up" "\eOx")
+	   		(bind-to-key "the-previous-character" "\eOs")
+			(bind-to-key "reverse-case-char-invert" "\eOP\eOq")
+			(bind-to-key "eol-backward" "\eOr")
+			(bind-to-key "find-it-reverse" "\eOR")
+			(bind-to-key "getting-it-reverse" "\eOP\eOR")
+			(bind-to-key "find-marker-reverse" "\eOP/")
+			(bind-to-key "substitute-it-reverse" "\eOP\eOM")
+		)
+	)
+	
+	; general i.e direction independant definitions
+	
+	(bind-to-key "end-of-file" "\eOP\eOt")
+	(bind-to-key "beginning-of-file" "\eOP\eOu")
+	(bind-to-key "forward-word" "\^f")
+	(bind-to-key "backward-word" "\^b")
+	(bind-to-key "add-from-file" "\eOP\a")
+	(bind-to-key "add-from-file" "\eOP\A")
+	(bind-to-key "write-buffer-exit" "\eOPe")
+	(bind-to-key "write-buffer-exit" "\eOPE")
+	(bind-to-key "exit-emacs" "\eOPq")
+	(bind-to-key "exit-emacs" "\eOPQ")
+	(bind-to-key "beginning-of-line" "\10")
+	(bind-to-key "character-kill" "\eOl")
+	(bind-to-key "restore-character" "\eOP\eOl")
+	(bind-to-key "word-kill" "\eOm")
+	(bind-to-key "restore-word" "\eOP\eOm")
+	(bind-to-key "line-kill" "\eOS")
+	(bind-to-key "restore-line" "\eOP\eOS")
+	(bind-to-key "kill-to-end-of-line" "\eOP\eOr")
+	(bind-to-key "newline-and-backup" "\eOP\eOp")
+	(bind-to-key "select-region" "\eOn")
+	(bind-to-key "insert-the-marker" "\eOP.")
+	(bind-to-key "lets-append-it" "\eOy")
+	(bind-to-key "lets-replace-it" "\eOP\eOy")
+	(bind-to-key "list-buffers" "\eOPs")
+	(bind-to-key "list-buffers" "\eOPS")
+	(bind-to-key "switch-buffers" "\eOPB")
+	(bind-to-key "switch-buffers" "\eOPb")
+	(bind-to-key "return-to-last-buffer" "\eOPl")
+	(bind-to-key "return-to-last-buffer" "\eOPL")
+	(bind-to-key "delete-buffer" "\eOPD")
+	(bind-to-key "delete-buffer" "\eOPd")
+	(bind-to-key "redraw-display" "\^R")
+	(bind-to-key "redraw-display" "\^r")
+	(bind-to-key "read-in-a-file" "\eOPi")
+	(bind-to-key "read-in-a-file" "\eOPI")
+	(bind-to-key "write-out-a-file" "\eOPo")
+	(bind-to-key "write-out-a-file" "\eOPO")
+	(bind-to-key "help-me" "\eOQ")
+	(bind-to-key "apropos" "\eOP\eOQ")
+	(bind-to-key "delete-other-windows" "\eOP\eOs")
+	(bind-to-key "forward-definition" "\eOt")
+        (bind-to-key "backward-definition" "")
+	(bind-to-key "backward-definition" "\eOu")
+	(bind-to-key "cut-region" "\eOv")
+	(bind-to-key "paste-region" "\eOP\eOv")
+	(bind-to-key "edt-cut-to-buffer" "\^v")
+	(bind-to-key "edt-cut-to-buffer" "\^V")
+	(bind-to-key "edt-copy-buffer" "\^g")
+	(bind-to-key "edt-copy-buffer" "\^G")
+	(bind-to-key "edt-append-it" "\eOP\^v")
+	(bind-to-key "edt-append-it" "\eOP\^V")
+	(bind-to-key "backto-main-buffer" "\eOP\m")
+	(bind-to-key "backto-main-buffer" "\eOP\M")
+	(bind-to-key "edt-replace-it" "\eOP\^g")
+	(bind-to-key "edt-replace-it" "\eOP\^G")
+	(bind-to-key "delete-previous-word" "\012")
+	(bind-to-key "getting-repetitions" "\eOw")
+	(bind-to-key "execute-extended-command" "\eOP\eOw")
+	(set "track-eol-on-^N-^P" 0)
+	(set "selected" 0)
+	(set "repetitions" 1)
+	(forward-definition)
+

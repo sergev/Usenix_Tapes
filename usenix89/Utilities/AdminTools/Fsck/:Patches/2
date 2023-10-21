@@ -1,0 +1,67 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site ncr-sd.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!qantel!hplabs!sdcrdcf!sdcsvax!ncr-sd!greg
+From: greg@ncr-sd.UUCP (Greg Noel)
+Newsgroups: net.sources.bugs
+Subject: Re: preen
+Message-ID: <279@ncr-sd.UUCP>
+Date: 4 Sep 85 01:37:22 GMT
+Date-Received: 8 Sep 85 18:51:28 GMT
+References: <1459@umcp-cs.UUCP>
+Reply-To: greg@ncr-sd.UUCP (Greg Noel)
+Organization: NCR Corporation, Torrey Pines
+Lines: 53
+
+In article <1459@umcp-cs.UUCP> chris@umcp-cs.UUCP (Chris Torek) writes:
+># This is preen, a program to run /etc/fsck in parallel (more
+># than fsck -p does).
+> *
+> * This program differs from the -p option to fsck in that it
+> * uses the base names of the disks to determine which are the
+> * same physical drive, and actually tries to keep all drives
+> * busy.  fsck -p merely runs groups of "passes" and with odd
+> * configurations tends to leave the arms idle a lot.
+
+This program is a nice idea; it saved me the trouble of writing it (or
+harassing my vendor to write it).  I have always wondered why Berkeley
+chose do do it the way they did; it would seem to be just as much work
+to keep track of the arms and do the checks as this program does as it
+is to keep track of the passes and do those in parallel.  Maybe all of
+us can lobby to have the algorithm in fsck changed to this one; with a
+suitable example before us it can't be that hard.  And preen adds a nice
+heuristic to generate the list of arms that fsck could use by default if
+no information is given in /etc/fstab to override it.
+
+The only problem with preen is that it doesn't work as it should.  Indeed,
+it determines which drives are on separate arms, and the code is there to
+keep them busy.  The only problem is that the code that waits for a child
+to finish so that another fsck can be run on the same arm has a \small/ bug
+in it.  Instead of waiting for the \first/ child to finish, it waits for
+\all/ children to finish.....  The net effect is that does groups of passes
+the same way that fsck -p does, and is potentially worse than fsck -p in
+that it doesn't necessarily group the filesystems in a reasonable order.
+(Not to say that an SA would do any better, but the possiblilty is there.)
+
+The fix turns out to be trivial (aren't they all?) and is attached below.
+
+*** preen.c.orig	Tue Sep  3 17:59:25 1985
+--- preen.c	Tue Sep  3 18:03:43 1985
+***************
+*** 337,342
+  	else
+  	    fi -> fi_stat = FI_NORMAL;
+  	fi -> fi_disk -> dd_stat = DD_IDLE;
+      }
+  }
+  
+
+--- 337,343 -----
+  	else
+  	    fi -> fi_stat = FI_NORMAL;
+  	fi -> fi_disk -> dd_stat = DD_IDLE;
++ 	break;
+      }
+  }
+  
+-- 
+-- Greg Noel, NCR Rancho Bernardo    Greg@ncr-sd.UUCP or Greg@nosc.ARPA

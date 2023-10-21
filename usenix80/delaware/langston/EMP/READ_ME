@@ -1,0 +1,203 @@
+
+
+
+		Export Empire
+		------ ------
+
+To assemble [sic] Empire on your system you need a few source modules,
+a pile of object modules, a bigger pile of info topics, two archive files,
+and a little editing...
+
+Source modules:
+0)      Figure out where you'd like the Empire subtree on your system.  The
+whole thing looks like the diagram below although only INFO and UTIL need
+be created by you, (in order to read the tape in).  Edit the file empglb.c
+to reflect the configuration of your system, (the changes should be fairly
+obvious, I hope).
+	You need not modify the path names that start "/sys/games/.../emp"
+because the "run" file will do that for you.  The "run" file also creates
+the DATA and BIN directories.
+
+	starting somewhere in your system
+		      \
+		       \
+		      "emp"
+	     (sources, object modules, etc, etc)
+	    /           /          \           \
+	   /           /            \           \
+	"BIN"        "INFO"        "UTIL"     "DATA"
+(most executables) (info topics)  (misc progs) (sectors, ships, etc)
+(created by "run") (you create)   (you create) (created by "run")
+
+Various other paths are needed (e.g. nroff, post/mail prog, etc) so
+check over everything in empglb.c, (and empsys.c, see below).
+
+2)      Set the miscellaneous "parametric goodies" in empglb.c.
+privuid     The uid of the Empire super user.  All the files should be
+	owned by this uid and ONLY the executable file called "empire"
+	should be setuid.
+privname    The "real" name of the Empire System Mother; this is used in
+	various messages and for complaints, etc.
+privlog     The "log" name of the Empire System Mother; this is used for
+	mailing trouble reports, etc.
+w_xsize     The width of the world map; must be a power of two and less
+	than or equal to 128.
+w_ysize     The height of the world map; must be a power of two, (I think),
+	and less than or equal to 128.
+l2w_xsize   The base two log of w_xsize.  Don't forget this one...
+MAXNOC      The maximum number of countries you're going to allow in the
+	game.  Must be less than or equal to the value of MAX_MAXNOC
+	defined in "empdef.h".
+m_m_p_d     The maximum number of minutes per day that any one country may
+	be logged in to Empire; (to restrain the compulsives).
+
+3)      Look through the file "empsys.c", (which contains the sources of
+the routines in "empsub.a" that I though could be system-dependent), for
+stuff that may not work on your system.  Rewrite any of these routines
+that isn't right for your system replace the .o of the standard routine
+in "empsub.a".
+Note: Do NOT simply compile "empsys.c" and add it to the archive.
+
+I've tried to catch all routines that are specific to our system, but
+another always seems to pop up.  If you do find some undefined globals,
+or routines that give BAD SYSTEM CALL, or the like, please let me know
+and I'll add the appropriate sources.
+
+4)      Execute the command file called "run" to set up the basic Empire
+path in all modules, cretae the BIN and DATA directories, compile and link
+all the pieces of empire and move them into your BIN directory.
+
+The main program (called "empire") must be made setuid to the owner of
+the data files.  It is typically kept in "/usr/bin" so that merely typing
+"empire" to the shell executes the system.
+
+A brief description of the function of each module:
+
+
+	Source Modules
+
+empglb.c	Global storage and initialization of game parameters.
+
+empsys.c	Misc system-dependent routines.
+
+
+	Header Module
+
+empdef.h        Global definitions (included for compilation of empglb.c
+		and pieces of empsys.c)
+
+
+	Object Modules
+
+empcre.o        The "Creation"; volcanoes erupt and create land masses on the
+		earth.  The "Deity" (country #0) is set up.  An argument,
+		(optional), will stir the random number generator in a
+		repeatable fashion, otherwise the current time stirs it.
+
+empchk.o        Allows inspection of the results of empcre without disclosing
+		the actual shapes of continents -- Useful if country #0 is
+		also going to "play" the game.  Empchk reports the number
+		and sizes of land masses, the distribution of ore and the
+		distribution of gold.  A "land mass" is defined as a group
+		of sectors connected either orthogonally or diagonally.
+
+empfix.o        Used by Country 0 to make repairs to files that have
+		been scrambled, one way or another.
+empire.o        The initial log-on to Empire -- identity check, etc.
+
+empdis.o        The command dispatcher that calls the various command
+		routines.
+
+emp[123457].o   The Empire command routines in several pseudo-overlays.
+
+
+	Archive Modules     (These are in the "new" archive format)
+
+empcom.a        The individula command routines.
+
+empsub.a        The subroutines used by various Empire progs.
+
+
+	Misc
+
+run             Command file used to do all compiles & links
+
+INFO/*          The nroff form of all the info files.  Empire nroffs
+		them when the user needs them, using macros defined
+		in INFO/INFO.MAC.  Note that INFO.MAC is written for
+		phototypesetter Nroff/Troff and may require the strip-
+		ping of scale indicators (u, v, etc) from numeric and
+		number register values if you have an older Nroff.
+
+READ_ME         If I have to tell you what this one is you'll never know.
+
+
+	The executable modules that are formed are:
+
+empcre          The creation process.  After requesting the name and
+		representative to be used for country 0 this program:
+		makes volcanos which form the land area, spreads minerals
+		and gold ore around, and lets rivers carve their paths
+		across the land.
+
+empchk          Gives some vague information about the lay of the land
+		to help determine whether a world has sufficient variety
+		without giving away the specifics of the map.
+
+empire          The entry into the game.  This should be the only setuid
+		program in the bunch.  This program, after checking
+		the identity of the player, execls emp1.
+
+emp1,emp2,emp3, The game itself.  These modules execl each other as needed
+emp4,emp5,emp7  to carry out the commands given by the player.
+
+empfix          A general tool for performing surgery on the data files.
+
+
+Please let me know of any problems you encounter, (preferably after
+you've solved them).  Also let me know if you enjoy this madness.
+
+					Peter Langston
+					127 W. 26th St.
+					New York, NY  10001
+					June, '79
+
+
+		ADDENDUM
+
+Several commands are usable only by countries with nat_stat == STAT_GOD;
+for that reason no "info" files are provided for them.  Brief descriptions
+for these commands follows:
+
+add [a new country]
+	You will be asked for country number, (with a prompt about any
+	unused country numbers), country name, representative name, and
+	country status.  If country status is "new" or "visitor" then all
+	the country variables will be initialized, (money, technology level,
+	relations with other countries, etc).  If status is anything else
+	no initializations will be done, (see "fixup" below).
+fixup [nations, sectors, etc]
+	This command execs BIN/empfix which allows you to twiddle any
+	data regarding countries, sectors, ships, treaties, loans, etc.
+	It is very useful whenever some tweaking is necessary either to
+	correct (disguise) a bug or carry out the will of "god".
+turn [the game] on|off
+	This command destroys|creates the "down file" and creates|destroys
+	the "up file" either of which contains the Empire logon message.
+	Thus, to stop the game while some bug is fixed or some test is
+	being run, you would:
+    [255:0] Command? turn off
+    Enter telegram for The World, end with ^D
+    Down to repair sector file.
+    ^D
+	From this point on, only a country with nat_stat == STAT_GOD
+	can log in, and anyone already playing will be thrown off.
+	The message "The game is down" will be printed after each
+	command is executed as a reminder.  Once the bug is fixed
+	you would:
+    [255:0] Command? turn on
+    Enter telegram for The World, end with ^D
+	  Welcome to Empire
+    ^D
+	And Empire would be generally available once again.
+						Jun 16 1980

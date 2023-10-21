@@ -1,0 +1,143 @@
+Index: dbm.c
+*** dbm.orig.c	Thu Nov 27 17:45:38 1986
+--- dbm.c	Thu Nov 27 18:13:11 1986
+***************
+*** 6,16 ****
+--- 6,21 ----
+  #include	<sys/types.h>
+  #include	<sys/stat.h>
+  
++ static long dbm_access_oldb;
++ static getbit_oldb;
++ 
+  dbminit(file)
+  char *file;
+  {
+  	struct stat statb;
+  
++ 	dbm_access_oldb = -1;
++ 	getbit_oldb = -1;
+  	dbrdonly = 0;
+  	strcpy(pagbuf, file);
+  	strcat(pagbuf, ".pag");
+***************
+*** 27,36 ****
+  		dirf = open(pagbuf, 0);
+  		dbrdonly = 1;
+  	}
+! 	if(pagf < 0 || dirf < 0) {
+! 		printf("cannot open database %s\n", file);
+  		return(-1);
+- 	}
+  	fstat(dirf, &statb);
+  	maxbno = statb.st_size*BYTESIZ-1;
+  	return(0);
+--- 32,39 ----
+  		dirf = open(pagbuf, 0);
+  		dbrdonly = 1;
+  	}
+! 	if(pagf < 0 || dirf < 0)
+  		return(-1);
+  	fstat(dirf, &statb);
+  	maxbno = statb.st_size*BYTESIZ-1;
+  	return(0);
+***************
+*** 130,136 ****
+--- 133,143 ----
+  	return (0);
+  
+  split:
++ #ifdef BUGFIX
++ 	if(key.dsize+dat.dsize+3*sizeof(short) >= PBLKSIZ) {
++ #else
+  	if(key.dsize+dat.dsize+2*sizeof(short) >= PBLKSIZ) {
++ #endif
+  		printf("entry too big\n");
+  		return (-1);
+  	}
+***************
+*** 226,232 ****
+  dbm_access(hash)
+  long hash;
+  {
+! 	static long oldb = -1;
+  
+  	for(hmask=0;; hmask=(hmask<<1)+1) {
+  		blkno = hash & hmask;
+--- 233,239 ----
+  dbm_access(hash)
+  long hash;
+  {
+! /***	static long oldb = -1;	***/
+  
+  	for(hmask=0;; hmask=(hmask<<1)+1) {
+  		blkno = hash & hmask;
+***************
+*** 234,245 ****
+  		if(getbit() == 0)
+  			break;
+  	}
+! 	if(blkno != oldb) {
+  		clrbuf(pagbuf, PBLKSIZ);
+  		lseek(pagf, blkno*PBLKSIZ, 0);
+  		read(pagf, pagbuf, PBLKSIZ);
+  		chkblk(pagbuf);
+! 		oldb = blkno;
+  	}
+  }
+  
+--- 241,252 ----
+  		if(getbit() == 0)
+  			break;
+  	}
+! 	if(blkno != dbm_access_oldb) {
+  		clrbuf(pagbuf, PBLKSIZ);
+  		lseek(pagf, blkno*PBLKSIZ, 0);
+  		read(pagf, pagbuf, PBLKSIZ);
+  		chkblk(pagbuf);
+! 		dbm_access_oldb = blkno;
+  	}
+  }
+  
+***************
+*** 247,253 ****
+  {
+  	long bn;
+  	register b, i, n;
+! 	static oldb = -1;
+  
+  	if(bitno > maxbno)
+  		return(0);
+--- 254,260 ----
+  {
+  	long bn;
+  	register b, i, n;
+! /***	static oldb = -1;  ***/
+  
+  	if(bitno > maxbno)
+  		return(0);
+***************
+*** 255,265 ****
+  	bn = bitno / BYTESIZ;
+  	i = bn % DBLKSIZ;
+  	b = bn / DBLKSIZ;
+! 	if(b != oldb) {
+  		clrbuf(dirbuf, DBLKSIZ);
+  		lseek(dirf, (long)b*DBLKSIZ, 0);
+  		read(dirf, dirbuf, DBLKSIZ);
+! 		oldb = b;
+  	}
+  	if(dirbuf[i] & (1<<n))
+  		return(1);
+--- 262,272 ----
+  	bn = bitno / BYTESIZ;
+  	i = bn % DBLKSIZ;
+  	b = bn / DBLKSIZ;
+! 	if(b != getbit_oldb) {
+  		clrbuf(dirbuf, DBLKSIZ);
+  		lseek(dirf, (long)b*DBLKSIZ, 0);
+  		read(dirf, dirbuf, DBLKSIZ);
+! 		getbit_oldb = b;
+  	}
+  	if(dirbuf[i] & (1<<n))
+  		return(1);

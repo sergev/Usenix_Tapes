@@ -1,0 +1,154 @@
+.TH MAKETD 1L "11 November 1985"
+.if n \{.de Q
+"\\$1"\\$2
+.\}
+.if t \{.de Q
+``\\$1''\\$2
+.\}
+..
+.SH NAME
+maketd \- make transitive dependencies
+.SH SYNOPSIS
+.B maketd
+[
+.I option(s)
+] 
+.I file(s)
+.SH DESCRIPTION
+.I Maketd
+computes dependencies for makefiles from sources introduced through
+include files.
+It generates lines like
+.Q "xx.o: e.h struct.h ../h/const.h ..." .
+It makes xx.o not only dependent on all files it includes,
+but also recursively on all files other files include.
+This is achieved by passing the source through the C preprocessor.
+.PP
+The directories used in the search for include files
+are identical to the ones used by the C compiler, because the
+C preprocessor is used.
+This also means that `#define's, `#ifdef's, etc. are evaluated.
+It may therefore be necessary to recompute the dependencies if
+any source has been changed, including the associated Makefile.
+.PP
+A typical application in a Makefile goes as follows:
+.nf
+
+	INCL= \-I../include  \-I../h
+	CFLAGS= \-DPUCC \-DBSD4_2 ${INCL}
+	SRC= a.c b.c c.c
+
+	maketd: ${SRC}
+		maketd \-a ${CFLAGS} ${SRC}
+
+	# DO NOT DELETE THIS LINE \- make depend DEPENDS ON IT
+
+.fi
+The generated dependencies will be inserted after the `# DO NOT DELETE...'
+line.
+Everything after this line will go away through the editing
+process of the Makefile.
+If no such line exists, a line of the expected form will be emitted,
+followed by the dependencies.
+The default filename for the Makefile is `makefile'.
+If `makefile' does not exist, `Makefile' is used.
+The \-m and \-d options override this default action.
+Before it is edited, the Makefile will be saved in `Makefile.bak',
+overwritting any existing `Makefile.bak'.
+.PP
+Several options apply.
+If an option takes any arguments, all arguments follow the option
+directly, with no spaces.
+If spaces are required inside an argument to an option, then
+quotes must be used to prevent the shell from breaking up the
+argument.
+.TP
+.BI \-a
+Normally, dependencies on files in `/usr/include' are
+not included \- this option also includes dependencies on those files.
+.TP
+.BI \-b
+Generate dependencies for binaries rather than object files.
+This is equivelent to specifying a null suffix.
+The `.o' is stripped from the filename.
+.TP
+.BI \-d
+Instead of editing the Makefile, dependencies are written to standard
+output.
+The standard header and trailer, `# DO NOT...' are not emitted.
+.TP
+.BI \-f
+Force printing of header and trailer.
+Normally, these are suppresed when the output file is the standard
+output.
+.TP
+.BI \-h
+Print a set of oneline descriptions to the terminal and exit.
+.TP
+.BI \-m file
+Instead of editing `makefile' or `Makefile', the file named
+.I file
+is edited.
+.TP
+.BI \-nonlocalo
+Generate dependency paths that match the source paths given.
+.TP
+.BI \-o directory
+Normally dependencies are of the form
+.Q "a.o: ....." .
+This option generates dependencies of the form
+.Q "\fIdirectory\fP/a.o:...." ,
+which is useful for Makefiles which store the objects in
+a separate subdirectory.
+The name of the directory must not be empty.
+.TP
+.BI \-r
+Causes the dependencies for a single source file to be generated and
+replaced in the edited Makefile.
+.TP
+.BI \-s suffix
+Supply a suffix for the target.
+The suffix should start with a `.'.
+The target file name should have a suffix of some sort that
+is delimited by a `.' that is replaced by this suffix.
+.TP
+.BI \-t target
+Supply a new basename for the target.
+.TP
+.BI \-x
+Don't shorten include files.
+The default action is to replace various strings with abbreviations.
+The Makefile is scanned to see which single letter uppercase
+variables are set.
+These definitions are remembered.
+The pathnames `/usr/include' and `/usr/include/sys', along with any
+pathnames specified with \-I options are also used in abbreviations.
+Unused uppercase single letters are defined, printed to the Makefile,
+and used.
+.TP
+.BI \-v
+Be verbose.
+Extra output is directed to
+.I stderr.
+.TP
+.BI \-I...
+Specify a directory to search for include files.
+This option is passed to /lib/cpp, and thus behaves identically to
+the same option to `cc'.
+.TP
+.BI \-D...
+Specify a definition.
+This option is passed to /lib/cpp, and thus behaves identically to
+the same option to `cc'.
+.TP
+.BI \-U....
+Specify that a variable that should not be defined.
+This option is passed to /lib/cpp, and thus behaves identically to
+the same option to `cc'.
+.IR cc (1).
+.SH "AUTHOR"
+Stephan v. Bechtolsheim (the shell script) (Purdue CS)
+.br
+Stephen Uitti (the C version) (PUCC)
+.SH "SEE ALSO"
+make(1), cc(1)

@@ -1,0 +1,130 @@
+.LP
+.nr LT 6.5i
+.lt 6.5i
+.nr LL 6.5i
+.ll 6.5i
+.TL
+How backup tape labels work.
+.AU
+Rich Kulawiec
+.NH
+Overview 
+.PP
+Our backup tapes are \*Qlabelled\*U on the autoload ring (in writing)
+and on the tape itself (in a small file).  This document explains how
+that system works and how to label tapes.
+.NH
+What's in a label
+.PP
+A sample tape label file looks like this:
+.DS
+pucc-j Mon /usera 0
+.DE
+This means that the tape in question is supposed to be used to do
+a level 0 dump of /usera on pucc-j on Monday.  If someone tries
+to use it for any other dump, \fIbackup(1l)\fR will stop them.
+\fBThere is no way to force backup to override this.\fR
+The only way out is manual intervention.
+.PP
+The whitespace-separated fields in the label file have meaning as follows:
+.DS
+.nf
+hostname:    eg. \*Qpucc-j\*U, as returned by gethostname()
+day-of-week: eg. \*QMon\*U, as returned in the first 3 characters of ctime()
+filesystem:  eg. \*Q/usera\*U, as shown in /etc/fstab
+dump level:  eg. \*Q0\*U, a single digit between 0 and 9
+.fi
+.DE
+.NH
+How backup uses labels
+.PP
+Before \fIbackup\fR will scribble on a tape, it reads the label file and
+compares it against its idea of what it's about to try to do.
+If everything looks okay, it will skip past that file and write
+the dump on tape.
+However,
+if any of the four fields fail to match
+(with certain exceptions, see below),
+it complains vigorously and demands a different tape.
+.NH
+The exceptions
+.PP
+Since we put all of the partial backups for an entire machine on
+one tape (at least for the moment) that tape is labelled with
+the string \*QPARTIAL\*U where the filesystem should be.
+Incidentally, partial backup tapes only have one label at beginning
+of the tape\(emthere's nothing between the actual dumps.
+.PP
+The other case we have to discuss concerns the pool of spare tapes.
+This pool is actually several small pools of several tapes per machine,
+each of which has been labelled as follows:
+.DS
+hostname sss SPARE c
+.DE
+where \*Qhostname\*U is as above; \*Qsss\*U is just a scratch character string;
+\*QSPARE\*U is the string that tells backup that this is a spare tape; and
+\*Qc\*U is just a scratch character.
+.PP
+When a spare tape is presented to \fIbackup\fR, it verifies that it is indeed
+a spare, and that it's for the correct machine, and then writes a \fIreal\fR
+label file on it.  In other words, the tape is no longer a spare.
+.NH
+Creating a tape label file
+.PP
+Simple; you can just \*Qecho\*U the information onto that tape; or type it
+into a file and \*Qcat\*U it on, or whatever.  Make sure that you write it
+on the tape at 6250 bpi using the RAW device, since \fIbackup\fR
+runs at that density.
+It's also important to point out that writing a label file on a tape
+which already contains an old label file and a dump image will make the dump
+inacessible, since a double EOF will be written after the label file.
+Make \fIcertain\fR that the dump isn't needed before rewriting the label file.
+.PP
+It's also easy to check a label file, just by using cat or dd to read the
+first file on the tape.   Again, make sure you use the 6250 bpi RAW device.
+Here's an example:
+.DS
+% echo \*Qpucc-j Mon /usera 0\*U > /dev/rmt6250
+
+% cat /dev/rmt6250
+pucc-j Mon /usera 0
+.DE
+.NH
+Faking it
+.PP
+Occasionally, due to a failed backup or a massive change in a filesystem
+between epoch dumps, there is a need to do a manual dump.  This is a
+slightly dangerous and tricky business, and should not be attempted unless
+you understand \fBexactly\fR what you are doing.  Caveat emptor.
+.PP
+Generally speaking, these "special-case" dumps are epoch dumps and are done
+on the same tapes normally used by \fIbackup\fR.  Mount the tape and verify
+that it is indeed the correct one by checking the label on it; one way
+to do this is
+.DS
+% cat /dev/nrmt8
+.DE
+which will show you the label--it also leaves the tape positioned after the
+end of the label and ready for dumping, since the no-rewind tape device
+is used.
+.PP
+The correct invocation for dump is of the form
+.DS
+% /etc/dump 0ufd /dev/rmt8 6250 \fI/filesystem\fR
+.DE
+where \fIfilesystem\fR is the name (e.g. /usr) of the filesystem
+you wish to dump.
+The effects of the "u" flag are important to note; if present, it causes
+the file /etc/dumpdates to keep a record of the date of this dump, and
+that record is used to decide which files will be included on subsequent
+incremental dumps.  If absent, no such record will be kept, and incremental
+dumps will be based on whatever date is already in /etc/dumpdates.
+For our purpose, which is usually to "catch up" after making many
+changes to a filesystem, the "u" flag should be used.
+.NH
+Summary
+.PP
+Most of the tape labelling functions are automatic; human intervention
+should only be required if (a) we run out of spare tapes or (b) we want
+to reuse some of the (formerly spare) tapes, or (c) we have to set up
+the backup scheme on a new machine, or on new filesystems.

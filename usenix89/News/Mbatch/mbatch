@@ -1,0 +1,129 @@
+
+#! /bin/sh
+#
+# mbatch - handle the MULTICAST news batching stuff through UUCP
+#
+# R. Perry, perry@vu-vlsi, Thu Apr  9 20:11:28 EDT 1987
+#
+# Depends on having a uux flag (-l) that will create a link to the
+# batch file, so only one copy of a given batch need exist for sending
+# to multiple sites.
+#
+# News must have MULTICAST enabled in defs.h and the systems participating
+# in the multicasting must have M flag specified in the sys file, with
+# a dummy name ('multi' here) used like:
+#
+# devon:world,mod,net,comp,news,sci,rec,misc,soc,talk,to.devon:M:multi
+# excalibur:world,mod,net,comp,news,sci,rec,general,flame,to.excalibur:M:multi
+# multi:all:OF:/usr/spool/batchnews/multi
+#
+# Some of the variables below should be customized depending on
+# where things are.
+#---
+
+PATH=/bin:/usr/bin:/usr/ucb; export PATH
+
+# place where news/lib programs are
+#
+LIBDIR=/usr/lib/news
+
+# place where the news batches go, we will cd there
+#
+BATDIR=/usr/spool/batchnews
+
+# name of the dummy multicast system
+#
+MULTI=multi
+
+# batch byte limit (before compression)
+#
+BLIM=100000
+
+# uux command, with -l option so it creates a link to the batch file.
+# The TMPFILE must be in same partition as spool/uucp for this to
+# work properly.
+#
+UUX="uux -l -r -z -n -gd"
+
+# prefix for the batch temporary files
+#
+TMPFILE=/usr/tmp/b.$$
+
+#---
+# start:
+
+cd $BATDIR
+
+# Make sure we are not running this more than once at the same time.
+# If system crashes while this is running, the $MULTI.tmp file could
+# be left hanging around and prevent future runs...
+#
+if [ -s $MULTI.tmp ]
+then
+   echo "$MULTI.tmp is stuck" 1>&2
+   exit 1
+fi
+
+# see if there's any work to be done
+#
+if [ ! -s $MULTI ]
+then
+   exit 0
+fi
+
+# create a .tmp file to work with, and a .tmp2 with the spaces between
+# system names replaced by colons.  It's important that the delimiter
+# never appear in a news group name nor a system name.  Colon seems
+# like a good choice for now.
+#
+mv $MULTI $MULTI.tmp
+sed -e 's/ /:/g' -e 's/:/ /' $MULTI.tmp >$MULTI.tmp2
+
+# get the unique name combinations
+#
+NAMES="`awk '{ print $2 }' $MULTI.tmp2 | sort -u`"
+
+# n will be incremented before each execution of batch below
+# and used as an extension to the TMPFILE name.
+#
+n=0
+
+# for each combination, do it!
+#
+for combo in $NAMES
+do
+	grep " $combo\$" $MULTI.tmp2 | awk '{ print $1 }' >$combo
+
+	while [ -s $combo -o -s $combo.work ]
+	do
+	    n=`expr $n + 1`
+
+	    ( echo "#! cunbatch"; $LIBDIR/batch $BATDIR/$combo $BLIM | \
+	     $LIBDIR/compress ) >$TMPFILE.$n
+
+	    for rmt in `echo $combo | sed 's/:/ /g'`
+	    do
+#
+# the feed from vu-vlsi to excalibur is a wierd case...
+#
+		case $rmt in
+		 excalibur)
+		    seq=`cat $rmt.seq`
+		    seq=`expr $seq + 1`
+		    $UUX $rmt!@uucp_root:\[exe\]xj\< !$TMPFILE.$n \($seq._Z\)
+		    echo $seq >$rmt.seq
+		    ;;
+		 *)
+		    $UUX $rmt!rnews\< !$TMPFILE.$n
+		    ;;
+		esac
+	    done
+
+	  rm $TMPFILE.$n
+
+	done
+done
+
+rm $MULTI.tmp $MULTI.tmp2
+
+exit 0

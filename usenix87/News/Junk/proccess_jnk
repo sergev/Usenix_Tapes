@@ -1,0 +1,173 @@
+SPOOL=/usr/spool/news
+NEWSBIN=$SPOOL/bin
+LIB=/usr/local/lib/news
+ACTIVE=$LIB/active
+LOG=$LIB/log
+JUNK=$SPOOL/junk
+GRPCHARS=",-a-z0-9."
+LOCALGP=ibm
+
+PATH=/usr/local:/bin:/usr/bin:$NEWSBIN
+count=
+export PATH count
+#
+#	NOTE: You should make sure that no new articles can be posted while
+#	      this script is running, otherwise $ACTIVE might be screwed up
+#	      a little bit.
+#	It assumes that:
+#	      1. It is OK to create any necessary newsgroups,
+#	      2. The active file is in news 2.10.2 format,
+#	      3. Posting to fa.*, mod.* is disallowed,
+#	      4. Posting to na.*, net.* $LOCALGP.* is allowed, and
+#	      5. It is OK to leave unprocessed articles in $JUNK.
+#	      6. There are commas between newsgroups when there an
+#		 article is posted to multiple newsgroups.
+#	      7. No "parent" newsgroup directories need to be created.
+#		 (This assumption is often violated).
+#
+#	NOTE: A check is performed to make sure that all the current copies 
+#		of the junk article are links to the same file.	
+#
+#	NOTE: If a junk article does not need to be posted to ANY groups,
+#		this script doesn't recognize it and leaves the article in $JUNK
+#		I do have additional (less interesting) processing that I do in
+#		this case.
+#
+#	Because of #1, a "grep '^Newsgroups: ' $JUNK/*" might be advisable
+#	before running this script.
+#
+#	Last note: don't shoot me if some comment or another is outdated.
+#
+cd $JUNK
+junkcount=`sed -n "/^junk /s/junk \([0-9]*\).*/\1/p" $ACTIVE`
+case "$junkcount" in
+"")	exit
+esac
+newsgrps=`while test "$junkcount" -ge ${i=0}000
+	do
+		case "$i" in
+		0)	getnewsgps [1-9] [1-9]? [1-9]??;;
+		*)	getnewsgps ${i}???
+		esac
+		i=\`expr $i + 1\`
+	done | tr ' ' '\012' | sort -u`
+(cd $LIB; tar cf - active ) | (cd /usr/tmp; tar xpvf - )	# Save a $ACTIVE
+#
+#	Crunch, crunch -- do a newsgroup at a time...
+#
+for newsgrp in $newsgrps
+do
+	ngline='^Newsgroups:.*( |,)'$newsgrp'(,|$)'
+	articles=`2> /dev/null egrep -l "$ngline" [1-9] [1-9]? [1-9]??
+		i=1
+		while test ${i}000 -le $junkcount
+		do
+			2> /dev/null egrep -l "$ngline" ${i}???
+			i=\`expr $i + 1\`
+		done`
+	newsdir=$SPOOL/`echo $newsgrp | sed "s;\.;/;g"`
+	count=`sed -n "/^$newsgrp /s/$newsgrp \([0-9]*\).*/\1/p" $ACTIVE | sed 1q`
+	if test -z "$count"   -a   ! -d $newsdir
+	then
+	#
+	#	Directories will exist for non-existent
+	#	newsgroups, when the newsgroup has a sub-group
+	#	that was created first (e.g, "mod.std.c" came
+	#	before "mod.std").
+	#
+	#	NOTE that this does not handle the case when
+	#	parent directories also need to be created.
+	#
+		date_field=`date '+%h %d %H:%M'`
+		echo "$date_field	local.prjunk	Junk processing: creating newsgrp $newsdir."
+		mkdir $newsdir
+	fi | tee -a $LOG
+	count=`expr 0$count + 0`		# Toss leading zeroes.
+	if test ! -d $newsdir
+	then
+		date_field=`date '+%h %d %H:%M'`
+		echo "$date_field	local.prjunk	Junk processing: Bad directory $newsdir!" |
+			tee -a $LOG
+		continue
+	fi
+	prevcount=$count
+	chown news $newsdir
+	INDEX=$newsdir/IndeX
+	#
+	#	Create indexes for each newsgroup
+	#	-- save the time needed for continually
+	#	   grepping each article.
+	#
+	( cd $newsdir
+	  2> /dev/null grep '^Message-ID: <' [1-9] [1-9]? [1-9]??
+  	  i=1
+	  while test ${i}000 -le $count
+	  do
+	  	2> /dev/null grep '^Message-ID: <' ${i}???
+	  	i=`expr $i + 1`
+	  done ) | sed "s/\([0-9]*\):\(.*\)/\2 \1/" | uniq -2 > $INDEX
+	for article in $articles
+	do
+		articleID=`sed -n "/^Message-ID: </s///p
+					10q" $article | sed 1q`
+		#
+		#	This new strategy will fail in the following case:
+		#	    the article needs to be posted to some of the
+		#	    newsgroups in the Newsgroup line, but not all
+		#	    of them.  I have never seen this case.
+		#	    I have an old version that handles it, though.
+		#	Also, it removes articles after they have been
+		#	    processed.  That may be undesirable.
+		#	    (our "rm" secretly saves them for a day...)
+		#
+		oldartnum=`sed -n "/^Message-ID: <$articleID/s/.* //p" $INDEX`
+		case "$oldartnum" in
+		"")	count=`expr 0"$count" + 1`
+			newsart=$newsdir/$count
+			date_field=`date '+%h %d %H:%M'`
+			if test ! -f $newsart    &&    ln $article $newsart
+			then
+				echo "$date_field	local.prjunk	Linked $article to $newsart."
+				echo "Message-ID: <$articleID $count" >> $INDEX
+				oldartnum=$count
+				linegrps=`getnewsgps $article |
+						tr ' ' '\012' | sort -u`
+				case "$linegrps" in
+				*$newsgrp)	rm $article
+				esac	# If it was $article's last newsgroup.
+			else
+				echo "$date_field	local.prjunk	Link problem; $article $newsart"
+			fi | tee -a $LOG
+		esac
+		echo article="$article", oldartpath="$newsdir/$oldartnum"
+	done
+	#
+	# 	All articles belonging to $newsgrp have been processed.
+	#	Adjust the count field in $ACTIVE.
+	#
+	case "$prevcount" in
+	"$count")	;;
+	*)		modactive $newsgrp $count
+	esac
+done
+#
+#	Final cleanup; modify entry for junk newsgroup in $ACTIVE.
+#
+date_field=`date '+%h %d %H:%M'`
+oldarts=`ls [1-9]* | sort -n`	||
+	{ echo "$date_field	local.prjunk	ls problem during $JUNK cleanup." |
+					tee -a $LOG
+	  exit ; }
+count=0
+for article in $oldarts
+do
+	count=`expr $count + 1`
+	if test ! -f $count   &&   ln $article $count
+	then
+		rm $article
+	else
+		date_field=`date '+%h %d %H:%M'`
+		echo "$date_field	local.prjunk	mv $article $count fails in $JUNK cleanup." |
+			tee -a $LOG
+	fi
+done

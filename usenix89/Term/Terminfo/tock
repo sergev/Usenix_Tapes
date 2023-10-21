@@ -1,0 +1,74 @@
+
+
+
+: 'Bourne shell  tock-  Uncompile terminfo entry compiled with tic.'
+# Does about a 90% job.  Its slow, it can't figure out padding specs or
+# terminal names/aliases other than the one its given.  If run in a window
+# or layers environment, the lines and cols reflects the size of the current
+# window rather than the maximum limits.   Oh Well...
+# LCP 10-May-86 3b2 Sys.V
+#
+type=${1:-${TERM:-bOgUs}}
+if test "X$type" = "XbOgUs"
+then
+	echo 'No terminal type specified, no $TERM defined.'
+	exit 1
+fi
+tput -T$type bw > /dev/null 2>&1
+stat=$?
+if test "$stat" != "0" -a "$stat" != "1"
+then
+	echo 'Info for '$type' not found in terminfo database.'
+	exit 2
+fi
+echo $type,
+# Booleans
+for c in bw am xsb xhp xenl eo gn hc km hs in da db mir msgr os eslok xt hz ul xon
+do
+	if tput -T$type $c >/dev/null
+	then
+		echo " $c,"
+	fi
+done
+
+# Numerics
+for c in cols it lines lm xmc pb vt wsl
+do
+	result=`tput -T$type $c`
+	if test "$result" -ge '0'
+	then
+		echo " $c#$result,"
+	fi
+done
+
+# Strings
+cap0="cbt bel cr csr tbc clear el ed hpa cmdch cup cud1 home civis cub1 mrcup"
+cap1="cnorm cuf1 ll cuu1 cvvis dch1 dl1 dsl hd smacs blink bold smcup smdc"
+cap2="dim smir prot rev invis smso smul ech rmacs sgr0 rmcup rmdc rmir rmso rmul"
+cap3="flash ff fsl is1 is2 is3 if ich1 il1 ip kbs ktbc kclr kctab kdch1 kdl1 kcud1"
+cap4="krmir kel ked kf0 kf1 kf10 kf2 kf3 kf4 kf5 kf6 kf7 kf8 kf9 khome kich1"
+cap5="kil1 kcub1 kll knp kpp kcuf1 kind kri khts kcuu1 rmkx smkx lf0 lf1 lf10"
+cap6="lf2 lf3 lf4 lf5 lf6 lf7 lf8 lf9 smm rmm nel pad dch dl cud ich indn il"
+cap7="cub cuf rin cuu pfkey pfloc pfx mc0 mc4 mc5 rep rs1 rs2 rs3 rf rc vpa"
+cap8="sc ind ri sgr hts wind ht tsl uc hu iprog ka1 ka3 kb2 kc1 kc3 mc5p"
+
+for part in cap0 cap1 cap2 cap3 cap4 cap5 cap6 cap7 cap8
+do
+    cmd='list="$'$part'"'
+    eval "$cmd"
+
+    for c in $list
+    do
+	if test `tput -T$type $c | wc -c` -ne "0"
+	then
+	    echo " $c=\c"
+	    tput -T$type $c | od -c | ( tr '\012' ' ' ; echo ) | \
+		sed -e 's/[0-9]\{4,\}//g' \
+		-e 's/033/\\E/g' -e 's/\([0-9]\{3\}\)/\\\1/g' \
+		-e 's/\([,:^]\)/\\\1/g' \
+		-e 's/ //g' -e 's/\\0$//' -e 's/$/,/'
+	fi
+    done
+done
+exit
+>>>>>>>> End of file "tock" <<<<<<<  --- Cut Here ---

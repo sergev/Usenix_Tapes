@@ -1,0 +1,73 @@
+
+
+		Miscellaneous Notes on Version 3.02
+
+
+1.  Some applications have appeared to "lose" session clear packets
+    under certain circumstances.  Changing the bufferlet size (BFLT_SIZE
+    in driver.h) cleared it up.  It's unclear where the problem lies at 
+    the moment.
+
+2.  It is now possible to query the status of channel 0 without locking
+    up the driver.  It is recommended that the application do so
+    frequently, as this is the only way of detecting certain error
+    conditions.
+
+    When such an error is detected, the I/O status request returns a 
+    status of "Call Cleared."  This is a little bit misleading, since
+    there never really was a call active on channel 0, but it does
+    indicate something abnormal happened.  There are four clear codes
+    applicable to channel 0:
+    
+    11 -- Restart Received.  This is the status channel 0 will have the
+          first time the status is checked, since we start packet level
+    	  with a restart.  At any other time it indicates that the driver
+	  or the server detected a condition severe enough to restart 
+	  the packet level.  This clears all calls, and resets various
+	  internal parameters.
+	  
+	  If your application sees this after the first connection to X.PC,
+	  all you have to do is check the status of all your active channels
+	  so you can pick up the call clear status on each of them.
+	  
+    12 -- Restart Terminating.  This indicates that the other end wants you
+	  to go away.  The driver sends this upon leaving packet mode and
+	  entering character mode.  The server sends it upon egregious 
+	  violations of protocol, inactivity time-outs, or other misbehavior.
+	  
+	  If your application receives this code, you should clear all active
+	  channels, and drop back to character mode, because you will have to
+	  log back into the X.PC server.
+	  
+    13 -- Remote X.PC Lost.  The other end has not sent any valid packets in
+	  the last 128 seconds.  Usually, this indicates that the network
+	  server has gone to Never-Never Land.  If you get this one, try
+	  resetting the device and going back into Tymnet.  Needless to say,
+	  your active channels probably aren't connected to anything anymore.
+	  
+    14 -- Modem Signals Lost.  When the driver tried to transmit, it found
+	  that DSR or DCD had dropped.  This usually means your network
+	  session is gone.  About all you can do at this point is to reset
+	  the device and try dialing in again.
+
+
+3.  The Proper Way to Say Goodbye to Tymnet.  As with all conversations, 
+    there is an etiquette to talking to Tymnet.  Too often, ill-mannered
+    applications decide a conversation is over and simply hang up the
+    phone.  This is not only rude (even computers like a little courtesy
+    now and then), but can also lead to problems.
+    
+    Some modems do not hang up the phone line properly when control
+    signals are dropped.  If a session with the X.PC server was
+    terminated this way, the network doesn't see the termination until
+    the server drops the connection for some reason.  This can lead to
+    substantial phone bills and Tymnet charges for users.
+    
+    The "polite" way to terminate a session with the X.PC server is
+    to make sure that there are no active channels, either because the
+    user has cleared them or by having the application clear them, and
+    then to tell the driver to go into character mode.  This clears
+    the connection to the server, leaves the driver ready to log in to
+    Tymnet again,  and if you hang up the phone now, a misbehaving
+    modem will only stay connected for 2 minutes before Tymnet
+    disconnects it.

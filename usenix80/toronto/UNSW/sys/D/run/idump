@@ -1,0 +1,59 @@
+: Usage: idump [unix] [core] [od flags]
+:	Default is  /unix  core
+= a "$1" /unix
+= b "$2" core
+nm "$a" > nm-a
+grep 'B _end$' nm-a ^ = e
+grep 'T _etext$' nm-a ^ = f
+expr substr "$e" 1 6 ^ = e
+expr substr "$f" 1 6 ^ = f
+echo "8i$e 77+100/p" ^ dc ^ = e
+echo "8i$f 17701-100/p" ^ dc ^ = f
+if $e -lt 128 then
+	dd if="$b" of=i_space bs=64 count=$e
+	cp i_space d_space
+else
+	dd if="$b" of=i_space count=16
+	dd if="$b" of=d_space bs=64 count=$e
+endif
+dd if="$b" of=i_space bs=64 iseek=$e oseek=128 count=$f
+if ! { ask 'Do you want a listing' } exit
+pr -w136 -6 -h "Namelist of $a. Alphabetical" nm-a
+nm -n "$a" > nm-n
+cp nm-n nm-nT
+cp nm-n nm-nD
+ed - nm-nT
+v/^......T/d
+1,$s/^\(......\)T/0\1/
+1,$s/^......[23]/&=/
+1,$s/^......[45]/&==/
+1,$s/^......[67]/&===/
+1,$s/^.....[15]./&====/
+1,$s/^.....[26]./&========/
+1,$s/^.....[37]./&============/
+1,$s/=/       /g
+1,$s/^\(.....\)[0123]/\100   ==&/
+1,$s/^\(.....\)[4567]/\140   ==&/
+w
+q
+ed - nm-nD
+v/^......[BD]/d
+1,$s/^\(......\)[BD]/0\1/
+1,$s/^......[23]/&=/
+1,$s/^......[45]/&==/
+1,$s/^......[67]/&===/
+1,$s/^.....[15]./&====/
+1,$s/^.....[26]./&========/
+1,$s/^.....[37]./&============/
+1,$s/=/       /g
+1,$s/^\(.....\)[0123]/\100   ==&/
+1,$s/^\(.....\)[4567]/\140   ==&/
+w
+q
+grep '^......T' nm-n ^ pr -w136 -6 -h "I-space symbols ($a)"
+od -"$3"w i_space +20000 ^ sort -m nm-nT - ^ sed -e 's/.*==//' ^ \
+	pr -h "Instruction space ($a)"
+grep '^......[BD]' nm-n ^ pr -w136 -6 -h "D-space symbols ($a)"
+od -"$3"w d_space ^ sort -m nm-nD - ^ sed -e 's/.*==//' ^ \
+	pr -h "Data space ($a)"
+rm -f nm-a nm-n nm-nT nm-nD

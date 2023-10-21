@@ -1,0 +1,205 @@
+/*	date.cpm	Date/Time support for CP/M-80 v 3.0
+
+	Copyright (C) 1985 Mark E. Mallett
+
+	Permission is hereby granted to distribute this file indiscriminately.
+
+Edit history
+
+When	Who	What
+------	---	--------------------------------
+84xxxx	MEM	Create file.
+
+
+	Included are
+
+		curdtm		Get current date/time
+		cvedid		Convert external to internal date
+		cvided		Convert internal to external date
+
+*/
+
+#include	"stdio.h"
+#include	"mem.h"			/* Get my standard defs */
+#include	"cpm.h"			/* Get CP/M call definitions */
+
+/* Local definitions */
+
+typedef					/* date/time structure */
+  struct
+    {
+    int		DAT_DAT;		/* Days since Jan 1 1978 */
+    BYTE	DAT_HRS;		/* BCD hours */
+    BYTE	DAT_MIN;		/* BCD minutes */
+    }
+  DAT;					/* Date */
+
+/* External variables */
+
+
+/* External routines */
+
+
+
+/* Locals */
+
+
+static	int mdtbl[] = {31,28,31,30,31,30,31,31,30,31,30,31};
+					/* Days in each month */
+/*
+
+*//* curdtm (id, it)
+
+	Get date/time from operating system
+
+Accepts :
+
+	id		Address of where to store the date in internal form
+	it		Address of where to store the time in internal form
+
+Returns :
+
+	*id		Date as an int.
+	*it		Time as an int.
+
+*/
+
+
+curdtm (id, it)
+
+int		*id;			/* Address of date variable */
+int		*it;			/* Address of time variable */
+
+{
+IND	DAT	date;			/* Date value */
+IND	int	i;			/* Scratch */
+
+CPM (_MRGDT, &date);			/* Call system to get date */
+*id = date.DAT_DAT;			/* Get days since Jan 1 1978 */
+
+i = (date.DAT_HRS>>4)&0x0F;
+i = i*10 + (date.DAT_HRS&0x0F);
+i = i*6 + ((date.DAT_MIN>>4)&0x0F);
+i = i*10 + (date.DAT_MIN&0x0F);
+*it = i;				/* Return the time. */
+}
+/*
+
+*//* cvedid (id, it, m, d, y, hh, mm)
+
+	Convert external date/time to internal date/time
+
+
+Accepts :
+
+	id		Address of internal date variable (int)
+	it		Address of internal time variable (int)
+	m		Month number (1-12)
+	d		Day number (1-31)
+	y		Year number (1978-??)
+	hh		Hour (0 - 23)
+	mm		Minutes (0 - 59)
+
+Returns :
+
+	<value>		0 if ok inputs
+			-1 = bad year
+			-2 = bad month
+			-3 = bad day of month
+	*id		Internal date value
+	*it		Internal time value
+
+*/
+
+cvedid (id, it, m, d, y, hh, mm)
+
+int		*id, *it;		/* Addr of date and time variables */
+int		m, d, y, hh, mm;	/* Date and time component values */
+
+{
+IND	int	i,j;			/* Scratch */
+
+*it = hh*60+mm;				/* Takes care of time */
+
+if ((y < 1978) || (y > 2070))
+    return (-1);
+
+mdtbl[1] = 28;				/* Setup February */
+if (y%4 == 0)				/* if leap year */
+    mdtbl[1] = 29;
+
+m--;					/* Make month and day zero-based */
+d--;
+if ((m < 0) || (m > 11))		/* Check out month */
+    return (-2);
+if ((d < 0) || (d >= mdtbl[m]))		/* Check out day of month */
+    return (-3);
+
+i = 0;					/* Calculate days */
+for (j=0; j < m; j++)
+    i += mdtbl[j];
+i += d;
+i += (y-1978)*365;
+i += (y-1976)/4;
+
+*id = i+1;				/* Return day */
+
+return (0);				/* Give good status */
+}
+/*
+
+*//* cvided (id, it, m, d, y, hh, mm)
+
+	Convert internal date/time values to external values
+
+
+Accepts :
+
+	id		Date in internal form
+	it		Time in internal form
+	*m		Where to put month number
+	*d		Where to put day number
+	*y		Where to put year number
+	*hh		Where to put hours
+	*mm		Where to put minutes
+
+
+Returns :
+
+	*m		Month number (1-12)
+	*d		Day number (1-31)
+	*y		Year number (1978-??)
+	*hh		Hour (0-23)
+	*mm		Minutes (0-59)
+
+*/
+
+cvided (id, it, m, d, y, hh, mm)
+
+int		id, it;			/* Internal date/time */
+int		*m, *d, *y, *hh, *mm;	/* Where to put components */
+
+{
+IND	int	i,j;			/* Scratch */
+IND	int	yr,ly,mo,day;		/* Various values */
+
+i = id-1;				/* day 1 = Jan 1 1978 */
+ly = (i+672)/1461;			/* Number of leap days passed. */
+yr = (i-ly)/365;			/* Number of full years passed */
+i = i-(yr*365)-((yr+1)/4);		/* Number of day in this year */
+yr = yr+1978;				/* What year it is */
+mdtbl[1] = 28;				/* Presume not leap year */
+if (yr%4 == 0)				/* If is */
+    mdtbl[1] = 29;			/*  then set feb days */
+for (j=0,mo=0; j <= i; mo++)		/* Find month */
+    j = j+mdtbl[mo];			/* Add days */
+
+j = j-mdtbl[--mo];			/* Subtract off last month */
+day = (i-j)+1;				/* Get real day. */
+
+*y = yr;				/* Return component values */
+*m = mo+1;
+*d = day;
+*hh = it/60;
+*mm = it%60;
+}

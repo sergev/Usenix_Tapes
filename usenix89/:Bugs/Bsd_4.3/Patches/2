@@ -1,0 +1,695 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!bellcore!petrus!scherzo!allegra!princeton!caip!think!husc6!seismo!ut-sally!im4u!milano!sandel
+From: sandel@milano.UUCP
+Newsgroups: net.sources.bugs
+Subject: Re: Question on Untamo logout deamon.
+Message-ID: <2161@milano.UUCP>
+Date: 27 Aug 86 00:48:11 GMT
+References: <427@curly.ucla-cs.ARPA> <240001@wdl1.UUCP>
+Sender: sandel@milano.UUCP
+Organization: MCC, Austin, TX
+Lines: 682
+Summary: another logout daemon
+Posted: Tue Aug 26 19:48:11 1986
+
+
+I put together a logout/renicing daemon called "assassin" that
+runs on 4.2BSD & 4.3BSD.  Several sites have been running it
+for awhile.  I include below the README which will give you
+an idea what it does.  The source is available to anyone
+with Berkeley/ATT source license.  If you are interested, send
+me mail at:
+
+	sandel@mcc.com
+or
+	*!ut-sally!im4u!milano!sandel
+
+Charles Sandel
+
+----------<cut here for assassin README>----------
+
+# Assassin README
+# March 5, 1986
+
+This directory contains the source for the "assassin" daemon
+which (1) kills idle logins and (2) renices long-running jobs.
+
+This file is rather long, but that is because I've tried to
+make it as complete and readable as I could.  Much of what
+follows may be skimmed over, especially by those who are very familiar
+with 4.2BSD.
+
+This file is broken into several sections:
+
+1. OPERATIONAL MODES
+	What it does.
+2. FILES NEEDED
+	What it eats.
+3. INSTALLATION INSTRUCTIONS
+	How to make and install it.
+4. KERNEL MODIFICATIONS
+	Required changes to the 4.2/4.3BSD UNIX kernel.
+5. CONFIGURING THE HITLIST
+	How to control the assassin once you've let it loose.
+6. ALGORITHMS
+	How it thinks about things (determining idleness, pausing and renicing).
+7. ERRORS, ACTION LOGGING AND DEBUGGING
+	It talks to you.
+8. IGNORANCE
+	It can ignore lots of things (users, commands, groups, ttys).
+9. DEATH MESSAGES
+	It talks to you while it kills you.
+10. MISCELLANEOUS
+	Random thoughts and comments.
+11. GUIDE TO THE SOURCE
+	What is where in the source code.
+12. WISHLIST
+	I haven't had time to do these yet.
+13. PROBLEMS
+	As always.
+14. THANX
+	Gratitude.
+15. DISCLAIMER
+	Eets a notta my fault, beeg boy.
+
+OPERATIONAL MODES:
+--------------------------
+The assassin is designed to run as a daemon or from cron(8)
+at intervals and kill idle logins and re-nice long-running
+processes during "prime-time".  Its actions are determined
+by a configuration file.  The assassin must run as root in
+order to perform its functions.  This is accomplished either
+by starting from rc.local when booting or by being run from
+cron(8).  The file does not need to be setuid root.
+
+At present, the assassin runs only on VAXen running 4.2BSD or 4.3BSD UNIX.
+
+The assassin examines each process on the host machine.  Every
+process is analyzed for various aspects.  This is called a "run"
+in the text below.
+
+FILES NEEDED:
+--------------------------
+The assassin reads several
+files and must run as root.  Here is a list of files to which
+the assassin must have read access:
+
+	/usr/local/lib/hitlist	# the configuration file
+	/etc/passwd		# password file
+	/etc/group		# group file
+	/dev/kmem		# kernel memory
+	/dev/drum		# for swapped processes
+	/vmunix			# for symbols
+
+Here are the files the assassin must have write access to:
+
+	/usr/local/lib			# to create log & data files
+	/usr/local/lib/assassin.log	# log file for errors, etc.
+	/usr/local/lib/renice.data	# renice data for restarting
+
+It must have write permission in /usr/local/lib in order to
+create the checkpoint file and
+dump data between runs (if running from cron(8)), or when
+being killed.  It creates a file there to contain the data.  The
+name of the file is in the "RF" configuration option, default
+is "/usr/local/lib/renice.data".
+It also creates a log file there ("assassin.log") into which all
+error, logging and debugging messages will go.
+
+INSTALLATION INSTRUCTIONS:
+--------------------------
+(0) Make the kernel mods described below in KERNEL MODIFICATIONS.  Make
+a new kernel and make sure that you are running the new modified kernel
+before starting up the assassin.
+
+(1) Edit the Makefile to reflect the multiplexor  and PTY configuration
+of your system.  Use the "-D" flag for "cc" to define the
+number of multiplexors you have of each type.  Currently, only
+these are supported:
+	DZ (8 lines per board)
+	DMF (8 lines per board)
+	DH (16 lines per board)
+If you are using non-DEC boards which provide twice the number
+of ports that their DEC equivalents do, you must double the number of boards
+that you say you have.  I.e., if you are using 2 Able DMF equivalents
+which have 16 ports each (instead of DEC's 8), tell the assassin
+that you have 4 DMF's, e.g.:
+	-DNDMF=4
+The defined numbers determine table sizes.
+Define NPTY to be the actual number of pseudo-terminals you are
+running, i.e., /dev/tty[p-z]* .
+
+Also, if you are using the internet server daemon "inetd" to service
+rlogin requests, define INETD in CFLAGS by adding:
+	-DINETD
+Otherwise, the assassin will assume that you are running a long-running
+rlogin daemon to listen for rlogin requests.
+
+(2) Compile the assassin by doing "make".  It should not be
+necessary at this point to make any changes in the
+include files or in the source.  Almost all of the assasin's
+relevant configuration parameters may be changed in the hitlist (the
+configuration file) without recompiling.  Except, of course,
+the tty configuration defined in the Makefile.
+(NOTE: If you browse "assassin.h", you will see MAX_USERS.  This is
+a hash table size, and does NOT limit the number of users the
+assassin will know about.  Don't change this number, unless you feel
+that you need a much bigger (or smaller) user hash table for the
+number of users you have.)
+
+(3) Install the daemon by doing "make install".  The default destination
+is /usr/local/etc/assassin .
+
+(4) Edit the run-time configuration file to suit your needs
+and install it in the file "/usr/local/lib/hitlist".
+Configuration instructions follow below.
+
+(5) If you want to run the assassin as a long-lived daemon that
+wakes up occasionally to do its business, add an entry
+to /etc/rc.local to start up the assassin when rebooting.  A sample
+entry is in the file "rc.local.assassin".  Edit the "hitlist"
+to make the "delay ruleset" option (dr) be 0 like this:
+	:dr#0:
+This is the recommended configuration, and is also the default.
+The assassin will wake up at varying intervals, the interval depending
+on the number of people who are logged in, and on the minimum and
+maximum sleep times in the hitlist.  These are re-configurable without
+killing the assassin.
+
+(6) If you want to run the assassin as a short-lived daemon called
+at regular intervals from cron(8), add an entry
+to /usr/lib/crontab to start up the assassin at an interval you
+deem appropriate.  I suggest starting with once an hour, every hour
+and monitoring its behavior by viewing the log file.
+A sample entry is in the file "crontab.assassin".  Edit the "hitlist"
+to make the "delay ruleset" option (dr) be 1 like this:
+	:dr#1:
+Delay ruleset 1 causes the assassin to run once, dump its data and
+then exit.  This ruleset can also be used if, for some reason, you want to
+only run it by hand occasionally, although this is not recommended,
+and I really can't think of any good argument for this.
+
+KERNEL MODIFICATIONS
+--------------------
+There are two minor kernel modifications you should make before
+bringing up the assassin.  One of these is absolutely essential
+and the other is strongly recommended.
+
+I really hate the idea of having to do kernel modifications for something
+like this.  I tried very hard to work around it, but there was no
+guaranteed way of determining login shells without having the kernel
+flag them.  Sigh.  Fortunately, the changes are extremely minor, and
+in the case of the renicing mod, will actually help the kernel's performance
+a bit (though not a huge amount, probably not even a measurable
+amount) by making it do less work.
+
+(1) ESSENTIAL!!  As distributed, there is no positive way to identify
+a login shell in 4.2/4.3BSD.  The assassin MUST KNOW which processes
+are login shells.  Otherwise, the whole idea falls flat.
+You MUST arrange for the kernel to flag login shells by turning on
+the SLOGIN bit in p_flag for the process.  Fortunately, the mask
+is already defined in <sys/proc.h>, so all you need to do is set
+the bit.  (Since the mask is defined already by the Berkeley folks,
+it makes me wonder why they didn't use it???  Sigh.)  Change the routine
+newproc() in /sys/sys/kern_fork.c to add two lines when the new
+process structure is being set up.
+Here is a context diff from the 4.3BSD kern_fork.c:
+
+% diff -c kern_fork.c /tmp/kern_fork.c
+*** kern_fork.c Sun Feb  2 16:30:04 1986
+--- /tmp/kern_fork.c    Wed Mar  5 10:06:29 1986
+***************
+*** 176,186 ****
+        rpp->p_textp = isvfork ? 0 : rip->p_textp;
+        rpp->p_pid = mpid;
+        rpp->p_ppid = rip->p_pid;
+- #ifdef        KERNEL_NAME
+- /* flag login processes -- legit children of init */
+-       if(rpp->p_ppid == 1)
+-               rpp->p_flag |= SLOGIN;
+- #endif	KERNEL_NAME
+        rpp->p_pptr = rip;
+        rpp->p_osptr = rip->p_cptr;
+        if (rip->p_cptr)
+--- 176,181 ----
+
+That is, it will flag legitimate children of init (pid 1).  Since this
+is done on fork, it will only flag legitimate children, and not
+inherited children of init.
+I strongly urge you to bracket the changes in #ifdef ... #endif
+and use your kernel configuration name as the key.
+
+I have been ruminating on ways to positively recognize login shells
+without requiring kernel mods, for example, making a good guess based
+on the shell name vs. the login shell as in /etc/passwd, but I haven't
+come up with anything that is 100% guaranteed.  If you have suggestions,
+I'd appreciate hearing them.
+
+(2) STRONGLY SUGGESTED!!  As distributed, the 4.2/4.3BSD scheduler
+will lower the nice to 4 for any processes which have accumulated
+over 10 minutes  CPU time.  This function is done much more intelligently
+by the assassin, so you should comment out the kernel code that does
+this.  The file is /sys/sys/kern_clock.c, the routine is
+softclock().  Comment out the following lines by using either
+/* ... */ or by using #ifndef KERNEL_NAME ... #endif like this:
+
+#ifndef KERNEL_NAME
+/* assassin does this better */
+                if (p->p_uid && p->p_nice == NZERO &&
+                    u.u_ru.ru_utime.tv_sec > 10 * 60) {
+                        p->p_nice = NZERO+4;
+                        (void) setpri(p);
+                        p->p_pri = p->p_usrpri;
+                }
+#endif  KERNEL_NAME
+
+
+Configuring the hitlist (or, "How to control a hired Assassin")
+---------------------------------------------------
+The assassin takes directives from its configuration file, which
+should be in "/usr/local/lib/hitlist".  This file is
+in termcap(5) format (why? because all the routines for reading
+it already existed and it had the functionality that was needed).
+If you are familiar with the termcap(5) format, then the hitlist format
+should pose no problems.
+
+A complete assassin configuration consists
+of a name followed by a vertical bar (|), followed by
+configuration options which are separated by colons (:).  Configurations may
+span more than one line by escaping the newline
+(ending the line in a backslash).  Configuration options have names
+which are two-character identifiers.  These names must be unique
+across all options.  Option names may not be upper case.
+Below, I often use upper-case when talking about an option.  This
+is for clarity in this document ONLY!
+
+The hitlist may contain several complete configurations.  I suggest that
+when you make changes to a configuration, that you retain
+old configurations in the file, but
+rename them.  The assassin will take one command line argument, which
+is the name of the configuration you want it to use.  If there is no
+argument, it uses the "default" configuration.
+
+If you are running the assassin as a long-running daemon (Delay Ruleset 0),
+then the assassin will check the hitlist immediately upon awakening
+to see if the modification date has changed since the last time it was
+read.  If the file has changed since the last re-configuration, the
+assassin will automatically re-configure itself.  Therefore, it is not
+necessary to kill the assassin to effect a new configuration option.
+However, sending the assassin a signal 1 will cause it to immediately
+reconfigure itself by re-reading the hitlist.
+
+There are three types of configuration options:
+
+	strings
+	flags
+	numbered values
+
+STRING options are indicated by a '=' after the name, such as:
+	:it=ttyh3,ttyi0:
+where "it" is the option name and its string value is "ttyh3,ttyi0".
+A string may be null:
+	:it=:
+
+FLAG options are boolean values which are either set or not set.  If
+the option name appears, the option is set.  Otherwise, whether the
+option is set depends on the compiled-in default (see defconf.c).
+To explicitly turn an option off, follow the name with a '!'.
+Example:
+	:rn:		# explicitly turns on renicing
+	:rn!:		# explicitly turns off renicing
+
+NUMERIC-VALUED options are indicated by following the name with
+a pound-sign (#) and then the value.  A leading 0 in the value indicates
+an octal value, otherwise, the value is assumed to be decimal:
+	:dn#200:	# the option DN has the decimal value 200
+	:db#03751:	# the option DB has the octal value 03751
+
+Many of the options have synergistic functions and their effects
+often depend
+on the value of other options, so you should be
+aware of the possible effects before changing an option.
+There is a list of options and a description of their functions in
+the file CONFIG.OPTIONS.
+
+ALGORITHMS
+----------
+There are three important algorithms that the assassin uses.
+One is an algorithm that decides if a tty is idle and therefore
+eligible to be assassinated.  Another algorithm decides how
+the assassin will pause between making runs.  The third determines
+how to renice long-running processes.
+The assassin is designed so that it will be easy to plug in different
+algorithms and switch between the different ones.  This was done since
+not everyone has the same ideas and goals for the assassin.
+As of this date, there are two algorithms for deciding delay
+time, but only one to decide idle time.  Contributions are welcome.
+Also, the renicing algorithm is not yet switchable.  That is on the
+list of improvements.
+
+(1) IDLE ALGORITHM:
+This algorithm is designed to be lenient in its interpretation of
+tty idleness.  By default it uses the last modification time (mtime) of the
+tty to determine idleness instead of last access time (atime) which w(1) uses.
+Mtime is the last time the tty was written to, and atime is the last
+time there was input from the keyboard (?). Or something like that.
+Using mtime is more lenient because anything written to the tty
+will change mtime.  This allows programs which constantly spit
+garbage to the tty, but don't requrire any input,
+to prevent that tty from being considered
+idle.  This is an obvious and large hole into which will fall
+many evasions.  However, people have griped a lot and loudly
+when I used atime instead, since it killed them quite readily.
+Thus, the birth of an option.
+Do what you like by changing the "mt" conf flag (if set, use mtime
+else use atime).  Clearing the mt flag will make us behave like w(1).
+
+After we decide that issue, we compute how long it's been since they've
+had terminal I/O (either [current_time - mtime]  or  [current_time - atime]
+depending on the MT flag option).  Then it gets hairy.  The rest of this
+is pretty much based on the assumption that we don't kill logins on ttys
+that are busy in some sense.  For example, if they are just sitting
+there with no processes running anywhere on that tty, then we probably
+want to bump them off.  If they are sitting there with a process running
+in the foreground which is actually using the CPU and is not sleeping,
+then we want to leave them alone for awhile (this condition is called
+"running idle").  If they are just sitting there with a foreground process
+that is not doing anything (sleeping, idle or waiting for input),
+then we probably want to kill them.  The main object of assassinating
+logins is to free up idle tty ports, and not to balance the CPU load.
+
+There are several option values which affect the notion of idleness and
+therefore affect whether or not a particular login will be assassinated.
+These are:
+
+IR	idle ruleset
+MT	tty modification time/access time
+ID	idle threshhold
+RI	running idle seconds
+
+The IR and MT options are discussed above.  The idle threshhold (ID)
+determines the number of idle seconds above which a login is eligible to
+be assassinated.  If the tty has been idle for less than this number
+of seconds, then the login WILL NOT be killed.  If the idle seconds is
+more than this number, then the login may or may not be killed, depending
+on what the other conditions are.  If the tty is idle and there is a process
+actually running on it, then RI determines the number of seconds that the
+tty may be idle before being killed.  This allows a process to actually
+run on a tty and not need any terminal I/O with less danger of being killed.
+
+There are comments in idle.c which go into more detail about how
+the assassin does all of this.  I welcome additional idle algorithms.
+The idle ruleset which is used is determined by the "IR" option
+value in the hitlist.  At present, the only ruleset is 0.
+
+(2) DELAY ALGORITHM:
+The assassin was designed originally to run as a long-lived daemon
+which woke up occasionally and did its job.  It soon occurred to me
+that it wasn't really necessary to keep it around ALL the time, and that
+if it checkpointed itself, it could easily be run from cron(8).  Hence,
+the birth of another option!  The delay ruleset is determined by
+the value of the DR.  At present, there are two rulesets: 0 and 1.
+Ruleset 0 is the default and causes the assassin to run as a long-lived
+daemon.  In this mode, it goes through one run and then computes a delay
+(in seconds) based on the number of tty ports which are in use.  Minimum
+and maximum delay times may also be specified by using DN and DX.
+The delay is calculated so that if N% of the ports are in use, then
+the assassin will sleep N% between the minimum and maximum delay times.
+The advantage of this algorithm is that it causes the daemon to be
+more responsive to the actual usage of the machine.  That is, if lots
+of people are using the machine, then the assumption is that there
+are more people who *want* to use the machine, but may be limited by
+the number of ports available, some of which may be idle.  The assassin
+will check more often, then, for idle ports, and should free them up
+more often.
+Options which affect the delay algorithm:
+
+DR	delay ruleset; which algorithm to use.
+DN	minimum delay, in seconds
+DX	maximum delay, in seconds
+NP	number of desired login-able ports
+FD	fixed delay, in seconds.  If FD is > 0, then DN and DX are ignored.
+
+The actual algorithm is:
+
+	delay = FD
+	if ( delay <= 0 ) {
+		pctused = number_of_logins / NP
+		delay = DX - (DX - DN)*pctused
+		if(delay < DN) delay = DN;
+		if(delay > DX) delay = DX;
+	}
+
+The second algorithm causes the assassin to make one run, then checkpoint
+itself and die.  Intended to be run from cron(8).
+
+(3) RENICING ALGORITHM
+The assassin looks at every process on the machine, bar none.
+Every process is examined for eligibility to be reniced, i.e., have
+its priority lowered (a high nice implies a low priority as far as
+getting a chunk of the CPU).  However, under NO circumstances will
+the assassin lower the priority of a process which is owned by
+root.  This is compiled into the code and cannot be changed
+by a configuration option.
+
+There are several configuration options which
+affect the renicing behavior:
+
+RN	boolean flag determines if renicing is done.
+FS	free seconds threshhold; if a process has accumulated less than
+	this number of seconds CPU time, then it will not be reniced.
+SN	seconds nice; a long-running process gets reniced to a value computed
+	as (cpu_secs - FS)/SN; i.e., one "nice" for each SN seconds CPU time
+PS	start of prime time; renicing occurs only during prime time on prime
+	days.
+PE	end of prime time;
+SE	end of swing time; Swing time begins at the end of prime time.  No
+	renicing occurs during swing time. After swing time is over,
+	all processes which have been reniced by the assassin are
+	returned to their original nice.
+PD	prime days; An seven-bit octal map of which weekdays are
+	considered prime days.  Sunday is the rightmost bit.
+HO	Do renicing on holidays and non-prime days.  The assassin knows about
+	certain holidays (Christmas, New Years, etc.).  Ordinarily, no renicing
+	occurs on these days, or on non-prime days.
+NL	A nice load average.  If the 5-minute load average dips below this
+	value, then renicing is not done.  When the 5-minute load average
+	exceeds this value, renicing is resumed.  Processes which have already
+	been reniced are not affected.
+WL	Same as NL, but for non-prime days.  Has meaning only if HO is set.
+RF	Name of the file to checkpoint the renicing data.
+
+
+ERRORS, ACTION LOGGING AND DEBUGGING
+---------------------------
+All error loggin and debugging messages are printed in the logfile
+/usr/local/lib/assassin.log .  I am working on being able to switch
+log names via the configuration file, but as yet this doesn't work.
+There are 5 error levels:
+	information	just for information, no attention required
+	warning		administrators take note
+	serious		could indicate real problems
+	levelling	prevents assassin from doing its jobs
+	fatal		cannot continue
+When an error occurs, a line is printed in the log file with this format:
+>>ERROR (error level name): error message
+
+There is the capability to log certain actions of the assassin when
+they occur.  This is sort of a checkpoint procedure to report on what
+it is doing, i.e., who it is assassinating, who it is renicing, etc.
+The configuration option LM defines a 32-bit mask, with one bit for
+each log level.  Each level covers a particular type of action, such
+as "anything concerning killing" or "anything concerning renicing".
+There are currently bit values for the masks defined
+in "level.h".   The distributed sample hitlist has all these values
+turned on.  It would be wise to run this way for a short time to get
+a feel for the actions of the assassin, but then to cut down to a smaller
+subset later on.  The log file could become huge if too much logging is
+turned on.
+
+The debugging capabilities are very similar to the logging actions and are also
+defined in "level.h".  The same comments apply about the configuration
+file option (the option name is DB).  At present, only the checkpointing
+debugging mask is defined.
+
+IGNORANCE
+---------
+Reality dictates that not all users, ttys or processes are equal.  This
+is sometimes due to real physical limitations, and sometimes due to
+artificial and political reasons.  Whatever these reasons are, the
+assassin tries to deal with them.  It is possible to prevent the
+assassin from killing logins which have the following
+attributes:
+
+	login owned by certain users  (option IU)
+	login on particular ttys  (option IT)
+	login shells with particular names  (option IC)
+	login shells in particular groups  (option IG)
+
+Similarly, it is possible to prevent the assassin from renicing processes
+which have the following attributes:
+
+	procs owned by certain users  (option NU)
+	procs on particular ttys  (option NT)
+	procs with particular names  (option NC)
+	procs in particular groups  (option NG)
+
+It is also possible to prevent the assassin from
+killing a login if the controlling process on that tty is owned by
+a particular user.  This option is RU (running as user).  Similarly,
+it is possible to prevent the assassin from killing a login
+if the controlling command process has a particular name
+This option is RC (running command).
+
+All of these options are string values.  More than one name may be given
+by using commas to separate the names:
+
+	:it=ttyi0,console,/dev/ttyp8:
+	:ru=aips,root,uucp:
+
+When tty or command names are expected, the assassin strips the
+name down to the final pathname component.  That is, for ttys, the following
+names are equivalent:
+	/dev/ttyi0
+	ttyi0
+For command names, this has the implication that the following names
+are equivalent:
+	/usr/stp/sandel/bin/foo
+	/etc/foo
+	foo
+The reason for this is that the kernel accounting stores only the final
+component of the pathname (check "lastcomm").
+
+DEATH MESSAGES:
+---------------
+The assassin likes to send death messages to a tty just prior to
+killing a login.  The message looks something like this:
++----------------------------------------------------------------------+
+|                                                                      |
+|                IDLE TIMEOUT ON PORT ttyxx, HOST hostname             |
+|                      IDLE 30 MINUTES, 53 SECONDS                     |
+|             ASSASSINATED LOGIN PID=pidnumber, USER=username          |
+|        (additional message from option KS printed here, if any)      |
+|                                                                      | 
++----------------------------------------------------------------------+
+Then it mercilessly kills the login.  In order to prevent the user from
+locking up the assassin by typing control-S when the message starts printing,
+the assassin sneaks in before printing the message and disables
+control flow on that tty.
+
+There have been some problems with having PC's on a MICOM port selector
+connected to the host.  Occasionally, and for reasons I haven't ever
+figured out, the assassin will hang while printing its message to those
+ports.  To prevent this, you can turn off all kill
+messages with the KM option flag by specifying :km!:.  If anyone
+figures out what is happening with the PC's and the MICOM,
+please let me know.
+
+If sending messages, you can create an additional message with the
+KS option string.  The assassin prints it verbatim.  The assassin
+usually uses gethostname(2) to determine the host name.  However, you
+can force it to use any string for the hostname with the HN option.
+
+MISCELLANEOUS
+-------------
+The assassin checks /etc/passwd and /etc/group before beginning
+each run to see if they have been changed since the last time they
+were read.  If so, the assassin will re-read them and re-build its
+hash tables.  Similarly, it checks the directory /dev/ and will re-initialize
+its tty stuff to make sure it is current.
+
+When starting up, the assassin chdir's to /dev/ and stays there.
+
+GUIDE TO THE SOURCE
+-------------------
+
+Makefile	for make(1)
+README		this file
+aconf.h		configuration include file; defines option structures, arrays
+		and number of options of each type
+assassin.h	general include file
+assassinate.c	deals with killing logins
+basename.c	strips a pathname down to its last component
+defconf.c	stuffs option array structures with comiled defaults
+delay.c		contains the delay algorithms
+getconf.c	reads the configuration file
+getucmd.c	interprets process page tables
+getval.c	gets values out of the kernel/kmem
+groupstuff.c	stuff dealing with groups, hashing, etc
+hitlist		a sample configuration file
+idle.c		contains the idle algorithms
+inc.h		include file which includes system include files
+level.h		defines masks for errors, logging and debugging options
+log.c		prints stuff to the log file (errors, logging, debugging)
+main.c		the main loop of the assassin
+nullnl.c	nulls out a newline in a string
+renice.c	contains renicing algorithm
+rlog.c		keeps track of rlogins
+ttystuff.c	stuff dealing with ttys
+userstuff.c	stuff dealing with users, hashing, etc
+value.h		defines the options
+vstodb.c	for reading page tables
+zalloc.c	memory allocation routines
+
+WISHLIST
+--------
+Allow algorithm selection options to be named rather than using numbers.
+Add option to send mail to a user when killing him.
+Make the renicing algorithm selectable like the delay and idle algorithms.
+Support Sun and other 4.2 machines.
+Support recongition of telnet, ftp and chaosnet logins.
+Allow option to send messages (or not send messages) only to specific ttys.
+Keep ongoing statistics about assassinations and renicing vs load average
+and time of day/week.
+
+PROBLEMS:
+---------
+As yet, the assassin does not deal effectively with telnet logins
+(although it does deal with rlogin's), ftp logins or chaosnet
+logins.  These are in the works.
+
+PLEASE send bug reports to me so that I can fix them for the next
+release!!  Improvements are always welcome!
+
+Charles Sandel
+MCC Software Technology
+9430 Research Blvd
+Austin, TX  78759
+(512)834-3498
+
+ARPANET:	sandel@mcc.arpa    
+	OR
+ARPANET:	charles@sally.arpa
+
+UUCP:	{seismo,ihnp4,harvard,gatech,pyramid}!ut-sally!im4u!milano!sandel
+	OR
+UUCP:	{seismo,ihnp4,harvard,gatech,pyramid}!ut-sally!charles
+	OR
+UUCP:	{sun,nrao}utastro!milano!sandel
+	OR
+UUCP:	{sun,nrao}utastro!charles
+
+
+THANX
+-----
+Many thanx go to the people at the Astronomy Department, The
+University of Texas at Austin, for their indulgence while I
+created this monster.
+
+DISCLAIMER
+----------
+No guarantees or warranties of any kind are expressed or implied.
+Don't blame me.
+
+
+
+
+UNIX, as always, is a trademark of AT&T Bell Laboratories
+VAX is a trademark of Digital Equipment Corporation
+The assassin is copyright (C) 1986 Charles Sandel
+-- 
+Charles Sandel
+    arpa: sandel@mcc.arpa
+    uucp: *!ut-sally!im4u!milano!sandel (or  *!ut-sally!charles)
+
+ The truth will  make you free...
+ But first it will make you miserable.

@@ -1,0 +1,70 @@
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: BE.aux,v 1.9 86/06/22 18:08:57 dick Exp $
+
+#
+#		B u i l d   E n t r y
+#	Script, to be included.
+#
+#	Assumes set:
+#		$CVSLIB
+#		$Name
+#		$Options
+#		$Rcs
+#		$Repository
+#		$User
+#
+#	Builds an entry for a new file and sets up $User,[pt] by
+#	interrogating the user.
+#
+#	Sets OK to no and calls continue, if necessary.
+#
+
+# there may be an old file with the same name in the attic!
+# this is an awkward place to test, but other places are equally awkward
+if	# it is in the attic already
+	[ -r $Repository/Attic/$User,v ]
+then
+	echo $Name: there is an old file $User already \
+						in $Repository/Attic >&2
+	OK=no
+	continue
+fi
+
+# isn't the name too long?
+if	# both $User and $User,x can be linked made by linking
+	ln $User $User, >/dev/null 2>/dev/null \
+&&
+	ln $User $User,x >/dev/null 2>/dev/null
+then
+	rm $User, $User,x
+else
+	rm -f $User,
+	echo $Name: filename $User is too long >&2
+	OK=no
+	continue
+fi
+
+# store the options
+echo "$Options" >$User,p
+
+# get a description file by imitating a call of rcs -i
+echo "RCS file: $Rcs"
+echo "enter description, terminated with ^D or '.':"
+echo "NOTE: This is NOT the log message!"
+cp /dev/null $User,t
+while	# the user still provides text
+	echo -n ">> "
+	read TXT
+do	# add it to $User,t, except if it is a single dot
+	if	# it is the terminating dot
+		[ "$TXT" = "." ]
+	then
+		break
+	fi
+	echo "$TXT" >>$User,t
+done
+echo done
+
+# create the entry (at the end, since the user may have interrupted)
+$CVSLIB/RG.aux $User 0 "Initial $User"

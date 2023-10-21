@@ -1,0 +1,347 @@
+%{
+
+# include <ctype.h>
+# include <stdio.h>
+
+
+	/***************************************************************\
+	*								*
+	*	Error messages.						*
+	*								*
+	\***************************************************************/
+
+char	*charroom = " MAXCHARS TOO SMALL - no room to store ";
+char	*occroom  = " MAXOCCS TOO SMALL - no room to store occurance of ";
+char	*defroom  = " MAXDEFS TOO SMALL - no room to store definition of ";
+char	*idroom   = " MAXIDENTS TOO SMALL - no space in table for new identifier ";
+
+%}
+
+
+	/*******************************************************\
+	*							*
+	*	X_reference program for YACC files		*
+	*	~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~		*
+	*							*
+	*	Cathy Taylor,					*
+	*	c/o Department of Computing,			*
+	*	University of Lancaster,			*
+	*	Bailrigg, Lancaster, England.			*
+	*							*
+	*	Date : Mon Jul 14 01:24:34 BST 1986		*
+	*							*
+	\*******************************************************/
+
+
+	/***********************************************\
+	*						*
+	*	Yacc Input Syntax			*
+	*	~~~~~~~~~~~~~~~~~			*
+	*						*
+	*	Adapted from the document		*
+	*	'YACC - Yet Another Compiler Compiler'	*
+	*		by				*
+	*	   S. C. Johnson			*
+	*						*
+	*	Date: Tue Jul  1 02:40:18 BST 1986	*
+	*						*
+	\***********************************************/
+
+
+%token	IDENTIFIER CHARACTER NUMBER
+%token	LEFT RIGHT NONASSOC TOKEN PREC TYPE START UNION
+%token	PER PERCURL ACT
+%token	COLON SEMICOLON COMMA OR LESS GREATER
+
+%start	spec
+
+%%
+
+spec
+	:	defs PER rules tail
+			{
+				printf("\n\n");
+				yyclearin;
+				return(0);
+			}
+	;
+
+tail
+	:	/* empty */
+	|	PER 
+	;
+
+defs
+	:	/* empty */
+	|	def_bk
+	;
+
+def_bk
+	:	def
+	|	def_bk def
+	;
+
+def
+	:	START IDENTIFIER
+	|	UNION
+	|	PERCURL
+	|	rword tag nlist
+	;
+
+rword
+	:	TOKEN
+	|	LEFT
+	|	RIGHT
+	|	NONASSOC
+	|	TYPE
+	;
+
+tag
+	:	/* empty */
+	|	LESS IDENTIFIER GREATER
+	;
+
+nlist
+	:	nmno
+	|	nlist opt_comma nmno
+	;
+
+opt_comma
+	:	/* empty */
+	|	COMMA
+	;
+
+nmno
+	:	IDENTIFIER opt_num
+	;
+
+opt_num
+	:	/* empty */
+	|	NUMBER
+	;
+rules
+	:	rule
+	|	rules rule
+	;
+
+rule
+	:	IDENTIFIER
+		{
+			yyaction(ON_C_IDENT,line);
+		}
+		COLON body SEMICOLON
+	;
+
+body
+	:	body_block
+	|	body OR body_block
+	;
+
+body_block
+	:	/* empty */
+	|	body_block body_entity
+	;
+
+body_entity
+	:	opt_prec id_ent
+	|	ACT
+	;
+
+id_ent
+	:	IDENTIFIER
+		{
+			yyaction(ON_IDENT,line);
+		}
+	|	CHARACTER
+	;
+
+opt_prec
+	:	/* empty */
+	|	PREC
+	;
+
+
+%%
+
+# include	<stdio.h>
+# include	"lex.yy.c"
+# include	"sto.h"
+
+#define	ON_C_IDENT	000
+#define	ON_IDENT	001
+
+#define	MAXIDENTS	200
+#define	MAXCHARS	50
+#define	MAXDEFS		5
+#define	MAXOCCS		80
+
+struct	IREC {
+		char	symbol[MAXCHARS];
+		int	description[MAXDEFS];
+		int	next_d;
+		int	occurance[MAXOCCS];
+		int	next_o;
+		} table[MAXIDENTS];
+
+
+yyaction (action,ln)
+int	action;
+int	ln;
+{
+	int	id;
+	
+	id = 0;
+	while (	strcmp(table[id].symbol,yytext) != 0 && strcmp(table[id].symbol,"") != 0 )
+	{
+		if (id== MAXIDENTS)
+		{
+			yyerror(strcat(idroom,yytext),ln);
+			exit(3);
+		}
+		id++;
+	}
+
+	if ( strcmp(table[id].symbol, yytext) != 0 )
+	{
+
+	/*******************************************************\
+	*							*
+	*	New non-terminal to be stored.			*
+	*	No distinction is made here between tokens	*
+	*	and (non) terminals.				*
+	*							*
+	\*******************************************************/
+
+		if (strlen(yytext) == MAXCHARS)
+		{
+			yyerror(strcat(charroom,yytext),ln);
+			exit(3);
+		} /* fi */
+		strcpy(table[id].symbol,yytext);
+		table[id].next_d = 0;
+		table[id].next_o = 0;
+	} /* fi */
+
+	switch (action) {
+	case ON_C_IDENT:
+
+	/*******************************************************\
+	*							*
+	*	Add to list of definition lines.		*
+	*							*
+	\*******************************************************/
+
+		if (table[id].next_d == MAXDEFS )
+		{
+			yyerror(strcat(defroom,yytext),ln);
+			exit(3);
+		} /* fi */
+		table[id].description[table[id].next_d++] = ln;
+		break;
+
+
+	case ON_IDENT:
+				
+	/*******************************************************\
+	*							*
+	*	Add to list of occurance lines.			*
+	*							*
+	\*******************************************************/
+		if (table[id].next_o == MAXOCCS )
+		{
+			yyerror(strcat(occroom,yytext),ln);
+			exit(3);
+		} /* fi */
+		table[id].occurance[table[id].next_o++] = ln;
+		break;
+
+	default		:
+		fprintf (stdout, "yyaction: invalid action\n");
+		return (-1);
+		} /* hctiws */
+	return (0);
+} /* corp */
+
+nline(ln)
+int	ln;
+{
+	printf("%4d :\t",ln);
+}
+
+
+	char	declared_at_mark[] = "*";
+	char	occurs_at_mark[] = "";
+	char	token_maybe[] = "is not declared - token??";
+	char	start_maybe[] = "never occurs on rhs of rule - start rule?";
+	
+/*
+*	Strings for output
+*/
+
+main ()
+{
+	int	ind,id,numids;
+	int	i, j, gap, temp;
+	int	pos[MAXIDENTS];
+
+	strcpy(table[0].symbol,"");
+
+	line = 0;
+	nline(++line);
+
+	yyparse ();
+
+	id = 0;
+	while ( strcmp(table[id].symbol,"") != 0 )
+		pos[id] = id++;
+	
+
+	/***************************************************************\
+	*								*
+	*	Grubby sort. Pointers to records held in "pos[]".	*
+	*								*
+	\***************************************************************/
+
+	numids = id;
+	for (gap = numids/2; gap > 0; gap /= 2)
+		for (i=gap; i<numids; i++)
+			for (j=i-gap; j>=0; j-=gap)
+				if (strcmp(table[pos[j]].symbol,table[pos[j+gap]].symbol) > 0)
+				{
+					temp = pos[j];
+					pos[j] = pos[j+gap];
+					pos[j+gap] = temp;
+				}
+	
+
+	for ( i=0; i<numids; i++ )
+	{
+		id = pos[i];
+		printf("\n' %s ' -\n\t\t\t",table[id].symbol);
+		if (table[id].next_d == 0 )
+		    printf("%s",token_maybe);
+		else
+		{
+		    ind = 0;
+		    printf("%s%d ",declared_at_mark,table[id].description[ind++]);
+		    for ( ind=1; ind < table[id].next_d ; ind++)
+			printf(", %s%d",declared_at_mark,table[id].description[ind]);
+		}
+		if (table[id].occurance[0] == 0)
+		    printf(", %s",start_maybe);
+		else
+		{
+		    printf(" %d occurances at lines ",table[id].next_o);
+		    for ( ind = 0; ind < table[id].next_o ; ind++ )
+			printf(", %s%d",occurs_at_mark,table[id].occurance[ind]);
+		}
+		id++;
+	}
+	printf("\n\n\tEnd of X-ref\n\t~~~~~~~~~~~~\n");
+} /* niam */
+
+yyerror(mess,errline)
+char	*mess;
+{
+	printf("\n\n\n\t%s at line %d\n",mess,errline);
+} /* corp */

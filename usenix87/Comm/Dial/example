@@ -1,0 +1,69 @@
+# Example for a dial script.
+#
+# Connect to a remote UNIX machine through a PABX and obtain certain
+# information from a server account (`qomnews') on this machine.
+# The line through which the PABX can be accessed is defined in
+# /etc/remote under the name `pabx', thus...
+
+line=pabx
+
+# If the PABX receives ^A^B+, it responds with D+ indicating that
+# it is ready to accept a phone number.
+# Due to a bug in the PABX software, it sometimes responds with
+# two beeps; In this case, there is nothing we can do exept quit
+# and fix it by hand...
+
+prolog \1\2+ 1
+    dial  D+
+    exit  \7\7  "Go buy a new PABX!\n"
+    exit  #     "No response from PABX.\n"
+
+# Send the phone number of the remote UNIX machine.  Sleep 0.1 seconds
+# before actually transmitting the number (otherwise the PABX gets angry).
+# If we receive a V followed by a three-digit number and a plus sign,
+# the connection has been established successfully.  Several responses
+# of the form <letter>+ are used by the PABX to indicate that something
+# went wrong; these reponses are translated into useful messages.
+
+dial 618\r 5,.1
+    exit  B+    "Port busy -- try later.\n"
+    exit  N+    "Out of order.\n"
+    exit  E+    "Invalid phone number.\n"
+    connected  V...+
+    exit  #      "Connection failed.\n"
+
+# Transmit a carriage return in order to get the login prompt.
+
+connected \r 5,.1
+    login "login: "
+    exit  #      "Login failed.\n"
+
+# Login at the remote machine using the login name `qomnews'.
+
+login qomnews\r
+    enter "name? "
+    exit  #      "QOM news server down.\n"
+
+# The qomnews server prompts for a user name.  The name is obtained
+# from the file .qomid from the caller's home directory.
+# Note that a time-out of 15 seconds is scheduled in order to give
+# the server a resonable time for the response.
+# If all goes well, the server transmits a number of lines of the form
+#    You have <n> unseen letters
+#    You have <n> unseen entries in XYZ   
+# or simply
+#    You have seen all the news.
+# If the first `You' has been received, enter the `data' loop below.
+
+enter "${~/.qomid}" 15
+    data \r\n\r\nYou You
+    exit O+	 "Early disconnect."
+    exit #       "QOM news server is hung.\n"
+
+# Print all data received from the remote machine on standard output
+# until either a time-out of 5 seconds occurs or the disconnect message
+# O+ is received.
+
+data "" 5
+    exit O+
+    data * &

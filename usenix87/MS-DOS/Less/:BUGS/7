@@ -1,0 +1,61 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site uw-beaver
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxm!mhuxf!mhuxi!mhuxh!mhuxv!mhuxt!houxm!vax135!cornell!uw-beaver!schwartz
+From: schwartz@uw-beaver (Michael Schwartz)
+Newsgroups: net.sources.bugs
+Subject: Re: Problem I noticed with less
+Message-ID: <1652@uw-beaver>
+Date: 15 Oct 85 18:47:52 GMT
+Date-Received: 17 Oct 85 05:21:24 GMT
+References: <1258@daemen.UUCP>
+Distribution: usa
+Organization: U of Washington Computer Science
+Lines: 47
+
+> I use less now as my pager and I usually pipe things into. I am one
+> of those stop a job and startup another (usually about three stopped
+> at a time). What I noticed is sometimes I would stop a command
+> like "diff a b |less" and only the diff would be stopped, the less
+> would continue waiting thus I don't get me back control of
+> the terminal.  It happens off and on without any apparent pattern,
+> anybody else notice this?
+> 
+> Doug Boyce   Daemen College, Amherst NY
+
+I experienced this problem when I used a version of man(1) I hacked to allow it
+to use less.  The problem is in the routine psignals, in signal.c (less' signal
+handler).  There is some code near the end of this routine to clean up the
+terminal before sending itself the SIGTSTP signal.  The problem is that this
+code was executing with SIGTTOU enabled, creating a race condition where
+sometimes the shell would grab control of the terminal before less had a chance
+to clean it up.  I also took out the flush() call, as this sometimes caused
+the shell prompt not to be printed.
+
+Old code:
+
+		/*
+		 * Clean up the terminal.
+		 */
+		lower_left();
+		clear_eol();
+		flush();
+		raw_mode(0);
+		SIGNAL(SIGTSTP, SIG_DFL);
+
+Changed code:
+
+		/*
+		 * Clean up the terminal.  Ignore SIGTTOU while cleaning up
+		 * so we don't get stopped half-way if the shell grabs control
+		 * of the terminal.
+		 */
+
+		signal(SIGTTOU, SIG_IGN);
+		lower_left();
+		clear_eol();
+		raw_mode(0);
+	        signal(SIGTTOU, SIG_DFL);
+		SIGNAL(SIGTSTP, SIG_DFL);
+
+
+ - Mike Schwartz (University of Washington, Computer Science Dept.)

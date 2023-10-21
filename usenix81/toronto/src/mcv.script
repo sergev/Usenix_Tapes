@@ -1,0 +1,110 @@
+# fix up all the old special char abbrevs, needed before nroff got \( etc.
+/\\\*-/s//\\-/g
+/\\\*_/s//\\(ul/g
+/\\\*a/s//\\(aa/g
+/\\\*v/s//\\(br/g
+/\\\*|/s//\\|/g
+/\\\*g/s//\\(ga/g
+/\\\*b/s//\\(*b/g
+/\\\*G/s//\\(*G/g
+/\\\*>/s//\\(->/g
+/\\\*p/s//\\(*p/g
+/\\\*r/s//\\(rg/g
+/\\\*X/s//\\(mu/g
+/\\\*u/s//\\(*m/g
+/\\\*W/s//\\(*W/g
+/\\\*\*/s//\\(**/g
+# font stuff
+/^\.b[dn]/s//.BR/;	# somewhat incorrect treatment of the rare .bn
+/^\.it/s//.IR/;		# IR (and BR above) in case of more args
+# arguments with embedded \f sequences
+/^\.BR[ 	][ 	]*\(.*\)\\fI\(.*\)\\f.$/s//.BI \1 \2/
+/^\.IR[ 	][ 	]*\(.*\)\\fB\(.*\)\\f.$/s//.IB \1 \2/
+# arg ends in punctuation -- often winked at in old manual sections
+/^\.[BI]R.*[.,;:!?]$/s;.$; &;
+# arg begins with ( -- ditto
+/^\.\([BI]\)R[ 	][ 	]*(/s//.R\1 ( /
+# lines ending with ; and : -- [nt]roff not smart enough to leave 2 blanks
+/[:;]$/s/$/\\ /
+# formatting commands
+/^\.lp/{
+	# carry the indent depth over
+	/^\.lp[ 	][ 	]*[-+0-9][-+0-9]*[ 	][ 	]*\([0-9][0-9]*\)/s//.TP \1/
+	N
+	# break the next line at the tab
+	s;\(\n[^ 	][^ 	]*\)[ 	][ 	]*;\1\
+;
+	P
+	D
+	}
+/^\.sh/{
+	s/^\.sh/.SH/
+	N
+	/^\.SH.*\n\.sh/D;		# delete null section
+	# and get rid of useless space in NAME sections -- common at U of T
+	/^\.SH[ 	][ 	]*NAME/s/[ 	][ 	]*/ /g;
+	P
+	D
+	}
+/^\.s[123]/s//.PP/;	# not quite correct for s1, s2, but who cares?
+/^\.i0/s//.PP/;		# not really correct, but close
+/^\.PP/{		# eliminate .PP preceding .PP, .TP, or .SH
+	N
+	/^\.PP.*\n\.s[123]/D;
+	/^\.PP.*\n\.i0/D;
+	/^\.PP.*\n\.lp/D;
+	/^\.PP.*\n\.sh/D;
+	P
+	D
+	}
+/^\.li/{	# put \& in front of next line
+	N
+	s/^\.li.*\n/\\\&/
+	}
+/^\.dt/s//.DT/
+# convert chapter numbers in text, suppressing the common useless space as well
+/ *(I)/s//(1)/g
+/ *(II)/s//(2)/g
+/ *(III)/s//(3)/g
+/ *(IV)/s//(4)/g
+/ *(V)/s//(5)/g
+/ *(VI)/s//(6)/g
+/ *(VII)/s//(7)/g
+/ *(VIII)/s//(8)/g
+# heap big special handling for the .th
+/^\.th/{
+	# split it into .TH and .DA
+	s;^\.th \([^ ][^ ]*\) \([IV][IV]*[A-Z]*\) ["]*\([^"]*\)["]*;.TH \1 \2\
+.DA \3;
+	# fix up the chapter number
+	s; I\([A-HJ-UW-Z]*\)\(\n\); 1\1\2;
+	s; II\([A-HJ-UW-Z]*\)\(\n\); 2\1\2;
+	s; III\([A-HJ-UW-Z]*\)\(\n\); 3\1\2;
+	s; IV\([A-HJ-UW-Z]*\)\(\n\); 4\1\2;
+	s; V\([A-HJ-UW-Z]*\)\(\n\); 5\1\2;
+	s; VI\([A-HJ-UW-Z]*\)\(\n\); 6\1\2;
+	s; VII\([A-HJ-UW-Z]*\)\(\n\); 7\1\2;
+	s; VIII\([A-HJ-UW-Z]*\)\(\n\); 8\1\2;
+	# fix up dates like Sept/72
+	s;[ 	][ 	]*\([^/ 	][^/ 	]*\)/\([0-9][0-9]*\)$; "" \1 \2;
+	# fix up dates like 3/20/73
+	s;\([0-9][0-9]*\)/\([0-9][0-9]*\)/\([0-9][0-9]*\)$;\2 \1 \3;
+	# fix up years to be four digits
+	s;[ 	]\([0-9][0-9]\)$; 19\1;
+	# fix up month numbers to be month names
+	s; 1 \([0-9][0-9]*\)$; Jan \1;
+	s; 2 \([0-9][0-9]*\)$; Feb \1;
+	s; 3 \([0-9][0-9]*\)$; March \1;
+	s; 4 \([0-9][0-9]*\)$; April \1;
+	s; 5 \([0-9][0-9]*\)$; May \1;
+	s; 6 \([0-9][0-9]*\)$; June \1;
+	s; 7 \([0-9][0-9]*\)$; July \1;
+	s; 8 \([0-9][0-9]*\)$; Aug \1;
+	s; 9 \([0-9][0-9]*\)$; Sept \1;
+	s; 10 \([0-9][0-9]*\)$; Oct \1;
+	s; 11 \([0-9][0-9]*\)$; Nov \1;
+	s; 12 \([0-9][0-9]*\)$; Dec \1;
+	# whew
+	P
+	D
+	}

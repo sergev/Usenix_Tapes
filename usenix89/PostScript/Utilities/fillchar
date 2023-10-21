@@ -1,0 +1,95 @@
+#! /bin/sh
+
+# This is a PostScript program wrapped as a shell script.
+
+# copyright 1987 by Peter Greenberg. You may use, copy, or redistribute this
+# work freely so long as this message and the copyright message are retained.
+
+# comments/bug fixes to:
+# Peter Greenberg
+# Swarthmore College
+# Swarthmore, PA 19081
+# (215) 328-8610
+# UUCP: ...!seismo!bpa!swatsun!greenber
+# ARPA: swatsun!greenber@seismo.CSS.GOV
+
+# CHANGE THESE LINES TO USE ANTOHER SPOOLER
+spooler=/usr/ucb/lpr
+spoolopts=-PPostScript
+
+# Except for number of arguments (7), no checking done in shell. Specifically,
+# arguments 3 and 4 must be integers, 7 must be real beween 0 and 1. If these
+# conditions are not met, PostScript errors will result.
+
+emit_header() {
+cat <<End-Of-Header
+%!
+/InsideTextFontName /$1 def 
+/InsideText ($2) def 
+/Lines $3 def 
+/Size $4 def 
+/ShapeStrFontName /$5 def 
+/ShapeStr ($6) def 
+/GrayLevel $7 def
+End-Of-Header
+}
+
+emit_main_stuff() {
+cat <<End-Of-Main-Stuff
+% This program prints some string repeatedly within the path defined by some
+% other string.
+
+/FillWithText { % 
+	/grayness exch def 	% background color     
+	/c exch def		% string defining clipping path
+	/cfont exch def		% font of string defining clipping path
+	/size exch def		% size of outline string shape
+	/lines exch def		% number of lines within shape
+	/str exch def		% string to be repeated within shape
+	/sfont exch def		% font of str
+
+	gsave
+	
+	size srand		% we will need random numbers later
+	cfont findfont size scalefont setfont
+	c true charpath		% set up clipping path	
+	gsave stroke grestore	% stroke and fill with background color
+	gsave grayness setgray fill grestore
+	pathbbox		% get bounding box
+		/ury exch def
+		/urx exch def
+		/lly exch def
+		% strings should start left of box
+		str stringwidth pop sub /llx exch def
+	/lineht ury lly sub lines div def
+	/cury ury lineht sub def
+	clip			% do the clipping
+	sfont findfont lineht scalefont setfont
+	% nested loop to print text in box
+	{ 
+		llx rand str stringwidth pop cvi mod add cury moveto
+
+		{ str show ( ) stringwidth pop 2 div 0 rmoveto 
+			currentpoint pop urx ge {exit} if } loop
+		/cury cury lineht sub def
+		cury lly le {exit} if
+	} loop				
+
+	grestore
+} def
+
+40 40  moveto
+InsideTextFontName InsideText Lines Size ShapeStrFontName ShapeStr GrayLevel 
+FillWithText
+
+showpage
+End-Of-Main-Stuff
+}
+
+case $# in
+	7) ;;
+	*) echo usage: ; echo $0 InsideTextFontName InsideText Lines Size ShapeStrFontName ShapeStr GrayLevel ; exit 1 ;;
+esac
+
+(emit_header $@ ; emit_main_stuff) | $spooler $spoolopts
+exit 0

@@ -1,0 +1,728 @@
+.nr FM .5i
+.nr PO 1i
+.nr LL 80n
+.nr LT 80n
+.DS C
+UNIX Networking at Purdue
+.DE
+.SH
+Introduction
+.LP
+This paper describes a modest UNIX network in use and developed
+at Purdue University School of Electrical Engineering.
+Features include:
+.IP o
+Virtual terminal access.
+Through the program "con" a user can connect his physical terminal to a
+"pseudo-terminal" on any other machine.
+A virtual terminal protocol provides local/remote echoing by
+propagation of stty/gtty functions.
+.IP o
+Remote process execution.
+The program "csh" (for "connected shell") takes as arguments a machine name
+and a string of one or more commands.
+These commands then execute on the specified machine but with standard input
+and output redirected to the local machine.
+.IP o
+File transfer/remote device access.
+"csh" in conjunction with "cat" or "cpio" allows simple file or
+directory transfers between machines.
+.IP o
+User programmed net I/O.
+The above programs "con" and "csh" access the net through a pool of
+UNIX "special files".
+By issuing "set teletype" (stty) functions on such an open file, programs
+can directly connect to any machine in the network, disconnect,
+wait for connection, send signals, and so on.
+All of these capabilities are available to any user-written program.
+.IP o
+Moderate bandwidth.
+Measurements have shown 400K baud process to process within the same
+machine and 250K baud process to process between two machines
+separated by a DMC11 network link.
+At this rate single block disk latency limits any further improvement
+for file-file transfers.
+.IP o
+Low system overhead.
+Minimal internal buffering and copying is done.
+Packets contain 512 bytes of user data.
+The net buffer pool resides outside of kernel D space.
+.IP o
+Generalized machine interconnection.
+There are no master-slave relationships.
+Up to 256 machines can be connected arbitrarily using any combination
+of DMC11 and DA11-B network links.
+Link device drivers are reentrant (code is shared over multiple
+units).
+Packet routing is determined by a simple static table in each
+machine at sysgen time.
+.LP
+.KF
+.nf
+
+					   host
+	      host                          imp
+	       |                             |
+	       |                             |     host
+	host--imp-----imp--host             imp----imp
+		       |                   host     |
+		       |                            |
+      (fig A)         host            (fig B)      imp
+						   host
+
+.fi
+.KE
+.SH
+Machine interconnection.
+.LP
+In an ideal local network, the intermachine packet switching and routing
+would take place in a
+.I
+subnetwork
+.R
+of highly reliable, single function processors (interface message
+processors, "imp"s in ARPA-NET terminology), which connect
+through physically short interfaces with the "real" machines of the
+network (called "host"s in ARPA-NET).
+The imps themselves are then connected through longer links to form
+the backbone or subnetwork (fig A).
+Some other subnet designs have used loop or broadcast techniques
+for the inter-imp links.
+.LP
+Due to our limited budget and the time it would take to assemble a
+working subnetwork, we have moved the imp function inside of each
+host, at a cost of added complexity and reduced network reliability (fig B).
+.SH
+Special files.
+.LP
+Programs such as "con" and "csh", their servers (their counterparts in
+the other host which wait for a connection requesting service),
+and user-written software, all run in "user" address space as normal
+processes.
+They read and write from network "special files" which are connected to
+a special file and process in another host.
+.LP
+The special files have names /dev/mx/A, /dev/mx/B, /dev/mx/C, and so on.
+"mx" stands for multiplex device and the last letter in each filename
+just selects a different "minor" device of the "major" mx device.
+The different file names comprise a pool of network files;
+the actual file name used has no significance.
+.LP
+Before a process can do any network I/O, it must find a free mx file
+by opening them consecutively until a free one is found.
+At this point stty's may be issued to for example connect or wait for
+a connection;
+once the connection is open, data written at one end may be read at
+the other and vice versa.
+.SH
+Connection names, host and socket numbers.
+.LP
+Hosts are identified by a one byte host number.
+Within a given host many processes may wish to hold network conversations
+simultaneously so a unique inter-host connection naming convention
+is needed.
+A connection between a process in the local host and a process in a
+foreign host is uniquely identified by four numbers, each one byte long:
+local host, local socket, foreign host, and foreign socket.
+The socket number can be thought of as specifying a particular process
+or service within the given host.
+.LP
+A subset of the socket numbers at each host are reserved for
+connections to system provided services.
+For example a process called the "con server" (started initally after
+the system is booted) is always waiting for connections to local
+socket number 1.
+When a connection arrives the server "fork"s a child process to handle this
+particular request while the parent opens a new mx file and goes back
+to waiting for further socket 1 connects.
+The child now reads and writes from the connected file
+(at the other end is the user-initiated
+"con" process) and behaves as a
+pseudo-terminal for the virtual terminal protocol.
+Socket number 2 is used similarly by the "csh" server.
+.LP
+Note that many connections can exist to the same local host/socket
+pair, since the entire 4 byte connection name is still unique.
+This is analogous to phone company PBX service where many incoming
+calls can be in progress to the same number.
+Note also that this naming convention eliminates the need for a
+clumsy "initial connection protocol".
+.SH
+User callable function library
+.LP
+A library is available to C programs for performing various network
+functions.
+The library can be loaded with a program by using the \%"-lmx" switch of
+the C compiler (cc) command.
+Most of the functions just reformat the arguments into the appropriate
+stty call on the open network file descriptor supplied as
+the first argument.
+For completeness the resulting system call which the function makes is
+shown in brackets; however users need not be concerned with
+this level of detail.
+The functions return -1 on failure.
+.LP
+fd = mxfile();  [fd = open("/dev/mx/x",2);]
+.IP
+A free network file from the pool "/dev/mx/x", is found and opened.
+Its file descriptor (fd) is returned.
+A valid network file descriptor must be supplied to most of the
+functions listed below.
+No reads or writes can be performed on this fd until a connection
+is made.
+.LP
+mxwait(fd,socket);  [stty(fd,{3,socket,0});]
+.IP
+Wait for a connection to local socket number "socket" from any host
+in the network.
+When the connection arrives, mxwait returns.
+Socket numbers 1 through 5 are reserved for super-user owned servers.
+.LP
+mxcon(fd,host,socket);  [stty(fd,{1,host,socket});]
+.IP
+Connect the local network file "fd" to foreign host "host", foreign socket
+"socket".
+When the connection is complete, mxcon returns.
+The connection is completed if a process at the foreign host has issued
+the corresponding mxwait, or issues it at some time in the future.
+The local socket number is picked more or less at random from those
+unallocated at the local host.
+If no path through the network currently exists to "host",
+mxcon fails immediately.
+The standard UNIX alarm clock signal can be used to timeout mxcon or
+mxwait, if this is desired.
+.LP
+mxscon(fd,"hostname",socket);
+.IP
+This call is identical to mxcon, except that here a string rather than
+an integer is used for the host.
+A table of standard host names to numbers is searched and mxcon called
+with the result.
+mxscon fails if the hostname is not in its table.
+.LP
+mxdis(fd);  [stty(fd,{2,0,0});]
+.IP
+The connected file fd is disconnected; further reads or writes are
+now ignored.
+A new mxcon or mxwait can now be issued on this fd.
+A disconnect occurs automatically on a close(fd) or if the process exits.
+.LP
+read(fd,buffer,count);  write(fd,buffer,count);
+.IP
+Read and write work normally but note the following:
+(1) Read never returns more bytes than were written, and never more than
+512 bytes (the host-host packet size).
+In other words the read returns when ANY data is available;
+it does not wait for the buffer to fill.
+(2) So that 1-byte writes (which are pretty common in UNIX) are not
+horribly slow, they are buffered locally inside the kernel until
+the packet is filled or a timer goes off.
+.LP
+mxsig(fd,signal);  [stty(fd,{6,signal,0});]
+.IP
+The process at the other end of the connection is sent a UNIX signal
+number "signal".
+See the UNIX programmers manual section SIGNAL(II).
+.LP
+mxpgrp(fd);  [stty(fd,{5,0,0});]
+.IP
+The current process and all its children by "fork"s are placed in the
+same unique "process group".
+If a signal (mxsig) is received over the net, all the members of the
+process group receive it.
+.LP
+mxeof(fd);  [stty(fd,{7,0,0});]
+.IP
+An end of file (EOF) is written onto the connected file fd, such that
+all reads issued at the other end will now return a zero byte count
+(EOF).
+Further writes at this end are ignored.
+.LP
+mxserve(socket);
+.IP
+This call is used mainly by the con and csh servers to answer
+requests for service on socket number "socket".
+The basic actions are:
+.LD
+   close all file descriptors
+   while(1) {
+      mxfile();               /* fd will = 0 */
+      mxwait(0,socket);
+      fork();                 /* split into 2 processes */
+      if(child process) {
+         dup(0);  dup(0);     /* fd 0,1,2 now net file */
+         return;
+      }
+      if(parent process) {
+         close(0);
+      }
+   }
+.DE
+.LP
+Since most UNIX processes do input from file descriptor 0 (standard
+input) and output to file descriptor 1 (standard output),
+such a process if "exec"ed after calling mxserve will do its I/O over
+the network.
+.LP
+.KF
+.nf
+	  ---------------------------
+	  |network application progs|
+	  |con, csh servers         |      user space
+	  |=========================|      =======
+	  |mx device driver         |      kernel space
+	  |/dev/mx/x special files  |
+	  |- - - - - - - - - - - - -|
+	  |net interface control    |
+	  |(host-host protocol)     |
+	  |-------------------------|
+	  |      |------------------|
+	  | imp  | line driver da   |--->
+	  |      |------------------|
+	  |      | line driver dmc  |--->  to other machines
+	  |      |------------------|
+(fig C)   |      | line driver dmc  |--->
+	  ---------------------------
+.fi
+.KE
+.SH
+Overview of internal organization
+.LP
+The network software in each machine is split into two parts (fig C):
+.IP IMP
+The "imp" process receives buffers (packets) from the local host and
+from neighboring imps.
+The imp examines the destination address on each packet it receives and
+looks up the host number in its (static) routing table.
+This table maps host numbers to external line (link) numbers.
+The packet is then enqueued for output via the appropriate line driver
+and the driver is activated if idle.
+A special routing table entry marks the local host number.
+Packets for the local host are passed directly via a subroutine call
+to the mx driver.
+.IP MX
+The mx device (/dev/mx/x) appears as a conventional device driver to
+UNIX.
+Open, close, read, write, and stty calls on mx files pass control
+to the mx driver in kernel space.
+The driver generates packets containing host to host protocol and
+passes these to the imp for delivery.
+Host to host packets from foreign hosts are received from the imp
+and decoded.
+.SH
+Host to host protocol.
+.LP
+Hosts communicate with each other by exchanging packets containing
+host to host protocol.
+The structure of a host to host packet is shown below (fig D).
+The first four bytes can be seen as the connection name.
+"byte_count" contains the number of bytes in the array data[], if any.
+The maximum number of bytes a packet can contain is 512, which
+is the same size as a disk block.
+.KF
+.nf
+
+   struct packet {
+      char   source_host;
+      char   source_socket;
+      char   dest_host;
+      char   dest_socket;
+      char   host_control;              (fig D)
+      char   imp_control;
+      int    byte_count;
+      char   data[512];
+   }
+
+.fi
+.KE
+.LP
+The imp and host control fields are usually zero, in which case this is
+a packet of "byte count" bytes of user data from the source host/socket
+to the destination host/socket given in the header.
+.LP
+The host_control field when non-zero is a small integer op-code which
+represents a host-host control message.
+Below are listed the op-code mnemonics and the function a packet
+with that op-code performs.
+.IP con
+connect.
+This packet requests that the connection named in the first four bytes
+be established.
+The connection is open when a pair of these is exchanged, one in each
+direction.
+After the connection is open, data packets may then be sent.
+If the host receiving this request has a process with a matching
+mxwait(fd,socket) pending, the matching con is sent and the connection
+is open.
+If no one is currently listening (mxwait pending) to that socket at the
+receiver, the con is remembered but no reply is sent.
+An mxwait then issued some time later will find this remembered con
+and open the connection by replying.
+.IP
+Once a con has been sent, that connection name must not be used again
+until disconnects (dis, below) are exchanged.
+If a con is sent and no matching con returns, the user or process
+which issued the mxcon (causing con to be sent) will typically time
+out and close or mxdis the offending mx file, which causes dis to be sent.
+.IP
+[Implementation note:
+Rather than using a giant ARPA-NET-style finite-state machine to record
+the state of connection establishment, it was found sufficient to just
+store a bit vector: (con sent, con received, dis sent, dis received)
+in each host per connection, and just make tests on combinations
+of these bits.]
+.IP dis
+disconnect.
+This requests that the connection named in the first four bytes
+be broken.
+The disconnect is complete when a pair of these are exchanged.
+.IP next
+ready for next packet.
+After a data packet is sent and before more data can
+be sent, this op-code must be received.
+The "next" op-code is sent by the consumer of the data packet when the
+user process at that end reads the data from kernel into user space.
+This flow-control scheme is crude, half-duplex, and is the reason
+we can only get 250k baud out of our 1m baud DMC11;
+but it's simple and reasonably effective due to the large
+packet size used.
+[Of course the remaining 750k bandwidth is available for 3 other
+connections doing simultaneous full-speed transfers.]
+.IP sig
+signal.
+Sends interrupt signal number in data[0], to the process at the other
+end of the connection.
+Note that this bypasses the queued data-packet stream.
+.IP rst
+reset.
+The source and dest socket numbers are not used.
+The source host is telling the dest host to clear out and reset all
+known connections between the two.
+This is "broadcast" by each host when it comes up (normally
+or after a crash) to clean up loose ends.
+.IP rrp
+reset reply.
+Reply to rst op-code.
+Not currently implemented.
+.SH
+Imp-host protocol.
+.LP
+Rather than adding another independent layer of protocol on top of
+host-host, a single byte is stolen from the host-host packet header,
+and when non-zero indicates an imp to host or host to imp control
+op-code.
+There is currently only one op-code and it is imp to host:
+.IP dead
+dead host.
+This packet is being returned because there is no path to the host it
+was sent to.
+The imp that discovered this fact simply reversed the source/dest fields,
+set this op-code in the header, and requeued the packet for
+transmission.
+The second time a packet bounces off an imp like this, it is destroyed,
+for both the source and dest host are then dead.
+.SH
+Imp-imp protocol.
+.LP
+There is no single imp-imp protocol at present but rather a different
+protocol used by the line device drivers for each type of physical
+link.
+There is a more or less common type of imp-imp header that is
+prefixed to the host-host packet header.
+It contains a start of header (SOH) or flag character, a sequence
+number, and an optional checksum.
+Currently DMC11 and DA11-B line drivers are supported,
+a DH11 driver will be available in the near future.
+.SH
+Imp process / line driver interaction.
+.LP
+The imp process is activated whenever a packet arrives at the imp,
+from either the local host or from neighboring imps.
+The packets are placed on the imp's single "task" (or work) queue
+and the imp activated by a level 1 program interrupt request.
+The imp: (1) dequeues packets one at a time;  (2) examines their
+destination;  (3) checks that the appropriate line is "alive";
+(4) places them on that line driver work queue; and (5) activates
+the driver.
+.LP
+Each line driver has a standard set of entry points:
+.IP TPACK 9
+A packet has been placed on the drivers work queue.
+.IP TTIMER 9
+Each driver is entered here 10 times per second for use in
+timeouts and in determining if the physical link is "alive".
+.IP TSTART 9
+Entered at network start-up time to handle preset details:
+initial buffer allocation, csr setup, etc.
+.IP (inter) 9
+Each driver has one or two interrupt entry points from the
+vectors (in low.s).
+Packets received for the imp at this level are passed to the imp
+through his task queue.
+.LP
+The "unit" number is an argument in all of these entry points to allow
+the driver code to be shared over multiple physical link devices of
+the same type.
+.SH
+DMC11 line driver.
+.LP
+The DMC microcomputer does most of the work but some code is still
+required for:
+.IP o
+sequence number and general consistency checking.
+It might be due to the old ROM set in our DMC, but several DMC bugs were
+found:
+On rare occasions the DMC will loose a buffer with no error status.
+Two or three times a weird trap has occured on one cpu when the cpu at
+the other end is halted (perhaps in the middle of a DMC dma).
+Defective devices on the unibus which hog the bus for too long
+cause problems.
+The sequence and timing of commands to first-time initialize the
+DMC were found to be critical.
+Internal UNIX errors which lockout interrupts during /dev/tty8 (console)
+error messages make the DMC sick.
+(We have improved error message handling to avoid most of these lockouts).
+.IP o
+idle packets.
+The old ROM set also requires something to be sent fairly often to keep
+the line responsive.
+DECs new ROMs will eliminate this (and we hope the other ideosyncracies).
+Idle packets also are used to detect the line coming alive.
+.LP
+Although the DMC has its little quirks, now that we have figured them
+out we are very pleased with its performance and reliability.
+.SH
+DA11-B line driver.
+.LP
+The imp-imp links are logically full-duplex channels with no master-slave
+relationship.
+Since the DA is half-duplex, code had to be provided to give the
+physical link this logical appearance.
+Both sides must cooperate at the beginning and end of each packet transfer.
+.LP
+Each side is always in one of 4 states:  (1) interrupts off (for about
+a second after an INIT pulse is detected, to prevent continuous
+interrupts).
+(2) idle.  (3) receive.  (4) transmit.
+Each side remains in idle state until either:
+(1) the local side gets a packet to send from its imp, in which case
+the local state goes from idle to transmit while
+a dma transmit is started and a "transmit go" interrupt sent to
+the other side.
+(2) a "transmit go" interrupt is received from the other side causing
+this side to go from idle to receive and start a receive dma.
+.LP
+Along with the "transmit go" signal the word count is sent;
+this allows the receiver to setup his dma word count properly.
+The transmitter actually sets his dma count one word higher (in fact
+2 words higher for obscure reasons) so that the receive side always
+services his interrupt first upon transfer completion.
+Upon completion the receiver decides if he now wants to transmit
+a packet (perhaps queued during the receive transfer).
+If so the receiver moves directly to transmit state (sending a
+"transmit go" to the previous transmitter), if not receive moves to
+idle, sending a completion interrupt to the previous transmitter.
+This scheme allows packets to flow alternately in each direction
+if transmit queues exist on both sides.
+.LP
+Of course occasionally both sides will decide to transmit at the same
+time.
+Since the hardware does not contain any arbitration logic for this case,
+the software must detect this state and correct it.
+At sysgen time one side is declared "secondary" and the other "primary".
+In the event of a collision, the hardware hang is cleared and the primary
+allowed to go first.
+.LP
+Sequence numbers are used to detect missing blocks (from gross hardware
+faults), but no checksum is used since the physical distance involved
+is less than 100 feet.
+Timeouts are used to send null blocks every second for line alive/dead
+determination.
+Collisions are detected and corrected immediately, but rarely the
+link freezes unexplicably (a cryptic comment concerning this was
+discovered in a DEC written DA11 driver), so another timeout
+trys to thaw things out.
+.LP
+Although the DA11-B is now being used, we think half-duplex links
+are just generally undesirable and would recommend the DMC over the
+DA any day.
+Only when one is stuck with an old DA (as we were) should this link
+driver be used.
+.SH
+Virtual terminal protocol ("con" program)
+.LP
+When "con" is in use there are actually 4 processes and a "pseudo terminal"
+involved:
+.KF
+.nf
+
+			  local host | foreign host
+				     |                        ---------
+keyboard  (fd0) ---> con (send) >----|----> s_con (recv) ---> |   |   |
+				     |                        |pty|tty|
+screen    (fd1) <--- con (recv) <----|----< s_con (send) <--- |   |   |
+				     |                        ---------
+(fig E)                              |
+
+.fi
+.KE
+.IP local 9
+The con at the local host is split into two parts: one reads from the
+keyboard (fd0) and writes to the net, while the other reads from
+the net and writes to the screen (fd1).
+.IP foreign 9
+At the foreign host the "con server" (called s_con) has also split into
+two parts.  One half is reading from the net and writing to a
+pseudo terminal, the other half is reading from the same pseudo
+terminal and writing to the net.
+.LP
+A pseudo terminal is a device driver that has two sides.
+For a single pseudo terminal the sides might be named /dev/ttyx and
+/dev/ptyx.
+Anything written on /dev/ptyx looks like it was "typed in" at /dev/ttyx,
+while everything "printed out" at /dev/ttyx can be read at /dev/ptyx.
+.LP
+The con server's job is very simple; when a connect arrives on socket 1,
+s_con forks once to generate a child.
+The child s_con then finds a free /dev/ptyx and forks into receiving
+and sending parts.
+.LP
+Certain "escape" or "command" character sequences are generated and
+accepted by /dev/ptyx.
+For example, when an "stty" function is issued on /dev/ttyx, it is
+translated to a command sequence that is then read from /dev/ptyx.
+The local con program and /dev/ptyx use this "virtual terminal" protocol
+to propagate stty/gtty's and to perform other operations.
+The con server (s_con) only issues reads and writes, it never
+intercepts the command sequences between /dev/ptyx and con.
+.LP
+Each "command" consists of an escape byte called "IAC" (interpret as
+command), followed by a command code byte, possibly followed by
+data for that command.
+The mnemonics for the commands are listed below with their function.
+.IP ST
+set teletype, followed by 6 bytes from the stty function.
+Sent by /dev/ptyx when an stty is issued on /dev/ttyx.
+Also sent by con in response to a GT (below).
+.IP GT
+get teletype.
+Sent by /dev/ptyx when a gtty is issued on /dev/ttyx.
+The user process that issued the gtty sleeps until ST returns from con.
+.IP IN
+interrupt signal.
+Sent by con when an actual interrupt (not just rubout) is generated
+by the user.
+A rubout typed by the user in raw mode thus causes no problems.
+.IP QU
+quit signal.
+.IP EF
+end of file.
+.IP DM
+data mark.
+When con detects local interrupt or quit, and the IAC IN or QU sequence
+is sent, a flag is set so that all data characters received by con
+from the net are flushed  --until this command (IAC DM) is received.
+/dev/ptyx sends the data mark when IN or QU is received, to flush
+out the output stream to the other host.
+.IP IAC
+an IAC sent as data must be doubled.
+.SH
+Remote process protocol ("csh" program)
+.LP
+The sequence of events when using csh is as follows:
+.IP 1.
+The local csh connects to socket 2 on the foreign host.
+It then writes 3 lines (each '\en' terminated but as a single write,
+for speed): name, password, and command line.
+Name and password are possibly null.
+.IP 2.
+At the foreign host, s_csh (csh server) has received the socket 2
+connection and forks a child to handle it.
+.IP 3.
+The child s_csh has file descriptors 0,1, and 2 (standard I/O and error)
+open as the net file.
+s_csh reads the name, password, and command.
+If name/password is not null, s_csh "logs in" as that user name,
+else user name "user" is the default.
+.IP 4.
+s_csh now "exec"s in the command on top of itself.
+The command will do its I/O from the net.
+.IP 5.
+Meanwhile the local csh has split into two parts, one
+reads from standard input and writes to the net, while the
+other reads from the net and writes on standard output.
+When the half that is reading standard input gets an EOF, it writes
+an EOF to the net and exits.
+.IP 6.
+The command running at the foreign host will eventually exit.
+.IP 7.
+The local csh reading the net will get an EOF when the command exits
+at the foreign host;  the local csh then exits.
+.SH
+Kernel network buffers.
+.LP
+Memory management register 5 (ka5) in our UNIX kernel has been freed
+for use as a general window into extended disk, network, and misc. buffer
+areas.
+This allows a healthy supply of dedicated network buffers.
+.LP
+The net buffers have no "buf" structure associated with them (as do
+system disk buffers) and are large enough to hold a packet complete
+with internal, imp-imp and host-host headers.
+This means user data can be moved directly to its transmission buffer
+in kernel space from user space ONCE, with no further moves.
+.LP
+The buffers are located on 64 byte (memory management) boundaries so that
+they are easily referenced.
+Buffers in queues are circularly linked (queues are named by their
+tails), and links (which are stored in the first word) can be
+plugged directly into *ka5 to access that buffer (links are the
+physical memory address shifted right 6 bits).
+.SH
+Current configuration
+.LP
+Our site currently has 2 11/70s and an 11/45 connected; the /70s by
+a DMC11, and the /45 to one /70 with a DA11-B.
+Three other /45s in the same building could be connected immediately
+if we had 3 pairs of DMC11's.
+Currently we are working on a low speed serial (19k baud) link
+driver for these machines.
+.SH
+Availability
+.LP
+The mx software is public domain and free to anyone with a version 6
+UNIX license.
+Currently we only have ours running on split I/D machines:  11/45s,
+11/70s, etc.
+It is not known whether it could be squeezed into an 11/40 or /60.
+Minor mods would also be needed in machines without the
+programmable interrupt request hardware to perform this
+with software (we were just lazy).
+Perhaps more critical are the modifications we have made to the "standard"
+version 6 kernel and user space programs.
+.IP o
+We no longer have "groups".  The group byte in the inode has been
+taken over by the high order bits of the 16 bit user id (we have a large
+number of users).
+.IP o
+The ka5 window is used for:  most system disk buffers, net buffers,
+the proc table, the clist, and high speed (low sys time)
+terminal output.
+.IP o
+The "speeds" word of the stty/gtty function has been rearranged to
+support various local serial I/O needs:  Full speed 19K baud
+input to a circular buffer in user space.  APL overstrikes on
+specially modified ADM3As.  Etc.
+.IP o
+Powerfail recovery and retry.  Device drivers are entered with dev == NODEV
+following a powerfail.  99% of our outages are now automatically
+recovered.
+.IP o
+A lot of "little" things that improve throughput and system error recovery.
+Most of the "PWB diff listing" kernel mods (obtained from UUG) are
+installed.
+.LP
+To run the mx code we really recommend running with our kernel as well.
+Many of the mods above can be conditionally compiled out, but some
+cannot (such as uid's, we didnt know of #ifdef back then).
+Thus installing only "part" of our kernel will require some effort.

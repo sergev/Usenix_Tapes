@@ -1,0 +1,67 @@
+
+# ISSUE  - Shell script creates a new issue of a mailing-list Digest.
+#          To do this it creates a new title file then calls the digest.all
+#          program to summarize the mailings.  It then drops you into the
+#          editor to modify the subject headers, if desired.  Upon leaving
+#          it then starts up the batchmail program in the background and
+#          exits.
+#
+# (C) 1985, Dave Taylor, Hewlett-Packard Laboratories
+#
+
+  titles=digest.title
+     vol=volume_number
+    tail=digest.tail
+
+if [ ! -r outbound ]
+then
+  echo Nothing queued to go out.
+  exit 0
+fi
+
+echo " "
+echo "Creating $digest_name, Number `cat $vol`"
+
+rm -f $titles
+echo ' ' > $titles
+echo "$digest_name, Number `cat $vol`" | center >> $titles
+echo " " >> $titles
+mydate notime | center >> $titles
+echo ' ' >> $titles
+echo "Today's Topics:" >> $titles
+echo ' ' >> $titles
+
+digest.all $titles outbound outbound.digest $tail
+mv outbound outbound.last
+
+if [ "$EDITOR" = "" ]
+then
+  /bin/vi outbound.digest
+else
+  $EDITOR outbound.digest
+fi
+
+echo ' '
+echo ' '
+if [ "`echo -n hi | grep n`" = "" ]	# can echo deal with -n ?
+then
+  echo -n "Are you sure you want to send this issue out now? (y/n) "
+else
+  echo "Are you sure you want to send this issue out now? (y/n) \\c"
+fi
+read answer junk
+
+if [ "$answer" = "yes" -o "$answer" = "y" ]
+then
+  echo " "
+  rm -f $issue_log
+  echo "starting up mail daemon..."
+
+  mail_issue
+
+  echo " "
+else
+  echo "just type \"mail_issue\" when you're ready to mail it out!"
+fi
+
+exit 0

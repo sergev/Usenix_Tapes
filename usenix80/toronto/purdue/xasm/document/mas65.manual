@@ -1,0 +1,1515 @@
+***********************************************************************
+I.   Introduction to Assemblers
+
+     Suppose that you wanted to write a computer program that would
+cause a MCS-650X based microcomputer to add the hex numbers 12 and 34
+together. You could write a simple one by typing:
+
+                         18A91269348D0010
+
+This program when executed by a microcomputer will (1) clear the carry
+flag in the ALU,(2) load the hexidecimal number 12 into the Accumulator
+(3) add the number 34 to it ,(4) and store it in memory at address
+1000.
+     Writing a program in that manner is difficult to do and even
+harder to understand. It is extremely consicse since you specify only
+the binary codes that the machine itself recognizes but is very hard
+for humans to read and understand. Special languages called ASSEMBLY
+LANGUAGES have been developed to make life easier for those who
+have to program microcomputers. An assembly language program is a
+symbolic representation of a computer program. It allows you to call
+for instructions by using short three letter codes that are easy to
+remember(menomics) instead of awkward machine codes. It also allows you
+to assign symbolic names and labels to binary values or addresses.This
+will allow us to write microcomputer programs in a clearly understood
+form.
+
+     The process of translating a mnemonic or symbolic form of a 
+computer program to actual machine code is called an assembly, and a
+program that performs the translation is called an assembler. The 
+symbols used and the rules of association for those symbols are the
+assembly language. In general one assembly language statement will
+translate into one machine instruction. This distinguishes an assembler
+from a compiler which may produce many machine instructions from a
+single statement.
+
+     If we wanted to write our addition program in assembly language
+instead of machine langauge we could write:
+
+                     clc
+                     lda #12h
+                     adc #34h
+                     sta 1000h
+                     end
+
+Although the result is still not as easy to understand as a one might
+wish, it is a lot better than the original machine code. The three
+letter menomics may seem a bit cryptic at first but with usage they
+become easy to understand.
+
+     Normally digital computers use the binary number system for
+representation of data and instructions. Computers only understand
+ones and zeros corresponding to an "on" and "off" state. Human users
+on the other hand find it difficult to work with the binary number
+system and hence use a more convenient representation such as OCTAL
+[base 8], DECIMAL [base 10] or HEXIDECIMAL [base 16]. Two represen-
+tations of the MCS-650X operation to load information into an "accum-
+ulator" are shown below:
+
+                  10101001    {binary}
+                    A9        {hexidecimal}
+An instruction to move the value 21 (decimal) to the accumulator is:
+
+                   A9 15      {hexidecimal}
+
+     Users still find numeric representation of instructions tedious
+to work with and hence have developed symbolic representations. For
+example the preceeding instruction might be written as:
+
+                   LDA #21
+
+In this case LDA is a symbol for A9, load the accumulator. A computer
+program used to translate the symbolic form LDA into the numeric form
+A9 is called an assembler. The symbolic program is refered to as
+source code and the numeric program is the object code. Only the obj-
+ect code can be executed on the microprocessor.
+     Each machine instruction to be executed has a symbolic name re-
+ferred to as an OPCODE (operation code). The opcode for "store the
+accumulator in memory" is STA. An opcode for "transfer the accumulator
+to index X" is TAX. There are 56 opcodes for the MCS-650X processors
+(listed in section II). A machine instruction in assembly language
+consists on an opcode and perhaps operands which specify the data on
+which the operation is to be performed.
+
+     Instructions may be labelled for reference by other instructions
+as in:
+
+            L2       LDA  #12
+
+The lable is L2, the opcode is LDA and the operand is #12. At least
+one blank must seperate the three parts of the instruction. Additional
+blanks may be inserted for ease of reading. MCS-650X instructions
+have at most one operand and many have none. In these cases the. 
+operation to be performed is completely specified by the opcode.
+(ex. CLC clear carry flag)
+
+     Programming in assembly language requires learning the instruction
+set (opcodes), addressing conventions for referencing data,the data
+structures within the processor,as well as the structure of assembly
+language programs.
+
+
+
+
+
+
+
+
+
+
+***********************************************************************
+
+
+MCS-650X Microprocessor hardware
+
+     Because microcomputer programing is at a very close level to the
+actual machine hardware, You must understand the internal structure
+of the processor before attempting to write programs.
+     The MCS-650X family of microprocessors are 8 bit devices with
+a maximun address range of 16 bits (65536 locations). Internaly it
+consists of 5 registers that the programmer must be concerned about.
+
+Accumulator:       This is the single most powerful register in the
+             processor. Many instructions affect the accumulator either
+             by taking their information from it or leaving results in
+             it.
+
+X and Y index registers:  These two 8 bit registers can be used by
+             many of the instructions to compute indexed addresses
+             for data transfers and other operations. They are also
+             designed to function as binary counters and are very
+             usefull for controling loops.
+
+Stack Pointer:    The MCS-650X processors have a stack that can contain
+              up to 256 bytes of information.It is permantly located in
+              memory in memory page 01. The stack pointer can address 
+              from 0100 to 01FF. The cautious programmer will not try
+              to use any memory in this range without making a very
+              carefull analysis of how much stack space his program
+              will require.
+          
+Status Flags:      The 8 bit flag register in the processor consists of
+              several status bits that are affected by the conditions
+              of the program. Most of them are testable and can be
+              used to control branching in the program and other
+              operations. The bits in the status byte are:
+
+           (0) Carry Flag; It is set if an arithmetic carry is
+               generated. It is also used as an inverted borrow
+               for the subtract operation and a 9th bit for the
+               rotate operations.
+
+           (1) ZERO Flag; This flag is set to 0ne if the result
+               on an operation is zero. If not then it is reset.
+
+           (2) IRQ Disable; When set to one the IRQ interupt is
+               ignored. The NMI is not affected.
+
+           (3) DECIMAL Flag; When this flag is set all addition
+               and subtraction operations are done in BCD. When
+               cleared they are done in binary.
+
+           (4) BREAK Flag; This flag is set by the executing of
+               the break instruction and reset by the execution
+               of an IRQ produced interupt.
+
+           (5) Not used
+
+           (6) OVERFLOW Flag; This flag is set by the arithmetic
+               instructions if an carry occurs from bit 6 to bit
+               7. It allows you to treat your numbers as signed
+               binary numbers with bit 7 used only as a sign.
+
+           (7) NEGATIVE Flag; This flag is set depending on the
+               sign of the operations result. One is negative.
+
+
+     The flags are normally written as "N Z C I D V" in documentation.
+When an instruction affects a flag then it can either set the flag to
+one or clear to zero.Most of the flags are affected by the operations
+that take place in the arithmetic logic unit and will be changed by 
+operations. Some operations are done for the sole purpose of changing
+flags.
+
+
+
+********************************************************************
+
+MACHINE LANGUAGE INSTRUCTIONS for a MCS-650X
+     Machine instructions correspond to the 56 operations implemented
+on the MCS-650X processors. Their instruction format is:
+
+  {label} opcode {operands}   {;comments}
+
+Fields are bracketed to show if they are optional. Labels and comments
+are always optional and many operation codes (opcodes) such as RTS (
+Return from subroutine) do not require operands. A typical instruction
+showing all four fields is:
+
+      loop  lda beta,x    ;fetch beta indexed by X
+
+A field is defined as a string of characters seperated by a blank space
+or tab character. A label is an alphanumeric string from one to six
+characters, the first of which MUST be alphabetic. A label may not be
+any of the 56 opcodes and also may not be any of the special characters
+A,S,P,X,or Y. These special characters are used by the assembler to
+reference the Accumulator,Stack Pointer,Processor Status and X,Y
+Index Registers. A lable must begin in the first column and may be
+terminated with a colon if desired. Lables are used on instructions
+as branch targets and on data elements for reference in operands.
+
+ The MCS-650X processor has 56 different instructions and 13 different
+addressing modes. The instructions tell the processor what to do while
+the addressing mode tells it where to do it. An instruction as at least
+one adressing mode and some have as many as eight.
+
+     Understanding the different addressing modes is essential to
+programming in MCS-650X assembly language. The 13 addressing modes are:
+
+     Immediate
+     Absolute
+     Page Zero
+     Absolute indexed by X
+     Page Zero indexed by X
+     Absolute indexed by Y
+     Page Zero indexed by Y
+     Indexed Indirect (X index)
+     Indirect Indexed (Y index)
+     Accumulator
+     Implied
+     Relative
+     Indirect
+
+
+
+[IMMEDIATE MODE]
+
+     This addressing mode indicates that the data the instruction needs
+in stored immediatly after the opcode for the instruction.It is written
+in assembly language by using a # as the first character in the operand
+field. The operand that follows the # is evaluated as a 8 bit constant
+and stored in the binary output file immediately following the opcode.
+
+ex:           lda #12h
+
+causes the assembler to produce A9 12
+
+[ ABSOLUTE MODE]
+
+     This mode tells the processor that the data it needs is stored
+in memory . The address of where it is stored is contained in the two 
+bytes of data after the opcode. Absolute addressing always requires
+a three byte instruction, one byte for the opcode and two more to
+specify the 16 bit address of the data. When an address is given as part
+of an instruction, it is ALWAYS stored lo order byte first.
+
+
+
+[ PAGE ZERO]
+
+     The Page Zero addressing mode is quite similar to Absolute with
+one distinction, The location of the data in memory must be in the
+lowest 256 bytes of memory. In this block of memory the high order
+byte of the address will always be 00. When a Page Zero instruction
+is used the processor knows that it only needs to fetch the low order
+byte of the address (the high will always be 00). Therfore Page Zero
+addressing can be done in a two byte instruction, one byte for the
+opcode and a second one for the lo order byte of the data address.
+     The advantages of using Page Zero addressing whenever possible
+are enormous. The single greatest limiting factor on the speed of a
+microcomputer is the access time to its program memory Each time that
+you perform a memory read costs one microsecond. When you consider
+the number of times that a program may have to access data during
+execution, you can see how Page Zero addressing helps. Page Zero
+requires one less byte of memory than Absolute and therefore can
+be executed in one less microsecond. The effect on the entire program
+can be substantial. Page ZERO instructions will also save one byte
+of program memory for each time data is addressed.
+     Page Zero addressing is automaticaly used by the assembler when
+the operand for an instruction is less than 256 (decimal). Program
+efficiency can be improved by defining data storage areas in the
+first 256 bytes of memory.
+
+[ ABSOLUTE,X]
+
+     This mode is similar to the Absolute mode. The only difference
+is that the processor takes the 16 bit address following the opcode,
+and adds to it the 8 bit quanity currently in the X index register to
+form a new address. This new address is then used to access the data.
+     Absolute,X is called by placing a comma and a x after the oper-
+and.
+
+ex:           lda beta,x
+
+
+[ PAGE ZERO,X]
+     Similar to Absolute,X except that the operand must be in Page
+Zero. It is specified in the same manner to the assembler and will
+automaticaly be used if the operand is in the correct range.
+
+
+[ ABSOLUTE,Y]
+     Similar to Absolute,X except that the Y index is used.
+
+
+[ PAGE ZERO,Y]
+     Similar to Page Zero,X except that the Y index is used.
+
+
+
+[ INDEXED INDIRECT]
+     This addressing mode allows you to specify the address of the
+data by indirect means. It is a two byte instruction, the first is
+the opcode and the second is an address in Page Zero. The 8 bit X
+index register is added to the 8 bit address in Page Zero to obtain
+an indexed address in page zero(overflow into bit 9 is ignored).
+The resulting Page zero address contains the lo order byte of the
+data address.The next byte in page zero contains the hi order byte.
+Once the processor computes the page zero address, it can then fetch
+the two bytes starting at that address. These are then used for the
+data address.
+     Indexed Indirect is specified by using a set of (). The left
+paren MUST be the first character in the operand field. If is is not
+then the assembler will assume that it is to evalute the parens as
+an arithmetic expersion and not as an Indirect addressing mode.
+Inside the parens you must have an operand whose value is less than
+256 (Page Zero) followed by a comma x and right parens.
+
+ex:
+     If the X index has a value of 04, Address 0084 has a 34 stored in
+it and address 0085 has a 12 stored in it then;
+
+           lda (0080h,x)
+
+will load the accumulator with the data that is stored at address 1234h
+
+
+[ INDIRECT INDEXED]
+     This mode works opposite the way that Indexed Indirect does.
+It is a two byte instruction where the processor fetches an data
+address in the same manner as it would using Indexed Indirect with
+X index =00. It in effect allows you to tell the processor where in
+Page Zero that the Data address is located. After the data address is
+found then the processor will add it to the Y index to form a new
+16 bit address. The data will be located at this new address.
+     This mode is specified by placing an 8 bit operand in parens
+followed by a comma and a y.
+
+ex:  If Y index is equal to 04 and memory address 0080 has a 34
+     and memory 0081 has a 12 then;
+
+
+              lda (0080h),y
+
+      will load the accumulator with the contents of address 1238h
+
+
+[ ACCUMULATOR]
+    This mode simply tells the processor that the data it needs to work
+with is located in the accumulator. It is specified by using an "a" for
+the operand.
+
+
+[ IMPLIED]
+     This mode is for the instructions where the location of the data
+is implied by the name of the instruction. For example a TAX (transfer
+Accumulator to X index register) instruction does not require any
+additional information to tell the processor where the data is located,
+
+
+[ RELATIVE]
+
+     This mode is only used for the 8 branching instructions. When a
+branch instruction is encountered it will consist of two bytes. The
+first one is the opcode and tells the processor what flag to test and
+whether to branch on a flag set or a flag cleared.
+    The second byte contains an offset that defines where the branch is
+to go to. If the branch is not to be taken then the processor will go
+to the instruction following the offset. If the branch is to be taken
+then the offset is added to the program counter inside the processor
+and the resulting address is where the processor goes for the next
+instruction. The offset is an 8 bit interger in 2's complement form
+so that the branch can be from -128 bytes before the instruction to
++127 bytes after the instruction.
+     Relative addressing is assumed for all branching instructions so
+to use it you merely use the branch menomics and a operand. The value
+of the operand is the 16 bit address that the processor goes to if the 
+branch is taken.
+     If you should attempt to branch to an instruction that is out of
+the =128--+127 range then an error statement will be given.
+
+
+[ INDIRECT]
+     The simple indirect mode is only used for one instruction, JMP.
+When used it allows you to specify an address that contains the address
+to be jumped to. To use it you type jmp with the operand in parens and
+no commas or registers. The operand is evaluated and is used as the 
+address where the address of the next instruction is located.
+
+ex:    if memory contains 1000 34
+                          1001 12
+
+        Then jmp (1000h) will cause the processor to jump to 1234h
+
+
+
+
+MACHINE INSTRUCTIONS:
+
+     The 56 machine instructios for the MCS-650X are the tools
+that the programmer will use to construct assembly language programs.
+A detailed understanding of what each instruction does is important
+to achieve efficient programs
+
+
+Instruction:     Add memory to accumulator with carry
+Menomic:         adc
+Addressing Modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+Description:
+                  This instruction takes the data from memory and adds it
+                  to the accumulator. The add can be either a binary or
+                  Binary coded Decimal depending on the condition of the
+                  DECIMAL flag. The result is stored back in the accum-
+                  -ulator
+Flags affected:     N Z C V
+
+
+
+
+instruction:   Logical AND memory with accumulator
+Menomic:       and
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+description:     Takes the value in the accumulator and performs a bit
+                 by bit logical AND with value from memory. The result
+                 is stored in the accumulator.
+Flags affected:   N Z
+
+
+
+
+Instruction:     Arithmetic Shift Left
+Menomic          asl
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Accumulator
+description:     Performs a left shift of memory or accumulator. A zero
+                 is shifted into the low bit and the high bit is shifted
+                 into the Carry flag. The result is rewritten back into
+                 memory or accumulator.
+Flags affected:   Z N C
+
+
+
+
+instruction:     Branch if Carry is clear
+Menomic:         bcc
+Addressing modes:
+                 Relative
+description:     If the Carry flag is set then the instruction following
+                 the branch is executed.If the carry flag is cleared then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+
+instruction:     branch on carry set
+Menomic:         bcs
+Addressing modes:
+                 Relative
+description:     If the Carry flag is cleared then the instruction following
+                 the branch is executed.If the carry flag is set then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+
+instruction:     branch if Z flag is set
+Menomic:         beq
+Addressing modes:
+                 Relative
+description:     If the Zero flag is cleared then the instruction following
+                 the branch is executed.If the zero flag is set then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+
+instruction:     Bit test memory with the accumulator
+Menomic:         bit
+Addressing modes:
+                 Absolute
+                 Page Zero
+description:     The bit instruction is a powerful testing instruction
+                 that performs three seperate operations at once.
+                 (1) The accumulator is Logically ANDed with memory and
+                     the Z flag is set or cleared depending on the result
+                     The result of the AND is thrown away so that the
+                     accumulator is left intact.
+                 (2) Bit #7 of the memory location is transfered into
+                     The N flag.
+                 (3) Bit #6 of the memory location is transfered into
+                     the V flag.
+                 This instruction does not affect any registers or 
+                 memory location. All it does is set flags for branch
+                 instructions.
+flags   affected:   N Z V
+
+
+
+
+instruction:     Branch on N set
+Menomic:         bmi
+Addressing modes:
+                 Relative
+description:     If the N flag is cleared then the instruction following
+                 the branch is executed.If the N flag is set then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+
+instruction:      Branch on Z not set
+Menomic:          bne
+Addressing modes:
+                 Relative
+description:     If the Z flag is set then the instruction following
+                 the branch is executed.If the zero flag is cleared then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+instruction:      Branch on N not set
+Menomic:          bpl
+Addressing modes:
+                 Relative
+description:     If the N flag is set then the instruction following
+                 the branch is executed.If the negative flag is cleared then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+
+instruction:     Software break
+Menomic:         brk
+addressing modes:
+                 implied
+description:     This instruction causes the processor to react exactly
+                 as it would if it had received a IRQ request. The only
+                 difference is that the BREAK flag is set to allow the
+                 program to determine the source of the interuption.
+Flags affected:   Break
+
+
+
+instruction:     Branch on V not set
+memmonic:        bvc
+Addressing modes:
+                 Relative
+description:     If the O flag is set then the instruction following
+                 the branch is executed.If the O flag is cleared then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+instruction:     Branch on V set
+Menomic:         bvs
+Addressing modes:
+                 Relative
+description:     If the V flag is cleared then the instruction following
+                 the branch is executed.If the V flag is set then
+                 the offset is added to the program counter and this 
+                 causes a branch to a new instruction.
+Flags affected:   none
+
+
+
+instruction:    clear carry flag
+Menomic:        clc
+Addressing modes:
+                 Implied
+description:     This instruction sets the carry flag to zero. It can
+                 be very useful especially since the MCS-650X only has
+                 an ADC instruction so you must preset the carry to 0
+                 before performing any single byte arithmetic. If you
+                 are doing multibyte then you must preset the carry 
+                 going into the first byte and then use the carry to
+                 link the overflows from each stage of addition
+Flags affected:    Carry flag set to 0
+
+
+
+instruction:     clear decimal mode
+Menomic:         cld
+Addressing modes:
+                 Implied
+description:     This instruction clears the DECIMAL Flag so that all 
+                 arithmetic will be done in the binary mode.
+Flags affected:   D
+
+
+
+instruction:     clear interupt disable flag
+Menomic:         cli
+Addressing modes:
+                 Implied
+description:     Sets the Interupt disable bit to zero. After this is
+                 done the processor is able to respond to an interupt.
+flags   affected:   I
+
+
+
+instruction:     clear overflow flag
+Menomic:         clv
+Addressing modes:
+                 Implied
+description:     This instruction clears the OVERFLOW flag.This can
+                 be a fairly useful instruction if properly used.
+                 Since the V flag is only affected by three other
+                 instructions (ADC,SBC and BIT) you may be able
+                 to write a program where the V flag is not altered
+                 at all. In this case you could clear the V flag at
+                 the start of the program and be able to make 2 byte
+                 unconditional branches with a BVC instruction.
+                    This instruction is also useful on small control
+                 systems that use the MCS-6502 SO pin. This pin can
+                 be used to set the V flag to 1 with an external
+                 signal. It can be used as a 1 bit input port.
+
+Flags affected:   V
+
+
+
+instruction:     compare memory to accumulator
+Menomic:         cmp
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+description:     This instruction performs a subtraction between the
+                 accumulator and memory soley to set the flags. The
+                 result is not saved so no register or memory is
+                 altered. The flags are set according to the relation
+                 between the value in the accumulator and memory.
+
+                      N     Z     C
+                 A<M  1     0     0
+                 A=M  0     1     1
+                 A>M  0     0     1
+
+                 The state of the C flag before the operation does not
+                 affect the comparision.
+flags   affected:   N Z C
+
+
+
+instruction:     compare memory to X index register
+Menomic:         cpx
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+description:     Same as CMP only with the X index instead of Accumulator
+flags   affected:   N Z C
+
+
+
+instruction:     compare memory to Y index register
+Menomic:         cpy
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+description:     Same as CMP only with Y index instead of Acumulator
+Flags affected:   N Z C
+
+
+
+instruction:     decrement memory
+mMenomic:        dec
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+description:     The memory address specified in the operand is read,
+                 then decremented by one and rewritten back into its
+                 original location.
+Flags affected:   N Z
+
+
+
+instruction:     decrement X index by one
+Menomic:         dex
+Addressing modes:
+                 Implied
+description:     X index is decrememted by one
+Flags affected:   N Z
+
+
+
+instruction:     Decrement Y index register by 01
+Menomic:         dey
+Addressing modes:
+                 Implied
+description:     Y index is decremented by 01
+Flags affected:   N Z
+
+
+
+instruction:     Exclusive OR memory with Accumulator
+Menomic:         eor
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+description:     A bit by bit ExclusiveOR is performed between memory and
+                 the acumulator. The result is stored in the accumulator.
+Flags affected:   N Z
+
+
+
+instruction:     Increment memory by one
+Menomic:         inc
+Addressing modes:
+                 Implied
+description:      The memory specified by the operand is read,incremented
+                  by one and then replaced by the result.
+Flags affected:   N Z
+
+
+
+instruction:     Incremment X index by one
+Menomic:         inx
+Addressing modes:
+                 Implied
+Description:     The X index is incremented by 01
+Flags affected:   N Z
+
+
+
+instruction:     Increment Y index by one
+Menomic:         iny
+Addressing modes:
+                 Implied
+Description:     The Y index is incremented by 01
+Flags affected:   N Z
+
+
+
+instruction:     Jump to a new location
+Menomic:         jmp
+Addressing modes:
+                 Absolute
+                 Indirect
+Description:     The program jumps to the location specified in the
+                 operand and continues execution.
+Flags affected:   none
+
+
+
+instruction:     Jump to a subroutine
+Menomic:         jsr
+Addressing modes:
+                 Absolute
+Description:     The Processor Saves the current Program Counter value
+                 on the Stack and jumps to the location specified in
+                 the Operand. The Stack allows the RTS instruction to
+                 cause a return to the location it left from.
+                   Most programmers can successfully use subroutine calls
+                  and returns easily since they are designed to complement
+                  each other. A fancy or otherwise reckless programmer
+                  may try to perform a jump by pushing an address on the
+                  stack and then doing a RTS. The JSR and RTS instructions
+                  do not push the address of the next opcode on the stack
+                  They use the address minus one byte. Keep that in mind
+                  if you want to try any tricks with the stack.
+Flags affected:   none
+
+
+
+instruction:     Load the accumulator from memory
+Menomic:         lda
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+Description:     The value in the memory location specified in the 
+                 Operand is loaded into the Acumulator.
+Flags affected:   N Z
+
+
+
+instruction:      load X index from memory
+Menomic:          LDX
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by Y
+                 Page Zero indexed by Y
+Description:     The value in the memory location specified in the 
+                 Operand is loaded into the X Index.
+Flags affected:   N Z
+
+
+
+instruction:      Load Y index from memory
+Menomic:          LDY
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+Description:     The value in the memory location specified in the 
+                 Operand is loaded into the Y Index.
+Flags affected:   N Z
+
+
+
+instruction:     Logical Shift right memory or accumulator
+Menomic:         LSR
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Accumulator
+Description:     The memory or Accumulator is shifted Right by one bit.
+                 A 0 is shifted into bit 7 and bit 0 is shifted into the
+                 Carry flag.
+Flags affected:   N Z C     ( N set to 0)
+
+
+
+instruction:      No Operation
+Menomic:          NOP
+Addressing modes:
+                 Implied
+description:     This instruction is a one byte do-nothing instruction.
+                 It is useful for filling in sections of your program
+                 that you haven't written but want to reserve space for
+                 later.
+Flags affected:   none
+
+
+
+instruction:     Logical OR the accumulator with memory
+Menomic:         ORA
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+                 Accumulator
+Description:      The Accumulator is Inclusive ORed with memory and
+                  the result is stored in the accumulator.
+Flags affected:   N Z
+
+
+
+instruction:     Push the accumulator on the stack
+Menomic:         PHA
+Addressing modes:
+                 Implied
+description:      The Acumulator is pushed on the stack and the stack
+                  Pointer is decremented.
+Flags affected:   none
+
+
+
+instruction:     Push the processor status flags on the stack
+Menomic:         PHP
+Addressing modes:
+                 Implied
+Description:      The Status Register is pushed on the stack and the
+                  Stack Pointer is decremented.
+Flags affected:   none
+
+
+
+instruction:     Pull the accumulator off the stack
+Menomic:         PLA
+Addressing modes:
+                 Implied
+description:     The byte on the top of the stack is read into the
+                 acumulator and the stack pointer is incremented.
+Flags affected:   N Z
+
+
+
+instruction:     Pull the processor status flags off the stack
+Menomic:         PLP
+Addressing modes:
+                 Implied
+description:     The byte on the top of the stack is read and placed in
+                 the processor status register. The stack ponter is then
+                 incremented.
+Flags affected:   all
+
+
+
+instruction:     Rotate memory or accumulator left
+Menomic:         ROL
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Accumulator
+description:     This instruction will rotate memory or the accumulator
+                 left by one bit. The Carry flag is rotated into bit 0
+                 and bit 7 is rotated into the Carry flag
+Flags affected:N Z C
+
+
+
+instruction:     Rotate memory or accumulator right
+Menomic:         ROR
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Accumulator
+description:     This instruction will rotate memory or the accumulator
+                 right by one bit. The Carry flag is rotated into bit 7
+                 and bit 0 is rotated into the Carry flag
+Flags affected:N Z C
+
+
+
+instruction:     Return from Interupt
+Menomic:         RTI
+Addressing modes:
+                 Implied
+description:     This instruction will return the program to the point
+                 where it was when the last interrupt occured. The 
+                 Programmer must be careful in writing an interrupt
+                 service routine to assure that the stack is properly
+                 balanced with equal number of pushes and pulls. The
+                 X Y and X registers must be saved if they are to be
+                 used, and this can be done quite nicely on the stack.
+                 This instruction can also be used to "trick" the 
+                 processor. For example if you are in a subroutine then
+                 the statements:
+
+                        pha
+                        rti
+
+                  will Return from Subroutine and set the status
+                  register with the value that was in the accumulator.
+                  This is handy if you want your subroutine to perform
+                  a test and only return the results with the flags.
+Flags affected:   All the flags are restored to their pre-interupt
+                  states.
+
+
+
+instruction:     Return from subroutine
+Menomic:         RTS
+Addressing modes:
+                 Implied
+description:     This instruction is used to end a subroutine in such
+                 a way so as to return to the place where the call
+                 to the subroutine was made.
+Flags affected:   none
+
+
+
+instruction:     Subtract memory from accumulator with borrow
+Menomic:         SBC
+Addressing modes:
+                 Immediate
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+description:     This instruction takes memory and subtracts it from the
+                 accumulator with a borrow. A borrow is an inverted carry
+                 flag so the C=1 is no borrow. The accumulator will be 
+                 used to store the result of the subtraction and the C 
+                 flag will contain the inverted borrow out (0=borrow).
+                 The programmer must be sure of the state of the Carry
+                 and Decimal flags before using this instruction since
+                 they both affect the results.
+Flags affected:   N Z C V
+
+
+
+instruction:     Set carry flag
+Menomic:         SEC
+Addressing modes:
+                 Implied
+description:     This will set the Carry flag to 1. It is useful
+                 when placed before SBC instructions to set the flag
+                 to a known state.
+flags   affected:   C
+
+
+
+instruction:     Set decimal flag
+Menomic:         SED
+Addressing modes:
+                 Implied
+description:     This will set the decimal flag to 1. All ADC or SBC
+                 operations performed after this instruction will be
+                  in the BCD mode.
+Flags affected:   D
+
+
+
+instruction:     Set interupt enable flag
+Menomic:         SEI
+Addressing modes:
+                 Implied
+Description:     The I flag is set to 1. After this instruction the 
+                 processor will ignore all IRQ interupts. NMI will
+                 still be serviced.
+Flags affected:   I
+
+
+
+instruction:     Store the Accumulator in memory
+Menomic:         STA
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Absolute indexed by X
+                 Page Zero indexed by X
+                 Absolute indexed by Y
+                 Indexed Indirect (X index)
+                 Indirect Indexed (Y index)
+description:     The value in the Accumulator is stored in the 
+                 memory address specified by the operand.
+Flags affected:   none
+
+
+
+instruction:     Store the X index in memory
+Menomic:         STX
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Page Zero indexed by Y
+description:     The value in the X Index is stored in the 
+                 memory address specified by the operand.
+Flags affected:   none
+
+
+
+instruction:     Store the Y index in memory
+Menomic:         STY
+Addressing modes:
+                 Absolute
+                 Page Zero
+                 Page Zero indexed by X
+description:     The value in the Y Index is stored in the 
+                 memory address specified by the operand.
+Flags affected:   none
+
+
+
+instruction:     Transfer Accumulator to the X index
+Menomic:         TAX
+Addressing modes:
+                 Implied
+Description:     The Accumulator is transfered to the X index
+Flags affected:   N Z
+
+
+
+instruction:     Transfer Accumulator to the Y index
+Menomic:         TAY
+Addressing modes:
+                 Implied
+Description:     The Accumulator is transfered to the Y index
+Flags affected:   N Z
+
+
+
+instruction:     Transfer Stack Pointer to X index
+Menomic:         TSX
+Addressing modes:
+                 Implied
+Description:     The Stack Pointer is transfered to the X index
+Flags affected:   N Z
+
+
+
+instruction:     Transfer X index to Accumulator
+Menomic:         TXA
+Addressing modes:
+                 Implied
+Description:     The X index is transfered to the Accumulator
+Flags affected:   N Z
+
+
+
+instruction:     Transfer X index to Stack Pointer
+Menomic:         TXS
+Addressing modes:
+                 Implied
+Description:     The X index is transfered to the Stack Pointer
+Flags affected:   none
+
+
+
+instruction:     Transfer Y index to accumulator
+Menomic:         TYA
+Addressing modes:
+                 Implied
+Description:     The Y index is transfered to the Accumulator
+Flags affected:   N Z
+
+
+
+
+
+
+
+
+
+
+***********************************************************************
+
+ASSEMBLER CHARACTERISTICS
+
+
+
+
+     A programmer must be familiar with the various methods available
+for specifying operands. A Operand can be looked at as a number that
+the instruction needs to do it's job. It can be either a 8 bit or
+a 16 bit binary number and may represent either data or addresses.
+If the programmer knows the exact value that an opperand must have 
+then he can specify it directly using any of the different radix
+convenctions.
+
+Radix Conventions:
+
+	 Numbers with no post or pre radix tags are initally decimal.
+	Post radix tags are:
+		q	octal
+		h	hex
+		.	decimal
+	Pre-radix tags are:
+		0	octal
+		00	hex
+		000	binary
+	Any numer with a hex digit in it is considered hex
+	irregardless of any radix flags.
+	Othewise, post radix has priority.
+	To change the default radix, use the 'base' psydo-op.
+	the operhand field of the base psydo-op  is allways
+	in base ten.  Usage is:
+	
+	base	16	;to set default radix to base 16
+
+
+     There are many cases where you do not know the exact value
+for an operand when writing a program. The prime example is when
+the operand is an address for a JUMP instruction to some other point
+in the program. Before the program is assembled you do not know where
+the jump is to be made to. You will specify a destination by placing
+a lable at to point you want to jump to and then using that lable as
+the operand in the JMP instruction. During assembly the lable will be
+assigned a value that is equal to it's address and when the JMP is
+encountered then this value will be used as the operand.
+     Another method for specifying an operand is by using arithmetic
+operations. This method allows you to give the assembler an equation
+that will be solved and the result will be used as the operand.
+Arithmetic expressions can be used with parens but be careful 
+since parens are also used to specify the indirect addressing modes.
+If you want to use parens in a non-indirect addressing mode then the
+first character of the operand field can not be a (. You may have to
+use a operand in the form 0+(expression) to prevent errors.
+
+
+Arithmetic:
+	The arithmetic power of the assembler is that of the
+	'c' languege on the 11/70.  There is NO order of operations,
+	so parentheis () must be used to direct the assembler.
+	The operators are:
+	+ - *	standard.
+	/	divide, get the integer portion
+	%	mod operator (i.e. 16%5 = 1)
+	>>	arithmetic shift right
+	<<	arithmetic shift left
+	^	XOR
+	!	complement
+	~	two's complement
+	&	and
+	|	or
+
+	All arithmetic operators have the same priority
+	(there is no order of operations)
+	The operators for the comparisions (used in if statment or
+	anywhere else the result it true or false)
+	==	equal to
+	!=	not equal to
+	<=	less than or equal to
+	>=	greater than or equal to
+	>	  "	 "
+	<	less	 "
+
+	Also, at any point in the assembly you can re-assign the
+	value of a variable while evaluatin the operhand by using
+	an equals sign.  For example, if 'foo' had a value of 10 :
+	'foo = foo + 2'
+	would have a value 12, and foo would have a value of 12.
+
+	Special re-asignments exist for situations where such
+	constructions are used a great deal.  They are:
+
+	=+	'foo =+ 2' is the same as 'foo = foo + 2'
+	Others:
+	=-  =*  =/  =%  => (shift)  =< (shift) 
+
+	the equal sign in conjuction with the 'eval' psydo-op
+	is used to change the value of a variable in the symbol table.
+
+	$	is value of current location(start of that current
+		instruction)
+
+	::	A double-colen after a lable enter the lable into the
+	    perminate symbol table, even if it is in a macro.
+
+********************************************************************
+
+PYSDO OPS
+
+     Pysdo ops are statements that direct the assemblr to do something.
+This is quite different from machine instructions that direct the
+assembler to produce machine executable code. Pysdo ops look simialar
+in format to machine instructions but generally do not produce any
+binary code. The only exceptions are the "Define Byte" and "Define
+Word" Pysdo ops.
+    org	#
+	   10-4.  A symbol on an org statement has the value
+	of the org #. i.e.
+
+	foo	org	10h
+
+	'foo' will have a value of 10h.
+         org is generally used to tell the assembler where you want your
+         program to appear in memory. The assembler starts out assuming
+         a value of 0000h unless otherwise specified by an org statement.
+
+    equ  [expression]
+	   Just like in the big leages.  Note that the expression can
+	contain any previously defined symbols.
+	There is NO  'SET' psydo-op.  Use  'eval' instead (see below)
+
+
+    db	# [,#,#...]
+	   Define Byte.  Evaluates the number and stores it.
+	Can stack arguments seperated by commas.  Only the lower eight
+	bits are stored. Any high-order bits are truncated.
+
+    ds	# or "string" [,...]
+	   Define storage.  Evaluates the number and reserves
+	that much room.  If string, initalizes storage area
+	to string.	Special charactors are preceeded by a '\'.
+	'\r' is 15q (carrige return)
+	'\n' is 12q (line feed)
+	'\t' is 11q (tab)
+	'\b' is a 10q (backspace)
+	'\e' is an 04 (eot)
+	'\0' is 0  (null byte)
+
+    dw	# [,...]
+	  Define word.  Evaluates the number and stores as a
+        full word (2 bytes). The lo order byte is stored first.
+
+    repeat	n
+	   Repeats the line folling the 'repeat' n times.
+	Nested repeats produce funny but constant results.
+	Lables in the line are passed on the first repetition,
+	and delited for subsiquent repititions.
+	Do not try to repeat a dup.
+
+    dup	n
+	 .
+	[dup field]
+	 .
+	enddup
+	   Duplicates the series of lines between the dup and the
+	enddup n times.
+	Lables in the dup field are passed on the first dup, and
+	deleted for subsiquent dups.  Dups may be nested.
+
+    defmacro	name
+	 .
+	[macro body]
+	 .
+	endmacro
+	   Defines the macro 'name' as the macro body.  Arguments
+	in main are substituted whenever there is a &# , where
+	1 <= # <= 9 .  The number of calling parametors is not
+	specified.  To invoke the macro, type:
+
+	name	arg1,arg2,...arg9
+
+	Be sure the arguments match the call.  mas65 does not
+	check for this.
+	To use a '&' in the text string, type '\&'.
+	Any other charactor after a '\' is passed with
+	the '\' and that charactor (i.e. untouched).
+	Instructions may be used as macro names to replace
+	or modify an istruction to your likeing.  Generally
+	speaking, macro names take precidence over everthing.
+	Maximum nesting level is at least 22 levels, and maybee
+	more depending on various unexplicable conditions.
+
+    fixtable
+	   Fixes the symbol table to the current lenght.
+
+    expunge
+	  Expunges the table up to the point of the last 'fixtable'
+
+	expung	symbol [,symbol2,...]
+	   Expunges the symbol or symbols from the table.
+
+    fixmacro
+	expungemacro
+	expungemacro name[,name2,...]
+	   Same as fixtable group but for macros.
+
+Note:  the fixtable and fixmacro and associated commands are good
+	for globle macros and variables.
+
+    eval	expression.
+	   Evaluates the expression.  'expression' can be any
+	valid 'c' expression, and will allow you to modify the
+	value of symbols in the symbol table (i.e. foo =+ 1).
+
+    if	expression
+    .
+    [else]
+    .
+   endif
+	Conditional assembly.  Done if expression is non-zero.
+	'expression' is any valid 'c' expression.
+	Can be nested.
+
+    listoff
+	Suppresses listing of source.  The statement itself is not
+	listed.
+
+    liston
+	Enables listing of source.  The statement itself is not listed.
+
+    binoff
+	Suppresses generation of binary (mt.out) file.
+
+    binon
+	Enables (turns on) generation of binary (mt.out) file.
+
+    macon
+	Turns on the listing of code produced due to a macro being
+	expanded.
+
+    macoff
+	Turns off the listing of code produced due to a macro being
+	expanded.
+
+    include
+        Is used to allow the inclusion of other UNIX files.
+        This allowes the user, for example,  to keep a libary of common 
+        macros in a single file and easily use them from any other 
+	program.  Only one filename is allowed in the operhand field.
+	To include many files, use seperate include statments for each one.
+
+    message
+	message prints out any text in the operhand field
+	on the terminal during pass 1 and on the lising durring
+	pass two.  It increments the error count too. If the
+	expression '%symbol' is encoutered in the line, the
+	value of the symbol is printed.  i.e.  if 'data' had a value
+	of 45, the line:
+	message	data was a %data.
+	would print:
+	data was a 45.
+
+
+
+    end
+	   Last statment the assembler assembles.  All following
+	statments are ignored.
+
+    Internal Variables:
+
+	Internal variables exist with certain usefull information in
+    them.  They may be used in expressions like any other varaibles.
+	Valid internal varibles are:
+
+	_NARGS		Number of arguments passed in the most recient
+		macro.  This is NOT a nested variable.
+
+	_NEST		Number of levels of nesting in a macro, repeat,
+		or dup.
+
+	_SECONDS	Seconds of real world clock as of time of assembly
+
+	_MIN		Minutes ...
+	_HOUR		Hours ...
+	_DAY		Day #
+	_MONTH		Month
+	_YEAR		Current year
+	_DOW		Day of week (monday = 1)
+	_DOY		Day of year
+	_DSTF		Daylight saving flag (1 = daylight saving time)
+	_ASSVERNO	Assembler version number.  Changes when major
+		changes in the assember accure.
+
+	A user may change any of these variables with sucsess except
+for '_NARGS' and '_NEST', which the assembler will clobber.  If a user
+defines a lable as any of these except '_NARGS' and '_NEST', the user
+variable has priority and is used.  Do NOT expunge these variables!
+
+***********************************************************************
+
+Using MAS65
+
+	To use type:
+	% mas65 "filename"
+
+	Errors are preceeded by the line number they occure in.
+	They are preceeded by a  '%%' so that files may be read
+	in with the editor to search for errors (usfull on long
+	programs.)
+
+	Max number of symbols = 500
+	Max  "	   "  macros  = 60
+	Max  "     "  char. in a dup = 500
+	Max  "  of local variables in a macro = 20
+
+
+
+	Files produced are:
+	mt.out	6502 absolute load file
+	mt.lst	listing of program.
+
+	At this point, symbol table overflow is not checked.
+	In fact, many tables are not checked for overflow.
+	Table overflow presents itself with a core dump.  If
+	you should get a core dump, contact /v/wa1yyn) and
+        I will increase the lenght of the offending table
+
+
+         Other MCS-650X cross-support programs include
+
+1)	mas65 "filename"	-cross assembler
+2)	clean65 "filename"	-binary .obj re-formatter
+3)	prom65	"filename"	-prom burning program
+4)	pack65 "filename"	-raw packer for 11/70
+5)	unpack65 "filename"	-raw unpacker for 11/70
+6)	dis65 "filename"	-6502 dissassembler
+
+Default names for all of these programs are 'mt.lst' and 'mt.out' .

@@ -1,0 +1,33 @@
+SPOOL=/usr/spool/news
+NEWSBIN=$SPOOL/bin
+LIB=/usr/local/lib/news
+ACTIVE=$LIB/active
+JUNK=$SPOOL/junk
+
+PATH=/usr/local:/bin:/usr/bin:$NEWSBIN
+(cd $LIB; tar cf - active ) | (cd /usr/tmp; tar xpvf - )	# Save a $ACTIVE
+count=`awk '$1 == "junk" {print $2}' $ACTIVE`
+case "$count" in
+"")	exit
+esac
+curdir=`pwd | sed "s/ //"`
+for artdir in $*
+do
+	cd $curdir/$artdir
+	oldarts=`ls | sort +n`  ||
+	{ echo Something went wrong during $JUNK cleanup.
+	  exit ; }
+	for article in $oldarts
+	do
+		count=`expr $count + 1`
+		if test -f $count
+		then
+			echo ln $article $count fails during $JUNK cleanup.
+		else
+			ln $article $JUNK/$count
+		fi
+	done
+done
+modactive junk $count
+echo diff $LIB/active /usr/tmp/active
+diff $LIB/active /usr/tmp/active

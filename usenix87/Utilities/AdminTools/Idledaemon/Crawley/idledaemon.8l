@@ -1,0 +1,89 @@
+.TH IDLEDAEMON 8L "6 September 1985"
+.UC 4
+.SH NAME
+idledaemon \- auto-logout idle terminals
+.SH SYNOPSIS
+.B /etc/idledaemon 
+[
+.B \-a
+] [
+.BI \-f nosfree
+] [
+.BI \-gil minutes
+]
+.B tty ...
+.SH DESCRIPTION
+.I Idledaemon 
+monitors the use of a group of terminal lines.  When the number
+of free terminals in the group falls below a given threshold, it finds those
+which are idle, sends a warning message, and if necessary logs them out.
+The options to 
+.I idledaemon
+are as follows:
+.TP
+.B \-a
+causes the daemon to kill idle terminals irrespective of the number that are 
+free.
+.TP
+.B \-d
+runs the daemon in 
+.I debug
+mode.  The daemon goes through the motions of checking terminals and sending
+messages, but does not kill off sessions.  You might want to use this to get
+your users used to the idea of an idle daemon.
+.TP
+.BI \-f nosfree
+sets the size of the free terminal pool that the daemon tries to keep.  This
+parameter defaults to 1.
+.TP
+.BI \-i minutes
+changes the terminal
+.B idle time
+from the default of 30 minutes.  If there is no terminal input processed for
+this many minutes, the session may be deemed to be idle (see below).
+.TP
+.BI \-g minutes
+changes the minimum
+.B grace time
+between the warning message and auto-logout from the default of 5 minutes.
+Notifications which have not been followed by kills time out after 30 minutes.
+.TP
+.BI \-l minutes
+changes the time between idle daemon scans from the default of 5 minutes.
+.PP
+The algorithm for finding and killing idle sessions is complicated and not
+foolproof.  When a terminal has had no input (strictly, no program has
+read input from the terminal) for the prescribed number of minutes, the
+idledaemon scans the processes 
+.B attached
+to the session to see if any are active.  Attached processes include
+stopped or background processes started by the session but exclude
+background processes started by previous sessions and daemon processes 
+like 
+.IR sysline (1).  
+An 
+.B active
+process is any process that is ready to execute or has been in the past
+few seconds; basically anything that
+.IR ps (1) 
+shows with a STAT of R, P, D or S.
+When an idle session has been found, all processes attached to the session
+are sent HUP signals to allow them to tidy up, then the shell process is
+sent a KILL.
+.PP
+When the idledaemon receives a SIGINT signal, it prints a summary of the
+current state to its output stream.  This could be directed to the console.
+.SH AUTHOR
+Stephen Crawley
+.SH FILES
+/dev/tty*,
+/etc/utmp
+.SH "SEE ALSO"
+ps(1)
+.SH BUGS
+The scheme the daemon uses to find idle sessions is trivially easy to fool.
+.PP
+The daemon doesn't do anything about objectionable people who hog lots of
+terminals ports at the same time.
+.PP
+Probably lots of bugs in some of the unusual cases (like stuck ttys).

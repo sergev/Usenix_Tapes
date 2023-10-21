@@ -1,0 +1,113 @@
+						Feb 18, 1979
+
+Professor Melvin Ferentz
+Box 8, The Rockefeller University
+1230 York Avenue
+New York, NY 10021
+
+
+		UNIX & PWB/UNIX buffer pool problems
+
+        When a block (buffered) device is closed (or umounted) all  delayed
+buffers  are  written  out  to  the  device, however if the system is idle,
+several blocks may still remain in the incore buffer pool, causing havoc if
+a mountable media is changed or can even wreck a physically nondismountable
+device if operations are intermixed between raw and cooked  versions  of  a
+device.   This  effect  is most pronounced in large systems with big buffer
+pools (Purdue has about 130 disk buffers).
+
+   To wreck a dectape:
+   % tp tv0
+     (tape moves and directory gets printed out)
+     (put up a new tape)
+   % tp rv0 new-file
+     (directory is not read in, since in buffer pool but 1st tape's
+      directory is written on 2nd tape)
+
+   To wreck a disk filesystem:
+   Assume a crash occured and rk1 is umounted with a damaged
+   filesystem, needing a (icheck -s) recovery.
+
+   # icheck /dev/rk1
+     all kinds of dups in free
+        ...
+   # icheck -s /dev/rrk1
+   # mount /dev/rk1 /dir
+
+        The first  icheck  was  done  on  the  buffered  (cooked)  dev  and
+discovered  filesys  errors  and  probably  left the bad super block in the
+buffer pool.  The second icheck fixes the filesys using the raw device  and
+the  buffer pool isn't touched.  The mount reads in the superblock which is
+still in the buffer pool and the wrong superblock is used  for  the  mount.
+One  can  also get into trouble with clri's and other mixing of the raw and
+cooked entries to a disk if a bclose() call is not made in the driver.
+
+        It is possible to avoid problems when  mixing  raw/cooked  (without
+the  bclose  mod)  by manually flushing out the buffer pool.  For the above
+case:  "dd if=/dev/rk0 of=/dev/null count=300" should  be  executed  before
+the  icheck  -s  /dev/rrk1.  This will get rid of any incore blocks hanging
+around on rk1 before fixing filesys.
+
+        To fix this problem, a new routine "bclose" was written  and  added
+to  to  bio.c.   Block device driver close routines should call bclose(dev,
+&devtab) where dev is major+minor  device  and  &devtab  is  this  device's
+devtab.  The bflush(dev) call, if any can be removed.
+
+/*
+ * Disassociate all buffers from dev (NODEV for all).  bflush()
+ * makes sure everything gets written out, but if system
+ * is idle and a mountable device is changed (like Dectape) and
+ * there may be some blocks in freelist (like Dectape dir)
+ * which get reused from incore copies instead of being read in
+ * again. Must pass devtab since we can get called on a raw dev close.
+ * --ghg 01/28/79.
+ */
+bclose(adev, dtab)
+struct devtab *dtab;
+{
+	register struct buf *bp;
+	register dev;
+	register struct devtab *dp;
+
+	dev = adev;
+	dp = dtab;
+	bflush(dev);
+	if (dev != NODEV && dp) {
+		while (dp->d_actf)      /* let I/O queue drain */
+			sleep(&lbolt, PRIBIO+3);
+	}
+	spl6();
+	for (bp = bfreelist.av_forw; bp != &bfreelist; bp = bp->av_forw) {
+		if (dev == NODEV || dev==bp->b_dev) 
+			bp->b_dev.d_minor = -1; /* no assoc. */
+	}
+	spl0();
+}
+
+
+	Procs with large text sizes crash v6 UNIX exec call
+
+        If a split I/D proc with text  size  less  than  65536.  bytes  but
+greater  than  65536.-64.  bytes,  is  exec'd, the system crashes.  This is
+caused by exec "rounding up" the text size to 0.  Fix was to change routine
+estabur() in main.c.  After the sequence:
+
+	if (cputype == 40)
+		goto err;
+
+insert the following two lines:
+
+	if (nt == 0)
+		goto err;
+
+This returns ENOMEM error for split I/D proc  with  above  text  size.   It
+would be nice to allow above proc to be exec'd correctly, but several other
+routines fail on max text size.  I was unable to get the UNIX ld to produce
+an a.out file of this size, he too must use core clicks.  However, the CULC
+F4P/linker will let one generate such files.
+
+					Yours sincerely,
+
+
+					George Goble
+					11/70 System Manager.

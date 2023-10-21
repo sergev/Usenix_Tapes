@@ -1,0 +1,68 @@
+*** /tmp/,RCSt1024686	Thu Jan 10 13:04:02 1985
+--- cmd2.c	Thu Jan 10 11:42:56 1985
+***************
+*** 512,514
+  
+  	return(strcmp(*l, *r));
+  }
+
+--- 512,570 -----
+  
+  	return(strcmp(*l, *r));
+  }
++ 
++ /*
++  * Push the indicated messages at the end of the passed
++  * file name, minus header and trailing blank line.
++  */
++ 
++ scommand(command)
++ char command[];
++ {
++ 	register int	*ip, mesg;
++ 	register struct message *mp;
++ 	register char	*disp;
++ 	char linebuf[BUFSIZ];
++ 	int	f, *msgvec, t;
++ 	FILE	*obuf, *mesf;
++ 
++ 	printf("scommand(%s)\n", command);
++ 
++ 	msgvec = (int *) salloc((msgCount + 2) * sizeof *msgvec);
++ 
++ 	if ((*msgvec = first(0, MMNORM)) == NULL) {
++ 		printf("No message to process.\n");
++ 		return(1);
++ 	}
++ 	msgvec[1] = NULL;
++ 
++ 	if ((obuf = popen(command, "w")) == NULL) {
++ 		perror(command);
++ 		return(1);
++ 	}
++ 
++ 	flush();
++ 
++ 		ip = msgvec;
++ 		mesg = *ip;
++ 		touch(mesg);
++ 		mp = &message[mesg-1];
++ 		mesf = setinput(mp);
++ 		t = mp->m_lines - 1;
++ 
++ 		while (t-- > 0 && strlen(fgets(linebuf, BUFSIZ, mesf)) > 1) {
++ 			fputs(linebuf, stdout);
++ 		}
++ 		putchar('\n');
++ 		flush();
++ 
++ 		while (t-- > 0) {
++ 			fgets(linebuf, BUFSIZ, mesf);
++ 			fputs(linebuf, obuf);
++ 		}
++ 	fflush(obuf);
++ 	if (ferror(obuf))
++ 		perror(command);
++ 	pclose(obuf);
++ 	return(0);
++ }

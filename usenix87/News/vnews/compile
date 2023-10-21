@@ -1,0 +1,60 @@
+
+#!/bin/sh
+: This file compiles all of vnews.
+: With the -i option, it also installs everything
+: The -f option forces a remake of everything.
+: The -n option is passed to make.
+: Arguments like DEBUG=-g are passed to make.
+
+case "$0" in
+../compile)	cd .. ;;
+esac
+
+. lib/makedefs
+
+dirs=
+install=
+frc=
+makedefs=
+for x 
+do	case "$x" in
+	-i)	install=install ;;
+	-f)	frc="FRC=FRC" ;;
+	-n)	makedefs="-n|$makedefs" ;;
+	*=*)	makedefs="$makedefs|$x" ;;
+	-*)	echo 'Usage: compile [ -i ] [ directories ]'
+		exit 1 ;;
+	*)	dirs="$dirs $x" ;;
+	esac
+done
+if test "$dirs" = ""
+then	dirs=lib
+	for x in *
+	do	if test "$x" != lib -a -f $x/genmakefile
+		then	dirs="$dirs $x"
+		fi
+	done
+fi
+
+cd lib
+for x in $dirs
+do	echo "Making $x:"
+	cd ../$x
+	if test "$frc" != "" -o ! -f ../lib/newer || ../lib/newer genmakefile makefile
+	then	echo "	genmakefile"
+		genmakefile
+	fi
+	IFS='|'
+	echo "	make" $makedefs $frc $install
+	make $makedefs $frc $install || exit
+	IFS=' 	
+'
+done
+
+if test "$install" = "" || grep '^artfile:' $LIBDIR/sys > /dev/null
+then	:
+else	echo adding artfile entry to sys file
+	echo "artfile:all:H:$LIBDIR/afinsert \"%s\"" >> $LIBDIR/sys
+	echo "Remember to update crontab to invoke $LIBDIR/afbuild every night"
+fi
+echo Compile all done

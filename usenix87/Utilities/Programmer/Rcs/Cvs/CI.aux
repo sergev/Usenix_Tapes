@@ -1,0 +1,62 @@
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: CI.aux,v 1.6 86/06/22 18:09:32 dick Exp $
+
+#
+#		C h e c k   I n
+#	Script, to be included
+#
+#	Assumes set:
+#		$ACT
+#		$CVSLIB
+#		$Message
+#		$Name
+#		$RCSBIN
+#		$Repository
+#		$Revision	(to be set to -rN if needed; empty otherwise)
+#		$User
+#
+#	Does a very careful check-in of the file $User, and tries not
+#	to spoil its modification time (to avoid useless recompilations)
+#
+#	Sets OK to no, if necessary.
+#
+
+echo Checking in $User\; log: "$Message"
+Rcs=$Repository/$User,v
+
+# offer copy to RCS, in an attempt not to spoil the modification time of $User
+Tmp=,,$User
+$ACT mv $User $Tmp
+$ACT cp $Tmp $User
+
+if	# check in $Rcs
+	$ACT $RCSBIN/ci $Revision -m"$Message" $Rcs 2>&1
+then	# the file $User will now be gone; get a new copy,
+	# with a possibly updated $Header
+	$ACT $RCSBIN/co -q $Rcs
+	$ACT chmod +w $User
+	# but maybe the old $User may still serve
+	if	# there were no funny modifications
+		$ACT cmp -s $User $Tmp
+	then	# $User is preferable, because of 'make'
+		$ACT mv $Tmp $User
+	else	# $Tmp is not of use any more
+		$ACT rm $Tmp
+	fi
+	# get new version number and time stamp
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	# and register $User
+	$ACT $CVSLIB/RG.aux $User $VN_Rcs "$TS_User"
+else	# something is very wrong
+	# restore the old $User
+	$ACT mv $Tmp $User
+	echo $Name: could not check in $User >&2
+	OK=no
+	if	# unlock $Rcs
+		$ACT $RCSBIN/rcs -u $Rcs
+	then	:
+	else
+		echo $Name: could not UNlock $Rcs >&2
+	fi
+fi

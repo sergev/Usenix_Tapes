@@ -1,0 +1,386 @@
+
+
+                ==[ All the bugs that fit, we print ]==
+
+Version 1.0 Old Empire - circa 1978, decompiled from optimized
+                                11/70 object 1982-3 (honest!).
+
+Bugs should be reported to ihnp4!druxn!tsf  -  Tom Fisher
+Credit for the game belongs to Peter Langston.  I take credit for
+any bugs remaining in this version.  If you are using a version
+that was modified (in addition to the parametric goodies in empglb.c)
+since distribution, try to locate the bug and fix it before reporting it.
+
+The only things considered bugs are those that appear to change the
+original intent of the code.  Core dumps, meaningless or inaccurate
+messages, and obvious cheating opportunities are considered UN-
+intentional.  Enhancements, (such as adding a coastwatch command) are
+not listed here.
+
+Items containing "Fix:" are fixed in this release.  The others will be 
+fixed later.
+
+1) When bridge head is changed to w, b, or u, the number of supplies
+   (o, s, g, b, or c) is multiplied.  Put 50 shells in a bridge
+   head.  Change it to a warehouse to get 500 shells.  Also, when
+   there is a bridge head on both ends of a span, redesignating
+   just one of the bridge heads drops the span.
+
+        Fix: desi.c  -  it loses track of things when hunting around
+             for spans attached to a bridge head and other bridge
+             heads attached to the spans.  Fix it so it keeps track
+             of everything as intended.
+
+2) The command line buffer overflows into the BTU variable.  This is
+   used to supply yourself with BTUs whenever in need.
+
+        Fix: prmptrd.c  -  add check for length
+
+3) Repay cheats the lender; loan is considered repaid when nothing
+   is paid back. This is a good way to start wars.
+
+        Fix: ledg.c   - calculate interest correctly
+             lend.c   - fix max loan size
+             coll.c   - fix floating point interest and max
+             repa.c   - fix floating point interest and max
+
+4) Spy gets info deep within other country's area instead of limiting
+   to just adjacent sectors.
+        
+        Fix: spy.c  -  initialize chart array completely instead of
+                       of leaving some areas subject to whatever was
+                       on the stack.
+
+5) If your ship automatically flaks enemy planes in same enemy's harbor,
+   location of enemy's current capital position is revealed.
+
+        Fix: fly.c  -  the wu() call should use flakker instead of
+                       sect.sct_owned when sending telegram to captain
+                       of the target ship.
+
+6) Mov reports 34 civilians when 'v' is done while passing through urban
+   sector with 340 civilians.
+
+        Fix: mov.c  -  multiply times tunits in printf
+
+7) When a ship is successfully boarded, it becomes part of the '\0' fleet.
+   It should become part of the ' ' (or null) fleet.
+
+        Fix: boar.c  -  set the correct value in the fleet variable
+
+8) Logging in with more than 127 telegrams waiting produces a core dump.
+
+        Fix: empdis.c  -  check for negative nat.nat_tgms
+
+9) Last logged in time for deity and visitor not accurate.
+
+        Fix: empcre.c  -  join deity's sanctuary with 127 civilians
+
+10) Flying anything off a carrier results in immediate splashdown.
+
+        Fix: fly.c  -  initialize bomb weight correctly
+
+11) When bombing ships, fly complains about direction input after bombs
+     hit.
+
+        Fix: getstri.c  -  use multiple, rotating buffers to avoid
+                           clobbering cp in fly.c
+
+12) When moving more material than a destination sector can hold,  excess
+    commodity is destroyed rather than returned as stated.
+
+        Fix: mov.c  -  Fix up fcnt to be accurate if it doesn't all fit.
+
+13) Attack causes core dump (11/70 version) when iot instruction hit.
+
+        Fix: flush.c  -  avoid using supplied output functions. Use
+                         standard USG C library instead.
+
+14) Number of characters in telegram file as reported by nation
+    command not accurate.
+
+        Fix: nati.c  -  use proper structure for fstat.
+
+15) Compiler errors in empglb.c
+
+        Fix: This got fixed with all the changes to the basic structures
+             in empdef.h while porting the game to the Amdahl UTS and
+             3b systems.
+
+16) Production sometimes goes negative.  Results in negative civilians,
+    gold bars, etc.  Very elusive.  Suspect max127() or update().
+
+17) Signals  SIGHUP, SIGINT, SIGQUIT not handled at all.  This stuff was
+    more or less ignored during the decompilation process.  Sorry.
+
+18) Country report heading "time" should be BTU ?
+
+19) Spelling error "capital" in desi.c
+
+        Fix: No change.  Spelling is correct!  Speller needs to read a
+             few chapters out of the dictionary.
+
+20) Goofing up add command as deity by entering "XXXXX" when asked for
+    country number results in "Welcome back to shell...." and wipes
+    out the deity in the nation file.
+
+        Fix: If a non-number is entered when asked for a country number,
+             the number is taken to be 0 !!  Add a check, in add.c,
+             to see if the result is valid (0 < number < MAXNOC).
+
+21) When country is joined and first two-sector allocation is diagonal,
+    the welcome message still claims you have 0,0 and 0,1.
+
+22) cen #1 ?des=x&&  produces "'&es' -- meaningless condition?"
+
+        Fix: In snxtsct(), print out the condition argument instead
+             of the working buffer, buf, when an error is detected.
+             Now it will print out: "'des=x&&'? -- meaningless condition?".
+
+23) Shells landing in the sea report damage to the sea sector.  Should
+    be SPLASH!!
+
+        Fix: This only happened when firing from a fort.  Fixed by
+             refreshing the sector buffer (getsect(vx, vy, UP_NONE))
+             right before checking if victim sector is sanctuary or sea.
+
+24) Mobility goes negative in sector where crash landing occurs.
+
+25) Nav'ing ships at 2,2 causes your ships at 34,2 to move also ?
+    This is in a 64,64 world.  This is caused by [xy]wrap() routines
+    mishandling the range check.  Needs new algorithm.
+
+26) World of size other than 64,64 never tested after decompilation.
+    There are probably hardcoded 2**6 or 64 references somewhere.  Sorry.
+
+27) World is subject to "continental drift" or "Atlantis Syndrome".
+    Sectors get changed to water, mountains, or wilderness in an apparently
+    random manner.  In at least one such disaster, damaged sectors were
+    identical to the sectors immediately to the west.  It appeared that
+    the sector buffer had the x-1,y sector data when the putsect(x,y)
+    was done.
+
+        Fix: Not known.  But for now, change update.c to return 0
+        immediately when lst_up == 0.  Original routine set lst_up to
+        curup, returned 1, which caused putsect to be invoked.  Putsect
+        would detect the uninhabited case and set lst_up back to 0.
+        This change substantially reduces the number of putsects on
+        uninhabited sectors and presumably cuts down the bug exposure.  
+        Also change getsect.c to detect impending damage to sector, and
+        on this condition, CORE DUMP.
+        Change assa.c and atta.c to set lst_up to curup when taking over
+        a sector.
+
+28) Telegrams get screwed up.  It appears to be placing data from initial-
+    data section in the telegram buffer.  Suspect this happens when more
+    than 511 characters are in the message or when there is concurrent
+    activity in the telegram file.
+
+29) You get a core dump if you enter numbers that are greater than +127
+    or -128 when doing a spy command.  E.g.  spy -156:-14,-25,-23 dumps
+    memory.  This is because sargs doesn't check for reasonable values
+    on return from atoip().  Suspect that a lot of other commands will
+    also behave this way.
+
+30) Mobility in submarines can go positive on the 13th torpedo.
+
+        Fix:  Put check in to make sure that mobility stays negative (-120).
+
+31) "Because of containerization ..." message printed when dropping off
+    commodity in the same sector it started from.
+
+        Fix:  Before printing message, check to see if hx,hy are the same
+              as sx,sy.  If so, don't print.
+
+32) A memory fault occurs when executing the "upd" command.
+
+        Fix:  Memory fault was in the xytoa() routine.  It was being passed
+              only two out of three arguments when update() was trying to 
+              send the PLAGUE telegram to the victim country.  Supply the 
+              missing third argument and declare char *xytoa().
+              All changes are in update.c.
+
+33) "n citizens died of PLAGUE in x,y" bulletin has wrong coordinates.
+    This bulletin is sent when some other country does an update of the
+    world, causing plague to break out or kill citizens in another country.
+    The infected country can't find out where the PLAGUE is.
+
+        Fix:  In update.c correct the third argument to xytoa() in the call
+              to wu() which sends the bulletin.
+
+34) Victim ships don't fire back properly.  Freighters will fire back up to 
+   127 shells in one blast if the attacker is in the same sector.
+   The fleet is never checked in returning fire.  Only ships in the 
+   same fleet as the victim ship are supposed to fire back.  
+   All ships that are able to fire back, do so. Instead of quitting when they 
+   have sunk the attacker, they all take a shot at the bubbles.
+
+        Fix: Make freighters impotent, check the fleet, and stop firing
+             back as soon as the attacking ship is sunk.  Send a telegram
+             to the defender indicating which ship was sunk.  All changes
+             are in fire.c .
+   
+
+35) Shells landing in the ocean cause a bulletin to be sent to the Deity.
+
+        Fix:  Put a check to inhibit bulletin in fire.c.
+
+36) Treaties aren't checked properly.  You can fire at a ship and not violate
+   an active treaty against such mischief.  If you fire at land, and you
+   have a treaty against firing on ships, you will be guilty of violating
+   a treaty.
+
+        Fix: Straighten out program flow to perform checks in the right
+             order in fire.c.
+
+37) You can fire more than 1 gun from a tender.  This little feature makes
+   the tender roughly 5 times more awesome than a battleship !  You can
+   get 50% damage on a battleship in one shot.
+
+        Fix: Put check in landgun.c to limit guns to one for a tender.
+
+38) If a fort fires on a ship, and ships in the same fleet return fire, the
+   bulletin to the defender says fire was returned on "ship at x,y".  It
+   should be "sector x,y".
+
+        Fix: Use "alors" instead of "vlors" to determine whether attacker
+             is attacking from land or sea in fire.c.
+
+39) Defending forts don't return fire as documented.  If you fire on a fort,
+   that fort should return fire if its able.  Furthermore, if that fort is
+   defended by another fort, the defending fort should also clobber the
+   attacking item.  Of course the target must be in range, shells and guns
+   must be available, etc.  This double defense doesn't appear to be 100%
+   functional.
+
+        Fix: Pass float to tfact() instead of integer.  Passing integer
+             caused defending forts to have a range of 0 in fire.c.
+
+40) The "short round" calculation for firing shells is in error.  If firing
+   north or west, the shell sometimes goes the whole distance instead of
+   falling short.
+
+        Fix: Force integer truncation by casting to short in fire.c.
+
+41) Spelling error when flying.  "Barometer @620; seas to rough to fly".
+
+        Fix: fly.c - Fix fmt "...seas too rough to fly".
+
+42) Planes will catch flak from ships that have been sunk (owned by the
+    Deity), and also from ships from the same country as the planes.
+    The first case happens when entering a sector that has sunken ships
+    with shells and guns still aboard.  The second case happens if you
+    accidently bomb your own ship.  If there are any of your ships in that
+    same sector, they will send up flak instead of regarding it as an
+    accident (or training mission).
+
+        Fix: fly.c, flakcheck() - Add check to inhibit flak from same
+             country or Deity.
+
+43) You get the message "0 citizens died of PLAGUE...".  Notifying the
+    country monarch that nothing happened seems superfluous.
+
+        Fix: No Change.  Although nobody died, the message is notification
+             that the plague state of the sector changed.  This is
+             valuable information.  The message could read "All citizens
+             survived the PLAGUE...", but this would be fixing something
+             that ain't broke.
+
+44) It is possible to bomb a Deity-owned ship.  Ships owned by the Deity
+    should not be detectable.
+
+        Fix: fly.c - When bombing, a check is made to see if the victim ship
+             is under the plane.  Add a check to disallow bombing a ship
+             owned by the Deity.
+
+45) No information is given about ships when flying over and "viewing"
+    sector containing ships.
+
+        Fix: fly.c - Activate previously unreachable code segment.  If ship
+             is owned by same country as plane, ship details are given.
+             If ship is foreign, two things happen: 1) the ship type and ship
+             number (but not country) are given to the pilot, and 2)
+             a telegram is sent to flagship's owner "2 country #5 planes
+             buzzed ship #123".
+             Now you can find out a submarine's ship number one more way
+             (besides sonar and look), but not its country.  And now you
+             have one more chance for a successful landing when you try to
+             land on a carrier and forget the carrier's ship number.
+
+46) When crash landing planes with bombs into ships or sectors, sometimes
+    no damage is done.
+
+        Fix: fly.c - In the case where all the planes blew up, there was a
+             missing putsect() and putship() to update the sector or ship.
+             Thus, the sector or ship would not be updated with all the damage
+             done by the exploding bombs.
+             With this fixed, Kamikazi attacks are much more effective.
+
+47) In mtch.c, the stmtch() function has a built-in assumption that
+    pointers are 4 bytes long.
+
+        Fix: Use a variety of casting operations to get the pointer
+             arithmetic to come up with the right answer.  Even lint
+             buys it, honest !!
+
+48) If sectors are granted to the Deity, and then the Deity grants those
+    sectors to a country, the timestamp of a sector is left at zero.
+    The sector will never be updated after that.  The granting operation
+    should set the timestamp to curup.
+
+        Fix: In gran.c set sect.sct_lstup = curup before doing the
+             doing the putsect.
+
+49) Since the fixes to the "fire" command, shelling land owned by the
+    Deity doesn't do any damage to that sector.  
+
+        Fix: In fire.c, a check is made to see if the victim sector
+             is owned by the Deity or the attacking country.  In that
+             case, no check is made to see if a defending fort can fire
+             back -- it just returns.  The fix is to write the victim
+             sector out (possibly with damage from the shell) before
+             returning.
+
+50) This code doesn't work on a Amdahl UTS UNIX system.
+
+        Fix:  Most of the problems stem from the fact that in the original
+             code, characters were used to hold negative values.  This
+             doesn't work out on the UTS system since characters are
+             unsigned.   Change all the basic structures (gulp!) in empdef.h
+             to replace all characters with possible negative values with
+             shorts.  Change all the subroutines, commands, and empglb.c
+             that have knowledge of the position of these characters, --
+             and run lint on the whole thing to get rid of all complaints.
+             Whew!  
+             Also - get rid of the superet() function that happens to
+             have knowledge of the C stack frame layout.  Change all functions
+             that called superet() to achieve the functionality a different
+             way.
+
+51) The code that was ported to the Amdahl UTS system doesn't work on the 3b.
+    There are two problems:  1) chan.c won't compile because it can't find
+    the "N_NAME_CHANGE" symbol, and 2) it won't load because it can't find
+    the _doprnt() symbol.
+
+        Fix: Change the symbol "N_NAME_CHANGE" in chan.c to "N_NAME_CHNG"
+             to match the header file.  The 3b was looking at more characters.
+
+             The 3b libc.a doesn't have the portable version of _doprnt().
+             It uses the optimized version (assembly language) called
+             __doprnt().  This all stems from a highly questionable choice
+             made during decompilation & integration testing -- to use
+             the _doprnt() routine directly, rather than indirectly through
+             printf or fprintf.  This short-cut backfired on the 3b.   Sorry.
+             So OK we have to bite the big bullet here:
+             Change all pr(), prfmt(), and pr(fmt()) calls to printf().
+             Change all fmt() calls to sprintf(fmtbuf,...) calls, and
+             position the sprintf call just before the function needing
+             the formatted goodies in fmtbuf.  Change all function calls
+             that used fmt() in the calling parameters to use fmtbuf
+             instead.  Get rid of explicit fmtlen references in tele.c.
+             Comment out most of pr.c, leaving only the global fmtbuf[].
+             To get performance back to what it was with the original
+             functions, get rid of setbuf(stdout,(char *)NULL) in empdis.c, 
+             and insert a fflush(stdout) in prmptrd.c, chkok.c, and cleared.c .
+             So now we're a little more portable, I think.  Neat.
+

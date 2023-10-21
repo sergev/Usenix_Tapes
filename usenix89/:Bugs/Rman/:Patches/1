@@ -1,0 +1,504 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site ucbvax.ARPA
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!ucbvax!broome
+From: broome@ucbvax.ARPA (Jonathan C. Broome)
+Newsgroups: net.sources.bugs
+Subject: Fixes to rman system
+Message-ID: <10384@ucbvax.ARPA>
+Date: 14 Sep 85 23:51:50 GMT
+Date-Received: 16 Sep 85 02:27:21 GMT
+Reply-To: broome@ucbvax.UUCP (Jonathan C. Broome)
+Followup-To: net.sources.bugs
+Distribution: net
+Organization: University of California at Berkeley
+Lines: 489
+
+[ an apple a day keeps the doctor aw----  (munch!)]
+
+This is a small set of fixes to be applied to the remote manual server/client
+code that I posted last month.  Hopefully you can feed the diffs directly
+into the "patch" program...  Thanks go to Chris Torek of U. of Maryland 
+and Lawrie Brown of University College in Australia for pointing out these
+problems and the fixes...
+
+===========================================================
+Jonathan C. Broome       University of California, Berkeley
+
+          UUCP    ...!ucbvax!broome
+          ARPA    broome@ucb-vax.berkeley.edu 
+===========================================================
+
+===== CUT HERE --- THIS IS NOT A SHELL ARCHIVE ===============================
+
+*** /tmp/,RCSt1016791	Sat Sep 14 16:31:44 1985
+--- client/rman.c	Sat Sep 14 16:31:46 1985
+***************
+*** 18,24
+   */
+  
+  #ifndef lint
+! static char *RCSid = "$Header: rman.c,v 1.18 85/08/27 15:19:13 broome Exp $";
+  #endif
+  
+  /*
+
+--- 18,24 -----
+   */
+  
+  #ifndef lint
+! static char *RCSid = "$Header: rman.c,v 1.20 85/09/14 16:30:58 broome Exp $";
+  #endif
+  
+  /*
+***************
+*** 23,28
+  
+  /*
+   * $Log:	rman.c,v $
+   * Revision 1.18  85/08/27  15:19:13  broome
+   * Added copyright/distribution comment.
+   * 
+
+--- 23,38 -----
+  
+  /*
+   * $Log:	rman.c,v $
++  * Revision 1.20  85/09/14  16:30:58  broome
++  * Fixed one of the bug fixes ... :-)
++  * 
++  * Revision 1.19  85/09/13  23:32:29  broome
++  * Added two fixes: 
++  *   1) From Chris Torek (chris@maryland) - unlink the temp file before
++  *      opening it, in case it exists from an earlier user...
++  *   2) Fix by Lawrie Brown (lpb@csadfa.oz) to fix problem of passing a 
++  *      (possibly) null pointer to fprintf in the routine "doit()"
++  * 
+   * Revision 1.18  85/08/27  15:19:13  broome
+   * Added copyright/distribution comment.
+   * 
+***************
+*** 194,199
+  	if (use_more == 1) {             /* set up temp file */
+  		umask (0);                   /* should we do this when setuid? */
+  		sprintf (fname, "/tmp/rman.%05d", getpid ());
+  		if ((tfp = fopen (fname, "w")) == NULL) {
+  			fprintf (stderr, "%s: cannot create temp file: ", prog);
+  			perror (fname);
+
+--- 204,210 -----
+  	if (use_more == 1) {             /* set up temp file */
+  		umask (0);                   /* should we do this when setuid? */
+  		sprintf (fname, "/tmp/rman.%05d", getpid ());
++ 		(void) unlink (fname);       /* in case it already exists */
+  		if ((tfp = fopen (fname, "w")) == NULL) {
+  			fprintf (stderr, "%s: cannot create temp file: ", prog);
+  			perror (fname);
+***************
+*** 257,263
+  			case WHATIS:  cmd = "whatis"; break;
+  			case RAW:     cmd = "raw"; break;
+  		}
+! 	fprintf (sock_wp, "%s %s %s\n", cmd, sec, name);  /* ask for a page */
+  	(void) fflush (sock_wp);
+  
+  	if (response ())        /* bad response */
+
+--- 268,274 -----
+  			case WHATIS:  cmd = "whatis"; break;
+  			case RAW:     cmd = "raw"; break;
+  		}
+! 	fprintf (sock_wp, "%s %s %s\n", cmd, sec == 0 ? "" : sec, name);
+  	(void) fflush (sock_wp);
+  
+  	if (response ())        /* bad response */
+
+*** /tmp/,RCSt1016802	Sat Sep 14 16:32:29 1985
+--- client/gethost.c	Sat Sep 14 16:32:30 1985
+***************
+*** 18,24
+   */
+  
+  #ifndef lint
+! static char RCSid[] = "$Header: gethost.c,v 1.7 85/08/27 15:19:41 broome Exp $";
+  #endif
+  
+  /*
+
+--- 18,24 -----
+   */
+  
+  #ifndef lint
+! static char RCSid[] = "$Header: gethost.c,v 1.8 85/09/13 23:30:06 broome Exp $";
+  #endif
+  
+  /*
+***************
+*** 23,28
+  
+  /*
+   * $Log:	gethost.c,v $
+   * Revision 1.7  85/08/27  15:19:41  broome
+   * Added copyright/distribution comment.
+   * 
+
+--- 23,32 -----
+  
+  /*
+   * $Log:	gethost.c,v $
++  * Revision 1.8  85/09/13  23:30:06  broome
++  * Fixed bug pointed out by Chirs Torek (chris@maryland) in timeval 
++  * assignment, where the author got his units confused .. :-)
++  * 
+   * Revision 1.7  85/08/27  15:19:41  broome
+   * Added copyright/distribution comment.
+   * 
+***************
+*** 65,71
+  int port;        /* in network order */
+  {
+  	struct sockaddr_in sin, low;
+! 	static struct timeval timeout = { 0, 100 };   /* 1/10th sec timeout */
+  	float  curr_low = 200.0;           /* higher than your system goes! */
+  	float  la;
+  	int    got_one = 0;
+
+--- 69,75 -----
+  int port;        /* in network order */
+  {
+  	struct sockaddr_in sin, low;
+! 	static struct timeval timeout = { 0, 100000 };   /* 1/10th sec timeout */
+  	float  curr_low = 200.0;           /* higher than your system goes! */
+  	float  la;
+  	int    got_one = 0;
+
+*** /tmp/,RCSt1016588	Sat Sep 14 16:15:56 1985
+--- daemon/Makefile		Fri Sep 13 23:24:30 1985
+***************
+*** 22,27
+  # use MODE = 2711 if the man directories are unwritable, else use MODE = 755
+  # set OWNER to the user who owns the man pages, usually root, sometimes "man"
+  # KMEM needs to be the name of the group which can read /dev/kmem (for load avg)
+  
+  CFLAGS = -DSERVICES # -O
+  LFLAGS = -hbxa
+
+--- 22,28 -----
+  # use MODE = 2711 if the man directories are unwritable, else use MODE = 755
+  # set OWNER to the user who owns the man pages, usually root, sometimes "man"
+  # KMEM needs to be the name of the group which can read /dev/kmem (for load avg)
++ # WHATIS is the name of the file to use for the "apropos" and "whatis" commands
+  
+  CFLAGS = -DSERVICES # -O
+  LFLAGS = -hbxa
+***************
+*** 28,33
+  MODE   = 2711
+  OWNER  = root
+  KMEM   = kmem
+  
+  # The help files should be in this directory.
+  
+
+--- 29,35 -----
+  MODE   = 2711
+  OWNER  = root
+  KMEM   = kmem
++ WHATIS = /usr/lib/whatis
+  
+  # The help files should be in this directory.
+  
+***************
+*** 66,71
+  identify.o: identify.c
+  	cc ${CFLAGS} -c -DHOSTFILE=\"${HOSTFILE}\" identify.c
+  
+  # Updates whenever any sources change
+  version.o: $(SRCS)
+  	@csh -f newver.csh
+
+--- 68,79 -----
+  identify.o: identify.c
+  	cc ${CFLAGS} -c -DHOSTFILE=\"${HOSTFILE}\" identify.c
+  
++ apropos.o:    apropos.c
++ 	cc ${CFLAGS} -c -DWHATIS=\"${WHATIS}\" apropos.c
++ 
++ whatis.o: whatis.c
++ 	cc ${CFLAGS} -c -DWHATIS=\"${WHATIS}\" whatis.c
++ 
+  # Updates whenever any sources change
+  version.o: $(SRCS)
+    @csh -f newver.csh
+***************
+*** 111,118
+  main.o: /usr/include/sys/ttychars.h
+  
+  main.o: /usr/include/sys/ioctl.h
+- 
+- main.o: /usr/include/time.h
+  
+  main.o: /usr/include/sys/time.h
+  
+
+--- 119,124 -----
+  main.o: /usr/include/sys/ttychars.h
+  
+  main.o: /usr/include/sys/ioctl.h
+  
+  main.o: /usr/include/sys/time.h
+  
+RCS file: RCS/apropos.c,v
+retrieving revision 1.5
+retrieving revision 1.6
+diff -c -r1.5 -r1.6
+*** /tmp/,RCSt1016633	Sat Sep 14 16:20:14 1985
+--- daemon/apropos.c	Sat Sep 14 16:20:15 1985
+***************
+*** 1,5
+  #ifndef lint
+! static char RCSid[] = "$Header: apropos.c,v 1.5 85/08/27 15:16:08 broome Exp $";
+  #endif
+  
+  /*
+
+--- 1,5 -----
+  #ifndef lint
+! static char RCSid[] = "$Header: apropos.c,v 1.6 85/09/13 23:37:34 broome Exp $";
+  #endif
+  
+  /*
+***************
+*** 4,9
+  
+  /*
+   * $Log:  apropos.c,v $
+   * Revision 1.5  85/08/27  15:16:08  broome
+   * Last cleanup before release.
+   * 
+
+--- 4,13 -----
+  
+  /*
+   * $Log:  apropos.c,v $
++  * Revision 1.6  85/09/13  23:37:34  broome
++  * Changed #define LIST to WHATIS with #ifndef around it, so that it may be
++  * changed in the Makefile to something besides the usual /usr/lib/whatis
++  * 
+   * Revision 1.5  85/08/27  15:16:08  broome
+   * Last cleanup before release.
+   * 
+***************
+*** 18,24
+  #include "response.h"
+  #include <stdio.h>
+  
+! #define LIST "/usr/lib/whatis"
+  
+  /*ARGSUSED*/
+  apropos (argc, argv)
+
+--- 22,30 -----
+  #include "response.h"
+  #include <stdio.h>
+  
+! #ifndef WHATIS
+! #define WHATIS "/usr/lib/whatis"
+! #endif
+  
+  /*ARGSUSED*/
+  apropos (argc, argv)
+***************
+*** 30,37
+    int      found = 0;
+  
+    argv++;
+!   if ((fp = fopen (LIST, "r")) == NULL) {
+!       printf ("%d cannot open %s\r\n", ERR_NOFILE, LIST);
+        return;
+    }
+  
+
+--- 36,43 -----
+    int      found = 0;
+  
+    argv++;
+!   if ((fp = fopen (WHATIS, "r")) == NULL) {
+!       printf ("%d cannot open %s\r\n", ERR_NOFILE, WHATIS);
+        return;
+    }
+  
+*** /tmp/,RCSt1016643   Sat Sep 14 16:20:55 1985
+--- daemon/defs.h   Sat Sep 14 16:20:56 1985
+***************
+*** 1,5
+  /*
+!  * $Header: defs.h,v 1.3 85/08/27 15:16:31 broome Exp $
+   */
+  
+  /*
+
+--- 1,5 -----
+  /*
+!  * $Header: defs.h,v 1.4 85/09/13 23:38:39 broome Exp $
+   */
+  
+  /*
+***************
+*** 4,9
+  
+  /*
+   * $Log:  defs.h,v $
+   * Revision 1.3  85/08/27  15:16:31  broome
+   * Last cleanup before release.
+   * 
+
+--- 4,14 -----
+  
+  /*
+   * $Log:  defs.h,v $
++  * Revision 1.4  85/09/13  23:38:39  broome
++  * Changed TYPES and DIRS macros to NTYPES and NDIRS so as to avoid 
++  * a possible conflict with the _TYPES_ macro in <sys/types.h>
++  * (submitted by Lawrie Brown [lpb@csadfa.oz])
++  * 
+   * Revision 1.3  85/08/27  15:16:31  broome
+   * Last cleanup before release.
+   * 
+***************
+*** 16,23
+  
+  #include <stdio.h>
+  
+! #define DIRS   11    /* one name can reference DIRS-1 directories */
+! #define TYPES  10    /* and at most TYPES cpu types               */
+  
+  struct section {
+    char    *name;            /* name of section */
+
+--- 21,28 -----
+  
+  #include <stdio.h>
+  
+! #define NDIRS   11    /* one name can reference NDIRS-1 directories */
+! #define NTYPES  10    /* and at most NTYPES cpu types               */
+  
+  struct section {
+    char    *name;             /* name of section */
+***************
+*** 20,28
+  #define TYPES  10    /* and at most TYPES cpu types               */
+  
+  struct section {
+!   char    *name;            /* name of section */
+!   struct  dir *dirs[DIRS];  /* array of pointers to directories */
+!   struct  section *next;    /* next one in chain */
+  };
+  
+  struct dir {
+
+--- 25,33 -----
+  #define NTYPES  10    /* and at most NTYPES cpu types               */
+  
+  struct section {
+!   char    *name;             /* name of section */
+!   struct  dir *dirs[NDIRS];  /* array of pointers to directories */
+!   struct  section *next;     /* next one in chain */
+  };
+  
+  struct dir {
+***************
+*** 47,53
+    struct  section *sec;     /* top of section list        */
+  };
+  
+! struct type    types[TYPES];  /* all known cpu types */
+  struct section *sections;     /* top of list of sections */
+  struct dir     *dirs;         /* top of list of directories */
+  int    debug;
+
+--- 52,58 -----
+    struct  section *sec;     /* top of section list        */
+  };
+  
+! struct type    types[NTYPES]; /* all known cpu types */
+  struct section *sections;     /* top of list of sections */
+  struct dir     *dirs;         /* top of list of directories */
+  int    debug;
+
+*** /tmp/,RCSt1016728	Sat Sep 14 16:26:53 1985
+--- daemon/whatis.c		Sat Sep 14 16:26:55 1985
+***************
+*** 1,5
+  #ifndef lint
+! static char RCSid[] = "$Header: whatis.c,v 1.4 85/07/24 10:39:13 broome Exp $";
+  #endif
+  
+  /*
+
+--- 1,5 -----
+  #ifndef lint
+! static char RCSid[] = "$Header: whatis.c,v 1.5 85/09/13 23:40:28 broome Exp $";
+  #endif
+  
+  /*
+***************
+*** 4,9
+  
+  /*
+   * $Log:  whatis.c,v $
+   * Revision 1.4  85/07/24  10:39:13  broome
+   * 
+   * 
+
+--- 4,14 -----
+  
+  /*
+   * $Log:  whatis.c,v $
++  * Revision 1.5  85/09/13  23:40:28  broome
++  * Changed LIST macro to WHATIS, with #ifndef around it so that a different
++  * file can be used without hunting through the code...
++  * (From Lawrie Brown [lpd@csadfa.oz])
++  * 
+   * Revision 1.4  85/07/24  10:39:13  broome
+   * 
+   * 
+***************
+*** 15,21
+  #include "response.h"
+  #include <stdio.h>
+  
+! #define LIST    "/usr/lib/whatis"
+  #define DELIMS  " \t\n\r,\"\'-()"      /* word delimiters */
+  
+  int key;
+
+--- 20,28 -----
+  #include "response.h"
+  #include <stdio.h>
+  
+! #ifndef	WHATIS
+! #define	WHATIS    "/usr/lib/whatis"
+! #endif
+  #define DELIMS  " \t\n\r,\"\'-()"      /* word delimiters */
+  
+  int key;
+***************
+*** 34,41
+    int      found = 0;
+  
+    argv++;
+!   if ((fp = fopen (LIST, "r")) == NULL) {
+!       printf ("%d cannot open %s\r\n", ERR_NOFILE, LIST);
+        (void) fflush (stdout);
+        return;
+    }
+
+--- 41,48 -----
+    int      found = 0;
+  
+    argv++;
+!   if ((fp = fopen (WHATIS, "r")) == NULL) {
+!       printf ("%d cannot open %s\r\n", ERR_NOFILE, WHATIS);
+        (void) fflush (stdout);
+        return;
+    }

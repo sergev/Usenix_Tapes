@@ -1,0 +1,183 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!icom!andy
+From: andy@icom.UUCP (Andrew H. Marrinson)
+Newsgroups: net.sources
+Subject: RATS! bug in cmail posted here
+Message-ID: <684@icom.UUCP>
+Date: 6 Sep 86 04:54:08 GMT
+Distribution: net
+Organization: ICOM Sys., Arlington Hts, IL
+Lines: 171
+Posted: Fri Sep  5 23:54:08 1986
+
+How humiliating.  There were two (count 'em) bugs in cmail.  I used the
+bloody thing for most of this week without finding them, I posted it, and
+within the day I had found the bugs.  The first was with parenthesized
+comments in addresses.  If they contained commas, it blew it badly.  The
+second was with continued headers.  I should have caught at least the second
+one in testing, but...
+
+Anyway, I apologize if any of you got bit by these.  Here are context diffs
+to fix them.  ARGH!  Hopefully I will not find anymore.
+
+--------------------- cut here, run through sh -----------------------------
+:
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	bugfix.diff
+# This archive created: Fri Sep  5 23:43:36 1986
+export PATH; PATH=/bin:$PATH
+echo shar: extracting "'bugfix.diff'" '(4697 characters)'
+if test -f 'bugfix.diff'
+then
+	echo shar: will not over-write existing file "'bugfix.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'bugfix.diff'
+	X*** cmail.c.old	Mon Sep  1 16:25:34 1986
+	X--- cmail.c	Fri Sep  5 23:39:54 1986
+	X***************
+	X*** 204,210
+	X  				   unknown headers */
+	X  
+	X      /* if line starts with white space, return last header type */
+	X!     if (*line == ' ' || *line == '\t')
+	X  	return lasthead;
+	X  
+	X      /* cycle through table looking for a match */
+	X
+	X--- 204,212 -----
+	X  				   unknown headers */
+	X  
+	X      /* if line starts with white space, return last header type */
+	X!     if (*line == ' ' || *line == '\t') {
+	X! 	/* of course it would be nice if we set field */
+	X! 	*field = line+strspn(line, " \t");
+	X  	return lasthead;
+	X      }
+	X  
+	X***************
+	X*** 206,211
+	X      /* if line starts with white space, return last header type */
+	X      if (*line == ' ' || *line == '\t')
+	X  	return lasthead;
+	X  
+	X      /* cycle through table looking for a match */
+	X      for (p = htable; p->hlen != 0; ++p) {
+	X
+	X--- 208,214 -----
+	X  	/* of course it would be nice if we set field */
+	X  	*field = line+strspn(line, " \t");
+	X  	return lasthead;
+	X+     }
+	X  
+	X      /* cycle through table looking for a match */
+	X      for (p = htable; p->hlen != 0; ++p) {
+	X***************
+	X*** 237,242
+	X      char *p;			/* pointer used to cycle through addresses */
+	X      char *cp;			/* auxilliary pointer used to further parse
+	X  				   the indivual addresses */
+	X  
+	X      /* make a copy of the address list so we can split it with strtok(3) */
+	X      p = malloc((unsigned) (strlen(alist)+1));
+	X
+	X--- 240,246 -----
+	X      char *p;			/* pointer used to cycle through addresses */
+	X      char *cp;			/* auxilliary pointer used to further parse
+	X  				   the indivual addresses */
+	X+     int incmnt;			/* variable used to eliminate comments */
+	X  
+	X      /* make a copy of the address list so we can split it with strtok(3) */
+	X      /* *SIGH* ok, lets try removing the comments FIRST, since they might
+	X***************
+	X*** 239,244
+	X  				   the indivual addresses */
+	X  
+	X      /* make a copy of the address list so we can split it with strtok(3) */
+	X      p = malloc((unsigned) (strlen(alist)+1));
+	X      alist = strcpy(p, alist);	/* copy the address list */
+	X  
+	X
+	X--- 243,250 -----
+	X      int incmnt;			/* variable used to eliminate comments */
+	X  
+	X      /* make a copy of the address list so we can split it with strtok(3) */
+	X+     /* *SIGH* ok, lets try removing the comments FIRST, since they might
+	X+ 	contain commas (stupid) */
+	X      p = malloc((unsigned) (strlen(alist)+1));
+	X      incmnt = 0;
+	X      for (cp = p; *alist != '\0'; ++alist) {
+	X***************
+	X*** 240,246
+	X  
+	X      /* make a copy of the address list so we can split it with strtok(3) */
+	X      p = malloc((unsigned) (strlen(alist)+1));
+	X!     alist = strcpy(p, alist);	/* copy the address list */
+	X  
+	X      /* cycle through the list, splitting on commas */
+	X      for (p = strtok(alist, ",\n"); p != NULL; p = strtok(NULL, ",\n")) {
+	X
+	X--- 246,263 -----
+	X      /* *SIGH* ok, lets try removing the comments FIRST, since they might
+	X  	contain commas (stupid) */
+	X      p = malloc((unsigned) (strlen(alist)+1));
+	X!     incmnt = 0;
+	X!     for (cp = p; *alist != '\0'; ++alist) {
+	X! 	if (incmnt) {
+	X! 	    if (*alist == ')')
+	X! 		incmnt = 0;	/* the comment is over */
+	X! 	} else if (*alist == '(')
+	X! 	    incmnt = 1;		/* we have started a comment */
+	X! 	else
+	X! 	    *cp++ = *alist;	/* copy everything not in a comment */
+	X!     }
+	X!     *cp = '\0';			/* terminate the string */
+	X!     alist = p;			/* ok boss, that ought to fix the bastard! */
+	X  
+	X      /* cycle through the list, splitting on commas */
+	X      for (p = strtok(alist, ",\n"); p != NULL; p = strtok(NULL, ",\n")) {
+	X***************
+	X*** 248,259
+	X  	/* addresses take two general forms:
+	X  		addr [ (comment) ], and
+	X  		[ comment ] < addr >
+	X! 	   The following code deletes the comments.  It makes the
+	X! 	   simplifying assumption that there will be nothing valid
+	X! 	   following a '(' even outside the corresponding ')' */
+	X! 	if ((cp = strchr(p, '(')) != NULL)
+	X! 	    *cp = '\0';		/* ignore comment */
+	X! 	else if ((cp = strchr(p, '<')) != NULL) {
+	X  	    p = cp+1;		/* change starting point to after '<' */
+	X  	    if ((cp = strchr(p, '>')) != NULL)
+	X  		*cp = '\0';	/* change end to before '>' */
+	X
+	X--- 265,276 -----
+	X  	/* addresses take two general forms:
+	X  		addr [ (comment) ], and
+	X  		[ comment ] < addr >
+	X! 	   The code above deleted the first type of comment, the code
+	X! 	   below handles the second form.  Note that no commas may appear
+	X! 	   in the second form, and that the parenthesis in the first
+	X! 	   form do not nest.  Hopefully these will not bite me as the
+	X! 	   commas inside parens did. */
+	X! 	if ((cp = strchr(p, '<')) != NULL) {
+	X  	    p = cp+1;		/* change starting point to after '<' */
+	X  	    if ((cp = strchr(p, '>')) != NULL)
+	X  		*cp = '\0';	/* change end to before '>' */
+SHAR_EOF
+if test 4697 -ne "`wc -c < 'bugfix.diff'`"
+then
+	echo shar: error transmitting "'bugfix.diff'" '(should have been 4697 characters)'
+fi
+fi # end of overwriting check
+#	End of shell archive
+exit 0
+-- 
+
+	andy@icom.UUCP
+	Or for those of		Andrew H. Marrinson
+	you who wish to		ICOM Systems, Inc.
+	play it the hard	Arlington Heights, IL 60005
+	way: ihnp4!icom!andy

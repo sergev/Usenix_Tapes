@@ -1,0 +1,330 @@
+
+
+
+
+
+
+
+
+
+            Programmer Documentation for geneal
+
+
+                 Jim McBeath (jimmc) at SCI
+                      Terry L. Ridder
+
+                   Silcon Compilers Inc.
+                 The Terry L. Ridder Family
+
+
+
+                          _A_B_S_T_R_A_C_T
+
+          This document describes  some  of  the  files
+     used  in geneal.  It is intended to assist someone
+     who may want to fix a bug or improve the  program,
+     or  perhaps  use  one  of  the general modules for
+     another program.  If you do any of the  above,  we
+     would be interested in hearing about it.
+
+
+
+Aug 29, 1985
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+            Programmer Documentation for geneal
+
+
+                 Jim McBeath (jimmc) at SCI
+                      Terry L. Ridder
+
+                   Silcon Compilers Inc.
+                 The Terry L. Ridder Family
+
+
+
+_1.  _B_A_C_K_G_R_O_U_N_D
+
+The geneal program is divided up into a  number  of  general
+purpose  files  and  some special files specifically for the
+geneal program.
+
+        The general files include:
+            dataman.c   Simple reader for formatted data file.
+            errorman.c  Error message routines.
+            index.c     Routines to manipulate large virtual
+                        arrays.
+            pagemap.c   Build up an image of a page in memory
+                        and output it.
+            strsav.c    Save a malloc'ed copy of a string.
+            tprintf.c   sprintf into a malloc'ed string.
+            vsprintf.c  sprintf with a vector of arguments.
+            xalloc.c    allocate memory and die if no more.
+
+
+        The geneal-specific files include:
+            geneal.c    main program for geneal (switches etc).
+            famgetdat.c routines to generate one-line strings
+                        of data.
+            family.c    generate a page of info about a family.
+            famtree.c   generate a family tree (incomplete!).
+            gbrowse.c   browse through the data.
+            indivs.c    generate info about an individual.
+
+
+
+_2.  _G_e_n_e_r_a_l _f_i_l_e_s
+
+Most of the general files are  simple,  and  can  be  easily
+understood  by  inspection.   The  ones  which  deserve more
+extensive comment are dataman, index, and pagemap.
+
+
+
+
+
+
+
+
+                       Aug 29, 1985
+
+
+
+
+
+                           - 2 -
+
+
+_2._1.   _D_a_t_a_m_a_n  is  the  interface  to  the  datafile.   The
+datafile   is   in  a  particular  format  (records,  lines,
+keywords/values) which is decsribed at the beginning of that
+file.   The  routines  in  this module allow access to those
+data items, typically given a record number  and  a  keyword
+name. There were two primary considerations behind selecting
+the format used in the data file and the techniques used  to
+read that file:
+
+1)
+          It should be in a text format so that  it  can  be
+          edited  by a text editor (I didn't want to have to
+          write a special datafile editor) and so that it is
+          human  readable  (so  it could be used even before
+          all the output routines were written for any  par-
+          ticular program);
+
+2)
+          The program should be  able  to  handle  extremely
+          large files.
+
+The current implementation of DATAMAN works as follows: dur-
+ing  initialization,  it scans through the data file looking
+for the start of each record.  It then reads in  the  record
+number  (an arbitrary but unique integer) and records (using
+the INDEX module) the seek location in  the  file  for  that
+record.   When  an  access request is processed, it seeks to
+the location for that record and then scans until  it  finds
+the  requested  keyword.  While this may not be particularly
+fast, it does satisfy the above two requirements  of  simple
+text  file  format and the ability to handle extremely large
+files.  It is true that the initialization phase would  take
+much  longer  for a very large file, but the access time for
+any given item should be independent of file size.
+
+There are of  course  some  optimizations  and  improvements
+which could be made here.  The first two on my list are:
+
+1)
+          After scanning through the data file creating  the
+          list  of  indexes  and  seek positions, write that
+          information out to a file - then the next time the
+          program  is run with that same file, the dates can
+          be checked, and the index file can be read  in  if
+          it  is  still  newer  (i.e.  the data file has not
+          changed). This would greatly improve the initiali-
+          zation time for larger data files.
+
+2)
+          Cache the  most  recent  records  in  memory  (and
+          perhaps  sort the fields in them).  In those cases
+          where a program goes back and forth between a  few
+          records (as often happens in the genealogy program
+          when following child  pointers,  parent  pointers,
+
+
+
+                       Aug 29, 1985
+
+
+
+
+
+                           - 3 -
+
+
+          etc.),  this would help to speed up the accessing.
+          However, remember that unix alreadys  caches  some
+          disk  io,  so  this  may not be as big a win as it
+          seems at first.  (Try running the geneal program -
+          actually  it's  not all that slow, considering the
+          way it reads the data file!)
+
+
+_2._2.  _I_n_d_e_x implements a large dynamic virtual array.   Each
+location in the array is allowed to contain an integer (or a
+pointer, if you have more  data  to  store).   The  routines
+allow  you to set or get that value (integer or pointer) for
+a specified index  (conceptually  the  index  into  a  large
+table).   Internally,  the  data  are  stored in a number of
+smaller tables, so that unused locations in the  array  need
+not  take  up  memory  space.  For example, if you needed an
+array with indexes of 1 and 1000000, the amount  of  storage
+needed  would be something like 1K (due to chunk size).  The
+approach used works well for arrays with clusters  of  dense
+use,  e.g.  the  number  1  to  1000,  1M to 1M+1000, 10M to
+10M+1000, etc.  It does not work well for sparse but regular
+distributions, e.g. 1K, 2K, 3K, etc.
+
+The index table is implemented by a multi-level table.   The
+bottom  level table contains N data items; the next level up
+contains N pointers to bottom level tables; the  next  level
+up  contains  N pointers to first level pointer tables, etc.
+as far as needed.  The number N can be selected in the  ini-
+tialization  call  for  an  array.   When the set routine is
+called, enough tables are  built  to  access  the  requested
+index.   When  the  get  routine is called, those tables are
+then followed to get to the data.   Thus  the  size  of  the
+table can grow as needed.
+
+
+_2._3.  _P_a_g_e_m_a_p is an embryonic module used to generate a page
+of character data when it is desired to place things at par-
+ticular locations on the page.  The caller first initializes
+a  page (giving the size), and then calls routines to output
+strings and characters to particular locations  (row/column)
+on  the page.  At the end, he calls a function to output the
+page.  This function was written in order to do  the  family
+tree part of geneal, but so far has not seen that use.
+
+
+
+_3.  _G_e_n_e_a_l _s_p_e_c_i_f_i_c _f_i_l_e_s
+
+The  geneal  program  has  a  number  of  non-general  files
+intended only for use in this program.  These were mentioned
+above and will be discussed in a little more detail here.
+
+
+
+
+
+
+                       Aug 29, 1985
+
+
+
+
+
+                           - 4 -
+
+
+_3._1.  _G_e_n_e_a_l is the main program.  It scans the command line
+for  arguments  and switches, calls any initialization func-
+tions, and dispatches to the appropriate function  for  pro-
+cessing.
+
+
+_3._2.  _F_a_m_g_e_t_d_a_t is the basic interface to  dataman.   It  is
+used  to  read certain items of data for a particular person
+and return a string.  For  example,  one  of  the  functions
+reads  the  birth date and place, formats them into a string
+("b: 12-Oct-1855, Arlington, VA") and returns a  pointer  to
+that  string.   This  type  of routine is used to build up a
+list of information about someone, to be output in some par-
+ticular format.
+
+
+_3._3.  _F_a_m_i_l_y is a function to  output  information  about  a
+family  in a particular format.  This function is invoked by
+a switch on the command line.  The family page  consists  of
+information  about  the  parents,  their  children,  and the
+children's spouses.  This function calls famgetdat a lot  to
+collect  its  information,  then  formats it and outputs it.
+Mostly pretty straightforward code.
+
+
+_3._4.  _F_a_m_t_r_e_e is the routine which eventually will draw fam-
+ily  trees.   At  the moment there is not very much there to
+that end.  It outputs the information for one family in  the
+format in which it will appear in the tree.  It uses pagemap
+to build up this picture, so you can take a look  at  it  if
+you want to see an example of its use.
+
+
+_3._5.  _G_b_r_o_w_s_e is the module which controls browsing  through
+the  data.   This  is  a  very  simple control module at the
+moment, but should eventually  grow  to  have  a  much  more
+sophisticated interface to allow searching of the data.
+
+
+_3._6.  _I_n_d_i_v_s creates a short form data page for  an  indivi-
+dual.
+
+Have fun and send me your improvements!
+
+               -Jim  McBeath                     15-Jan-1985
+               -Terry L. Ridder                 29-Aug-1985
+
+
+
+
+
+
+
+
+
+
+
+                       Aug 29, 1985
+
+

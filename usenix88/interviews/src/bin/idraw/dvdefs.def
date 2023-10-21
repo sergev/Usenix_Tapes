@@ -1,0 +1,218 @@
+definition module dvdefs;
+
+import 
+    picture,
+    menu,
+    dialog,
+    rubband,
+    input;
+from drawing import
+    Drawing;
+from picture import
+    Picture, XCoord, YCoord;
+from genlists import
+    GenericList;
+from system import
+    Word;
+
+export qualified
+    VERSION, DATE, INFOOP, MINWIDTH, MINHEIGHT,
+    SMALLWIDTH, SMALLHEIGHT, LARGEWIDTH, LARGEHEIGHT, LEFTBUTTON,
+    MIDDLEBUTTON, RIGHTBUTTON, LARROW, RARROW, DARROW,
+    UARROW, NULL, BACKSPACE, DELETE, LINEFEED,
+    CARRIAGERTN, BELL, PRINTSUFFIX, CLIPBOARD, FONTFILE,
+    DEFAULTFONT, GRIDSIZE, SELECTAREA, PIXPERINCH, PAGESIZEX,
+    PAGESIZEY, OFFSETX, OFFSETY, MAXPOLYPTS, MAXZOOMIN,
+    MAXZOOMOUT, MAXFILENAMESIZE, MAXPATHSIZE, Cursor, Font,
+    Pattern, CharSet, CharPtr, AlignProc, VertexObjProc,
+    Box, LineType, VertexObjType, StateType, UndoOp,
+    UndoOpSet, ModifOp, Relation, UndoObj, UndoObjRecord,
+    SelecInfo, SelecInfoRecord, StateRecord, ScrollBarRecord, DrawingView,
+    DrawingViewRecord;
+
+const VERSION = "$Revision: 4.12 $";
+const DATE = "$Date: 87/11/19 16:30:38 $";
+const INFOOP = "?";
+const MINWIDTH = 250;
+const MINHEIGHT = 150;
+const SMALLWIDTH = 425;
+const SMALLHEIGHT = 540;
+const LARGEWIDTH = 652;
+const LARGEHEIGHT = 850;
+const LEFTBUTTON   = 0;
+const MIDDLEBUTTON = 1;
+const RIGHTBUTTON  = 2;
+const LARROW = 167;
+const RARROW = 168;
+const DARROW = 169;
+const UARROW = 170;
+const NULL = 0C;
+const BACKSPACE = 10C;
+const DELETE = 177C;
+const LINEFEED = 12C;
+const CARRIAGERTN = 15C;
+const BELL = 7C;
+const PRINTSUFFIX = ".ps";
+const CLIPBOARD = ".clipboard";
+const FONTFILE = ".fonts";
+const DEFAULTFONT = "Courier";
+const GRIDSIZE = 8;
+const SELECTAREA = 4;
+const PIXPERINCH = 72.0;
+const PAGESIZEX = 8.0;
+const PAGESIZEY = 10.9;
+const OFFSETX = 0.25;
+const OFFSETY = 0.05;
+const MAXPOLYPTS = 128;
+const MAXZOOMIN = 5;
+const MAXZOOMOUT = -3;
+const MAXFILENAMESIZE = 100;
+const MAXPATHSIZE = 300;
+type Cursor = pointer to input.Cursor;
+type Font = pointer to picture.Font;
+type Pattern = pointer to picture.Pattern;
+type CharSet = set of char;
+type CharPtr = pointer to char;
+type AlignProc = pointer to procedure(Picture, Picture);
+type VertexObjProc =
+    procedure (Picture, array of XCoord, array of YCoord);
+type
+    Box = record
+        x0, x1 : XCoord;
+	y0, y1 : YCoord;
+    end;
+type LineType = (None, Plain, LeftArrow, RightArrow, DblArrow);
+type VertexObjType = (Polygon, Spline, ClosedSpline);
+type
+    StateType = (
+        Idling, Rubberbanding, TextEntering, Menuing, Scrolling, Selecting,
+	TempSelecting, TempRubberbanding, Dialoging
+    );
+type
+    UndoOp = (
+	Move, MoveVertex, Scale, Stretch, Rotate, 
+	Insertion, Deletion, Alignment, Modification,
+	SendToBack, BringToFront, Group, Ungroup, ShowStructure
+    );
+type UndoOpSet = set of UndoOp;
+type
+    ModifOp = (
+	FontChange, PatternChange
+    );
+type
+    Relation = (
+	Parent, Sibling
+    );
+type UndoObj = pointer to UndoObjRecord;
+type
+    UndoObjRecord = record
+	selecList : GenericList;
+	zoom : integer;		    (* with no rubberbands.		*)
+	undone : boolean;
+
+	case undoOp : UndoOp of
+	    Move:
+		dx, dy : real;
+		|
+	    MoveVertex:
+		selection : Picture;
+		vertex : integer;
+		vdx : XCoord;
+		vdy : YCoord;
+		|
+	    Scale:
+	    	sx, sy : real;
+		|
+	    Stretch:
+		stx, sty : real;
+		codex, codey : integer;
+		|
+	    Rotate:
+		angle : real;
+		|
+	    Alignment, Modification, SendToBack, BringToFront, Group, Ungroup:
+		infoList : GenericList;
+	    else
+	end;
+    end;
+type SelecInfo = pointer to SelecInfoRecord;
+type 
+    SelecInfoRecord = record
+	case undoOp : UndoOp of
+	    Alignment:
+		dx, dy : real;
+		|
+	    SendToBack, BringToFront, Group:
+		relative : Picture;
+		relation : Relation;
+		|
+	    Ungroup:
+		numInGroup : integer;
+	    else
+	end;
+    end;
+type
+    StateRecord = record
+        activity     : StateType;
+	rubberband   : rubband.Rubberband;
+	selection    : Picture;
+	exposedCmd   : menu.Menu;
+	curCmdEntry  : menu.Menu;
+	curTool	     : menu.Menu;
+	curScroll    : Picture;
+	curDialog    : dialog.Dialog;
+	selecList    : GenericList;
+	charList     : GenericList;
+	charCount    : integer;
+	textPict     : Picture;
+	gridOn	     : boolean;
+	redrawOn     : boolean;
+	landscape    : boolean;
+	selecSorted  : boolean;
+	dirty        : boolean;
+	lineType     : LineType;
+	zoom	     : integer;
+	count	     : integer;
+	px	     : array [1..MAXPOLYPTS] of XCoord;
+	py	     : array [1..MAXPOLYPTS] of YCoord;
+	undoInfo     : UndoObj;
+    end;
+type
+    ScrollBarRecord = record
+	scrollBar	: Picture;
+        autoDownButton	: Picture;
+	autoUpButton 	: Picture;
+	pageArea	: Picture;
+	slider		: Picture;
+    end;
+(* public *) type DrawingView = pointer to DrawingViewRecord;
+type
+    DrawingViewRecord = record
+	drawing       : Drawing;
+	selected      : boolean;
+	quit	      : boolean;
+	left, right   : XCoord;
+	bottom, top   : YCoord;
+	width, height : integer;
+	stateInfo     : StateRecord;
+    	world	      : Picture;
+	indicator     : Picture;
+	lineIndic     : Picture;
+	patIndic      : Picture;
+	commands      : menu.Menu;
+	tools	      : menu.Menu;
+	selectTool    : menu.Menu;
+	pict          : Picture;
+	pictClipBox   : Box;
+	page	      : Picture;
+	xscroll	      : ScrollBarRecord;
+	yscroll	      : ScrollBarRecord;
+	defaultCursor : integer;
+	noFileSpecified : boolean;
+	fileName      : array [1..MAXFILENAMESIZE] of char;
+	bannermsg1    : array [1..MAXFILENAMESIZE] of char;
+	bannermsg2    : array [1..MAXFILENAMESIZE] of char;
+	curPath	      : array [1..MAXPATHSIZE] of char;
+    end;
+
+end dvdefs.

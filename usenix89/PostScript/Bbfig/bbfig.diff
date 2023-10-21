@@ -1,0 +1,428 @@
+:
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by linc.cis.upenn.edu!trevor on Thu Apr  2 21:32:38 EST 1987
+# Contents:  bbfig/README bbfig/bb.ps bbfig/bbfig bbfig/bbfig.l
+ 
+echo x - bbfig/README
+sed 's/^@//' > "bbfig/README" <<'@//E*O*F bbfig/README//'
+Bbfig is *not* perfect; personally I find a ruler and/or graph paper
+just about as quick in getting bounding boxes. But new users seem to love 
+it, and it is quite a fine example of PostScript hacking.
+
+Some imaging operators are ignored completely, for instance `image'.
+I'd say it was accurate ~90% of the time, with the 10% being clear 
+mistakes.
+
+If anyone makes major improvements or bug fixes to this, please let me
+know.
+
+--Trevor
+trevor@linc.cis.upenn.edu
+@//E*O*F bbfig/README//
+chmod u=rw,g=r,o=r bbfig/README
+ 
+echo x - bbfig/bb.ps
+sed 's/^@//' > "bbfig/bb.ps" <<'@//E*O*F bbfig/bb.ps//'
+%! 
+% bb.ps --
+% 
+% Prints a file, but keeps track of bounding box info, and prints the box at
+% the end (around the figure.)
+% 
+
+50 dict dup /$BoundingBox exch def begin
+
+/xdef {
+	exch def
+} def
+
+/xstore {
+	exch store
+} def
+
+/bb-pt+ {
+	exch
+	4 -1 roll add
+	3 1 roll add
+} def
+
+% 
+% Stubs of old functions.
+% 
+
+/-stroke /stroke load def
+/-fill /fill load def
+/-eofill /eofill load def
+/-image /image load def
+/-show /show load def
+/-awidthshow /awidthshow load def
+/-showpage /showpage load def
+
+% 
+% New Functions.
+% 
+
+/stroke {
+	gsave
+	{
+		flattenpath
+	 	strokepath	% Make sure to take line width into account.
+	} stopped {		% strokepath often hits a limitcheck.
+		grestore	% Restore the original path
+		gsave
+	} if
+	bb-path			% Accumulate it into our box.
+	grestore
+
+	-stroke
+} def
+
+/fill {
+	gsave
+	bb-path
+	grestore
+
+	-fill
+} def
+
+/eofill {
+	gsave
+	bb-path
+	grestore
+
+	-eofill
+} def
+
+% 
+% Text is implemented by reducing everything to an `awidthshow'.
+% 
+
+/show {
+	0 0 0 0 0		% Extra parameters for awidthshow
+	6 -1 roll		% Bring the string back up
+	awidthshow
+} def
+
+/widthshow {
+	0 0			% Extra parameters for awidthshow
+	3 -1 roll		% Bring the string back up.
+	awidthshow
+} def
+
+/ashow {
+	0 0 0 
+	6 3 roll
+	awidthshow
+} def
+
+/awidthshow {
+	5 dict begin
+	gsave
+	currentpoint
+	2 copy /@starty xdef /@startx xdef
+	2 index stringwidth	% Get the natural length of the string
+	bb-pt+			% Add to the start to get the end.
+
+	2 index length		% How many characters?
+
+	dup			% Add the offsets to each character
+	6 index mul
+	exch 5 index mul
+	bb-pt+
+
+	5 index 3 index
+	bb-chcount		% How many padding characters?
+
+	dup			% Add the offsets for each pad.
+	9 index mul
+	exch 8 index mul
+	bb-pt+
+
+	/@endy xdef /@endx xdef
+
+	bb-fontheight		% Get the height and depth of the current font.
+	
+	4 copy
+	@startx @starty bb-pt+ bb-point
+	@startx @starty bb-pt+ bb-point
+	@endx @endy bb-pt+ bb-point
+	@endx @endy bb-pt+ bb-point
+
+	newpath				% $Debug
+	@startx @starty moveto		% $Debug
+	@endx @endy lineto		% $Debug
+	bb-bwstroke			% $Debug
+	
+	grestore
+	end
+
+	-awidthshow
+} def
+
+% 
+% `image':
+% 
+% Assume here that the image lands in the unit square.
+% 
+
+/image {
+	-image
+} def
+
+% 
+% `showpage':
+% 
+% Just draw the box around the figure and print the page, and then initialize
+% the bounding box variables again.
+% 
+
+/bb-string 10 string def
+
+/showpage {
+	initgraphics
+
+	bb-llx bb-lly itransform 	% Convert them into default coords.
+	bb-urx bb-ury itransform
+	/bb-lly xstore /bb-urx xstore
+	/bb-ury xstore /bb-llx xstore
+
+	bb-llx bb-lly moveto		% Make the box
+	bb-llx bb-ury lineto
+	bb-urx bb-ury lineto
+	bb-urx bb-lly lineto
+	closepath
+
+	bb-bwstroke			% Draw the box.
+
+	0 setgray
+	/Courier findfont 10 scalefont setfont
+	bb-llx bb-lly 12 sub moveto
+	bb-llx bb-string cvs -show ( ) -show
+	bb-lly bb-string cvs -show ( ) -show
+	bb-urx bb-string cvs -show ( ) -show
+	bb-ury bb-string cvs -show
+
+	bb-init
+	-showpage
+} def
+
+% 
+% BoundingBox functions:
+% 
+% We accumulate the information about the bounding box into four variables.
+% The data is stored in device coordinates.
+% 
+
+/bb-init {
+	/bb-llx 99999 store
+	/bb-lly 99999 store
+	/bb-urx -99999 store
+	/bb-ury -99999 store
+} def
+
+/bb-llx 0 def
+/bb-lly 0 def
+/bb-urx 0 def
+/bb-ury 0 def
+
+% 
+% x y `bb-point' -
+% 
+% Takes a point in user coordinates and adds it into the bounding box info.
+% 
+
+/bb-point {
+	transform		% Convert to device coords.
+	dup
+	dup bb-lly lt {	
+		/bb-lly xstore
+	} {
+		pop
+	} ifelse
+	dup bb-ury gt {
+		/bb-ury xstore
+	} {
+		pop
+	} ifelse
+
+	dup
+	dup bb-llx lt {
+		/bb-llx xstore
+	} {
+		pop
+	} ifelse
+	dup bb-urx gt {
+		/bb-urx xstore
+	} {
+		pop
+	} ifelse
+} def
+
+% 
+% - `bb-path' -
+% 
+% Incorporates the bounding box of the path into the bounding box info.
+% 
+
+/bb-path {
+	gsave
+	{
+		0 setlinejoin
+		flattenpath
+	} stopped {
+		grestore
+		gsave
+	} if
+	pathbbox
+	bb-point
+	bb-point
+	grestore
+} def
+
+% 
+% A nice black-and white line drawing function.
+% 
+
+/bb-bwstroke {
+	0 setlinewidth			% Thinnest possible lines
+	1 setgray			% White first
+	[5] 0 setdash			% Only half the line
+	gsave -stroke grestore
+	0 setgray			% Then black
+	[5] 5 setdash			% On the other half
+	-stroke
+} def
+
+% 
+% Stuff for text.
+% 
+
+% 
+% char-code string `bb-chcount' occurs
+% 
+% Counts the number of times a character appears in a string.
+% 
+
+/bb-chcount {
+	0 exch
+	{
+		2 index eq {
+			1 add
+		} if
+	} forall
+	exch pop
+} def
+
+% 
+% - `bb-fontheight' heightx heighty depthx depthy
+% 
+% Returns the offsets to the lowest point and highest point in the current
+% font.
+% 
+
+/bb-fontheight {
+	currentfont begin
+	FontBBox
+	exch pop 0 exch
+	FontMatrix transform
+	4 2 roll
+	exch pop 0 exch
+	FontMatrix transform
+	end
+} def
+
+% Start it up.
+
+bb-init
+
+%  end of bb.ps
+@//E*O*F bbfig/bb.ps//
+chmod u=rw,g=r,o=r bbfig/bb.ps
+ 
+echo x - bbfig/bbfig
+sed 's/^@//' > "bbfig/bbfig" <<'@//E*O*F bbfig/bbfig//'
+#! /bin/csh -f
+
+if ($1 == -m) then
+	cat bb.ps /usr/lib/ps/mac.pro $2
+else
+	cat bb.ps $1
+endif
+
+@//E*O*F bbfig/bbfig//
+chmod u=rwx,g=rx,o=rx bbfig/bbfig
+ 
+echo x - bbfig/bbfig.l
+sed 's/^@//' > "bbfig/bbfig.l" <<'@//E*O*F bbfig/bbfig.l//'
+@.TH BBFIG LOCAL
+@.SH NAME
+bbfig \- calculate bounding boxes in PostScript
+@.SH SYNTAX
+@.B bbfig
+[
+@.B \-m
+] file
+@.SH USAGE
+@.I Bbfig
+should be piped into 
+@.I psprint
+or the equivalant.
+@.SH DESCRIPTION
+@.I Bbfig
+prepends code that
+calculates the bounding box of a 
+@.I file,
+and places both
+on standard output. The actual
+calculation is done in the PostScript printer, so the output is
+in the form of a dashed line demarcating the bounding box and
+the numerical value of
+its four coordinates. 
+@.PP
+The 
+@.B \-m
+option indicates the file is from a macintosh, and the mac prolog
+is added (-m should not be given to 
+@.I psprint
+if it is given to bbfig).
+@.PP
+Once the bounding box is given by the printer, a line of the form
+@.nf
+@.sp
+	%%BoundingBox: a b c d
+@.sp
+@.fi
+where `a' ... `d' are the four numbers representing the bounding box,
+should be added to the header of the PostScript file.
+@.SH BUGS
+@.I Bbfig
+is known to be confused by images, and cliping paths. If the box
+around the figure clearly is not the minimal one, a ruler is the
+best bet for calculating the correct box. Remember that the 
+bounding box values are in PostScript points (72 to the inch)
+relative to an origin at the lower left corner of the page, and 
+that (a,b) is the lower left hand corner of the bounding box, and
+(c,d) is the upper right corner.
+@.SH Author
+Ned Batchelder
+@//E*O*F bbfig/bbfig.l//
+chmod u=rw,g=r,o=r bbfig/bbfig.l
+ 
+echo Inspecting for damage in transit...
+temp=/tmp/shar$$; dtemp=/tmp/.shar$$
+trap "rm -f $temp $dtemp; exit" 0 1 2 3 15
+cat > $temp <<\!!!
+      13      77     464 README
+     316     834    4706 bb.ps
+       8      17      95 bbfig
+      51     252    1337 bbfig.l
+     388    1180    6602 total
+!!!
+wc  bbfig/README bbfig/bb.ps bbfig/bbfig bbfig/bbfig.l | sed 's=[^ ]*/==' | diff -b $temp - >$dtemp
+if [ -s $dtemp ]
+then echo "Ouch [diff of wc output]:" ; cat $dtemp
+else echo "No problems found."
+fi
+exit 0

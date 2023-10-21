@@ -1,0 +1,105 @@
+Path: plus5!wucs1!mcdchg!clyde!cbosgd!cwruecmp!hal!ncoast!allbery
+From: jaw@aurora.UUCP (James A. Woods)
+Newsgroups: comp.sources.misc
+Subject: Re: Very small ZCAT program for decompressing *.Z files
+Summary: further useful obfuscation
+Message-ID: <682@aurora.UUCP>
+Date: 23 May 87 07:09:12 GMT
+References: <3655@mirror.TMC.COM> <8705141214.AA19848@mstar.UUCP>
+Sender: allbery@ncoast.UUCP
+Organization: NASA Ames Research Center, Mt. View, Ca.
+Lines: 92
+Approved: allbery@ncoast.UUCP
+
+# "Summer came and went, and I realized that the book was monstrous.
+  [....] I thought of fire, but I feared that the burning of an 
+  infinite book might likewise prove infinite and suffocate the
+  planet with smoke." -- Jorge Luis Borges, "The Book of Sand"
+
+     Some may doubt the efficacy of what Karl Fox suggested.
+Though what I proffered is improved below, a self-decompressing shar
+can pay off in CPU time as well as modem bandwidth.  For example,
+using a 68020-class machine (Sun 3/160), 'shark'ing a 230KB /etc/hosts
+took about 5 seconds to yield a 104KB file.  The inverse (old code)
+required about 7 CPU (user+sys) seconds to compile (cc, no -O) the
+decoders, 11 seconds to do the decoding (atob+zcat), and 11 seconds of shell
+"here" document scanning (two passes).  The resulting 7KB per second
+would likely beat 'uucp' processing time for the data if passed
+by a Telebit modem, about the best that can be done for phones
+(10-14 kbits/sec).  Bandwidth savings were knocked down to 40% by
+the 25% expansion of 'btoa' (for the initiate, a base-85 converter by
+Paul Rutter and Joe Orost, mapping 4->5 chars vs. the meager 3->4 of
+'uuencode').  Bandwidth payoff for text starts at ~10KB, considering
+the 2.5KB overhead.
+
+     Well, I realized how much slop was still there, so I slimmed
+'shark' (or 'sharc'? for 'arc' replacement) by another 250 bytes.
+The code to follow uses 'tar' instead of 'shar' for speed (it's really just
+'tarmail' with decoder source).  'The End' substitutes for 'ZZ'
+for reliability (let's see, 128 exp 7 gives the rarity of a sabotaged
+line, or better than disk CRC).  In addition to some other changes
+(assuming globals start life at 0, tightened loops, shift replacement,
+more quirky #defines, name shortening, etc.), you may dispense with
+the recursive Capt. Beefheart "echo" for even more.  Go back to 'shar' if
+you mail to non-Unix boxes w/o John Gilmore's PD 'tar'.
+
+     -- jaw
+
+-------- 'cut' here for a new 'shark' (do *not* shar -- keep intact) --------
+#!/bin/sh
+echo 'echo "Cleverly he dialed from within." -- D. Van Vliet, "Trout Mask Replica">/dev/null'
+echo "echo decoding ..."
+echo "cat>atob.c<<'ZZ'"
+cat<<'TROUSER PRESS'
+#include <stdio.h>
+#define d define
+#d R register
+#d I if
+#d E else
+#d D {fprintf(stderr,"bad format or Csum to atob\n");exit(1);}
+FILE *T;long X,M,C,w,B;
+d(c)R c;{I(c=='z'){I(B)D E for(c=4;c--;)b(0);}E I(c>='!'&&(c<'!'+85))
+{I(!B){w=c-'!';++B;}E I(B<4){w*=85;w+=c-'!';++B;}E{w=w*85+c-'!';b((int)((w>>24)
+&255));b((int)((w>>16)&255));b((int)((w>>8)&255));b((int)(w&255));w=B=0;}}E D}
+b(c)R c;{X^=c;M+=c;M++;I(C&0x80000000){C*=2;C++;}E{C*=2;}C+=c;putc(c,T);}main
+(g,v)char **v;{R c;R long i;char n[99],Q[99];long A,B,x,s,r;I(g!=1){fprintf
+(stderr,"bad args to %s\n",v[0]);exit(2);}sprintf(n,"/tmp/atob.%x",getpid());
+T=fopen(n,"w+");I(!T)D unlink(n);for(;;){I(!fgets(Q,99,stdin))D I(!strcmp(Q,
+"xbtoa Begin\n"))break;}while((c=getchar())!=EOF){I(c=='\n')continue;E I(c=='x')
+break;E d(c);}I(scanf("btoa End N %ld %lx E %lx S %lx R %lx\n",&A,&B,&x,&s,&r)!=
+5)D I(A!=B||x!=X||s!=M||r!=C)D E{fseek(T,0L,0);for(i=A;i--;)putchar(getc(T));}}
+TROUSER PRESS
+echo "ZZ"
+echo "cc -o atob atob.c"
+echo "cat>zcat.c<<'ZZ'"
+cat<<'BAFFLE RHINOCEROSES'
+#include <stdio.h>
+#define d define
+#d G getchar()
+#d I if
+#d H(n) ((C*)h)[n]
+#d C char
+#d U unsigned long
+#d u unsigned short
+#d R register C*
+#d B(n) (1<<(n))
+#d V(a,b) (a&(B(b)-1))
+#d E {fprintf(stderr,"Bad COMPRESS file format\n");exit(1);}
+#d N 256
+#d L for(w=N;w--;)t[w]=0
+int i,q,b,n,k=16,e=128,j,O,S;u t[69001];long o,v,c,m,M=B(16),f;U h[69001];C 
+D[16];long g(){R p=D;I(j>0||O>=S||f>m){I(f>m)m= ++n==k?M:B(n)-1;I(j>0)m=B(n=9)
+-1,j=0;S=fread(D,1,n,stdin);I(S<=0)return-1;O=0;S=S*8-n+1;}q=O;b=n;p+=q>>3;q&=7;
+c=V(*p++>>q,8-q);q=8-q;b-=q;I(b>=8)c|=(*p++&255)<<q,q+=8,b-=8;c|=V(*p,b)<<q;
+O+=n;return c;}main(){I(G!=31||G!=157)E;k=G;e=k&128;k&=31;M=B(k);I(k>16)E;z();}
+z(){long w;R s;m=B(n=9)-1;L,H(w)=(C)w;f=e?257:N;i=o=g();I(o==-1)return;
+putchar((C)i);s=(C*)&H(B(16));while((w=g())>-1){I(w==N&&e){L;j=1;f=N;I((w=g())
+==-1)break;}v=w;I(w>=f)*s++=i,w=o;while((U)w>=(U)N)*s++=H(w),w=t[w];*s++=i=H(w);
+do putchar(*--s);while(s>&H(B(16)));I((w=f)<M)t[w]=(u)o,H(w)=i,f=w+1;o=v;}}
+BAFFLE RHINOCEROSES
+echo "ZZ"
+echo "cc -o zcat zcat.c"
+echo "(atob|zcat|tar xvf - )<<'The End'"
+tar cf - $* |compress|btoa
+echo "The End"
+echo "rm zcat* atob*"

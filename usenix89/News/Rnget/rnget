@@ -1,0 +1,63 @@
+#!/bin/sh
+#
+# NAME
+#	rnget - get a shar archive from rn output.
+#
+# SYNOPSIS
+#	rnget [ -p pattern ] [ directory ]
+#
+# DESCRIPTION
+#	Rnget changes to the given directory (if given) and then
+#	reads its standard input and searches for the given pattern
+#	(default to "[#:]") at the beginning of a line and passes that
+#	and all subsequent lines to the bourne shell for processing.
+#
+#	The idea is that the input is a shar file contained inside
+#	of a news article, with a scan done before hand for the
+#	beginning of the shar.  For shars that don't begin with '#'
+#	or ':' -p can be used to specify something else.
+#
+#	Note:  If the directory does not exist, it is created.
+
+prog="$0"
+usage="usage: $prog [-p pattern] [directory]"
+pattern="/^[:#]/"
+while [ $# -gt 0 ]; do
+	if [ $1 = -p ]; then
+		shift
+		if [ $# -lt 1 ]; then
+			echo $usage
+			echo 1
+		fi
+		pattern="/^$1/"
+		shift
+	else		# got a directory
+		if [ -f $1 ]; then
+			echo "$prog: $1:  Not a directory!!"
+			exit 2
+		fi
+		if [ ! -d $1 ]; then
+			mkdir $1 > /dev/null 2>&1
+			if [ $? -ne 0 ]; then
+				echo "$prog: $1:  Could not create directory"
+				exit 2
+			fi
+		fi
+		cd $1
+		shift
+	fi
+done
+awk "
+BEGIN	{
+	skip = 1; copy = 2;
+	state = skip;
+}
+state == skip && $pattern	{
+	state = copy;
+}
+state == copy	{
+	print \$0
+}" | /bin/sh
+if [ $? -ne 0 ]; then
+	echo "$prog:  error in writing to shell"
+fi

@@ -1,0 +1,78 @@
+.TH NBATCHER 1 LOCAL
+.SH NAME
+nbatcher  \- new batching system for news
+.SH SYNOPSIS
+.B nbatcher
+.IR "(run out of " cron ".)"
+.SH DESCRIPTION
+.PP
+.I Nbatcher
+is a program designed to send batched USENET data out
+in an orderly and controlled fashion, while providing alternative
+transmission methods.  As such, it is a replacement for
+.I csendbatch
+and the like, which typically require many entries in
+.IR crontab .
+.I Nbatcher
+is intended to be run hourly out of
+.I cron
+as the USENET administrator (NEWSID).
+.PP
+.I Nbatcher
+scans the file
+.I nbatcher.ctl
+in the NEWSLIB directory to determine if work should be spooled
+for a system.  In the control file, lines starting with asterisks
+are ignored; data lines are comprised of five colon\-separated
+fields:
+.RS
+site:hour:bits:queue_size:command
+.RE
+.TP
+The ``site'' field is the USENET neighbor; it is the same as the site in the
+news
+.I sys
+file.
+.TP
+The ``hours'' field is patterned after
+.IR cron's.
+If the hour is ``off,'' no work is spooled for the site.  An hour of
+``*'' matches every hour.  It is also possible to specify specific
+hours, (e.g., 8, 09, or 22), a comma-separated list (e.g., 8,09,22),
+or a twenty\-four range, like 10-\15 for 10am through 3pm and 22\-4,
+for 10pm through 4am.
+.TP
+The ``bits'' field specifies the number of bits to use in compression;
+it should be a number between nine and 16, inclusive, or null.  If
+a number is specified, it is passed on to the
+.I compress
+program via the ``\-b'' flag.
+.TP
+The ``queue_size'' field specifies the maximum number of bytes allowed
+in the UUCP queue for this site.  The default is 100K.
+The UUCP queue size is determined by lookin in the
+.IR /usr/spool/uucp/ site
+directory; if it doesn't exist, the check is bypassed.  If there is
+data in the UUCP queue,
+.I nbatcher
+will only queue up as many USENET transfers as will fit within the limit
+specified by the ``queue_size'' field.
+.TP
+The ``command'' field is used to specific the UUCP command that should
+be used to queue the job; the default is ``uux \- \-r site!rnews'';
+note the absence of the ``\-z'' flag.
+.PP
+To set up a USENET neighbor to be controlled by nbatcher, the news
+.I sys
+entry for the neighbor must be modified to specify the ``F'' flag,
+and the file used to contain the article names must be
+.RI BATCHDIR/sysname ,
+where BATCHDIR is set in the Makefile as distributed.
+.SH "FILES"
+NEWSLIB/nbatcher.log
+.br
+.in +1i
+a logfile of failures, postponements, etc.
+.in -1i
+.SH BUGS
+Parsing of the control file is fairly robust, but not perfect.

@@ -1,0 +1,75 @@
+.th SORTFS VIII 4/2/78
+.sh NAME
+sortfs - Unix file system sorter
+.sh SYNOPSIS
+sortfs [-i] [-t] device
+.sh DESCRIPTION
+Sortfs restructures a Unix file system by performing an in-place
+sort.  The free list and allocated blocks of a Unix file system tends
+to get fragmented as it is used.  Sortfs compacts each file of the
+file system and writes it onto a coniguous chunk of disk.  The
+free list is made contiguous also.  This improves the access time 
+of the files (and that of future files also).
+Blocks are interleaved so that files will occupy
+every third block on the disk.  This is for disks where consecutive
+blocks cannot be read on the same revolution (e.g. the rk disk).
+This can be turned off via the -c option.
+Once the file system is sorted, the n used blocks of the file system
+occupy the first n blocks after the inode list.  The free blocks
+occupy the remainder of the blocks.  Sortfs can be used to change
+the inode space size and/or the file system size while sorting.  The
+-i and -f options provide this.  Changing the inode size is useful 
+if one runs out of inodes.  Changing the file-system size is
+useful to change the amount of swap space on a system disk for
+example.    Sortfs can do all of this because it is already tooled
+up to move blocks and redirect inodes to them.
+.s3
+Sortfs works in 4 phases.  During phase 1, an internal relocation
+table is built which indicates where each block should be moved
+to.  During phase 2, all block pointers in inodes and indirection 
+blocks are updated to point to where the blocks will be after
+phase 3.  During phase 3, all the blocks which need to be moved
+are moved to their destination.  During phase 4, a new free list is
+built.
+The option flags are:
+.s3
+-c	Do not interleave the blocks.  Use this for floppy disks.
+.s3
+-t	Perform phase 1 only and write the relocation table on /tmp/table.
+The file system is not altered.
+.s3
+-i num	Change the inode space size to <num>.  Only increases are allowed.
+.s3
+-f num	Change the file system size to <num>.
+.s3
+Some cautions in using sortfs:  One should back up a disk before sorting
+it, just in case.  The file system should be [id]checked before and
+after sorting it.  The file system should not be mounted or active
+in any way while sorting it.  Thus, active system disks cannot be directly
+sorted since they cannot be unmounted.  Make a copy of it, sort it, then
+copy it back.  Once phase 2 of sortfs is entered it should not
+be stopped until it runs to completion or the file system will be
+destroyed.  For this reason, sortfs catches interrupts and hang-ups.
+The whole process takes about 8 min. for an rk disk, so leave it run.
+.sh FILES
+/tmp/table for the -t option.
+.sh DIAGNOSTICS
+Bad block encountered - bad block num. encountered while reading inodes.
+.s3
+Can't open file for writing/reading - User needs more permission bits.
+.s3
+New isize < current isize. - Decreases in inodes space size via -i option
+is illegal.
+.s3
+New i or f size leaves too few blocks for files. - Not enough room on
+disk for blocks with new i or f size.
+.s3
+Too many blocks on device. - Recompile sortfs with larger indirection table.
+.sh "SEE ALSO"
+icheck(VIII), dcheck(VIII), fs(V)
+.sh AUTHOR
+Brad Blasing, University of Minnesota.
+.sh BUGS
+Sortfs expects a correct file system as input.  The interleave
+option is rk disk specific.  Only file systems of up to ~30,000
+blocks can be sorted.

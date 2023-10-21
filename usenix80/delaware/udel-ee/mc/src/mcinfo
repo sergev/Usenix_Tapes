@@ -1,0 +1,121 @@
+The Motorola c compiler is now available for testing.  It is a full
+implementation of version 6 C with the following exceptions:
+	1.  No floating point.
+	2.  No register variables.
+	3.  The '?' and ':' operators have not been implemented, because
+	    no one uses them.  If a need arises, they will be added.
+
+The compiler is invoked similar to the normal 'cc' compiler:
+
+  mc [-b] [-c] [-O] [-S] [-l] [-m[4][8][12][16][20][24][28][32]] file...
+
+All options listed are the same as 'cc' excepting '-l', '-b', and '-m?'.
+The '-l' option will cause the assembler to produce a listing file
+'ca6800.lst'.  The '-m?' option (the question is replaced by one of the
+numbers 4,8,12,16,20,24,28, or 32) will set up the run-time startoff
+to expect a 6800 with 4k, 8k, etc. of memory.  The default is 4k.
+The -b option toggles the output format produced by the cross assembler
+from BG to S9 format.
+
+The major difference, and nuisance, is the lack of a true linking loader.
+The loader is the program which binds in all of the library routines that
+you call from your c program, such as 'printf', 'getchar', etc.  It normally
+does its work automatically.  However, with the mc compiler, you must
+tell it explicitly which subroutines to bind in.  Also, the assembler sources
+are what must be bound.  A limited library exists in '/lib/mc', and if you
+come up with any good ones, let me know, and I will add them.
+
+A standard I/O package consisting of 'printf', 'putchar', and 'getchar' has
+been placed in '/lib/mc/io.s'.  It should take care of most basic needs.
+
+The optimizer is a good one, and generally reduces code by 5-15%.  It will
+also speed up execution times, sometimes significantly.  It will
+take a bit more time to compile, however.  Otherwise, it is the same as the
+cc optimizer.
+
+The code produced is in the output file 'ca6800.bin', and can be loaded
+just like standard assembler output.  It does tend to be much larger, so
+the loading will be significantly longer that with the assembler programs
+you are used to.
+
+The code produced starts at location 0, and, if the program exits, terminates
+with a software interrupt at location 6.
+
+Examples:
+	Compile a test program which uses printf:
+		mc myfile.c /lib/mc/io.s
+
+	Compile for a 12k machine the blackjack program which uses printf,
+	getchar, putchar, and atoi, and produce a listing.
+		mc -l -m12 bj.c /lib/mc/io.s /lib/mc/atoi.s
+
+	Compile a program, optimize it, but don't assemble it.
+	(The output will be left in myfile.s)
+		mc -S -O myfile.c
+
+There are a few tricks that might be helpful.  First, most programs will
+not compile verbatim from the pdp11 to the 6800, due to operating system
+dependencies.  In particular, none of the Unix system calls are yet supported
+on the 6800, and the variables (argc,argv) are not set up for the 6800.
+Once you have all of the operating system dependencies out of the program,
+it should compile for both the 6800 and the pdp11.
+
+The calling sequence for c functions is simple, and you can link in
+assembly programs to the c routines for things like I/O, or interrupt
+handlers.  However, this should not really be necessary.  You can see
+the calling sequence by compiling a short program which calls a function,
+and looking at the assembler source.
+
+			ERRORS!!!
+There are no known errors at this time.  But, this is a new compiler,
+and as such likely has a few errors.  If you suspect you have found a compiler
+bug, do the following:
+
+	1.  Compile the program using 'cc' and see if it works on the 11.
+	    Only if it does have you found a compiler error.  Otherwise,
+	    debug your program.
+
+	2.  Try and isolate the line in the program that is in error.  The
+	    compiler is good enough that you can sprinkle printf's through
+	    the program, and get reliable data.
+
+	3.  Compile the program with the -l option to produce a listing.
+
+	4.  Edit ca6800.lst, and look for "line x" where x is the line
+	    number of the suspected line.
+
+	5.  Look at the code following the comment you found, and see if you
+	    can spot the code that is in error.  If you do, try to patch
+	    the object code in the 6800 and make it run.
+
+If, and only if, you have successfully completed all of the above, you have
+found a bona fide compiler error.  Show the c source, the part of the 
+ca6800.lst file, and any output you got to me, and I will fix the compiler.
+Also, I would appreciate it if anybody that gets a program up and running,
+please send me a note telling me so, and telling me where the source is
+so I can try it.
+
+		New Programs
+There are 2 new programs which might be interesting.  The first is 'M6800'.
+It is a modified version of attach, that takes no arguments, and will
+automatically connect you to a 6800 with 16k memory.  The connection is
+at 9600 baud, so loads go very fast.  Read the attach documentation for
+more info.  To reset the micro, type break.  To load the micro, type
+<break>
+q[ESC]<ca6800.bin[cr]
+
+The attach will respond with a '<' when complete.
+
+There also is a program called 'casize' which will tell you how big a
+'.obj' or a '.bin' format file is.  It assumes that the code starts at 0, and
+is contiguous.  All it does is read the loading address of the last line
+in the file.
+
+					Dave Sincoskie
+					Department of Electrical Engineering
+					University of Delaware
+					Newark, De. 19711
+					(302) 738 8005
+
+Since Dave Sincoskie has graduated, the person to contact (for 1980, anyway)
+is Rich Hammond, same address & telephone number.

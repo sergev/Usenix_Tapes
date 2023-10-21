@@ -1,0 +1,962 @@
+Path: plus5!wucs1!cuae2!ihnp4!ptsfa!lll-lcc!seismo!mcvax!cernvax!hslrswi!robert
+From: robert@hslrswi.UUCP (Robert Ward)
+Newsgroups: net.sources
+Subject: Updates to SPS to Sun Release 2.0 to 3.0, Ultrix1.2 and 4.3BSD
+Keywords: sps SPS
+Message-ID: <424@hslrswi.UUCP>
+Date: 12 Feb 87 08:48:31 GMT
+Organization: Hasler AG, Berne, Switzerland
+Lines: 936
+
+
+Mail all bugs, comments, etc. to me (Robert) at ...
+
+
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    J. Robert Ward,						   ___________
+    Hasler AG, Belpstrasse 23, CH-3000 Berne 14, Switzerland	   |    _    |
+								   |  _| |_  |
+Tel.:	    +41 31 632319					   | |_   _| |
+X.400:	    robert@hslrswi.hasler				   |   |_|   |
+Bitnet:	    robert%hslrswi.UUCP@cernvax.BITNET	   		   |_________|
+Uucp:	    ... {seismo,ukc, ... }!mcvax!cernvax!hslrswi!robert
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+Hello Net,
+
+
+I have made a few fixes to the source of SPS since it was last posted
+to mod.sources (Vol.3. Issues 55 and 56).  The advantages of the new
+version include :
+
+
+1. The new SPS has been tested and is believed to work on Vaxen running
+4.2BSD, 4.3BSD and Ultrix1.2 as well as Suns running Release 2.0, 2.2
+and 3.0. (I don't know about later Sun releases but I know no reason
+why it should not work on these).
+
+2. SPS now checks that the info file `/etc/spsinfo' is newer than both
+`/vmunix' and `/etc/passwd'. It gives an appropriate warning message if
+such is not the case.
+
+3. Devices specific to the VAX are now "#ifdef'ed" out on the Sun version.
+
+4. SPS now handles negative uid's properly on those systems that still
+have them.
+
+5. The Makefiles have been updated to install SPS so that it runs setgid
+to `kmem', in accordance with other programs that read from `/dev/kmem'.
+
+6. Additional code has been put in so that SPS now distinguishes when a
+process is hung in the connect(2) or accept(2) system calls.  It now
+prints "connct" or "accept" respectively, as opposed to just printing
+"socket" as the old version did.
+
+7. Additional code has been put in so that SPS running on 4.3BSD
+systems now distinguishes more accurately when a process is hung
+waiting to read from an empty socket connection or from an empty pipe
+(which is, of course, masquerading as a socket). Running the old 4.2BSD
+code does not distinguish correctly between the two cases on 4.3BSD.
+
+The changes come in two parts: a new file called `Makefile.4.3' and
+a set of patches to apply to the old sources. Cut out `Makefile.4.3'
+from this article and then invoke patch to apply the context diffs
+to the old sources. Finally, remake SPS as before.
+
+Here, then, is the file `Makefile.4.3' ...
+
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by jss on Mon Jun 29 11:33:25 CDT 1987
+# Contents:  Makefile.4.3 patch
+ 
+echo x - Makefile.4.3
+sed 's/^@//' > "Makefile.4.3" <<'@//E*O*F Makefile.4.3//'
+
+# Makefile for SPS (Vax 4.3BSD Version)
+
+PROG    =       sps
+OBJS    =       filecount.o findtty.o flagdecode.o flagsetup.o \
+		getcmd.o getupage.o globals1.o globals2.o hashuid.o \
+		initialise.o initsymbols.o inittty.o main.o mktree.o \
+		needed.o openfiles.o percentmem.o prcmd.o prcpu.o \
+		prheader.o printall.o printproc.o prsummary.o readstatus.o \
+		selectproc.o selecttty.o termwidth.o ttystatus.o waitingfor.o
+INCS    =       sps.h
+CC      =       cc
+CFLAGS  =       -DBSD42 -DBSD43 -I/sys
+LIBS    =       -ltermlib
+DIRINSTALL =	/bin
+
+all:		    $(PROG)
+@.c.o:
+		$(CC) $(CFLAGS) -c -O -R $<
+	
+globals1.o waitingfor.o:
+		$(CC) $(CFLAGS) -c -O $<
+
+$(OBJS):		$(INCS)
+
+$(PROG):		$(OBJS)
+		$(CC) -o $@ $(OBJS) $(LIBS)
+
+install:		$(PROG)
+		strip $(PROG)
+		mv $(PROG) $(DIRINSTALL)/$(PROG)
+		/etc/chown root $(DIRINSTALL)/$(PROG)
+		chgrp kmem $(DIRINSTALL)/$(PROG)
+		chmod 2755 $(DIRINSTALL)/$(PROG)
+
+lint:
+		lint -x -b $(CFLAGS) *.c
+clean:
+		rm -f $(OBJS) $(PROG)
+
+@//E*O*F Makefile.4.3//
+chmod u=r,g=r,o=r Makefile.4.3
+ 
+echo x - patch
+sed 's/^@//' > "patch" <<'@//E*O*F patch//'
+
+diff -b -c sps/Makefile.4.2 sps.old/Makefile.4.2
+*** sps/Makefile.4.2	Fri Dec  5 09:22:35 1986
+--- sps.old/Makefile.4.2	Wed Dec 17 13:57:20 1986
+***************
+*** 1,4 ****
+! # Makefile for SPS (Vax 4.2BSD and Ultrix1.2 UNIX Version)
+  
+  PROG    =       sps
+  OBJS    =       filecount.o findtty.o flagdecode.o flagsetup.o \
+--- 1,4 ----
+! # Makefile for SPS (4.2BSD UNIX Version)
+  
+  PROG    =       sps
+  OBJS    =       filecount.o findtty.o flagdecode.o flagsetup.o \
+***************
+*** 11,17 ****
+  CC      =       cc
+  CFLAGS  =       -DBSD42 -I/sys
+  LIBS    =       -ltermlib
+- DIRINSTALL =	/bin
+  
+  all:		    $(PROG)
+  .c.o:
+--- 11,16 ----
+***************
+*** 27,36 ****
+  
+  install:		$(PROG)
+  		strip $(PROG)
+! 		mv $(PROG) $(DIRINSTALL)/$(PROG)
+! 		/etc/chown root $(DIRINSTALL)/$(PROG)
+! 		chgrp kmem $(DIRINSTALL)/$(PROG)
+! 		chmod 2755 $(DIRINSTALL)/$(PROG)
+  
+  lint:
+  		lint -x -b $(CFLAGS) *.c
+--- 26,33 ----
+  
+  install:		$(PROG)
+  		strip $(PROG)
+! 		mv $(PROG) /bin/$(PROG)
+! 		/etc/chown root /bin/$(PROG)
+  
+  lint:
+  		lint -x -b $(CFLAGS) *.c
+Only in sps: Makefile.4.3
+diff -b -c sps/Makefile.sun sps.old/Makefile.sun
+*** sps/Makefile.sun	Tue Nov 25 11:34:08 1986
+--- sps.old/Makefile.sun	Wed Dec 17 13:57:25 1986
+***************
+*** 1,4 ****
+! # Makefile for SPS (Sun-2 and Sun-3, 4.2BSD UNIX Version)
+  
+  PROG    =       sps
+  OBJS    =       filecount.o findtty.o flagdecode.o flagsetup.o \
+--- 1,4 ----
+! # Makefile for SPS (Sun 4.2BSD UNIX Version)
+  
+  PROG    =       sps
+  OBJS    =       filecount.o findtty.o flagdecode.o flagsetup.o \
+***************
+*** 11,17 ****
+  CC      =       cc
+  CFLAGS  =       -DSUN -DBSD42 -I/sys
+  LIBS    =       -ltermlib
+- DIRINSTALL	= /bin
+  
+  all:		    $(PROG)
+  .c.o:
+--- 11,16 ----
+***************
+*** 27,36 ****
+  
+  install:		$(PROG)
+  		strip $(PROG)
+! 		mv $(PROG) $(DIRINSTALL)/$(PROG)
+! 		/etc/chown root $(DIRINSTALL)/$(PROG)
+! 		chgrp kmem $(DIRINSTALL)/$(PROG)
+! 		chmod 2755 $(DIRINSTALL)/$(PROG)
+  
+  lint:
+  		lint -x -b $(CFLAGS) *.c
+--- 26,33 ----
+  
+  install:		$(PROG)
+  		strip $(PROG)
+! 		mv $(PROG) /bin/$(PROG)
+! 		/etc/chown root /bin/$(PROG)
+  
+  lint:
+  		lint -x -b $(CFLAGS) *.c
+diff -b -c sps/findtty.c sps.old/findtty.c
+*** sps/findtty.c	Tue Nov 25 11:34:10 1986
+--- sps.old/findtty.c	Wed Dec 17 13:57:30 1986
+***************
+*** 1,5 ****
+  # include       "sps.h"
+- # include       <h/ioctl.h>
+  # include       <h/tty.h>
+  
+  /* FINDTTY - Attempts to determine to which tty a process is connected */
+--- 1,4 ----
+diff -b -c sps/flagsetup.c sps.old/flagsetup.c
+*** sps/flagsetup.c	Tue Nov 25 11:34:12 1986
+--- sps.old/flagsetup.c	Wed Dec 17 13:57:49 1986
+***************
+*** 1,6 ****
+  # include       "sps.h"
+  # include       "flags.h"
+- # include       <h/ioctl.h>
+  # include       <h/tty.h>
+  
+  /*
+--- 1,5 ----
+diff -b -c sps/globals2.c sps.old/globals2.c
+*** sps/globals2.c	Tue Nov 25 11:34:15 1986
+--- sps.old/globals2.c	Wed Dec 17 13:58:26 1986
+***************
+*** 40,67 ****
+  	{ "_usrpt",     0,  (caddr_t*)&Info.i_usrpt,    (char*)0        },
+  	{ "_cdevsw",    0,  (caddr_t*)&Info.i_cdevsw,   (char*)0        },
+  # ifdef BSD42
+- # ifndef SUN
+  	{ "_quota",     1,  (caddr_t*)&Info.i_quota0,   (char*)0        },
+  	{ "_nquota",    1,  (caddr_t*)&Info.i_nquota,   (char*)0        },
+- # endif SUN
+  	{ "_dmmin",     1,  (caddr_t*)&Info.i_dmmin,    (char*)0        },
+  	{ "_dmmax",     1,  (caddr_t*)&Info.i_dmmax,    (char*)0        },
+  	{ "_mbutl",     0,  (caddr_t*)&Info.i_mbutl,    (char*)0        },
+  # else
+  	{ "_hz",        1,  (caddr_t*)&Info.i_hz,       (char*)0        },
+! # endif BSD42
+  # ifdef CHAOS
+  	{ "_Chconntab", 0,  &Info.i_Chconntab,          (char*)0        },
+! # endif CHAOS
+  	/* Kernel addresses associated with process wait states.
+  	   It is not important if some of these addresses are unresolved
+  	   at initialisation. */
+- # ifndef SUN
+  	{ "_fltab",     0,  &Info.i_waitstate[0],       "floppy"        },
+  	{ "_tu",        0,  &Info.i_waitstate[1],       "tu58"          },
+- 	{ "_lp_softc",  0,  &Info.i_waitstate[3],       "printr"        },
+- # endif SUN
+  	{ "_bfreelist", 0,  &Info.i_waitstate[2],       "buffer"        },
+  	{ "_lbolt",     0,  &Info.i_waitstate[4],       "lbolt"         },
+  	{ "_runin",     0,  &Info.i_waitstate[5],       "runin"         },
+  	{ "_runout",    0,  &Info.i_waitstate[6],       "runout"        },
+--- 40,63 ----
+  	{ "_usrpt",     0,  (caddr_t*)&Info.i_usrpt,    (char*)0        },
+  	{ "_cdevsw",    0,  (caddr_t*)&Info.i_cdevsw,   (char*)0        },
+  # ifdef BSD42
+  	{ "_quota",     1,  (caddr_t*)&Info.i_quota0,   (char*)0        },
+  	{ "_nquota",    1,  (caddr_t*)&Info.i_nquota,   (char*)0        },
+  	{ "_dmmin",     1,  (caddr_t*)&Info.i_dmmin,    (char*)0        },
+  	{ "_dmmax",     1,  (caddr_t*)&Info.i_dmmax,    (char*)0        },
+  	{ "_mbutl",     0,  (caddr_t*)&Info.i_mbutl,    (char*)0        },
+  # else
+  	{ "_hz",        1,  (caddr_t*)&Info.i_hz,       (char*)0        },
+! # endif
+  # ifdef CHAOS
+  	{ "_Chconntab", 0,  &Info.i_Chconntab,          (char*)0        },
+! # endif
+  	/* Kernel addresses associated with process wait states.
+  	   It is not important if some of these addresses are unresolved
+  	   at initialisation. */
+  	{ "_fltab",     0,  &Info.i_waitstate[0],       "floppy"        },
+  	{ "_tu",        0,  &Info.i_waitstate[1],       "tu58"          },
+  	{ "_bfreelist", 0,  &Info.i_waitstate[2],       "buffer"        },
++ 	{ "_lp_softc",  0,  &Info.i_waitstate[3],       "printr"        },
+  	{ "_lbolt",     0,  &Info.i_waitstate[4],       "lbolt"         },
+  	{ "_runin",     0,  &Info.i_waitstate[5],       "runin"         },
+  	{ "_runout",    0,  &Info.i_waitstate[6],       "runout"        },
+***************
+*** 70,106 ****
+  	{ "_freemem",   0,  &Info.i_waitstate[9],       "freemm"        },
+  	{ "_kernelmap", 0,  &Info.i_waitstate[10],      "kermap"        },
+  	{ "_cwaiting",  0,  &Info.i_waitstate[11],      "cwait"         },
+  # ifdef BSD42
+! 	{ "_selwait",   0,  &Info.i_waitstate[12],      "select"        },
+! # endif BSD42
+  # ifdef CHAOS
+! 	{ "_Chrfclist", 0,  &Info.i_waitstate[13],      "chrfc"         },
+  # endif
+! # ifndef SUN
+! 	{ "_rhpbuf",    0,  &Info.i_waitstate[14],      "rhpbuf"        },
+! 	{ "_rhtbuf",    0,  &Info.i_waitstate[15],      "rhtbuf"        },
+! 	{ "_ridcbuf",   0,  &Info.i_waitstate[16],      "ridcbf"        },
+! 	{ "_rikbuf",    0,  &Info.i_waitstate[17],      "rikbuf"        },
+! 	{ "_rmtbuf",    0,  &Info.i_waitstate[18],      "rmtbuf"        },
+! 	{ "_rrkbuf",    0,  &Info.i_waitstate[19],      "rrkbuf"        },
+! 	{ "_rrlbuf",    0,  &Info.i_waitstate[20],      "rrlbuf"        },
+! 	{ "_rrxbuf",    0,  &Info.i_waitstate[21],      "rrxbuf"        },
+! 	{ "_rswbuf",    0,  &Info.i_waitstate[22],      "rswbuf"        },
+! 	{ "_rtmbuf",    0,  &Info.i_waitstate[23],      "rtmbuf"        },
+! 	{ "_rtsbuf",    0,  &Info.i_waitstate[24],      "rtsbuf"        },
+! 	{ "_rudbuf",    0,  &Info.i_waitstate[25],      "rudbuf"        },
+! 	{ "_rupbuf",    0,  &Info.i_waitstate[26],      "rupbuf"        },
+! 	{ "_rutbuf",    0,  &Info.i_waitstate[27],      "rutbuf"        },
+! 	{ "_rvabuf",    0,  &Info.i_waitstate[28],      "rvabuf"        },
+! 	{ "_rvpbuf",    0,  &Info.i_waitstate[29],      "rvpbuf"        },
+! 	{ "_chtbuf",    0,  &Info.i_waitstate[30],      "chtbuf"        },
+! 	{ "_cmtbuf",    0,  &Info.i_waitstate[31],      "cmtbuf"        },
+! 	{ "_ctmbuf",    0,  &Info.i_waitstate[32],      "ctmbuf"        },
+! 	{ "_ctsbuf",    0,  &Info.i_waitstate[33],      "ctsbuf"        },
+! 	{ "_cutbuf",    0,  &Info.i_waitstate[34],      "cutbuf"        },
+! # else
+! 	{ "_async_bufhead", 0,  &Info.i_waitstate[14],  "async"		},
+! 	{ "_desktops",	0,  &Info.i_waitstate[15],	"dtops"		},
+! # endif SUN
+  	{ (char*)0,     0,  (caddr_t*)0,                (char*)0        }
+  } ;
+--- 66,100 ----
+  	{ "_freemem",   0,  &Info.i_waitstate[9],       "freemm"        },
+  	{ "_kernelmap", 0,  &Info.i_waitstate[10],      "kermap"        },
+  	{ "_cwaiting",  0,  &Info.i_waitstate[11],      "cwait"         },
++ 	{ "_rhpbuf",    0,  &Info.i_waitstate[12],      "rhpbuf"        },
++ 	{ "_rhtbuf",    0,  &Info.i_waitstate[13],      "rhtbuf"        },
++ 	{ "_ridcbuf",   0,  &Info.i_waitstate[14],      "ridcbf"        },
++ 	{ "_rikbuf",    0,  &Info.i_waitstate[15],      "rikbuf"        },
++ 	{ "_rmtbuf",    0,  &Info.i_waitstate[16],      "rmtbuf"        },
++ 	{ "_rrkbuf",    0,  &Info.i_waitstate[17],      "rrkbuf"        },
++ 	{ "_rrlbuf",    0,  &Info.i_waitstate[18],      "rrlbuf"        },
++ 	{ "_rrxbuf",    0,  &Info.i_waitstate[19],      "rrxbuf"        },
++ 	{ "_rswbuf",    0,  &Info.i_waitstate[20],      "rswbuf"        },
++ 	{ "_rtmbuf",    0,  &Info.i_waitstate[21],      "rtmbuf"        },
++ 	{ "_rtsbuf",    0,  &Info.i_waitstate[22],      "rtsbuf"        },
++ 	{ "_rudbuf",    0,  &Info.i_waitstate[23],      "rudbuf"        },
++ 	{ "_rupbuf",    0,  &Info.i_waitstate[24],      "rupbuf"        },
++ 	{ "_rutbuf",    0,  &Info.i_waitstate[25],      "rutbuf"        },
++ 	{ "_rvabuf",    0,  &Info.i_waitstate[26],      "rvabuf"        },
++ 	{ "_rvpbuf",    0,  &Info.i_waitstate[27],      "rvpbuf"        },
++ 	{ "_chtbuf",    0,  &Info.i_waitstate[28],      "chtbuf"        },
++ 	{ "_cmtbuf",    0,  &Info.i_waitstate[29],      "cmtbuf"        },
++ 	{ "_ctmbuf",    0,  &Info.i_waitstate[30],      "ctmbuf"        },
++ 	{ "_ctsbuf",    0,  &Info.i_waitstate[31],      "ctsbuf"        },
++ 	{ "_cutbuf",    0,  &Info.i_waitstate[32],      "cutbuf"        },
+  # ifdef BSD42
+! 	{ "_selwait",   0,  &Info.i_waitstate[33],      "select"        },
+! # endif
+  # ifdef CHAOS
+! 	{ "_Chrfclist", 0,  &Info.i_waitstate[34],      "chrfc"         },
+  # endif
+! # ifdef SUN
+! 	{ "_async_bufhead", 0,  &Info.i_waitstate[35],  "async"		},
+! # endif
+  	{ (char*)0,     0,  (caddr_t*)0,                (char*)0        }
+  } ;
+diff -b -c sps/hashuid.c sps.old/hashuid.c
+*** sps/hashuid.c	Tue Nov 25 11:34:16 1986
+--- sps.old/hashuid.c	Wed Dec 17 13:58:30 1986
+***************
+*** 1,8 ****
+  # include       "sps.h"
+  
+  /* The hashing functions themselves ... */
+! # define        HASHFN1( a )            (((unsigned)(a)*91 + 17) % MAXUSERID)
+! # define        HASHFN2( a )            (((unsigned)(a) + 47) % MAXUSERID)
+  
+  /*
+  ** HASHUID - Returns a pointer to a slot in the hash table that corresponds
+--- 1,8 ----
+  # include       "sps.h"
+  
+  /* The hashing functions themselves ... */
+! # define        HASHFN1( a )            (((a)*91 + 17) % MAXUSERID)
+! # define        HASHFN2( a )            (((a) + 47) % MAXUSERID)
+  
+  /*
+  ** HASHUID - Returns a pointer to a slot in the hash table that corresponds
+diff -b -c sps/initsymbols.c sps.old/initsymbols.c
+*** sps/initsymbols.c	Fri Dec  5 09:47:23 1986
+--- sps.old/initsymbols.c	Wed Dec 17 13:58:38 1986
+***************
+*** 48,54 ****
+  		sysperror() ;
+  	}
+  	/* Get kernel addresses */
+! 	(void)nlist( filesymbol, np0 ) ;              
+  	if ( np0[0].n_value == -1 )
+  	{
+  		fprintf( stderr, "sps - Can't read symbol file %s", filesymbol);
+--- 48,54 ----
+  		sysperror() ;
+  	}
+  	/* Get kernel addresses */
+! 	nlist( filesymbol, np0 ) ;              
+  	if ( np0[0].n_value == -1 )
+  	{
+  		fprintf( stderr, "sps - Can't read symbol file %s", filesymbol);
+diff -b -c sps/inittty.c sps.old/inittty.c
+*** sps/inittty.c	Tue Nov 25 11:34:17 1986
+--- sps.old/inittty.c	Wed Dec 17 13:58:48 1986
+***************
+*** 1,6 ****
+  # include       "sps.h"
+  # include       <h/conf.h>
+- # include       <h/ioctl.h>
+  # include       <h/tty.h>
+  # include       <sys/stat.h>
+  # include       <stdio.h>
+--- 1,5 ----
+diff -b -c sps/main.c sps.old/main.c
+*** sps/main.c	Tue Nov 25 11:34:18 1986
+--- sps.old/main.c	Wed Dec 17 13:59:04 1986
+***************
+*** 1,14 ****
+  # include       "sps.h"
+  # include       "flags.h"
+  # include       <h/text.h>
+- # include       <sys/stat.h>
+  # include       <stdio.h>
+  
+- 
+  /* SPS - Show Process Status */
+! /* J. R. Ward - Hasler AG Bern, CH - 24 May 1985 */
+! /*				     26 Nov 1986 */
+! 
+  main ( argc,argv )
+  
+  int                             argc ;
+--- 1,10 ----
+  # include       "sps.h"
+  # include       "flags.h"
+  # include       <h/text.h>
+  # include       <stdio.h>
+  
+  /* SPS - Show Process Status */
+! /* J. R. Ward - Hasler AG Bern - 24 May 1985 */
+  main ( argc,argv )
+  
+  int                             argc ;
+***************
+*** 19,26 ****
+  	register struct process *process ;
+  	register struct text    *text ;
+  	int                     flinfo ;
+- 	char			*fileinfo, *filesymbol ;
+- 	struct stat		sinfo, ssymbol, spasswd ;
+  	extern struct flags     Flg ;
+  	extern struct info      Info ;
+  	extern int              Flmem ;
+--- 15,20 ----
+***************
+*** 29,36 ****
+  	char                    *getcore() ;
+  	struct process          *needed(), *mktree() ;
+  
+! 	/* Renice as fast as possible for root only (Suggested by Jeff Mogul,
+! 	   gregorio!mogul) */
+  	if ( !getuid() )
+  		(void)nice( -40 ) ;
+  	/* Decode the flag arguments */
+--- 23,29 ----
+  	char                    *getcore() ;
+  	struct process          *needed(), *mktree() ;
+  
+! 	/* Renice as fast as possible for root (Suggested by Gregorio!mogul) */
+  	if ( !getuid() )
+  		(void)nice( -40 ) ;
+  	/* Decode the flag arguments */
+***************
+*** 56,82 ****
+  		initialise() ;          
+  		exit( 0 ) ;
+  	}
+- 	/* Check that the information file is newer than the symbol and
+- 	   password files, suggested by gregorio!mogul */
+- 	fileinfo = Flg.flg_j ? Flg.flg_j : FILE_INFO ;
+- 	filesymbol = Flg.flg_s ? Flg.flg_s : FILE_SYMBOL ;
+- 	flinfo = openfile( fileinfo ) ;
+- 	(void)fstat( flinfo, &sinfo ) ;
+- 	if ( !stat( filesymbol, &ssymbol ) &&
+- 		sinfo.st_mtime < ssymbol.st_mtime )
+- 		fprintf( stderr,
+- 	       "sps - WARNING: Info file `%s' is older than symbol file `%s'\n",
+- 			fileinfo, filesymbol ) ;
+- 	if ( !stat( FILE_PASSWD, &spasswd ) &&
+- 		sinfo.st_mtime < spasswd.st_mtime )
+- 		fprintf( stderr,
+- 	       "sps - WARNING: Info file `%s' is older than passwd file `%s'\n",
+- 			fileinfo, FILE_PASSWD ) ;
+  	/* Read the information file */
+  	if ( read( flinfo, (char*)&Info, sizeof( struct info ) )
+  	!= sizeof( struct info ) )
+  	{
+! 		fprintf( stderr, "sps - Can't read info file `%s'", fileinfo ) ;
+  		sysperror() ;
+  	}
+  	(void)close( flinfo ) ;
+--- 49,61 ----
+  		initialise() ;          
+  		exit( 0 ) ;
+  	}
+  	/* Read the information file */
++ 	flinfo = openfile( Flg.flg_j ? Flg.flg_j : FILE_INFO ) ;
+  	if ( read( flinfo, (char*)&Info, sizeof( struct info ) )
+  	!= sizeof( struct info ) )
+  	{
+! 		fprintf( stderr, "sps - Can't read info file %s",
+! 			Flg.flg_j ? Flg.flg_j : FILE_INFO ) ;
+  		sysperror() ;
+  	}
+  	(void)close( flinfo ) ;
+diff -b -c sps/printproc.c sps.old/printproc.c
+*** sps/printproc.c	Fri Dec  5 09:48:22 1986
+--- sps.old/printproc.c	Wed Dec 17 13:59:53 1986
+***************
+*** 32,38 ****
+  		p->pr_p.p_flag & SDETACH ? '_' :
+  # endif
+  		p->pr_p.p_pgrp == p->pr_tty->l_pgrp ? '.' : ' ' ) ;
+! 	hp = hashuid( (int)p->pr_p.p_uid ) ;
+  	if ( !md  )                             
+  	{       /* If a top-level process, list the user name */
+  		if ( hp )
+--- 32,38 ----
+  		p->pr_p.p_flag & SDETACH ? '_' :
+  # endif
+  		p->pr_p.p_pgrp == p->pr_tty->l_pgrp ? '.' : ' ' ) ;
+! 	hp = hashuid( p->pr_p.p_uid ) ;
+  	if ( !md  )                             
+  	{       /* If a top-level process, list the user name */
+  		if ( hp )
+diff -b -c sps/selectproc.c sps.old/selectproc.c
+*** sps/selectproc.c	Fri Dec  5 09:02:28 1986
+--- sps.old/selectproc.c	Wed Dec 17 14:00:04 1986
+***************
+*** 1,8 ****
+  # include       "sps.h"
+  # include       "flags.h"
+- # ifdef USELOGINUID
+- # include	<pwd.h>
+- # endif USELOGINUID
+  
+  /*
+  ** SELECTPROC - Given a process structure, this procedure decides whether
+--- 1,5 ----
+***************
+*** 17,28 ****
+  {
+  	register union flaglist *fp ;
+  	register struct process *pp ;
+- #ifdef USELOGINUID
+- 	char			*username ;
+- 	struct passwd		*pw ;
+- 	char			*getlogin() ;
+- 	struct passwd		*getpwnam() ;
+- #endif USELOGINUID
+  	extern struct flags     Flg ;
+  
+  	/* Flg.flg_AZ is an internal flag set if one of flags `A' to `Z'
+--- 14,19 ----
+***************
+*** 29,43 ****
+  	   was specified. If this is not set, a process is listed only
+  	   if it or one of its ancestors belongs to the invoking user. */
+  	if ( !Flg.flg_AZ )
+- 	{
+- #ifdef USELOGINUID
+- 		thisuid = (username = getlogin())
+- 			&& (pw = getpwnam( username )) ? pw->pw_uid : getuid() ;
+- #endif USELOGINUID
+  		for ( pp = p ; pp > &process[1] ; pp = pp->pr_pptr )
+  			if ( thisuid == pp->pr_p.p_uid )
+  				return ( 1 ) ;
+- 	}
+  	if ( Flg.flg_A )
+  		return ( 1 ) ;
+  	if ( Flg.flg_P )
+--- 20,28 ----
+diff -b -c sps/sps.h sps.old/sps.h
+*** sps/sps.h	Tue Nov 25 11:34:28 1986
+--- sps.old/sps.h	Wed Dec 17 14:00:12 1986
+***************
+*** 9,25 ****
+  */
+  # define	MAXUSERID	100
+  /* Maximum # ttys to be considered ... */
+! # define	MAXTTYS		65
+  /* Maximum user name length ... */
+  # define	UNAMELEN	8
+  /* Maximum process-id not to be considered busy ... */
+  # define	MSPID		2
+  /* # of wait states defined in the `struct info' ... */
+! # ifdef SUN
+! # define	NWAITSTATE	16
+! # else
+! # define	NWAITSTATE	35
+! # endif
+  
+  /* Convert clicks to kbytes ... */
+  # ifdef SUN
+--- 9,21 ----
+  */
+  # define        MAXUSERID       100
+  /* Maximum # ttys to be considered ... */
+! # define        MAXTTYS         60
+  /* Maximum user name length ... */
+  # define        UNAMELEN        8
+  /* Maximum process-id not to be considered busy ... */
+  # define        MSPID           2
+  /* # of wait states defined in the `struct info' ... */
+! # define        NWAITSTATE      36
+  
+  /* Convert clicks to kbytes ... */
+  # ifdef SUN
+***************
+*** 35,41 ****
+  # define	FILE_DEV	"/dev"		/* Directory of tty entries */
+  # define	FILE_SYMBOL	"/vmunix"	/* Symbol file for nlist() */
+  # define	FILE_INFO	"/etc/spsinfo"	/* Sps information file */
+- # define	FILE_PASSWD	"/etc/passwd"	/* User database */
+  
+  /* Structure to hold necessary information concerning a tty ... */
+  struct ttyline
+--- 31,36 ----
+***************
+*** 49,55 ****
+  /* Structure holding a single hash table entry ... */
+  struct hashtab
+  {
+! 	short			h_uid ;		/* Uid of user entry */
+  	char			h_uname[ UNAMELEN ] ; /* Corresponding name */
+  } ;
+  
+--- 44,50 ----
+  /* Structure holding a single hash table entry ... */
+  struct hashtab
+  {
+! 	unsigned short          h_uid ;         /* Uid of user entry */
+  	char                    h_uname[ UNAMELEN ] ; /* Corresponding name */
+  } ;
+  
+diff -b -c sps/termwidth.c sps.old/termwidth.c
+*** sps/termwidth.c	Thu Dec 11 10:42:33 1986
+--- sps.old/termwidth.c	Wed Dec 17 14:00:17 1986
+***************
+*** 1,5 ****
+- #include	<sys/ioctl.h>
+- 
+  /*
+  ** TERMWIDTH - Sets the external variable `Termwidth' to the # of columns
+  ** on the terminal.
+--- 1,3 ----
+***************
+*** 8,28 ****
+  {
+  	register char           *termtype ;
+  	register int            twidth ;
+- #ifdef TIOCGWINSZ
+- 	struct winsize		w ;
+- #endif
+  	char                    buf[ 1025 ] ;
+  	extern unsigned         Termwidth ;
+  	char                    *getenv() ;
+  
+- #ifdef TIOCGWINSZ
+- 	w.ws_col = 0 ;
+- 	if ( !ioctl( 0, TIOCGWINSZ, &w ) && w.ws_col )
+- 	{
+- 		Termwidth = w.ws_col ;
+- 		return ;
+- 	}
+- #endif
+  	Termwidth = 80 ;
+  	if ( !(termtype = getenv( "TERM" )) )
+  		return ;
+--- 6,15 ----
+diff -b -c sps/ttystatus.c sps.old/ttystatus.c
+*** sps/ttystatus.c	Tue Nov 25 11:34:28 1986
+--- sps.old/ttystatus.c	Wed Dec 17 14:00:20 1986
+***************
+*** 1,7 ****
+  # include       "sps.h"
+  # include       "flags.h"
+  # include       <stdio.h>
+- # include       <h/ioctl.h>
+  # include       <h/tty.h>
+  # ifdef CHAOS
+  # include       <chunix/chsys.h>
+--- 1,6 ----
+diff -b -c sps/waitingfor.c sps.old/waitingfor.c
+*** sps/waitingfor.c	Fri Dec  5 11:23:05 1986
+--- sps.old/waitingfor.c	Wed Dec 17 14:00:31 1986
+***************
+*** 1,4 ****
+--- 1,5 ----
+  # include       "sps.h"
++ # include       <h/tty.h>
+  # include       <h/text.h>
+  # ifdef SUN
+  # include       <h/vnode.h>
+***************
+*** 5,22 ****
+  # include       <ufs/inode.h>
+  # else
+  # include       <h/inode.h>
+! # endif SUN
+! # include       <h/ioctl.h>
+! # include       <h/tty.h>
+  # include       <h/buf.h>
+  # ifdef BSD42
+- # ifndef SUN
+  # include       <h/quota.h>
+- # endif SUN
+  # include       <h/mbuf.h>
+  # include       <h/socket.h>
+  # include       <h/socketvar.h>
+! # endif BSD42
+  
+  /* 1 if `w' is in the address range defined by `a1' and `a2' ... */
+  # define        INRANGE( w, a1, a2 ) \
+--- 6,19 ----
+  # include       <ufs/inode.h>
+  # else
+  # include       <h/inode.h>
+! # endif
+  # include       <h/buf.h>
+  # ifdef BSD42
+  # include       <h/quota.h>
+  # include       <h/mbuf.h>
+  # include       <h/socket.h>
+  # include       <h/socketvar.h>
+! # endif
+  
+  /* 1 if `w' is in the address range defined by `a1' and `a2' ... */
+  # define        INRANGE( w, a1, a2 ) \
+***************
+*** 35,41 ****
+  # ifdef BSD42
+  	struct socket           sc ;
+  # endif
+- 	int			rc ;
+  	static char             wbuf[ 8 ] ;
+  	extern struct info      Info ;
+  	extern struct symbol    Symbollist[] ;
+--- 32,37 ----
+***************
+*** 59,75 ****
+  	if ( INRANGE( w, Info.i_text0, &Info.i_text0[ Info.i_ntext ] ) )
+  		return ( "swtext" ) ;
+  # ifdef BSD42
+- # ifndef SUN
+  	/* Waiting for an event associated with the quota system ? */
+  	if ( INRANGE( w, Info.i_quota0, &Info.i_quota0[ Info.i_nquota ] ) )
+  		return ( "quota" ) ;
+! # endif SUN
+! # endif BSD42
+  	/* Waiting for tty I/O ? If so, find which tty it is */
+  	for ( lp = Info.i_ttyline ; lp->l_name[0] ; lp++ )
+  		if ( INRANGE( w, &lp->l_addr[0], &lp->l_addr[1] ) )
+  		{
+! 			switch ( (int)w - (int)lp->l_addr )
+  			{
+  				case (int)&((struct tty*)0)->t_rawq :
+  					/* Read from a tty or slave pty */
+--- 55,69 ----
+  	if ( INRANGE( w, Info.i_text0, &Info.i_text0[ Info.i_ntext ] ) )
+  		return ( "swtext" ) ;
+  # ifdef BSD42
+  	/* Waiting for an event associated with the quota system ? */
+  	if ( INRANGE( w, Info.i_quota0, &Info.i_quota0[ Info.i_nquota ] ) )
+  		return ( "quota" ) ;
+! # endif
+  	/* Waiting for tty I/O ? If so, find which tty it is */
+  	for ( lp = Info.i_ttyline ; lp->l_name[0] ; lp++ )
+  		if ( INRANGE( w, &lp->l_addr[0], &lp->l_addr[1] ) )
+  		{
+! 			switch ( w - (int)lp->l_addr )
+  			{
+  				case (int)&((struct tty*)0)->t_rawq :
+  					/* Read from a tty or slave pty */
+***************
+*** 111,117 ****
+  			case (int)&((struct inode*)0)->i_shlockc :
+  				/* Shared lock on this inode */
+  				return ( "shlock" ) ;
+! # endif SUN
+  # else
+  			case 1 :
+  				return ( "wpipe" ) ;
+--- 105,111 ----
+  			case (int)&((struct inode*)0)->i_shlockc :
+  				/* Shared lock on this inode */
+  				return ( "shlock" ) ;
+! # endif
+  # else
+  			case 1 :
+  				return ( "wpipe" ) ;
+***************
+*** 119,125 ****
+  				return ( "rpipe" ) ;
+  			case (int)&((struct inode*)0)->i_un.i_group.g_datq :
+  				return ( "rmux" ) ;
+! # endif BSD42
+  			default :
+  				/* Inode probably locked */
+  				return ( "inode" ) ;
+--- 113,119 ----
+  				return ( "rpipe" ) ;
+  			case (int)&((struct inode*)0)->i_un.i_group.g_datq :
+  				return ( "rmux" ) ;
+! # endif
+  			default :
+  				/* Inode probably locked */
+  				return ( "inode" ) ;
+***************
+*** 132,146 ****
+  			- (int)&((struct mbuf*)0)->m_dat[0] )
+  		{
+  			case (int)&((struct socket*)0)->so_timeo :
+! 				/* Socket timeout event - Guess why */
+! 				rc = getsocket( (struct socket*)(w
+! 				    - (int)&((struct socket*)0)->so_timeo),
+! 						&sc ) ;
+! 				return ( rc && (sc.so_state & SS_ISCONNECTING)
+! 					? "connct" 
+! 					: rc && ((sc.so_options & SO_ACCEPTCONN)
+! 					  && !sc.so_qlen)
+! 					? "accept" : "socket" ) ;
+  			case (int)&((struct socket*)0)->so_rcv.sb_cc :
+  				/* Read from an empty socket. Here we actually
+  				   attempt to determine whether the socket
+--- 126,133 ----
+  			- (int)&((struct mbuf*)0)->m_dat[0] )
+  		{
+  			case (int)&((struct socket*)0)->so_timeo :
+! 				/* Socket timeout event */
+! 				return ( "socket" ) ;
+  			case (int)&((struct socket*)0)->so_rcv.sb_cc :
+  				/* Read from an empty socket. Here we actually
+  				   attempt to determine whether the socket
+***************
+*** 151,166 ****
+  				    - (int)&((struct socket*)0)->so_rcv.sb_cc),
+  						&sc )
+  					&& sc.so_type == SOCK_STREAM
+- #ifdef BSD43
+- 					&& ((sc.so_state
+- 					    & (SS_ISCONNECTED|SS_CANTSENDMORE))
+- 					    == (SS_ISCONNECTED|SS_CANTSENDMORE))
+- #else
+  					&& !sc.so_rcv.sb_hiwat
+  					&& !sc.so_rcv.sb_mbmax
+  					&& (sc.so_state
+  					    & (SS_ISCONNECTED|SS_CANTRCVMORE))
+- #endif BSD43
+  					? "rpipe" : "rsockt" ) ;
+  			case (int)&((struct socket*)0)->so_snd.sb_cc :
+  				/* Write to a full socket. Again, we try
+--- 138,147 ----
+***************
+*** 169,191 ****
+  				return ( getsocket( (struct socket*)(w
+  				    - (int)&((struct socket*)0)->so_snd.sb_cc),
+  						&sc )
+- #ifdef BSD43
+  					&& sc.so_type == SOCK_STREAM
+- 					&& ((sc.so_state
+- 					    & (SS_ISCONNECTED|SS_CANTRCVMORE))
+- 					    == (SS_ISCONNECTED|SS_CANTRCVMORE))
+- #else
+  					&& sc.so_rcv.sb_hiwat == 2048
+  					&& sc.so_rcv.sb_mbmax == 4096
+  					&& (sc.so_state
+  					    & (SS_ISCONNECTED|SS_CANTSENDMORE))
+- #endif BSD43
+  					? "wpipe" : "wsockt" ) ;
+  			default :
+  				/* Other mbuf event */
+  				return ( "mbuf" ) ;
+  		}
+! # endif SUN
+  	/* Look in the symbol table for known wait addresses. */
+  	for ( s = Symbollist ; s->s_kname ; s++ )
+  		if ( s->s_wait && w == *s->s_info )
+--- 150,166 ----
+  				return ( getsocket( (struct socket*)(w
+  				    - (int)&((struct socket*)0)->so_snd.sb_cc),
+  						&sc )
+  					&& sc.so_type == SOCK_STREAM
+  					&& sc.so_rcv.sb_hiwat == 2048
+  					&& sc.so_rcv.sb_mbmax == 4096
+  					&& (sc.so_state
+  					    & (SS_ISCONNECTED|SS_CANTSENDMORE))
+  					? "wpipe" : "wsockt" ) ;
+  			default :
+  				/* Other mbuf event */
+  				return ( "mbuf" ) ;
+  		}
+! # endif
+  	/* Look in the symbol table for known wait addresses. */
+  	for ( s = Symbollist ; s->s_kname ; s++ )
+  		if ( s->s_wait && w == *s->s_info )
+***************
+*** 196,202 ****
+  	(void)sprintf( wbuf, "x%05x", w ) ;
+  # else
+  	(void)sprintf( wbuf, "x%05x", w - 0x80000000 ) ;
+! # endif SUN
+  	return ( wbuf ) ;
+  }
+  
+--- 171,177 ----
+  	(void)sprintf( wbuf, "x%05x", w ) ;
+  # else
+  	(void)sprintf( wbuf, "x%05x", w - 0x80000000 ) ;
+! # endif
+  	return ( wbuf ) ;
+  }
+  
+***************
+*** 217,220 ****
+  	return ( read( Flkmem, (char*)s, sizeof( struct socket ) )
+  		== sizeof( struct socket ) ) ;
+  }
+! # endif BSD42
+--- 192,195 ----
+  	return ( read( Flkmem, (char*)s, sizeof( struct socket ) )
+  		== sizeof( struct socket ) ) ;
+  }
+! # endif
+@//E*O*F patch//
+chmod u=r,g=r,o=r patch
+ 
+echo Inspecting for damage in transit...
+temp=/tmp/shar$$; dtemp=/tmp/.shar$$
+trap "rm -f $temp $dtemp; exit" 0 1 2 3 15
+cat > $temp <<\!!!
+     40    115    968 Makefile.4.3
+    823   3743  26834 patch
+    863   3858  27802 total
+!!!
+wc  Makefile.4.3 patch | sed 's=[^ ]*/==' | diff -b $temp - >$dtemp
+if [ -s $dtemp ]
+then echo "Ouch [diff of wc output]:" ; cat $dtemp
+else echo "No problems found."
+fi
+exit 0

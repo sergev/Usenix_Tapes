@@ -1,0 +1,101 @@
+.TH CDECL 1
+.SH NAME
+cdecl \- Compose C declarations
+.SH SYNOPSIS
+.B cdecl
+.SH DESCRIPTION
+.I Cdecl
+is a program for encoding and decoding C type-declarations.
+It reads standard input for statements in the language described below.
+The results are written on standard output.
+.PP
+.I Cdecl's
+scope is intentionally small.
+It doesn't help you figure out storage classes or initializations.
+.SH "COMMAND LANGUAGE"
+There are four statements in the language.
+The "declare" statement composes a C type-declaration
+from a verbose description.
+The "cast" statement composes a C type-cast
+as might appear in an expression.
+The "explain" statement decodes a C type-declaration, producing a
+verbose description.
+The "help" statement describes the others.
+.PP
+The following grammar describes the language.
+In the grammar, words in "<>" are non-terminals,
+bare lower-case words are terminals that stand for themselves.
+Bare upper-case words are other lexical tokens:
+NOTHING means the empty string;
+NAME means a C identifier;
+NUMBER means a string of decimal digits; and
+NL means the new-line character.
+.LP
+.nf
+<program>    ::= NOTHING
+               | <program> <stat> NL
+<stat>       ::= NOTHING
+               | declare NAME as <decl>
+               | cast NAME into <decl>
+               | explain <cdecl>
+               | help
+<decl>       ::= array of <decl>
+               | array NUMBER of <decl>
+               | function returning <decl>
+               | function ( NAME ) returning <decl>
+               | pointer to <decl>
+               | <type>
+<cdecl>      ::= <cdecl1>
+               | * <cdecl>
+<cdecl1>     ::= <cdecl1> ( )
+               | <cdecl1> [ ]
+               | <cdecl1> [ NUMBER ]
+               | ( <cdecl> )
+               | NAME
+<type>       ::= <typename> | <modlist>
+               | <modlist> <typename>
+               | struct NAME | union NAME | enum NAME
+<typename>   ::= int | char | double | float
+<modlist>    ::= <modifier> | <modlist> <modifier>
+<modifier>   ::= short | long | unsigned
+.fi
+.SH EXAMPLES
+To declare an array of pointers to functions like malloc(3), do
+.Ex
+declare fptab as array of pointer to function returning pointer to char
+.Ee
+The result of this command is
+.Ex
+char *(*fptab[])()
+.Ee
+When you see this declaration in someone else's code, you
+can make sense out of it by doing
+.Ex
+explain char *(*fptab[])()
+.Ee
+The proper declaration for signal(2) cannot be described in
+.IR cdecl 's
+language (it can't be described in C either).
+An adequate declaration for most purposes is given by
+.Ex
+declare signal as function returning pointer to function returning int
+.Ee
+The function declaration that results has two sets of empty parentheses.
+The author of such a function might wonder where the parameters go.
+.Ex
+declare signal as function (args) returning pointer to function returning int
+.Ee
+provides the solution:
+.Ex
+int (*signal(args))()
+.Ee
+.SH DIAGNOSTICS
+The declare statement tries to point out constructions
+that are not supported in C.
+Also, certain non-portable constructs are flagged.
+.PP
+Syntax errors cause the parser to play dead until a newline is read.
+.SH "SEE ALSO"
+Section 8.4 of the C Reference Manual.
+.SH BUGS
+The pseudo-English syntax is excessively verbose.

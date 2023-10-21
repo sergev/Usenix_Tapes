@@ -1,0 +1,399 @@
+!<arch>
+base.m4         483183564   217   10    100644  2953      `
+##################################################################
+##################################################################
+#####
+#####		SENDMAIL CONFIGURATION FILE  UK-1.1
+#####
+#####   Copyright Jim Crammond, Heriot-Watt University. Apr. 1985.
+#####
+#####	This configuration file maybe be freely distributed,
+#####	provided no profit is gained by doing so.
+#####
+##################################################################
+##################################################################
+
+##################################################################
+`###'	HOST configuration file
+##################################################################
+
+# domain name
+Dj`'DOMAIN
+
+# uucp hostname
+ifdef(`UUCPNAME',DU`'UUCPNAME)
+
+############################################################
+#
+#	General configuration information
+#
+############################################################
+
+include(version.m4)
+
+##########################
+###   Special macros   ###
+##########################
+
+# my name
+DnMAILER-DAEMON
+# UNIX header format
+DlFrom $g $d remote from $U
+# delimiter (operator) characters (note '~' has been added)
+Do.:%@!^=/[]~
+# format of a total name
+Dq$?x$x $.<$g>
+# SMTP login message
+ifdef(`MULTIHOST',
+`De$w.$j Sendmail $v/$V ready at $b',`De$j Sendmail $v/$V ready at $b')
+
+###################
+###   Options   ###
+###################
+
+# location of alias file
+OA/usr/lib/aliases
+# default delivery mode (deliver in background)
+Odbackground
+# (don't) connect to "expensive" mailers
+#Oc
+# temporary file mode
+OF0644
+# default GID
+Og1
+# location of help file
+OH/usr/lib/sendmail.hf
+# log level
+OL9
+# default messages to old style
+Oo
+# queue directory
+OQ/usr/spool/mqueue
+# read timeout -- violates protocols
+Or2h
+# status file
+OS/usr/lib/sendmail.st
+# queue up everything before starting transmission
+# Os
+# default timeout interval
+OT3d
+# time zone names (V6 only)
+# OtGMT,BST
+# default UID
+Ou1
+# wizard's password
+OWz3GvK.dPUxieQ
+
+###############################
+###   Message precedences   ###
+###############################
+
+Pfirst-class=0
+Pspecial-delivery=100
+Pjunk=-100
+
+#########################
+###   Trusted users   ###
+#########################
+
+Troot
+Tdaemon
+Tuucp
+Tjim
+
+#############################
+###   Format of headers   ###
+#############################
+
+H?F?From: $q
+H?D?Date: $a
+H?F?Resent-From: $q
+H?D?Resent-Date: $a
+HSubject:
+ifdef(`MULTIHOST',
+`H?R?Received: $?sfrom $s by $w.$j; $b$.',`H?R?Received: $?sfrom $s by $j; $b$.')
+H?V?Via: $?s$s; $b$.
+
+
+##########################
+###    The Rulesets    ###
+##########################
+include(rules.m4)
+include(rules1.m4)
+include(SITE.dom)
+include(HOST.chn)
+
+#########################
+###    The Mailers    ###
+#########################
+include(localm.m4)
+ifdef(`ETHER',`include(etherm.m4)')
+ifdef(`UUCPNAME',`include(luucpm.m4)')
+ifdef(`UUCPNAME',`include(uucpm.m4)')
+ifdef(`JANET',`include(hhcpm.m4)')
+ifdef(`BITNET',`include(bitnetm.m4)')
+
+rules.m4        484580248   217   10    100644  3178      `
+###############################################################################
+###############################################################################
+#####
+#####	@(#)rules.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+#####	The rulesets
+#####
+###############################################################################
+###############################################################################
+
+###############################################
+#  Ruleset 0  --  Select mailer to be used    #
+###############################################
+S0
+
+# local domain - redo with local part of address
+R$+@$j			$>3$1
+ifdef(`MULTIHOST',`R$+@$w.$j		$>3$1')
+
+# local mail
+R$-			$#local$:$1		local mail - maybe aliased
+R~$-			$#binmail$:$1		local mail - no aliasing
+
+#
+# convert domain address into "<address>host.network" triple
+#
+R$+@$+.$=T		$:$>9$1@$2.$3		routing and address conversion
+
+# select mailer
+ifdef(`ETHER',`
+R<$+>$-.ether		$#ether$@$2$:$1		local ethernet mail
+')
+ifdef(`UUCPNAME',`
+R<~$+>$+.luucp		<\\~$1>$2.luucp		band-aid for uuxqt
+R<~$+>$+.uucp		<\\~$1>$2.uucp		band-aid for uuxqt
+R<$+>$-.luucp		$#luucp$@$2$:$1		local uucp mail
+R<$+>$-.uucp		$#uucp$@$2$:$1		external uucp mail
+')
+ifdef(`JANET',`
+R<$+>$+.janet		$#hhcp$@$2$:$1		janet mail
+')
+ifdef(`BITNET',`
+R<$+>$-.bitnet		$#bitnet$@$2$:$1	bitnet mail
+R<$+>$+.barpa		$#barpa$@$2$:$1		arpa mail via bitnet
+R<$+>$+.buucp		$#buucp$@$2$:$1		uucp mail via bitnet
+')
+
+# anything else with an '@' in is an error
+R$+@$+			$#error$:Domain Unknown
+
+# anything else - e.g. filenames, pipes etc goes to local mailer
+R$+			$#local$:$1		local
+
+
+###############################################
+#  Ruleset 1  --  Sender Field Pre-rewriting  #
+###############################################
+S1
+
+
+##################################################
+#  Ruleset 2  --  Recipient Field Pre-rewriting  #
+##################################################
+S2
+
+
+##########################################
+#  Ruleset 3  --  Name Canonicalisation  #
+##########################################
+S3
+
+#  handle special cases
+R$-			$@$1			return "user"
+R~$-			$@~$1			return "~ user"
+R<>			$@@			turn null into magic token
+
+#  basic textual canonicalisation
+R$*<$*>$*		$2			basic RFC 822 parsing
+R$+ at $+		$1@$2			" at " -> "@" for RFC 822
+R$+%$+			$1@$2			convert '%'s to '@'s
+R$+@$+@$+		$1%$2@$3		then reduce to only one '@'
+
+#  Address conversions. See rules1.m4 for the gory details
+R@$+:$+			$:$>10@$1:$2		RFC822 to Percent form
+R$+!$+			$:$>12$1!$2		uucp to Percent form
+
+ifdef(`JANET',`
+R$+@$+.$+		$:$>8$1@$2.$3		NRS ordering to 822 ordering
+')
+
+`#'  Domain name expansion. See SITE`'.dom for the details
+R$+@$+			$:$>5$1@$2		do domain name aliases
+R$+@$+			$:$>6$1@$2		expand incomplete domain names
+
+
+###############################################
+#  Ruleset 4  --  Final Output Post-rewriting #
+###############################################
+
+#  header rewriting is done in the per-mailer rulesets.
+
+S4
+R@			$@			handle <> error addr
+R$+@$+			$@$1@$2			already ok
+
+#  this ensures that $u has at least one '@' in (if percent style)
+R$+%$+			$1@$2			convert '%'s to '@'s
+R$+@$+@$+		$1%$2@$3		then reduce to only one '@'
+rules1.m4       484852372   217   10    100644  3357      `
+###############################################################################
+###############################################################################
+#####
+#####	@(#)rules1.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+#####	The rulesets
+#####
+###############################################################################
+###############################################################################
+
+
+#########################################################
+#  Ruleset 10  --  RFC source routing -> Percent style  #
+#########################################################
+
+#
+#  convert a routed address in RFC822 form to Percent form
+#  e.g. @ucl-cs.arpa,@kcl-cs.uucp:jim@hwcs.uucp  ->
+#					jim%hwcs.uucp%kcl-cs.uucp@ucl-cs.arpa
+#
+S10
+
+R$+,$+			$1:$2			@a,@b,@c:u%d -> @a:@b:@c:u%d
+R$*@$*			$1%$2			@a:@b:@c:u@d -> %a:%b:%c:u%d
+
+R%$+:$+			$:$2@$1			%a:%b:%c:u%d -> %b:%c:u%d@a
+R%$+:$+@$+		$2@$1@$3		%b:%c:u%d@a  -> u%d@c@b@a
+R$+@$+@$+		$1%$2@$3		u%d@c@b@a    -> u%d%c%b@a
+
+###############################################################
+#  Ruleset 11  --  Percent style source routing -> RFC style  #
+###############################################################
+
+#
+#  convert a routed address in the Percent form to RFC822 form
+#  e.g.	jim%hwcs.uucp%kcl-cs.uucp@ucl-cs.arpa  ->
+#				<@ucl-cs.arpa,@kcl-cs.uucp:jim@hwcs.uucp>
+#
+S11
+
+R$+@$+			$1%$2			u%d%c%b@a    -> u%d%c%b%a
+R$+%$+%$+		$:@$3:$1@$2		u%d%c%b%a    -> @c%b%a:u@d
+R$+%$+:$+		@$2:$1:$3		@c%b%a:u%d   -> @a:@b:@c:u@d
+R$+:$+:$+		$1,$2:$3		@a:@b:@c:u@d -> @a,@b,@c:u@d
+R@$+			$@<@$1>			@a,@b,@c:u@d -> <@a,@b,@c:u@d>
+
+################################################################
+#  Ruleset 12  --  uucp style source routing -> Percent style  #
+################################################################
+
+#
+#  convert an address in uucp form to Percent form
+#  e.g. kcl-cs.uucp!hwcs.uucp!jim -> jim%hwcs.uucp@kcl-cs.uucp
+#
+#  also converts mixed addresses, giving '@' and '%' priority over '!'
+#  e.g. hwcs!jim%kcl-cs.uucp@ucl-cs.arpa -> jim%hwcs%kcl-cs.uucp@ucl-cs.arpa
+#
+S12
+
+# handle mixed addresses (with '!'s, '@'s and maybe '%'s in)
+R$+!$+%$+		$1!$2@$3		c!d!u%b@a -> c!d!u@b@a
+R$+!$+@$+		$2@$1@$3		c!d!u@b@a -> u@d@c@b@a
+
+# handle pure uucp addresses
+R$+!$+			$:$2@$1			a!b!c!d!u -> b!c!d!u@a
+R$+!$+@$+		$2@$1@$3		b!c!d!u@a -> u@d@c@b@a
+
+R$+@$+@$+		$1%$2@$3		u@d@c@b@a -> u%d%c%b@a
+
+################################################################
+#  Ruleset 13  --  Percent style to uucp style source routing  #
+################################################################
+
+#
+#  convert a Percent style address to uucp (domain1!domain2!user) form
+#  e.g. jim%hwcs.uucp@kcl-cs.uucp -> kcl-cs.uucp!hwcs.uucp!jim
+#
+S13
+
+R$+%$+			$1@$2			u%d%c%b@a -> u@d@c@b@a
+R$+@$+			$:$2!$1			u@d@c@b@a -> d@c@b@a!u
+R$+@$+!$+		$2!$1!$3		d@c@b@a!u -> a!b!c!d!u
+
+ifdef(`JANET',`
+######################################################
+#  Ruleset 14  --  NRS <-> RFC822 domain conversion  #
+######################################################
+
+#
+# swap the order of the sub-domains around.
+# e.g. steve@uk.ac.ucl-cs.44d => steve@44d.ucl-cs.ac.uk
+#
+# this assumes that no colons will appear in the rhs of the domain address
+#
+S14
+
+R$*@$+.$+		$1@$2:$3		u@a.b.c.d -> u@a:b:c:d
+R$*@$-:$+		$:$1@$3.$2		u@a:b:c:d -> u@b:c:d.a
+R$*@$-:$+.$+		$1@$3.$2.$4		u@b:c:d.a -> u@d.c.b.a
+')
+
+version.m4      484578324   217   10    100644  1466      `
+#
+#	@(#)version.m4	UK-1.1 sendmail configuration		22/4/85
+#
+
+DVUK-1.1
+
+#
+#	UK-1.1	22/4/85		jim
+#	COMMENTS:
+#	Changed janet rules in ruleset 3 to cope properly with domain expansion.
+#	Changed output of ruleset 9 (channel ruleset) so that ruleset 0
+#	can parse multiple-token hostnames.  Support files for janet added.
+#	Renamed janet mailer to "hhcp". Added 'n' mailer flag to prog mailer.
+#	Added ruleset 8 to detect and convert NRS style domains to 822 style.
+#
+#	UK-1.0	26/3/85		jim
+#	COMMENTS:
+#	Some rearranging. Removed ruleset 8 (path optimisation) as it
+#	optimised munged addresses away completely! 
+#	Ruleset 4 ensures an '@' in Percent style address.
+#	Uucp ruleset rewritten to get as close to the uucp transmission
+#	standard as sendmail allows.
+#
+#	HW-5.1	1/3/85		jim
+#	COMMENTS:
+#	Fixed bug with mailing to filenames. Other cleanup for
+#	distribution version.
+#
+#	HW-5.0	26/2/85		jim
+#	COMMENTS:
+#	major restructuring: rewrote ruleset 3 which now converts
+#	all addresses to one style. Added bitnet mailer and ether mailer
+#	Rewrote all the mailer specs. Various other cleanups.
+#
+#
+#	HW-4.3	10/1/85		jim
+#	COMMENTS:
+#	Cope with rfc822 style routing and renumber some rulesets
+#
+#	HW-4.2	4/1/85		jim
+#	COMMENTS:
+#	Put in janet mailer definitions and rules
+#
+#	HW-4.1	17/12/84	jim
+#	COMMENTS:
+#	Some modifications and cleanup for distribution
+#
+#	HW-4.0	5/12/84		jim
+#	COMMENTS:
+#	This is a complete rewrite based on some ideas borrowed from
+#	mmdf.
+#

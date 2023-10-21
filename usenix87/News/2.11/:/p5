@@ -1,0 +1,1709 @@
+From: rick@seismo.CSS.GOV (Rick Adams)
+Newsgroups: news.software.b
+Subject: patch #5 for 2.11 news src
+Message-ID: <43143@beno.seismo.CSS.GOV>
+Date: 10 Mar 87 20:58:51 GMT
+Sender: rick@seismo.CSS.GOV
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 1698
+
+Description:
+	This is patch #5 for news 2.11 source. It addresses the following
+	problems:
+
+	The locking seems to work completely now. Various obscure
+	interactions have all been fixed.
+	Mail sent to moderators no longer contains the suggested news header.
+	If HIDDENNET is defined, you can now use your local hostname instead
+	of the HIDDENNET name in the sys file.
+	The senduuname control message has been removed. It wasn't used
+	anymore and many people felt it was a security hole.
+	ihave/sendme now works with multicasting.
+	expire -R will just rebuild the dbm history files without actually
+	expiring anything.
+	If LIBDIR/localdomain is present, it is used instead of MYDOMAIN.
+	"unbatch" has been moved into rnews to avoid execing a separate process.
+	Processing batches of news is much faster (but still not fast). This
+	is done by recognizing that the parent process IS rnews (since
+	the unbatcher was moved into it), so it only need fork and not exec.
+
+Fix:
+	cd to the src directory and apply the following patch
+
+Index: patchlevel.h
+Prereq: 4
+*** .d/patchlevel.h	Tue Feb 24 17:55:57 1987
+--- patchlevel.h	Tue Mar 10 15:06:47 1987
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	4
+  
+! #define NEWS_VERSION   "B 2.11 2/22/87"
+--- 1,3 ----
+! #define	PATCHLEVEL	5
+  
+! #define NEWS_VERSION   "B 2.11 3/10/87"
+
+Index: inews.c
+Prereq: 2.74
+*** .d/inews.c	Tue Feb 24 17:55:56 1987
+--- inews.c	Tue Mar 10 15:06:14 1987
+***************
+*** 17,27 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.74	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+  
+  #ifdef BSD4_2
+  # include <sys/dir.h>
+  # include <sys/file.h>
+--- 17,31 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.76	3/10/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+  
++ # ifdef LOCKF
++ # include <unistd.h>
++ # endif /* LOCKF */
++ 
+  #ifdef BSD4_2
+  # include <sys/dir.h>
+  # include <sys/file.h>
+***************
+*** 30,38 ****
+  # ifdef USG
+  # include <fcntl.h>
+  # endif /* USG */
+- # ifdef LOCKF
+- # include <unistd.h>
+- # endif /* LOCKF */
+  #endif /* !BSD4_2 */
+  /* local defines for inews */
+  
+--- 34,39 ----
+***************
+*** 86,91 ****
+--- 87,93 ----
+  };
+  
+  FILE *mailhdr();
++ extern char *mydomain();
+  extern int errno;
+  
+  struct timeb Now;
+***************
+*** 126,138 ****
+  	if (!ptr)
+  		ptr = *argv - 1;
+  	actfp = xfopen(ACTIVE, "r+");
+- #ifdef BSD4_2
+- 	if (flock(fileno(actfp), LOCK_SH|LOCK_NB) < 0 && errno == EWOULDBLOCK)
+- #else	/* !BSD4_2 */
+  #ifdef	LOCKF
+  	if (lockf(fileno(actfp), F_TLOCK, 0) < 0 &&
+  		(errno == EAGAIN || errno == EACCES))
+  #else	/* !LOCKF */
+  	sprintf(bfr, "%s.lock", ACTIVE);
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+  #endif /* V7 */
+--- 128,140 ----
+  	if (!ptr)
+  		ptr = *argv - 1;
+  	actfp = xfopen(ACTIVE, "r+");
+  #ifdef	LOCKF
+  	if (lockf(fileno(actfp), F_TLOCK, 0) < 0 &&
+  		(errno == EAGAIN || errno == EACCES))
+  #else	/* !LOCKF */
++ #ifdef BSD4_2
++ 	if (flock(fileno(actfp), LOCK_SH|LOCK_NB) < 0 && errno == EWOULDBLOCK)
++ #else	/* !BSD4_2 */
+  	sprintf(bfr, "%s.lock", ACTIVE);
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+  #endif /* V7 */
+***************
+*** 148,162 ****
+  
+  #endif /* SPOOLNEWS */
+  	}
+! #ifdef BSD4_2
+! 	flock(fileno(actfp), LOCK_UN);
+! #else	/* !BSD4_2 */
+  #ifdef	LOCKF
+! 	lockf(fileno(actfp), F_ULOCK, 0);
+  #else	/* !LOCKF */
+! 	UNLINK(bfr);
+! #endif /* V7 */
+  #endif	/* !BSD4_2 */
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+  		if (spool_news > 1) /* can't unspool while things are locked */
+  			xxit(0);
+--- 150,170 ----
+  
+  #endif /* SPOOLNEWS */
+  	}
+! 	if (spool_news != 2) {
+! 		/* only unlock if we locked */
+  #ifdef	LOCKF
+! 		lockf(fileno(actfp), F_ULOCK, 0);
+  #else	/* !LOCKF */
+! #ifdef 	BSD4_2
+! 		flock(fileno(actfp), LOCK_UN);
+! #else	/* !BSD4_2 */
+! 		UNLINK(bfr);
+! #endif 	/* V7 */
+  #endif	/* !BSD4_2 */
++ 	} else {	/* expire is running */
++ 		if (argc > 1 && !strcmp(*(argv+1), "-S"))
++ 			exit(42);	/* inform rnews -U by exit status */
++ 	}
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+  		if (spool_news > 1) /* can't unspool while things are locked */
+  			xxit(0);
+***************
+*** 357,368 ****
+  			}
+  			if (!Mflag && !strpbrk(forgedname, "@ (<"))
+  				(void) sprintf(header.from,"%s@%s%s",
+! 					forgedname, FULLSYSNAME, MYDOMAIN);
+  			else
+  				(void) strncpy(header.from, forgedname, BUFLEN);
+  
+  			(void) sprintf(header.sender, "%s@%s%s",
+! 				username, FULLSYSNAME, MYDOMAIN);
+  		} else {
+  			gensender(&header, username);
+  		}
+--- 365,376 ----
+  			}
+  			if (!Mflag && !strpbrk(forgedname, "@ (<"))
+  				(void) sprintf(header.from,"%s@%s%s",
+! 					forgedname, FULLSYSNAME, mydomain());
+  			else
+  				(void) strncpy(header.from, forgedname, BUFLEN);
+  
+  			(void) sprintf(header.sender, "%s@%s%s",
+! 				username, FULLSYSNAME, mydomain());
+  		} else {
+  			gensender(&header, username);
+  		}
+***************
+*** 407,413 ****
+  		(void) signal(SIGQUIT, SIG_IGN);
+  		header.ident[0] = '\0';
+  		if (hread(&header, infp, TRUE) == NULL)
+! 			error("Inbound news is garbled");
+  		input();
+  	}
+  	/* always check history */
+--- 415,421 ----
+  		(void) signal(SIGQUIT, SIG_IGN);
+  		header.ident[0] = '\0';
+  		if (hread(&header, infp, TRUE) == NULL)
+! 			xerror("%s: Inbound news is garbled", filename);
+  		input();
+  	}
+  	/* always check history */
+***************
+*** 470,475 ****
+--- 478,484 ----
+  	if (!rwaccess(f)) {
+  		mfd = mailhdr((struct hbuf *)NULL, exists(f) ? "Unwritable files!" : "Missing files!");
+  		if (mfd != NULL) {
++ 			putc('\n', mfd);
+  #ifdef HIDDENNET
+  			fprintf(mfd, "System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, f);
+  #else /* !HIDDENNET */
+***************
+*** 498,503 ****
+--- 507,513 ----
+  	if (eaccess(dir, 07) != 0) {
+  		mfd = mailhdr((struct hbuf *)NULL, exists(dir) ? "Unwritable diretories!" : "Missing directories!");
+  		if (mfd != NULL) {
++ 			putc('\n', mfd);
+  #ifdef HIDDENNET
+  			fprintf(mfd, "System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, dir);
+  #else /* !HIDDENNET */
+***************
+*** 566,574 ****
+  	register FILE *sp;
+  	register struct tm *tp;
+  	time_t t;
+! 	char buf[BUFLEN];
+  	extern struct tm *gmtime();
+  
+  	(void) time(&t);
+  	tp = gmtime(&t);
+  	/* This file name "has to" be unique  (right?) */
+--- 576,596 ----
+  	register FILE *sp;
+  	register struct tm *tp;
+  	time_t t;
+! 	char buf[BUFLEN], *mktemp();
+  	extern struct tm *gmtime();
+  
++ 	sp = xfopen(mktemp(INFILE), "w");
++ 	if (batchcmd != NULL)
++ 		fprintf(sp, "%s\n", batchcmd);
++ 	else
++ 		if (not_here[0] != '\0')
++ 			fprintf(sp, "#! inews -x %s -p\n", not_here);
++ 	if (dolhwrite)
++ 		lhwrite(&header, sp);
++ 	while ((c = getc(infp)) != EOF)
++ 		putc(c, sp);
++ 	fclose(sp);
++ 
+  	(void) time(&t);
+  	tp = gmtime(&t);
+  	/* This file name "has to" be unique  (right?) */
+***************
+*** 585,592 ****
+  		SPOOL,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+! 	sp = fopen(buf, "w");
+! 	if (sp == NULL) {
+  		char dbuf[BUFLEN];
+  #ifdef VMS
+  		sprintf(dbuf, "%s/+rnews", SPOOL);
+--- 607,613 ----
+  		SPOOL,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+! 	if (LINK(INFILE, buf) < 0) {
+  		char dbuf[BUFLEN];
+  #ifdef VMS
+  		sprintf(dbuf, "%s/+rnews", SPOOL);
+***************
+*** 595,612 ****
+  #endif /* !VMS */
+  		if (mkdir(dbuf, 0777&~N_UMASK) < 0)
+  			xerror("Cannot mkdir %s: %s", dbuf, errmsg(errno));
+! 		sp = xfopen(buf, "w");
+  	}
+! 	if (batchcmd != NULL)
+! 		fprintf(sp, "%s\n", batchcmd);
+! 	else
+! 		if (not_here[0] != '\0')
+! 			fprintf(sp, "#! inews -x %s -p\n", not_here);
+! 	if (dolhwrite)
+! 		lhwrite(&header, sp);
+! 	while ((c = getc(infp)) != EOF)
+! 		putc(c, sp);
+! 	fclose(sp);
+  	xxit(0);
+  	/* NOTREACHED */
+  }
+--- 616,626 ----
+  #endif /* !VMS */
+  		if (mkdir(dbuf, 0777&~N_UMASK) < 0)
+  			xerror("Cannot mkdir %s: %s", dbuf, errmsg(errno));
+! 		if (LINK(INFILE, buf) < 0) 
+! 			xerror("Cannot link(%s,%s): %s", INFILE, buf,
+! 				errmsg(errno));
+  	}
+! 	(void) UNLINK(INFILE);
+  	xxit(0);
+  	/* NOTREACHED */
+  }
+***************
+*** 638,644 ****
+  
+  	if (header.approved[0] == '\0')
+  		(void) sprintf(header.approved, "%s@%s%s",
+! 				username, FULLSYSNAME, MYDOMAIN);
+  	(void) sprintf(bfr, "%s/inews -n %s.ctl -c newgroup %s -d %s -a \"%s\"",
+  		LIB, header.nbuf, header.ctlmsg, header.distribution,
+  		header.approved);
+--- 652,658 ----
+  
+  	if (header.approved[0] == '\0')
+  		(void) sprintf(header.approved, "%s@%s%s",
+! 				username, FULLSYSNAME, mydomain());
+  	(void) sprintf(bfr, "%s/inews -n %s.ctl -c newgroup %s -d %s -a \"%s\"",
+  		LIB, header.nbuf, header.ctlmsg, header.distribution,
+  		header.approved);
+***************
+*** 839,847 ****
+  	if (is_mod[0] != '\0' 	/* one of the groups is moderated */
+  		&& header.approved[0] == '\0') { /* and unapproved */
+  		struct hbuf mhdr;
+! 		FILE *mfd;
+  		register char *p;
+! 		char modadd[BUFLEN];
+  #ifdef DONTFOWARD
+  		if(mode == PROC) {
+  			logerr("Unapproved article in moderated group %s",
+--- 853,861 ----
+  	if (is_mod[0] != '\0' 	/* one of the groups is moderated */
+  		&& header.approved[0] == '\0') { /* and unapproved */
+  		struct hbuf mhdr;
+! 		FILE *mfd, *mhopen();
+  		register char *p;
+! 		char modadd[BUFLEN], *replyname();
+  #ifdef DONTFOWARD
+  		if(mode == PROC) {
+  			logerr("Unapproved article in moderated group %s",
+***************
+*** 871,882 ****
+  		while (*++p)
+  			if (*p == '.')
+  				*p = '-';
+- 		sprintf(bfr, "Submission for %s", is_mod);
+  		sprintf(mhdr.path, modadd, is_mod);
+! 		mfd = mailhdr(&mhdr, bfr);
+  		if (mfd == NULL)
+  			xerror("Can't send mail to %s", mhdr.path);
+  		lhwrite(&header, mfd);
+  		while ((c = getc(infp)) != EOF)
+  			putc(c, mfd);
+  		mclose(mfd);
+--- 885,897 ----
+  		while (*++p)
+  			if (*p == '.')
+  				*p = '-';
+  		sprintf(mhdr.path, modadd, is_mod);
+! 		mfd = mhopen(&mhdr);
+  		if (mfd == NULL)
+  			xerror("Can't send mail to %s", mhdr.path);
++ 		fprintf(mfd, "To: %s\n", replyname(mhdr.path));
+  		lhwrite(&header, mfd);
++ 		putc('\n', mfd);
+  		while ((c = getc(infp)) != EOF)
+  			putc(c, mfd);
+  		mclose(mfd);
+***************
+*** 891,901 ****
+  	}
+  
+  	if (is_ctl) {
+! 		exitcode = control(&header);
+  		if (localize("control") && exitcode != 0)
+  			savehist(histline);
+  	} else {
+  		if (s_find(&srec, FULLSYSNAME) == FALSE) {
+  			logerr("Cannot find my name '%s' in %s", FULLSYSNAME, SUBFILE);
+  			srec = dummy_srec;
+  		}
+--- 906,920 ----
+  	}
+  
+  	if (is_ctl) {
+! 		exitcode = control(&header, mode == PROC);
+  		if (localize("control") && exitcode != 0)
+  			savehist(histline);
+  	} else {
++ #ifdef HIDDENNET
++ 		if (s_find(&srec, LOCALSYSNAME) == FALSE) {
++ #else /* !HIDDENNET */
+  		if (s_find(&srec, FULLSYSNAME) == FALSE) {
++ #endif /* !HIDDENNET */
+  			logerr("Cannot find my name '%s' in %s", FULLSYSNAME, SUBFILE);
+  			srec = dummy_srec;
+  		}
+***************
+*** 1193,1212 ****
+  	register struct direct *dir;
+  	register int foundsome;
+  	int pid, status, ret;
+  #ifdef VMS
+! 	sprintf(bfr, "%s/+rnews", SPOOL);
+  #else /* !VMS */
+! 	sprintf(bfr, "%s/.rnews", SPOOL);
+  #endif /* !VMS */
+  
+! 	if (chdir(bfr) < 0)
+! 		xerror("chdir(%s):%s", bfr, errmsg(errno));
+  
+  	do {
+  		foundsome = 0;
+- 		dirp = opendir(".");
+- 		if (dirp == NULL)	/* Boy are things screwed up */
+- 			xerror("opendir can't open .:%s", errmsg(errno));
+  
+  		while ((dir=readdir(dirp)) != NULL) {
+  			if (dir->d_name[0] == '.')
+--- 1212,1253 ----
+  	register struct direct *dir;
+  	register int foundsome;
+  	int pid, status, ret;
++ 	char spbuf[BUFLEN];
+  #ifdef VMS
+! 	sprintf(spbuf, "%s/+rnews", SPOOL);
+  #else /* !VMS */
+! 	sprintf(spbuf, "%s/.rnews", SPOOL);
+  #endif /* !VMS */
+  
+! 	if (chdir(spbuf) < 0)
+! 		xerror("chdir(%s):%s", spbuf, errmsg(errno));
+  
++ 	dirp = opendir(".");
++ 	if (dirp == NULL)	/* Boy are things screwed up */
++ 		xerror("opendir can't open .:%s", errmsg(errno));
++ #ifdef	LOCKF
++ 	if (lockf(dirp->dd_fd, F_TLOCK, 0) < 0 &&
++ 		(errno == EAGAIN || errno == EACCES)) {
++ #else	/* !LOCKF */
++ #ifdef BSD4_2
++ 	if (flock(dirp->dd_fd, LOCK_EX|LOCK_NB) < 0 &&
++ 		errno == EWOULDBLOCK) {
++ #else	/* V7 */
++ 	strcat(spbuf, ".lock");
++ 	sprintf(bfr, "%s.tmp", spbuf);
++ 	(void) close(creat(bfr, 0666));
++ 	if (LINK(bfr, spbuf) < 0) {
++ 		(void) UNLINK(bfr);
++ 		if (errno != EEXIST)
++ 			xerror("Can't lock %s: %s", spbuf, errmsg(errno));
++ 		else
++ #endif /* V7 */
++ #endif	/* !LOCKF */
++ 		xxit(3); /* another rnews -U is running */
++ 	}
++ 
+  	do {
+  		foundsome = 0;
+  
+  		while ((dir=readdir(dirp)) != NULL) {
+  			if (dir->d_name[0] == '.')
+***************
+*** 1222,1227 ****
+--- 1263,1273 ----
+  			while ((ret=wait(&status)) != pid && ret != -1)
+  				/* continue */;
+  
++ 			if (((status>>8)&0177) == 42) {
++ 				/* expire has started up, shutdown rnews -U */
++ 				break;
++ 			}
++ 
+  			if (status != 0) {
+  				sprintf(bfr, "../%s", dir->d_name);
+  				(void) LINK(dir->d_name, bfr);
+***************
+*** 1231,1238 ****
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+  		}
+! 		closedir(dirp);
+  	} while (foundsome); /* keep rereading the directory until it's empty */
+  
+  	xxit(0);
+  }
+--- 1277,1286 ----
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+  		}
+! 		rewinddir(dirp);
+  	} while (foundsome); /* keep rereading the directory until it's empty */
++ 	closedir(dirp);
++ 	(void) UNLINK(spbuf);
+  
+  	xxit(0);
+  }
+
+Index: control.c
+Prereq: 2.51
+*** .d/control.c	Tue Feb 24 17:55:44 1987
+--- control.c	Mon Mar  9 22:59:58 1987
+***************
+*** 19,25 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.51	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 19,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.52	3/9/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 55,66 ****
+   *		to listed address.
+   */
+  
+! control(h)
+  struct hbuf *h;
+  {
+  	register char *ctlmsgtext;
+  	register struct msgtype *mp;
+  
+  	if (strncmp(h->title, "cmsg ", 5) == 0) {
+  		register char *cp1, *cp2;
+  		cp1 = h->title;
+--- 55,70 ----
+   *		to listed address.
+   */
+  
+! static int is_proc;
+! 
+! control(h, isproc)
+  struct hbuf *h;
++ int isproc;
+  {
+  	register char *ctlmsgtext;
+  	register struct msgtype *mp;
+  
++ 	is_proc = isproc;
+  	if (strncmp(h->title, "cmsg ", 5) == 0) {
+  		register char *cp1, *cp2;
+  		cp1 = h->title;
+***************
+*** 161,166 ****
+--- 165,171 ----
+  	register int	i;
+  	char		list[sizeof header.title];
+  	extern char *	findhist();
++ 	extern char *	mydomain();
+  
+  	if (argc < 2)
+  		error("ihave: Too few arguments.");
+***************
+*** 210,216 ****
+  	(void) sprintf(header.title, "sendme%s %s", list, FULLSYSNAME);
+  	(void) strcpy(header.ctlmsg, header.title);
+  	getident(&header);
+! 	(void) sprintf(header.from, "%s@%s%s", "usenet", FULLSYSNAME, MYDOMAIN);
+  	(void) strcpy(header.path, NEWSUSR);
+  	header.subdate[0] = header.expdate[0] = '\0';
+  	dates(&header);
+--- 215,221 ----
+  	(void) sprintf(header.title, "sendme%s %s", list, FULLSYSNAME);
+  	(void) strcpy(header.ctlmsg, header.title);
+  	getident(&header);
+! 	(void) sprintf(header.from, "%s@%s%s", "usenet", FULLSYSNAME, mydomain());
+  	(void) strcpy(header.path, NEWSUSR);
+  	header.subdate[0] = header.expdate[0] = '\0';
+  	dates(&header);
+***************
+*** 238,243 ****
+--- 243,252 ----
+   * The other system wants me to send out article <artid>.
+   * Give it to them with no fuss.
+   */
++ #ifdef MULTICAST
++ static int	c_mc;
++ static char **	c_sysnames;
++ #endif /* MULTICAST */
+  c_sendme(argc, argv)
+  register char **argv;
+  {
+***************
+*** 249,254 ****
+--- 258,275 ----
+  		return 0;
+  	if (s_find(&srec, argv[argc - 1]) != TRUE)
+  		error("sendme: Can't find sys record for %s", argv[argc - 1]);
++ #ifdef MULTICAST
++ 	c_mc = index(srec.s_flags, 'M') != 0;
++ 	if (c_mc) {
++ 		struct srec	trec;
++ 
++ 		c_sysnames = &argv[argc - 1];
++ 		if (s_find(&trec, srec.s_xmit) != TRUE)
++ 			error("sendme: Can't find sys record for %s for %s",
++ 				srec.s_xmit, argv[argc - 1]);
++ 		srec = trec;
++ 	} else	c_sysnames = NULL;
++ #endif /* MULTICAST */
+  	/* Send the articles. */
+  	if (argc == 2) {
+  		register FILE *	fp;
+***************
+*** 284,290 ****
+--- 305,315 ----
+  	cp = findfname(id);
+  	if (cp == NULL) {
+  		logerr("System %s wants unavailable article %s.",
++ #ifdef MULTICAST
++ 			(c_mc ? c_sysnames[0] : sp->s_name), id);
++ #else /* !MULTICAST */
+  			sp->s_name, id);
++ #endif /* !MULTICAST */
+  		return;
+  	}
+  	cp = dirname(cp);
+***************
+*** 295,301 ****
+  	}
+  	(void) strcpy(savedbufname, firstbufname);
+  	(void) strcpy(firstbufname, cp);
+! 	transmit(sp, fp, FALSE, (char **) NULL, FALSE);
+  	/* transmit closes fp */
+  	(void) strcpy(firstbufname, savedbufname);
+  }
+--- 320,330 ----
+  	}
+  	(void) strcpy(savedbufname, firstbufname);
+  	(void) strcpy(firstbufname, cp);
+! #ifdef MULTICAST
+! 	transmit(sp, fp, FALSE, c_sysnames, c_mc);
+! #else /* !MULTICAST */
+! 	transmit(sp, fp, FALSE, (char **) NULL, 0);
+! #endif /* !MULTICAST */
+  	/* transmit closes fp */
+  	(void) strcpy(firstbufname, savedbufname);
+  }
+***************
+*** 389,396 ****
+  					fprintf(fd,
+  "%s\nhas requested that %s be changed from %smoderated to %smoderated\n",
+  						header.path, argv[1], 
+! 						*p=='y' ? "un" : "",
+! 						*p=='y' ? "" : "un");
+  #ifdef ORGDISTRIB
+  					fprintf(fd,
+  "You can accomplish this by re-creating the newsgroup with a distribution\n");
+--- 418,425 ----
+  					fprintf(fd,
+  "%s\nhas requested that %s be changed from %smoderated to %smoderated\n",
+  						header.path, argv[1], 
+! 						*p=='y' ? "" : "un",
+! 						*p=='y' ? "un" : "");
+  #ifdef ORGDISTRIB
+  					fprintf(fd,
+  "You can accomplish this by re-creating the newsgroup with a distribution\n");
+***************
+*** 595,601 ****
+  		   argv[1], tm->tm_mon+1, tm->tm_mday, tm->tm_year, tm->tm_hour,
+  		   tm->tm_min);
+  		savehist(bfr);
+! 		return 1;
+  	}
+  
+  	q = index(line, '\t');
+--- 624,630 ----
+  		   argv[1], tm->tm_mon+1, tm->tm_mday, tm->tm_year, tm->tm_hour,
+  		   tm->tm_min);
+  		savehist(bfr);
+! 		return is_proc ? 0 : 1;
+  	}
+  
+  	q = index(line, '\t');
+***************
+*** 603,614 ****
+  	if (p == NULL || *++p == '\0' || *p == '\n') {
+  		*q = '\0';
+  		log("Expired article %s", line);
+! 		return 1;
+  	}
+  	if (strcmp(p, "cancelled") == 0) {
+  		*q = '\0';
+  		log("Already Cancelled %s", line);
+! 		return 1;
+  	} else
+  		log("Cancelling %s", line);
+  	if ((uid == ROOTID||uid == 0) && strcmp(header.distribution, "local") == 0)
+--- 632,643 ----
+  	if (p == NULL || *++p == '\0' || *p == '\n') {
+  		*q = '\0';
+  		log("Expired article %s", line);
+! 		return is_proc ? 0 : 1;
+  	}
+  	if (strcmp(p, "cancelled") == 0) {
+  		*q = '\0';
+  		log("Already Cancelled %s", line);
+! 		return is_proc ? 0 : 1;
+  	} else
+  		log("Cancelling %s", line);
+  	if ((uid == ROOTID||uid == 0) && strcmp(header.distribution, "local") == 0)
+***************
+*** 696,750 ****
+  }
+  
+  /*
+-  * senduuname	(no arguments)
+-  *
+-  * Run the "uuname" command and send it back to the person who submitted
+-  * the article.  The purpose of this control message is for attempting to
+-  * make a uucp net map.
+-  *
+-  * POLICY: If you view this information as not public (because you have
+-  * a connection you consider secret, or know a site that considers itself
+-  * secret) you can feel free to change this code in whatever way is
+-  * appropriate, so long as it sends some response back to the sender.  If
+-  * you don't run uucp, this code does not make sense, and so an error
+-  * message (or garbage, such as "research") will be mailed back.
+-  *
+-  * If you wish to add or remove sites from the output of uuname, you
+-  * may wish to use the euuname.sh shell script here.
+-  */
+- /* ARGSUSED */
+- c_senduuname(argc, argv)
+- char **argv;
+- {
+- 	char buf[256];
+- 	FILE *fd, *u;
+- 	int c;
+- 
+- #ifdef NOTIFY
+- 	fd = mailhdr((struct hbuf *)NULL, "uuname control message");
+- 	fprintf(fd, "%s requested your uuname output\n", header.path);
+- 	(void) mclose(fd);
+- #endif /* NOTIFY */
+- 	fd = mailhdr(&header, "response to your senduuname request");
+- #ifdef UUPROG
+- 	if (UUPROG[0] == '/')
+- 		(void) strcpy(buf, UUPROG);
+- 	else
+- 		(void) sprintf(buf, "%s/%s", LIB, UUPROG);
+- #else
+- 	(void) strcpy(buf, "uuname");
+- #endif
+- 	u = popen(buf, "r");
+- 	if (fd != NULL && u != NULL) {
+- 		while ((c=getc(u)) != EOF)
+- 			putc(c, fd);
+- 		(void) pclose(u);
+- 		(void) mclose(fd);
+- 	}
+- 	return 0;
+- }
+- 
+- /*
+   * Send the version number to the right person.
+   */
+  /* ARGSUSED */
+--- 725,730 ----
+***************
+*** 923,928 ****
+--- 903,909 ----
+  	FILE *fp;
+  	time_t now;
+  	char *to = "usenet";
++ 	extern char *mydomain();
+  
+  #ifdef NOTIFY
+  	if (TELLME && *TELLME)
+***************
+*** 936,942 ****
+  		fprintf(fp, "Date: %s\n", arpadate(&now));
+  #ifdef MMDF
+  		fprintf(fp, "From: The News System <usenet@%s%s>\n",
+! 				FULLSYSNAME, MYDOMAIN);
+  #endif /* MMDF */
+  		fprintf(fp, "To: %s\n", to);
+  		fprintf(fp, "Subject: %s\n", subject);
+--- 917,923 ----
+  		fprintf(fp, "Date: %s\n", arpadate(&now));
+  #ifdef MMDF
+  		fprintf(fp, "From: The News System <usenet@%s%s>\n",
+! 				FULLSYSNAME, mydomain());
+  #endif /* MMDF */
+  		fprintf(fp, "To: %s\n", to);
+  		fprintf(fp, "Subject: %s\n", subject);
+***************
+*** 943,953 ****
+  #ifdef HIDDENNET
+  		if (strcmp(LOCALSYSNAME, FULLSYSNAME))
+  			fprintf(fp, "Responding-System: %s.%s%s\n\n",
+! 				LOCALSYSNAME, FULLSYSNAME, MYDOMAIN);
+  		else
+  #endif /* !HIDDENNET */
+  			fprintf(fp, "Responding-System: %s%s\n\n",
+! 				FULLSYSNAME, MYDOMAIN);
+  	}
+  	return fp;
+  }
+--- 924,934 ----
+  #ifdef HIDDENNET
+  		if (strcmp(LOCALSYSNAME, FULLSYSNAME))
+  			fprintf(fp, "Responding-System: %s.%s%s\n\n",
+! 				LOCALSYSNAME, FULLSYSNAME, mydomain());
+  		else
+  #endif /* !HIDDENNET */
+  			fprintf(fp, "Responding-System: %s%s\n\n",
+! 				FULLSYSNAME, mydomain());
+  	}
+  	return fp;
+  }
+***************
+*** 1009,1016 ****
+  	} else if (strcmp(msg, "rmgroup") == 0) {
+  		suser();
+  	} else if (strcmp(msg, "sendsys") == 0) {
+- 		suser();
+- 	} else if (strcmp(msg, "senduuname") == 0) {
+  		suser();
+  	} else if (strcmp(msg, "checkgroups") == 0) {
+  		suser();
+--- 990,995 ----
+
+Index: expire.c
+Prereq: 2.50
+*** .d/expire.c	Tue Feb 24 17:55:47 1987
+--- expire.c	Mon Mar  9 22:59:59 1987
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.50	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.51	3/9/87";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 230,235 ****
+--- 230,244 ----
+  			dorebuild++;
+  			nohistory++;
+  			break;
++ 		case 'R':	/* just rebuild the dbm files */
++ #ifdef DBM
++ 			rebuilddbm();
++ 			xxit(0);
++ #else /* !DBM */
++ 			fprintf(stderr, "You have not compiled expire with DBM, so -R is meaningless\n");
++ 			xxit(1);
++ #endif /* !DBM */
++ 
+  		case 'p':	/* use posting date to expire */
+  			usepost++;
+  			break;
+***************
+*** 1171,1177 ****
+  		(void) mkdir(fn, 0755);
+  	(void) sprintf(fn, "%s.d", ARTFILE);
+  	if (verbose)
+! 		printf("Rebuilding history subfile directory %d.\n", fn);
+  	if (access(fn,0) != 0)
+  		(void) mkdir(fn, 0755);
+  	for (i = 0; i < 10; i++) {
+--- 1180,1186 ----
+  		(void) mkdir(fn, 0755);
+  	(void) sprintf(fn, "%s.d", ARTFILE);
+  	if (verbose)
+! 		printf("Rebuilding history subfile directory %s.\n", fn);
+  	if (access(fn,0) != 0)
+  		(void) mkdir(fn, 0755);
+  	for (i = 0; i < 10; i++) {
+
+Index: header.c
+Prereq: 2.46
+*** .d/header.c	Wed Dec 17 18:23:40 1986
+--- header.c	Mon Mar  9 22:59:59 1987
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.46	12/17/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.47	3/9/87";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+***************
+*** 284,289 ****
+--- 284,290 ----
+  	char *at, *dot;
+  	char pathbuf[PATHLEN];
+  	char fullname[BUFLEN];
++ 	extern char *mydomain();
+  
+  	tp = tailpath(hp);
+  	user = rindex(tp, '!');
+***************
+*** 314,320 ****
+  	tp = index(host, '@');
+  	if (tp != NULL)
+  		*tp = 0;
+! 	(void) sprintf(hp->from, "%s@%s%s", user, host, MYDOMAIN);
+  
+  	skin(pathbuf, fullname, hp->path);	/* remove RFC822-style comments */
+  	if (fullname[0] != '\0') {
+--- 315,321 ----
+  	tp = index(host, '@');
+  	if (tp != NULL)
+  		*tp = 0;
+! 	(void) sprintf(hp->from, "%s@%s%s", user, host, mydomain());
+  
+  	skin(pathbuf, fullname, hp->path);	/* remove RFC822-style comments */
+  	if (fullname[0] != '\0') {
+
+Index: pathinit.c
+Prereq: 1.19
+*** .d/pathinit.c	Wed Dec 17 18:23:22 1986
+--- pathinit.c	Mon Mar  9 23:00:02 1987
+***************
+*** 34,40 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.19	12/16/86";
+  #endif /* SCCSID */
+  
+  #if defined(INEW) || defined(EXP)
+--- 34,40 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.20	3/9/87";
+  #endif /* SCCSID */
+  
+  #if defined(INEW) || defined(EXP)
+***************
+*** 57,63 ****
+  char *LOCKFILE, *SEQFILE, *ARTICLE, *INFILE, *TELLME;
+  
+  int c_cancel(), c_newgroup(), c_ihave(), c_sendme(), c_rmgroup(),
+!     c_sendsys(), c_senduuname(), c_version(), c_checkgroups(), c_unimp();
+  
+  struct msgtype msgtype[] = {
+  	"cancel", NULL, c_cancel,
+--- 57,63 ----
+  char *LOCKFILE, *SEQFILE, *ARTICLE, *INFILE, *TELLME;
+  
+  int c_cancel(), c_newgroup(), c_ihave(), c_sendme(), c_rmgroup(),
+!     c_sendsys(), c_version(), c_checkgroups(), c_unimp();
+  
+  struct msgtype msgtype[] = {
+  	"cancel", NULL, c_cancel,
+***************
+*** 67,73 ****
+  	"sendbad", NULL, c_sendme,
+  	"rmgroup", NULL, c_rmgroup,
+  	"sendsys", NULL, c_sendsys,
+- 	"senduuname", NULL, c_senduuname,
+  	"version", NULL, c_version,
+  	"checkgroups", NULL, c_checkgroups,
+  	"delsub", NULL, c_unimp,
+--- 67,72 ----
+
+Index: uname.c
+Prereq: 2.13
+*** .d/uname.c	Wed Dec 17 18:23:29 1986
+--- uname.c	Mon Mar  9 23:00:02 1987
+***************
+*** 21,27 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.13	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 21,27 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.14	3/9/87";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 35,42 ****
+  struct utsname *uptr;
+  {
+  	char *cp;
+  	gethostname(uptr->nodename, sizeof (uptr->nodename));
+! 	cp = MYDOMAIN;	/* Gould compiler can't handle ""[0] */
+  	if (*cp == '\0') /* get domain name from hostname */
+  		return;
+  	cp = index(uptr->nodename, '.');
+--- 35,43 ----
+  struct utsname *uptr;
+  {
+  	char *cp;
++ 	extern char *mydomain();
+  	gethostname(uptr->nodename, sizeof (uptr->nodename));
+! 	cp = mydomain();
+  	if (*cp == '\0') /* get domain name from hostname */
+  		return;
+  	cp = index(uptr->nodename, '.');
+***************
+*** 96,98 ****
+--- 97,157 ----
+  	}
+  }
+  #endif
++ 
++ 
++ /*
++  * At sites where the are many mail domains within the support area of a single
++  * news administrator, it is much nicer to be able to read the local domain of
++  * a machine from a file.  What we do here is:
++  * 1)	Check for the presence of a LIBDIR/localdomain file.  If it doesn't 
++  * 	exist,assume that MYDOMAIN should be used instead.
++  * 2)	If it does exist, we make the following assumptions:
++  *	a)  If it is empty, has only comments, or only blank lines; we assume
++  *	    the domain is desired to be a zero length string ( ie "").  (this
++  *	    implies that the domain name is contained in the hostname.)
++  *	b)  If it is not empty, we assume the first line not beginning with a
++  *	    '#', blank/tab, or newline is the desired domain name.
++  *	    A like '.UUCP' or '.TEK.COM' should be used.  We could insure that
++  *	    the line begin with a '.' to be a valid domain name, but I don't 
++  *	    think it is necessary to put that restriction on it.
++  */
++ char *
++ mydomain()
++ {
++ 	static char *md = NULL;
++ 	register char *cp;
++ 	FILE *fp = NULL;
++ 	char fbuf[BUFLEN];
++ 	extern char *malloc(), *strcpy(), *index();
++ 
++ 	if(md)	/* we've been here before, so just return what we found */
++ 		return(md);
++ 
++ 	(void) sprintf(fbuf,"%s/localdomain", LIBDIR);
++ 	if ( (fp = fopen(fbuf,"r")) == NULL) {
++ 		md = MYDOMAIN;	/* No localdomain file, use MYDOMAIN instead */
++ 	} else {
++ 		while(fgets(fbuf, sizeof(fbuf), fp) ) {
++ 			if( *fbuf == '\n' || *fbuf == '#' 
++ 			    || *fbuf == ' ' || *fbuf == '\t')
++ 				continue;
++ 	
++ 			if( cp = index(fbuf, '\n') )
++ 				*cp = '\0';
++ 	
++ 			if ( (md = malloc(strlen(fbuf) + 1)) == NULL)
++ 				md = MYDOMAIN;	/* punt here */
++ 			else
++ 				(void)strcpy(md, fbuf);
++ 			break;
++ 		}
++ 	}
++ 
++ 	if(fp)
++ 		(void)fclose(fp);
++ 
++ 	if( md == NULL)
++ 		md = "";
++ 	
++ 	return(md);
++ }
+
+Index: ndir.c
+Prereq: 1.9
+*** .d/ndir.c	Wed Dec 17 18:23:21 1986
+--- ndir.c	Mon Mar  9 23:00:01 1987
+***************
+*** 1,10 ****
+  #include "defs.h"
+! #if !defined(BSD4_2) && !defined(BSD4_1C)
+  #include <sys/param.h>
+  #include "ndir.h"
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ndir.c	1.9	12/16/86";
+  #endif /* SCCSID */
+  
+  /*
+--- 1,10 ----
+  #include "defs.h"
+! #if !defined(BSD4_2) && !defined(BSD4_1C) && !defined(HP9K5)
+  #include <sys/param.h>
+  #include "ndir.h"
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ndir.c	1.10	3/9/87";
+  #endif /* SCCSID */
+  
+  /*
+***************
+*** 48,67 ****
+  #else /* V7 file system */
+  #define	ODIRSIZ	14
+  
+- #if HP9K5
+- /* HP 9000/500 has a weird directory format */
+- struct olddirect {
+- 	char	od_name[DIRSIZ+2];	/* filename */
+- 	short	od_object_type;
+- 	short	od_file_code;
+- 	short	od_ino; 		/* inode */
+- };
+- #else /* normal V7 */
+  struct	olddirect {
+  	short	od_ino;
+  	char	od_name[ODIRSIZ];
+  };
+- #endif /* V7 */
+  #endif /* !pyr */
+  
+  /*
+--- 48,57 ----
+***************
+*** 110,113 ****
+  	dirp->dd_loc = 0;
+  	free((char *)dirp);
+  }
+! #endif /* !BSD4_2 && !BSD4_1C */
+--- 100,140 ----
+  	dirp->dd_loc = 0;
+  	free((char *)dirp);
+  }
+! 
+! /*
+!  * seek to an entry in a directory.
+!  * Only values returned by "telldir" should be passed to seekdir.
+!  */
+! void
+! seekdir(dirp, loc)
+! register DIR *dirp;
+! long loc;
+! {
+! 	long curloc, base, offset;
+! 	struct direct *dp;
+! 	extern long lseek();
+! 
+! 	curloc = telldir(dirp);
+! 	if (loc == curloc)
+! 		return;
+! 	base = loc & ~(DIRBLKSIZ - 1);
+! 	offset = loc & (DIRBLKSIZ - 1);
+! 	(void) lseek(dirp->dd_fd, base, 0);
+! 	dirp->dd_loc = 0;
+! 	while (dirp->dd_loc < offset) {
+! 		dp = readdir(dirp);
+! 		if (dp == NULL)
+! 			return;
+! 	}
+! }
+! 
+! /*
+!  * return a pointer into a directory
+!  */
+! long
+! telldir(dirp)
+! DIR *dirp;
+! {
+! 	return lseek(dirp->dd_fd, 0L, 1) - dirp->dd_size + dirp->dd_loc;
+! }
+! #endif /* !BSD4_2 && !BSD4_1C && !HP9K5 */
+
+Index: ndir.h
+Prereq: 1.4
+*** .d/ndir.h	Thu Oct 30 16:12:09 1986
+--- ndir.h	Mon Mar  9 23:00:01 1987
+***************
+*** 1,4 ****
+! /* @(#)ndir.h	1.4	4/16/85 */
+  #ifndef DEV_BSIZE
+  #define	DEV_BSIZE	512
+  #endif
+--- 1,8 ----
+! /* @(#)ndir.h	1.6	3/9/87	*/
+! #if defined(HP9K5)
+! /* He should have included it instead of this, but prevent confusion */
+! #include <sys/ndir.h>
+! #else /* other */
+  #ifndef DEV_BSIZE
+  #define	DEV_BSIZE	512
+  #endif
+***************
+*** 40,42 ****
+--- 44,49 ----
+  extern	DIR *opendir();
+  extern	struct direct *readdir();
+  extern	void closedir();
++ 
++ #define rewinddir(dirp)	seekdir((dirp), (long)0)
++ #endif /* other */
+
+Index: ifuncs.c
+Prereq: 2.60
+*** .d/ifuncs.c	Tue Feb 24 17:55:52 1987
+--- ifuncs.c	Mon Mar  9 23:00:00 1987
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.60	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.61	3/9/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 712,719 ****
+  	extern int errno;
+  #ifdef	VMS
+  	int fd;
+! 
+! 	(void) sprintf(lockname, "/tmp/%s.l.1", str);
+  	while ((fd = creat(lockname, 0444)) < 0) {
+  #else /* !VMS */
+  	(void) strcpy(tempname, "/tmp/LTMP.XXXXXX");
+--- 712,723 ----
+  	extern int errno;
+  #ifdef	VMS
+  	int fd;
+! /* The name here is because of the peculiar properties of version numbers
+!  * in Eunice.  We eliminate any troublesome characters also.
+!  */
+! 	(void) sprintf(lockname, "/tmp/%.10s.l.1", str);
+! 	for (cp = lockname; *cp; cp++)
+! 		if (*cp == '/' || *cp == '[' || *cp == ']') *cp = '.';
+  	while ((fd = creat(lockname, 0444)) < 0) {
+  #else /* !VMS */
+  	(void) strcpy(tempname, "/tmp/LTMP.XXXXXX");
+***************
+*** 768,773 ****
+--- 772,778 ----
+  {
+  	long seqn;
+  	register FILE *fp;
++ 	extern char *mydomain();
+  
+  	lock();
+  	fp = xfopen(SEQFILE, "r");
+***************
+*** 784,793 ****
+  #ifdef HIDDENNET
+  	if (strcmp(LOCALSYSNAME, FULLSYSNAME))
+  		(void) sprintf(hp->ident, "<%ld@%s.%s%s>", seqn, LOCALSYSNAME, FULLSYSNAME,
+! 		MYDOMAIN);
+  	else
+  #endif /* !HIDDENNET */
+! 	(void) sprintf(hp->ident, "<%ld@%s%s>", seqn, FULLSYSNAME, MYDOMAIN);
+  }
+  
+  /*
+--- 789,798 ----
+  #ifdef HIDDENNET
+  	if (strcmp(LOCALSYSNAME, FULLSYSNAME))
+  		(void) sprintf(hp->ident, "<%ld@%s.%s%s>", seqn, LOCALSYSNAME, FULLSYSNAME,
+! 		mydomain());
+  	else
+  #endif /* !HIDDENNET */
+! 	(void) sprintf(hp->ident, "<%ld@%s%s>", seqn, FULLSYSNAME, mydomain());
+  }
+  
+  /*
+***************
+*** 989,994 ****
+--- 994,1000 ----
+  	char buf[BUFLEN];
+  	char *fullname(), *getenv();
+  	int fd, n;
++ 	extern char *mydomain();
+  
+  	if ((fn = getenv("NAME")) == NULL) {
+  		(void) sprintf(buf, "%s/%s", userhome, ".name");
+***************
+*** 1007,1013 ****
+  		fn = fullname(logname);
+  
+  	(void) sprintf(hp->path, "%s", logname);
+! 	(void) sprintf(hp->from, "%s@%s%s (%s)", logname, FULLSYSNAME, MYDOMAIN, fn);
+  }
+  
+  /*
+--- 1013,1019 ----
+  		fn = fullname(logname);
+  
+  	(void) sprintf(hp->path, "%s", logname);
+! 	(void) sprintf(hp->from, "%s@%s%s (%s)", logname, FULLSYSNAME, mydomain(), fn);
+  }
+  
+  /*
+***************
+*** 1032,1104 ****
+  
+  #ifdef BATCH
+  /*
+!  * If the stdin begins with "#", we assume we have been fed a batched
+!  * shell script which looks like this:
+   *	#! rnews 1234
+   *	article with 1234 chars
+   *	#! rnews 4321
+   *	article with 4321 chars
+!  *
+!  * In this case we just exec the unbatcher and let it unpack and call us back.
+!  *
+!  * Note that there is a potential security hole here.  If the batcher is
+!  * /bin/sh, someone could ship you arbitrary stuff to run as shell commands.
+!  * The main protection you have is that the effective uid will be news, not
+!  * uucp and not the super user.  (That, plus the fact that BATCH is set to
+!  * "unbatch" as the system is distributed.)  If you want to run a batched link
+!  * and you are security conscious, do not use /bin/sh as the unbatcher.
+!  * the thing to do is to change BATCH in your localize.sh file from /bin/sh
+!  * to some restricted shell which can only run rnews.
+   */
+  checkbatch()
+  {
+  	int c;
+  
+! 	c = getc(infp);
+  	if (c != EOF)
+  		(void) ungetc(c, infp);
+  	clearerr(infp);
+! 	if (c == '#') {
+! 		char cmd[BUFLEN], unbatcher[BUFLEN], arg1[BUFLEN], arg2[BUFLEN];
+! 		register char *cp;
+! 		int n;
+  
+! 		reset_infp();
+  		/*
+! 		 * For efficiency, try and recognize the most common
+! 		 * forms of batching and exec them directly
+  		 */
+! 		n = read(0, cmd, BUFLEN-1);
+! 		if (n <= 0)	/* Can't happen */
+! 			xerror("can't read stdin to unbatch");
+! 		cmd[n] = '\0';
+! 		cp = index(cmd, '\n');
+! 		if (cp)
+! 			*cp = '\0';
+! 		/* now put stdin at the "right" place for the exec */
+! 		(void) lseek(0,1L+(long)(cp - cmd), 0);
+! 		if( strncmp(cmd, "#! cunbatch", 11) == 0) {
+! 			(void) strcpy(unbatcher, "/bin/sh");
+! 			(void) strcpy(arg1, "-c");
+! 			(void) sprintf(arg2, "%s/compress -d | %s/%s",
+! 				LIB, LIB, BATCH);
+! 		} else if (strncmp(cmd, "#! c7unbatch", 12) == 0) {
+! 			(void) strcpy(unbatcher, "/bin/sh");
+! 			(void) strcpy(arg1, "-c");
+! 			(void) sprintf(arg2,
+! 				"%s/decode | %s/compress -d | %s/%s",
+! 				LIB, LIB, LIB, BATCH);
+! 		} else {
+! 			(void) lseek(0, 0L, 0);
+! 			(void) sprintf(unbatcher, "%s/%s", LIB, BATCH);
+! 			arg1[0] = '\0';
+! 			arg2[0] = '\0';
+! 		}
+! 		execl(unbatcher, "news-unpack", arg1, arg2, (char *)0);
+! 		xerror("Unable to exec %s to unpack news.", unbatcher);
+  	}
+  }
+  
+  /*
+   * We've already done a read on stdin, and we want to seek back to the
+   * beginning.  We want the real file descriptor (beyond buffers) to
+--- 1038,1330 ----
+  
+  #ifdef BATCH
+  /*
+!  * If the stdin begins with "#" the input is some kind of batch.  if
+!  * the first line is:
+!  *	#!cunbatch
+!  * or
+!  *	#!c7unbatch
+!  * then fork off a pipe to do the either a
+!  *	"compress -d"
+!  * or a
+!  *	"decode | compress -d"
+!  * and check their output for more batch headers.  They probably
+!  * contain a batch format that looks like this:
+   *	#! rnews 1234
+   *	article with 1234 chars
+   *	#! rnews 4321
+   *	article with 4321 chars
+!  * If so, then for each article, copy the indicated number of chars into
+!  * a temp file, fork a copy of ourselves, make its input the temp file,
+!  * and allow the copy to process the article.  This avoids an exec of
+!  * rnews for each article.
+   */
++ 
+  checkbatch()
+  {
+  	int c;
+  
+! 	while ((c = getc(infp)) == '#') {
+! 		/* some kind of batch, investigate further */
+! 		int i;
+! 		char cmd[BUFLEN];
+! 		cmd[0] = c;
+! 		fgets(cmd + 1, BUFLEN, infp);
+! 		if (strncmp(cmd, "#! cunbatch", 11) == 0) {
+! 			reset_infp();
+! 			i = strlen(cmd);
+! 			(void) lseek(0, (long) i, 0);	/* position STDIN for
+! 							 * exec */
+! 			(void) sprintf(cmd, "%s/compress", LIB);
+! 			input_pipe(cmd, "compress", "-d", (char *) 0);
+! 			continue;	/* look for the #! rnews */
+! 		} else if (strncmp(cmd, "#! c7unbatch", 12) == 0) {
+! 			reset_infp();
+! 			i = strlen(cmd);
+! 			(void) lseek(0, (long) i, 0);	/* position STDIN for
+! 							 * exec */
+! 			(void) sprintf(cmd, "%s/decode | %s/compress -d", LIB, LIB);
+! 			input_pipe("/bin/sh", "news-unpack", "-c", cmd);
+! 			continue;	/* look for the #! rnews */
+! 		} else if (strncmp(cmd, "#! rnews", 8) == 0) {
+! 			/* instead of execing unbatch do it ourselves */
+! 			register int fd, rc, wc;
+! 			int piped[2];
+! 			register long size, asize;
+! 			char *filename;
+! 			int pid, wpid, exstat;
+! 			char *mktemp();
+! 			long atol();
+! #define CPBFSZ 8192
+! 			char buf[CPBFSZ];
+! 
+! 			filename = 0;
+! 			do {
+! 				while (strncmp(cmd, "#! rnews ", 9)) {
+! 					fprintf(stderr, "out of sync, skipping %s\n", cmd);
+! 					if (fgets(cmd, BUFLEN, infp) == NULL)
+! 						exit(0);
+! 				}
+! 				asize = atol(cmd + 9);
+! 				if (asize <= 0)
+! 					xerror("checkbatch: bad batch count %ld", asize);
+! 				fd = -1;
+! 				size = asize;
+! 				do {
+! 					if (size > CPBFSZ)
+! 						rc = CPBFSZ;
+! 					else
+! 						rc = size;
+! 					rc = fread(buf, 1, rc, infp);
+! 					if (rc <= 0)
+! 						break;
+! 					if (fd < 0) {
+! 						if (rc == asize)
+! 							break;	/* fits in buffer */
+! 						if (!filename)
+! 							filename = mktemp("/tmp/unbnewsXXXXXX");
+! 						if ((fd = creat(filename, 0666)) < 0) {
+! 							fprintf(stderr, "rnews: creat of \"%s\" failed",
+! 								filename);
+! 							perror(" ");
+! 							exit(1);
+! 						}
+! 					}
+! 					wc = write(fd, buf, rc);	/* write to temp file */
+! 					if (wc != rc) {
+! 						fprintf(stderr, "write of %d to \"%s\" returned %d",
+! 							rc, filename, wc);
+! 						perror(" ");
+! 						exit(1);
+! 					}
+! 					size -= rc;
+! 				} while (size > 0);
+! 				if (fd >= 0)
+! 					(void) close(fd);
+! 
+! 				/*
+! 				 * If we got a truncated batch, don't process
+! 				 * the last article; it will probably be
+! 				 * received again. 
+! 				 */
+! 				if ((rc < asize) && (size > 0))
+! 					break;
+! 
+! 				/*
+! 				 * This differs from the old unbatcher in
+! 				 * that we don't exec rnews, mainly because
+! 				 * we ARE rnews.  Instead we fork off a copy
+! 				 * of ourselves for each article and allow it
+! 				 * to process. 
+! 				 */
+! 				if (rc == asize) {
+! 					/*
+! 					 * article fits in buffer, use a pipe
+! 					 * instead of a temporary file. 
+! 					 */
+! 					if (pipe(piped) != 0) {
+! 						perror("checkbatch: pipe() failed");
+! 						exit(1);
+! 					}
+! 				}
+! 				while ((pid = fork()) == -1) {
+! 					fprintf(stderr, "fork failed, waiting...\r\n");
+! 					sleep(60);
+! 				}
+! 				if (pid == 0) {
+! 					if (rc == asize) {
+! 						/* article fits in buffer
+! 						 * make the output of the
+! 						 * pipe for STDIN 
+! 						 */
+! 						(void) fclose(infp);
+! 						/* redundant but why not */
+! 						(void) close(0);
+! 						if ((i = dup(piped[0])) != 0)
+! 							xerror("dup() returned %d, should be 0", i);
+! 						(void) close(piped[0]);
+! 						(void) close(piped[1]);
+! 						infp = fdopen(0, "r");
+! 					} else	/* supstitute temp file as
+! 						 * input */
+! 						freopen(filename, "r", infp);
+! 					return;	/* from checkbatch as if
+! 						 * normal article */
+! 				}
+! 				/* parent of fork */
+! 				if (rc == asize) {
+! 					/* article fits in buffer */
+! 					wc = write(piped[1], buf, rc);
+! 					if (wc != rc) {
+! 						fprintf(stderr, "write of %d to pipe returned %d",
+! 							rc, wc);
+! 						perror("rnews: write");
+! 						exit(1);
+! 					}
+! 					(void) close(piped[0]);
+! 					(void) close(piped[1]);
+! 				}
+! 				while ((wpid = wait(&exstat)) >= 0 && wpid != pid);
+! 			} while (fgets(cmd, BUFLEN, infp) != NULL);
+! 			(void) unlink(filename);
+! 			exit(0);/* all done */
+! 
+! 		} else {
+! 			reset_infp();
+! 			i = strlen(cmd);
+! 			(void) lseek(0, (long)i, 0);
+! 			docmd(cmd);
+! 			xxit(0);
+! 		}
+! 	}			/* while a batch */
+  	if (c != EOF)
+  		(void) ungetc(c, infp);
+  	clearerr(infp);
+! }
+  
+! /*
+!  * The input requires some processing so fork and exec the indicated command
+!  * with its output piped to our input. 
+!  */
+! static 
+! input_pipe(cmd, arg0, arg1, arg2)
+! char *cmd, *arg0, *arg1, *arg2;
+! {
+! 	int i, pid;
+! 	int piped[2];
+! 
+! 	if (pipe(piped) != 0) {
+! 		perror("checkbatch: pipe() failed");
+! 		exit(1);
+! 	}
+! 	fflush(stdout);
+! 	while ((pid = fork()) == -1) {
+! 		perror("checkbatch: fork failed, waiting");
+! 		sleep(60);
+! 	}
+! 	if (pid == 0) {		/* child process */
+  		/*
+! 		 * setup a pipe such that the exec'ed process will read our
+! 		 * input file and write to the pipe 
+  		 */
+! 		(void) close(1);
+! 		if ((i = dup(piped[1])) != 1)
+! 			xerror("dup() returned %d, should be 1", i);
+! 		(void) close(piped[0]);
+! 		(void) close(piped[1]);
+! 		execl(cmd, arg0, arg1, arg2, (char *) 0);
+! 		perror("checkbatch");
+! 		xerror("Unable to exec %s to unpack news.", cmd);
+! 	} else {		/* parent process */
+! 		/* make the output of the pipe for STDIN */
+! 		(void) fclose(infp);
+! 		(void) close(0);
+! 		if ((i = dup(piped[0])) != 0)
+! 			xerror("dup() returned %d, should be 0", i);
+! 		(void) close(piped[0]);
+! 		(void) close(piped[1]);
+! 		/*
+! 		 * there should be a way to clear any buffered input and just
+! 		 * replace file descriptor 0 but I can't find a portable way. 
+! 		 */
+! 		infp = fdopen(0, "r");
+  	}
+  }
+  
++ #define MAXARGS 32
++ 
++ docmd(p)
++ register char *p;
++ {
++ 	char *args[MAXARGS];
++ 	register char **ap = args;
++ 	char path[BUFSIZ];
++ 	char *rindex(), *cp;
++ 
++ 	while (*p && !isspace(*p))		/* skip leading #! crud */
++ 		p++;
++ 
++ 	while (isspace(*p))
++ 		p++;
++ 
++ 	while (*p != '\0') {
++ 		*ap++ = p;
++ 		if (ap >= &args[MAXARGS]) {
++ 			logerr("inews: unbatch: Too many args to %s", args[0]);
++ 			exit(2);
++ 		}
++ 		while (*p && !isspace(*p))
++ 			p++;
++ 		if (*p)
++ 			*p++ = '\0';
++ 		while (isspace(*p))
++ 			p++;
++ 	}
++ 	*ap = (char *)0;
++ 
++ 	if (ap == args) {
++ 		logerr("inews: unbatch: no command to execute");
++ 		exit(2);
++ 	}
++ 
++ 	/* strip off any leading pathname in case someone gets tricky */
++ 	cp = rindex(args[0], '/');
++ 	if (cp++ == NULL)
++ 		cp = args[0];
++ 
++ # ifdef HOME
++ 	sprintf(path, "%s/%s/%s", logdir(HOME), LIBDIR, cp);
++ # else /* !HOME */
++ 	sprintf(path, "%s/%s", LIBDIR, cp);
++ # endif /* HOME */
++ 
++ 	/*
++ 	 * "path" is absolute, no searching is needed,  we use
++ 	 * 'execvp' solely so that sh scripts will be handled
++ 	 */
++ 	(void) execvp(path, args);
++ 	perror(path);
++ 	xxit(2);
++ }
+  /*
+   * We've already done a read on stdin, and we want to seek back to the
+   * beginning.  We want the real file descriptor (beyond buffers) to
+
+

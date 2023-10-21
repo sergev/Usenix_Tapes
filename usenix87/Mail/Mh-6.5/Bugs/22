@@ -1,0 +1,86 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA21430; Mon, 6 Jul 87 17:33:56 EDT
+Received: from ICS.UCI.EDU by seismo.CSS.GOV (5.54/1.14) 
+	id AA18779; Mon, 6 Jul 87 17:28:24 EDT
+Received: by ICS.UCI.EDU id aa18637; 6 Jul 87 13:01 PDT
+Received: from ics.uci.edu by ICS.UCI.EDU id aa18608; 6 Jul 87 12:51 PDT
+Received: from [192.5.58.10] by ICS.UCI.EDU id aa18539; 6 Jul 87 12:37 PDT
+Received: from hplms2 by hplabs.HP.COM with TCP ; Mon, 6 Jul 87 12:32:40 pdt
+Received: from hplpm (hplpm) by hplms2; Mon, 6 Jul 87 12:32:13 pdt
+Return-Path: <marvit@hplpm>
+Received: from hplpm.hpl.hp.com by hplpm ; Mon, 6 Jul 87 12:31:52 pdt
+Message-Id: <8707061931.AA04280@hplpm>
+To: ics.uci.edu!bug-mh, ics.uci.edu!mh-workers
+Subject: Fix for repl & long headers
+X-Mailer: mh6.5
+Date: Mon, 06 Jul 87 12:31:48 PDT
+From: Peter Marvit <hplabs.hp.com!marvit%hplpm>
+
+<following the format used by Sven-Ove Westberg>
+
+Index: .../mh/uip/replsbr.c
+
+Description:
+	The repl(1) command, part of MH-6.5, core dumps on several types
+        of computers when responding to a message with a large "To:" and/or
+	"cc:" field.  This bug appears with any combination of "-cc all",
+	"-cc to", "-cc cc".  This bug is due to not keeping the relative
+	pointer within the header building after a realloc().
+
+Repeat-By:
+        Use repl(1) with a very long "To:" or "cc:" field (i.e., address >
+	BUFSIZ) in the message to which you are replying.
+
+Fix:
+	Keep track of the relative pointer when building the header.
+
+Sidebar:
+	This was a nasty, nasty bug to track down.
+
+-Peter Marvit
+ HP Labs
+ ARPA: marvit@hplabs.hp.com    uucp:{siesmo,ihnp4,decvax,...}!hplabs!marvit
+
+
+---------------------------CUT HERE-----------------------------------
+*** replsbr.c.old	Mon Jun 29 13:07:49 1987
+--- replsbr.c	Mon Jul  6 12:13:21 1987
+***************
+*** 223,229
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+! 		buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+
+--- 225,234 -----
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+! 		/*  Be sure to keep the relative pointer if realloc moves us \
+! 		    Luckily "len" isn't used otherwise */ \
+! 		len = dst - buf;   \
+!                 buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+***************
+*** 227,232
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+  	    }
+  
+  
+
+--- 232,238 -----
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
++ 		dst = buf + len;  /** Get us to the right relative loc. **/ \
+  	    }
+  
+  
+---------------------------CUT HERE-----------------------------------

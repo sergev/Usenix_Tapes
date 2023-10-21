@@ -1,0 +1,4 @@
+builtin()
+{
+	return(0);
+	}

@@ -1,0 +1,191 @@
+#! /bin/sh
+#
+#	@(#)spellck	2.0 (Tolerant) 12/18/86
+#
+PATHNAME=/b/mfg/waynet/bin/spellck
+#
+# Author: Wayne Thompson
+#
+# Interactive spelling checker
+#
+# Dependencies:
+#
+# Bugs:
+#
+USEAGE='Useage: spellck [-d directory] [-u] [file] ...'
+TRUE=1
+FALSE=0
+if [ -f $HOME/.spellckrc ]
+then
+   case `grep -c '^key' $HOME/.spellckrc` in
+      0)
+         ;;
+      1)
+         KEY=`awk '/^key/ { print $2 }' $HOME/.spellckrc`
+         ;;
+      *)
+         echo "Only one key define allowed in $HOME/.spellckrc"
+         exit
+         ;;
+   esac
+   case `grep -c '^dir' $HOME/.spellckrc` in
+      0)
+         ;;
+      1) DIR=`awk '/^dir/ { print $2 }' $HOME/.spellckrc`
+         ;;
+      *) echo "Only one dictionary directory define allowed in \
+            $HOME/.spellckrc"
+         exit
+         ;;
+   esac
+fi
+if [ -n "$SPELLKEY" ]
+then
+   KEY="$SPELLKEY"
+else
+   KEY="'"
+fi
+if [ -n "$SPELLDIR" ]
+then
+   DIR="$SPELLDIR"
+else
+   DIR="$HOME"
+fi
+if [ $# -eq 0 ]
+then
+   echo $USEAGE
+   cat << EOF
+   This is an interactive spelling checker. It will pass a file of words
+that don't appear in the dictionary to vi. Select a word to change or
+examine by placing the cursor on the word and press the "'" key (the key
+may be redefined, see files or variables). The file will be passed to vi
+with the cursor on the first line containing the selected word. You may
+search for additional occurrences of the word with the "n" key. Continue
+in this manner, a word at a time, until you are satisfied that all words
+are correctly spelled. When you indicate that you are done, spell will be
+re-run if the file has been modified. If the file has not been modified,
+you will be asked if you like to update your personal dictionary with those
+words you have chosen not to "correct" (acronyms, technical terms, etc.).
+
+flags: -d	dictionary directory (default ~)
+       -u	update dictionary only
+
+files: ~/.lista (ascii list of words you have added to your dictionary)
+       ~/.hlista (hashed dictionary)
+       ~/.spellckrc (define key other than "'" e.g. key \ or define
+          dictionary directory other than ~ e.g. dir /b/mfg/waynet)
+
+variables: \$SPELLKEY
+           \$SPELLDIR
+EOF
+   exit
+else
+   for i
+   do case $i in
+      -u) UPDATE=$TRUE
+          ;;
+      -d) ISDIR=$TRUE
+          shift
+          ;;
+      -*) echo "unknown flag '$i'"
+          echo $USEAGE
+          exit
+          ;;
+      *)  if [ "$ISDIR" = $TRUE ]
+          then
+             DIR=$i
+             if [ ! -d $DIR ]
+             then
+                echo "'$DIR' not a valid directory"
+                exit
+             fi
+             ISDIR=$FALSE
+          elif [ ! -f $i ]
+          then
+             echo "file '$i' does not exist"
+             exit
+          else
+             FILES=$FILES" "$i
+          fi
+          ;;
+      esac
+   done
+fi
+LIST=$DIR/.lista
+HLIST=$DIR/.hlista
+touch .$$
+trap 'rm .*$$; exit' 2 15
+if [ "$UPDATE" != $TRUE ]
+then
+   if [ ! -f $HLIST ]
+   then
+      cp /usr/dict/hlista $HLIST
+   fi
+   for i in $FILES
+   do
+      spell -d $HLIST $i > .spell.$i$$
+      if [ ! -s .spell.$i$$ ]
+      then
+         echo "No spelling errors in $i."
+         continue
+      fi
+      EXINIT="map $KEY :.w! .$i$$
+      export EXINIT
+      lastmod=`ls -l $i`
+      patn=""
+      while true
+      do
+         if [ -n "$patn" ]
+         then
+            vi +/$patn .spell.$i$$
+         else
+            vi .spell.$i$$
+         fi
+         if [ -f .$i$$ ]
+         then
+            patn=`cat .$i$$`
+            rm .$i$$
+            vi +/$patn $i
+         fi
+         echo -n "Done with $i" '(N) ? '
+         read ans
+         if [ "$ans" = "y" ]
+         then
+            if [ "$lastmod" != "`ls -l $i`" ]
+            then
+               echo "$i has been modified. Rerunning spell."
+               spell -d $HLIST $i > .spell.$i$$
+               if [ ! -s .spell.$i$$ ]
+               then
+                  echo "No spelling errors in $i."
+                  break
+               fi
+               patn=""
+               lastmod=`ls -l $i`
+            else
+               break
+            fi
+         fi
+      done
+   done
+   cat .spell.* > .$$
+fi
+if [ -s .$$ ]
+then
+   echo -n "Update $HLIST" '(N) ? '
+   read ans
+   if [ "$ans" = "y" ]
+   then
+      UPDATE=$TRUE
+   fi
+fi
+if [ "$UPDATE" = $TRUE ]
+then
+   if [ -f $LIST ]
+   then
+      cat $LIST >> .$$
+   fi
+   sort -u .$$ > $LIST
+   spellin /usr/dict/hlista < $LIST > $HLIST
+fi
+rm .*$$

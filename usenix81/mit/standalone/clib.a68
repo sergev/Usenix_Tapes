@@ -1,0 +1,103 @@
+| C startup 		-- Steve Ward 1/80
+|
+| Defined globals:
+|
+|	Genesis()		startup entry point
+|	long lmul(a,b)		long multiply
+|				 to return val.
+
+| Undefined globals:
+|	main()			main C entry point
+
+| To establish C routine f as handler for interrupt n, IVector[n] = &f;
+|  on interrupt, f will then be called with one argument which is a pointer
+|  to a "machine state" structure (on the system stack).  To return,
+|  either simply return or execute IRtn(State) (which has the effect of a
+|  long jump).  Note that if the IRtn doesn't maintain stack discipline,
+|  then the state structure must be copied to some private storage.
+
+Stack	= /EFFFC		| stack at top of dbg region
+
+	.text
+	.globl	Genesis
+Genesis:
+	movl	#Stack,sp	| initialize stack pointer
+	movw	#/2700,sr	| go to high priority.
+	movl	a0,sp@-
+	movl	a0,sp@-
+	jsr	main		| call debugger
+	bra	Genesis		| ... which should never return.
+
+| long multiply routine: c = a*b (unsigned, for now...)
+
+	.globl	lmul
+lmul:	movl	d1,sp@-		| save d1.
+	clrl	d0
+	movw	sp@(10.),d0	| alo, unsigned.
+	mulu	sp@(14.),d0	| alo*blo, unsigned.
+
+	clrl	d1
+	movw	sp@(8.),d1	| ahi, unsigned
+	mulu	sp@(14.),d1	| ahi*blo, unsigned
+	swap	d1		| use just the low portion...
+	clrw	d1		| clear the unused half.
+	addl	d1,d0
+
+	clrl	d1		| similar, for bhi*alo
+	movw	sp@(12.),d1
+	mulu	sp@(10.),d1
+	swap	d1
+	clrw	d1
+	addl	d1,d0
+
+	movl	sp@+,d1		| restore & return.
+	rts
+
+| Integer divide routine: c=a/b. short = long/short, signed
+
+	.globl	ldiv
+ldiv:	movl	d1,sp@-		| save d1.
+	clrl	d0
+	movl	sp@(8.),d0	| a, long.
+	divs	sp@(14.),d0	| divide by blo
+	extl	d0		| sign-extend quotient
+	movl	sp@+,d1		| restore & return.
+	rts
+
+| similar, but returns signed remainder.
+
+	.globl	lrem
+lrem:	movl	d1,sp@-		| save d1.
+	clrl	d0
+	movl	sp@(8.),d0	| a, long.
+	divs	sp@(14.),d0	| divide by blo
+	asrl	#8,d0
+	asrl	#8,d0		| access remainder.
+	movl	sp@+,d1		| restore & return.
+	rts
+
+| Turn of memory mgt, return to ROM debugger:
+
+	.globl	ROM
+ROM:	movl	#/801000,a0	| turn off memory mgt
+	clrw	a0@
+	movl	#/1F00,a0
+	jmp	a0@		| enter ROM bootstrap
+
+| set priority level to 0:
+
+	.globl	spl0
+spl0:	movw	sr,d0		| get program status register
+	andw	#/F8FF,d0	| set priority to zero
+	movw	d0,sr		| put it back.
+	rts
+
+| set priority level to 7:
+
+	.globl	spl7
+spl7:	movw	sr,d0
+	orw	#/0700,d0
+	movw	d0,sr
+	rts
+
+	.end	Genesis

@@ -1,0 +1,242 @@
+'''
+''' @(#) install.man	1.2 (TDI) 2/1/87
+''' This file is a part of UNaXcess Conferencing 1.0.2.
+'''
+.TH INSTALL LOCAL UNaXcess
+.ds U \fBUNaXcess\fR
+.SH NAME
+install \- procedures for installing \*U
+.SH SYNOPSIS
+sh install.sh
+.SH DESCRIPTION
+The \*U conferencing system is largely self-installing via the shell script
+.IR install.sh .
+However, it helps to understand what the \*U install script is doing, and
+what might be done beforehand.
+.PP
+\*U prefers to be installed setuid to a particular user, usually the login of
+the sysop.  This permits \*U to configure itself at runtime, requiring only
+that the file 
+.I ua-config
+exist in the home directory of the user to which it is setuid.  It also
+provides better security, as the \*U directory can be locked up tight, whereas
+write permission must exist in ALL directories and files used by \*U if it is
+not setuid.
+.SH "COMPILING \*U"
+At compile time, only two parameters need be set.  The system type must be
+specified in the Makefile; a list of valid system types is provided there.
+This is required because there are a number of divergent versions of Unix(R)
+in the marketplace:  System V, Berkeley 4.2/4.3, Research Edition 7, Xenix,
+etc.  It is the author's hope that this will change someday.
+.PP
+The second parameter is the NOAUTOPATH directive.  This informs \*U that it
+willnot be run setuid; it has a hard-coded initial directory specified by the
+value of NOAUTOPATH, where it must find the
+.I ua-config
+file and, if the
+.B bbs-directory
+parameter is not listed within that file (see
+.I "CONFIGURATION PARAMETERS"
+below), all other \*U files must also reside within that directory or below
+it.  This directive should be specified as:
+.nf
+.sp
+.ce
+-DNOAUTOPATH='"/path/to/\*U"'
+.sp
+.fi
+The best way to specify the system type parameter, on systems which support
+it, is to specify it in the
+.I make
+command used to make \*U, such as ``make SYSTEM=SYS5 all''.  It can also be
+placed on the CFLAGS line in the Makefile.
+.SH INSTALLATION
+\*U is installed by running the command, ``sh install.sh'', from the \*U
+source directory.  It first checks to see if NOAUTOPATH has been defined; if
+so, it disables all permission tightening and prevents the installation of the
+special 
+.I mkconf
+command used by the setuid \*U program.  If NOAUTOPATH is not defined, it asks
+for a user name to which \*U should be setuid; if the user already exists, the
+installer must be logged in as the \*U sysop, otherwise the script must be run
+as root.  (This is unavoidable, as there is no other way to make a user.)
+Note, however, that the
+.I mkconf
+command MUST be setuid root to work.  Again, this is unavoidable; UNIX(R) does
+not allow non-root users to create directories, and it is not possible to
+make the setuid the real uid, so 
+.I mkdir
+would run as the logged-in user and should not have permission to create a
+directory using
+.IR mkdir .
+.PP
+The install script asks a number of questions.  The first questions deal with
+the installation of the executable files, and whether the optional programs
+should be installed.  (An optional program is one like
+.IR uanews ,
+which will probably not be used on most systems.)  A second group of questions
+is used to build the initial
+.I ua-config
+file.  Finally, the install script invokes the
+.I umotd
+command to create an initial bulletin.
+.PP
+The install script does not cover the creation of special login messages, the
+new-user message, or other special-purpose files; these are described and
+instructions for creating them are given in the
+.IR "\*U Administrator's Manual" .
+.SH "CONFIGURATION PARAMETERS"
+\*U is configured at runtime via the file
+.B ua-config
+in the home directory of \*U's owner.  (Or the directory specified by
+NOAUTOPATH.)  This file contains variable settings of the form
+.nf
+.sp
+.ce
+\fIname\fR \fIvalue\fR
+.sp
+.fi
+which affect \*U's operation.  They are of three types:  STRING, which may
+take any whitespace-delimited string or any string in quotes; NUMERIC, which
+may take any number from 0-255; and BOOLEAN, which may take the strings YES,
+NO, TRUE, or FALSE.  The variables are:
+.de LS
+.sp
+.in +10
+.ll -5
+..
+.de LI
+.ti -5
+.sp
+\fB\\$1\fR
+.if \\w'\\$2' (\\$2)
+\-
+..
+.de LE
+.in -10
+.ll +5
+.sp
+.ns
+..
+.LS
+.LI bbs-directory STRING
+The directory where \*U's data files and message base reside.  The default is
+\*U's owner's home directory.
+.LI readonly BOOLEAN
+If this is TRUE, \*U will permit the creation of read-only conferences.  (See
+the
+.I "\*U Administrator's Manual"
+for details.)  The default is FALSE.
+.LI restricted BOOLEAN
+If this is TRUE, \*U will permit restrictions on conference membership via the
+.B M
+command.  See the
+.I "\*U Administrator's Manual"
+for details.  The default is FALSE.
+.LI shell STRING
+This is the path of the default shell used by the
+.B C
+command.  See also the
+.B read-env
+variable.  The default is /bin/sh.
+.LI read-env BOOLEAN
+If this is TRUE, \*U will read the environment of the invoker to determine the
+shell to be run via the
+.B C
+command.  The default is FALSE.
+.LI bbs-user STRING
+A list of UNIX(R) user-names, separated by commas and/or spaces, which may not
+log directly into \*U.  This is intended to prevent a generic BBS login from
+conflicting with a UNIX(R) user; otherwise, there would be a security hole, as
+shell users are forced to log in by their UNIX(R) user name if they are so
+named in \*U.  This is explained in more detail (and more clearly) in the
+.IR "\*U  Administrator's Manual" .
+The default is no BBS logins.
+.LI time-limit NUMERIC
+The time limit, in minutes, of a \*U session.  If this is set to 0, no time
+limit is imposed.  The default is 30 minutes.
+.LI sysop STRING
+This variable defines the sysop's login name.  The default is SYSOP; however,
+special purpose BBSes may have this changed to be more relevant (as in DUNGEON
+MASTER for a fantasy-gaming BBS).
+.LI private-msgs BOOLEAN
+If this is TRUE, users are permitted to create private messages to other
+users.  While public messages may have any recipient named, private messages
+must be to a registered \*U user.
+.LI logging BOOLEAN
+If this is TRUE, a log of activity and errors will be kept in the file 
+.B Logfile
+in the directory defined by
+.BR bbs-directory .
+This log can get quite large very quickly.  The default is FALSE.
+.LI banner STRING
+This is the pathname (fully qualified or relative to
+.BR bbs-directory )
+of a file to be displayed before the \*U login prompt is displayed.  The
+default value, "", causes an internal message to be displayed consisting of
+a copyright message.
+.LI login-msg STRING
+This is the login prompt to be displayed at the start of a \*U session.  The
+default value, "", causes the message
+.nf
+.sp
+.ce
+Enter your name, GUEST, OFF, or NEW:
+.sp
+.fi
+to be displayed.
+.LI login-tries NUMERIC
+This variable defines the number of tries a user gets to log in to \*U.  A
+value of 0 will be treated as 1.  The default is 3.
+.LI ascii-upload STRING
+The command to be passed to /bin/sh in order to upload a file using ASCII.  The
+default uses /bin/cat after turning echo off, then restores echo.  All
+download commands may have the escape
+.B %s
+in them to indicate where the file name should be placed; if it is not
+present, \*U will append the file name to the end of the command, preceded by
+a space.
+.LI ascii-download STRING
+The command to be passed to /bin/sh in order to download a file using ASCII.
+The default uses /bin/cat to send the file.
+.LI xmodem-upload STRING
+The command passed to /bin/sh to upload a file using XMODEM protocol.  The
+default is
+.BR "umodem -rb" .
+.LI xmodem-upload STRING
+The command passed to /bin/sh to download a file using XMODEM protocol.  The
+default is
+.BR "umodem -sb" .
+.LI kermit-upload STRING
+The command passed to /bin/sh to upload a file using Kermit protocol.  The
+default is
+.BR "kermit -iwr" ,
+and assumes that C-Kermit is available.
+.LI kermit-download STRING
+The command passed to /bin/sh to download a file using Kermit protocol.  The
+default is 
+.BR "kermit -iws" ,
+and assumes that C-Kermit is available.
+.LE
+.SH "OTHER INSTALLABLE FILES"
+There are a number of other files used by \*U that should be updated at
+install time.  They all reside in the
+.BR bbs-directory :
+.LS
+.LI NewMessage
+This file contains the message shown to new users.  As distributed, it
+contains a copyright message.  It should detail the system's rules,
+information about access levels, and any other information for new users.
+.LI directory
+This file contains listings of UDL branches and downloadable files.  As
+distributed, it defines the "general" UDL branch and the \*U User's Guide
+within that branch.  See the
+.I "\*U Administrator's Manual"
+for information on maintaining this file.
+.SH "ACKNOWLEDGEMENTS AND COPYRIGHTS"
+UNIX(R) is a registered trademark of AT&T.
+.SH COPYRIGHT
+\*U is Copyright (C) 1983-1987 by Brandon S. Allbery.  Permission is granted
+to copy this program and to distribute it freely; however, the
+author reserves the right to distribute the program for any fees beyond a
+copying/handling fee.

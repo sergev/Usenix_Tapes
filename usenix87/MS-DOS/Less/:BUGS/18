@@ -1,0 +1,450 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site nsc-pdc.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!vax135!cornell!uw-beaver!tektronix!reed!nsc-pdc!mark
+From: mark@nsc-pdc.UUCP (Mark Nudelman)
+Newsgroups: net.sources.bugs
+Subject: less mods
+Message-ID: <483@nsc-pdc.UUCP>
+Date: 18 Sep 85 19:45:39 GMT
+Date-Received: 21 Sep 85 15:04:22 GMT
+Reply-To: mark@nsc-pdc.UUCP (Mark Nudelman)
+Organization: NSC Portland Development Center, Portland Oregon
+Lines: 437
+
+I have made some bug fixes and improvements to my recently 
+posted paginator, less.  Included below are the diffs.  
+First, a summary of the changes:
+
+	* Due to popular demand, I have allowed any character
+	  to break out of the "press RETURN" messages; any
+	  char other than return or space is interpreted
+	  as a command.  The old code is under "#if ONLY_RETURN"
+	  for the benefit of anyone who liked the old way.
+
+	* Also by popular demand, I have added some new commands
+	  as synonyms for existing commands, mainly control
+	  characters like ^F, ^B, ^U, ^D for f, b, u, d.
+
+	* Pattern searching has been speeded up
+	  (by a factor of 2 on our Vax 4.2 system).
+
+	* New command "%" is a synonym for "p". 
+	  (Thanks to Andy Tannenbaum for this idea.)
+
+	* Shell and editor escapes now correctly reinitialize
+	  the terminal when less resumes.  
+	  (Thanks to Mike Kersenbrock for finding this one.)
+
+	* Minor bug with interrupts is fixed.
+	  ("n" command wouldn't work after an interrupt).
+
+	* Not-so-minor bug fix: search for N-th occurence
+	  of a pattern did not work when N > 1.
+
+	* Several other little changes which I
+	  just couldn't keep my fingers from typing.
+
+I have included index lines for the benefit of people who use "patch".
+As usual, feel free to send mail with comments, suggestions, bugs, etc.
+
+Mark Nudelman			ihnp4!nsc!nsc-pdc!mark
+National Semiconductor		tektronix!reed!nsc-pdc!mark
+
+-------------------- diffs start here ---------------------------------
+
+Index: command.c
+5a6,7
+> #include "position.h"
+> #include <setjmp.h>
+6a9
+> extern jmp_buf main_loop;
+22a26
+> static char last_mcc;		/* The previous mcc */
+115a120
+> 	cp = cmdbuf;
+177c182
+< 		if (cp > cmdbuf) 
+---
+> 		if (cp > cmdbuf && position(TOP) == NULL_POSITION)
+206d210
+< 	register int last_mcc = 0;
+208c212
+< 	mcc = 0;
+---
+> 	mcc = last_mcc = 0;
+209a214
+> 	setjmp(main_loop);
+262,267c267
+< 					lower_left();
+< 					putc('\n');
+< 					flush();
+< 					raw_mode(0);
+< 					system(cmdbuf);
+< 					raw_mode(1);
+---
+> 					lsystem(cmdbuf);
+312a313
+> 		case CONTROL('F'):
+319a321
+> 		case CONTROL('B'):
+329a332
+> 		case CONTROL('E'):
+340a344,345
+> 		case CONTROL('K'):
+> 		case CONTROL('Y'):
+350a356
+> 		case CONTROL('D'):
+361a368
+> 		case CONTROL('U'):
+378a386,387
+> 		case CONTROL('R'):
+> 		case CONTROL('L'):
+396a406
+> 		case '%':
+421a432
+> 		case CONTROL('G'):
+508,511d518
+< 			lower_left();
+< 			clear_eol();
+< 			flush();
+< 			raw_mode(0);
+513,514c520
+< 			system(cmdbuf);
+< 			raw_mode(1);
+---
+> 			lsystem(cmdbuf);
+Index: funcs.h
+2d1
+< 	public char * eq_message ();
+14a14
+> 	public void jump_loc ();
+26a27
+> 	public int onscreen ();
+47a49
+> 	public void eos_clear ();
+58a61,62
+> 	public POSITION forw_raw_line ();
+> 	public POSITION back_raw_line ();
+60a65
+> 	public void lsystem ();
+Index: help.c
+34c34
+< 	puts("p           *  Position to N percent into the file.\n");
+---
+> 	puts("p, %        *  Position to N percent into the file.\n");
+Index: input.c
+27,28d31
+< 	{
+< 		line = NULL;
+30d32
+< 	}
+34,35d35
+< 	{
+< 		line = NULL;
+37d36
+< 	}
+101,102d99
+< 	{
+< 		line = NULL;
+104d100
+< 	}
+126,127d121
+< 			{
+< 				line = NULL;
+129d122
+< 			}
+171,172d163
+< 	{
+< 		line = NULL;
+174d164
+< 	}
+Index: less.h
+53a54
+> #define	CONTROL(c)		((c)&037)
+Index: less.l
+89a90,92
+> .IP \%
+> Same as p.
+> .PP
+288,294d290
+< .PP
+< Searches will not find a string which has been split due
+< to line folding.
+< .sp
+< Tabs in the input are translated into the appropriate number of spaces, 
+< so a search pattern which includes a tab character will always fail.
+< Use the pattern "\ *" instead.
+Index: line.c
+245a246,346
+> 
+> /*
+>  * Analogous to forw_line(), but deals with "raw lines":
+>  * lines which are not split for screen width.
+>  * {{ This is supposed to be more efficient than forw_line(). }}
+>  */
+> 	public POSITION
+> forw_raw_line(curr_pos)
+> 	POSITION curr_pos;
+> {
+> 	register char *p;
+> 	register int c;
+> 	POSITION new_pos;
+> 
+> 	if (curr_pos == NULL_POSITION || ch_seek(curr_pos) ||
+> 		(c = ch_forw_get()) == EOF)
+> 		return (NULL_POSITION);
+> 
+> 	p = linebuf;
+> 
+> 	for (;;)
+> 	{
+> 		if (c == '\n' || c == EOF)
+> 		{
+> 			new_pos = ch_tell();
+> 			break;
+> 		}
+> 		if (p >= &linebuf[sizeof(linebuf)-1])
+> 		{
+> 			/*
+> 			 * Overflowed the input buffer.
+> 			 * Pretend the line ended here.
+> 			 * {{ The line buffer is supposed to be big
+> 			 *    enough that this never happens. }}
+> 			 */
+> 			new_pos = ch_tell() - 1;
+> 			break;
+> 		}
+> 		*p++ = c;
+> 		c = ch_forw_get();
+> 	}
+> 	*p = '\0';
+> 	line = linebuf;
+> 	return (new_pos);
+> }
+> 
+> /*
+>  * Analogous to back_line(), but deals with "raw lines".
+>  * {{ This is supposed to be more efficient than back_line(). }}
+>  */
+> 	public POSITION
+> back_raw_line(curr_pos)
+> 	POSITION curr_pos;
+> {
+> 	register char *p;
+> 	register int c;
+> 	POSITION new_pos;
+> 
+> 	if (curr_pos == NULL_POSITION || curr_pos <= (POSITION)0 ||
+> 		ch_seek(curr_pos-1))
+> 		return (NULL_POSITION);
+> 
+> 	p = &linebuf[sizeof(linebuf)];
+> 	*--p = '\0';
+> 
+> 	for (;;)
+> 	{
+> 		c = ch_back_get();
+> 		if (c == '\n')
+> 		{
+> 			/*
+> 			 * This is the newline ending the previous line.
+> 			 * We have hit the beginning of the line.
+> 			 */
+> 			new_pos = ch_tell() + 1;
+> 			break;
+> 		}
+> 		if (c == EOF)
+> 		{
+> 			/*
+> 			 * We have hit the beginning of the file.
+> 			 * This must be the first line in the file.
+> 			 * This must, of course, be the beginning of the line.
+> 			 */
+> 			new_pos = (POSITION)0;
+> 			break;
+> 		}
+> 		if (p <= linebuf)
+> 		{
+> 			/*
+> 			 * Overflowed the input buffer.
+> 			 * Pretend the line ended here.
+> 			 */
+> 			new_pos = ch_tell() + 1;
+> 			break;
+> 		}
+> 		*--p = c;
+> 	}
+> 	line = p;
+> 	return (new_pos);
+> }
+Index: main.c
+213c213
+< 	if (setjmp(main_loop) == 0)
+---
+> 	/*if (setjmp(main_loop) == 0)*/
+Index: output.c
+12c12,13
+< 	
+---
+> extern char *first_cmd;
+> 
+144a146
+> 	static char buf[2];
+152a155
+> #if ONLY_RETURN
+154a158,165
+> #else
+> 	c = getc();
+> 	if (c != '\n' && c != '\r' && c != ' ')
+> 	{
+> 		buf[0] = c;
+> 		first_cmd = buf;
+> 	}
+> #endif
+Index: position.c
+94a95,113
+> 
+> /*
+>  * See if the byte at a specified position is currently on the screen.
+>  * Check the position table to see if the position falls within its range.
+>  * Return the position table entry if found, -1 if not.
+>  */
+> 	public int
+> onscreen(pos)
+> 	POSITION pos;
+> {
+> 	register int i;
+> 
+> 	if (pos < table[0])
+> 		return (-1);
+> 	for (i = 1;  i < sc_height;  i++)
+> 		if (pos < table[i])
+> 			return (i-1);
+> 	return (-1);
+> }
+Index: prim.c
+68a69
+> 			line = NULL;
+112a114
+> 			line = NULL;
+269d270
+< 	int c;
+280a282,283
+> 	jump_loc(pos);
+> }
+281a285,291
+> 	public void
+> jump_loc(pos)
+> 	POSITION pos;
+> {
+> 	register int c;
+> 	register int nline;
+> 
+291a302,312
+> 	 * See if the line is currently displayed.
+> 	 * If so, just scroll there.
+> 	 */
+> 	if ((nline = onscreen(pos)) >= 0)
+> 	{
+> 		forw(nline, position(BOTTOM_PLUS_ONE), 1);
+> 		return;
+> 	}
+> 
+> 	/*
+> 	 * Line is not on screen.
+316,317c337
+< 	POSITION pos, new_pos;
+< 	register int lines_from_top;
+---
+> 	POSITION pos, linepos;
+399d418
+< 		lines_from_top = sc_height + 1;
+407d425
+< 		lines_from_top = 0;
+415d432
+< 		lines_from_top = 1;
+423d439
+< 		lines_from_top = sc_height + 1;
+434d449
+< 	new_pos = pos;
+452,453c467,468
+< 			 * Read the next line, and remember the 
+< 			 * starting position of the line after that.
+---
+> 			 * Read the next line, and save the 
+> 			 * starting position of that line in linepos.
+455,457c470,471
+< 			pos = new_pos;
+< 			new_pos = forw_line(pos);
+< 			lines_from_top++;
+---
+> 			linepos = pos;
+> 			pos = forw_raw_line(pos);
+461c475,476
+< 			 * Read the previous line.
+---
+> 			 * Read the previous line and save the
+> 			 * starting position of that line in linepos.
+463,464c478,479
+< 			pos = back_line(pos);
+< 			lines_from_top--;
+---
+> 			pos = back_raw_line(pos);
+> 			linepos = pos;
+467c482
+< 		if (line == NULL)
+---
+> 		if (pos == NULL_POSITION)
+496,517c511
+< 
+< 	if (lines_from_top > 0 && lines_from_top < sc_height)
+< 	{
+< 		/*
+< 		 * Scroll forward.
+< 		 */
+< 		clear_eol();
+< 		forw(lines_from_top-1, position(BOTTOM_PLUS_ONE), 1);
+< 	} else if (lines_from_top < 0 && -lines_from_top < sc_height)
+< 	{
+< 		/*
+< 		 * Scroll backwards.
+< 		 */
+< 		clear_eol();
+< 		back(-lines_from_top, position(TOP), 1);
+< 	} else
+< 	{
+< 		/*
+< 		 * Clear and paint screen.
+< 		 */
+< 		prepaint(pos);
+< 	}
+---
+> 	jump_loc(linepos);
+Index: signal.c
+135a136,153
+> 
+> /*
+>  * Pass the specified command to a shell to be executed.
+>  * Like plain "system()", but handles resetting terminal modes, etc.
+>  */
+> 	public void
+> lsystem(cmd)
+> 	char *cmd;
+> {
+> 	lower_left();
+> 	clear_eol();
+> 	deinit();
+> 	flush();
+> 	raw_mode(0);
+> 	system(cmd);
+> 	raw_mode(1);
+> 	init();
+> }
+Index: version.c
+71a72,73
+>  *	v41: ONLY_RETURN, control char commands,	9/17/85   mark
+>  *	     faster search, other minor fixes.
+75c77
+< char version[] = "@(#) less  version 40";
+---
+> char version[] = "@(#) less  version 41";

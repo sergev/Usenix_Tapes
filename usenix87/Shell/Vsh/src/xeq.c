@@ -1,0 +1,397 @@
+#include "hd.h"
+#include <signal.h>
+#include <errno.h>
+
+/*  F_exec forks and executes a process.  It then waits for the
+    forked process to finish.
+    Use f_exec like execl, except f_exec waits for termination of the
+    called program and then falls through.
+*/
+
+extern leave ();
+
+#define pipein	pipefile [0]
+#define pipeout	pipefile [1]
+
+/*VARARGS1*/
+f_exec (a, b) char *a, *b; 
+{
+
+    int retval;
+    int p;
+
+    tty_push (COOKEDMODE);
+    ewin();
+    if ((p = myfork ()) == 0) myexecv (a, &b);
+    else retval = join (p);
+    tty_pop ();
+    vwin();
+    return retval;
+}
+
+/* Exec takes parameters like a command and interfaces properly
+   to the command processor in command.c. */
+
+exec (argv, argv1) char **argv, **argv1; 
+{
+    register char **v;
+    register int p;
+    register int pflag;
+    int pipefile[2];
+    char argbuf[STRMAX];
+    register char *s;
+    register int argcnt, i;
+    int query;
+    FILE *stream;
+
+    pflag = 0;
+    /* Page output */
+    if (argv == 0) {
+	argv = argv1;
+	pflag++;
+    }
+    if (*argv == CNULL) 
+    {
+	putmsg ("Exec: missing command");
+	return NOREPLOT;
+    }
+
+    if (pflag) {
+	if (mypipe(pipefile))
+		return NOREPLOT;
+    }
+    else
+	tty_push (COOKEDMODE);
+    ewin();
+    if ((p = myfork ()) == 0) {
+	v = argv;
+	if (**v == ';')
+		(*v)++;
+	s = argbuf;
+	argcnt = 0;
+	for (; *v; v++) {
+		query = (v[0][0] == '?' && v[0][1] == '?') ? 1 : 0;
+		if (query || strcmp(*v, "$") == 0) {
+			if (!query && VSHMODE == SELECTMODE
+				&& selecttype == DIRCMD && *selectname)
+				*v = selectname;
+			else if (query || !NOARG) {
+				tty_push(COOKEDMODE);
+				if (argcnt == 0) {
+					if (pflag)
+						sleep(1);
+					hilite(1);
+					printf("\r(");
+					for (i = 0;;) {
+						if (query && (argv+i) >= v)
+							break;
+						printf("%s", argv[i++]);
+						if (argv[i])
+							putch(' ');
+						else
+							break;
+					}
+					printf(")\n");
+					hilite(0);
+				}
+				if (query) {
+					hilite("%s", &v[0][2]);
+					argcnt++;
+				}
+				else
+					hilite("Argument%d:", ++argcnt);
+				putch(' ');
+				i = xgetline(stdin, s, (&argbuf[STRMAX]-s));
+				tty_pop();
+				if (i) {
+					*v = s;
+					s += i+1;
+				}
+				else
+					*v = 0;
+			}
+			else
+				*v = 0;
+			if (*v == 0) {
+				p++;
+				if (query) {
+					hilite("(Missing argument, aborting)");
+					printf("\n\r");
+					exit(-1);
+				}
+				else
+					hilite("(Missing Argument)");
+				continue;
+			}
+		}
+		*(v - p) = *v;
+	}
+	if (pflag) {
+		close(outfile);
+		dup(pipeout);
+		close(errorfile);
+		dup(pipeout);
+		close(pipein);
+		close(pipeout);
+		/* Not clear whether closing stdin is a good decision... */
+		close(infile);
+		open("/dev/null", 0);
+	}
+	else
+		clearline();
+	myexecv (*argv, argv);
+    }
+    else {
+	if (pflag) {
+		stream = fdopen(pipein, "r");
+		close(pipeout);
+		page(stream, "");
+		fclose(stream);
+	}
+	join (p);
+    }
+    if (!pflag && **argv != ';')
+	getrtn ();
+    if (!pflag)
+	tty_pop ();
+    vwin();
+    return REPLOT;
+}
+
+mypipe(fd)
+int *fd;
+{
+	register int f;
+
+	f = pipe(fd);
+	if (f)
+		myperror("pipe()");
+	return f;
+}
+
+pagexec(argv)
+char **argv;
+{
+	return exec(0, argv);
+}
+/* Mysystem is similar to system, except the bugs are fixed.  In
+   addition, the tty is set to cooked mode and the command is printed.
+*/
+mysystem (name)  char *name; 
+{
+
+    int pipefile[2];
+    register int p;
+    FILE *stream;
+
+    if (mypipe (pipefile))
+	return NOREPLOT;
+    tty_push (COOKEDMODE);
+
+    if ((p = myfork()) == 0) 
+    {
+	close (infile); dup (pipein);
+#ifdef	PWBTTY
+	myexecl ("/bin/sh", "+", "-p", 0);
+#else
+	myexecl (SHELL, "+", 0);
+#endif
+    }
+    else
+    {
+	stream = fdopen (pipeout, "w");
+	close (pipein);
+	hilite ("%s", name);
+	printf ("\r\n");
+	fprintf (stream, "%s\n", name);
+	fclose (stream);
+	join (p);
+    }
+    tty_pop ();
+    return REPLOT;
+}
+
+/* p_exec is just like f_exec except output is paged */
+
+/*VARARGS1*/
+p_exec (a, b, c, d) char *a, *b, *c, *d; 
+{
+
+    int pipefile [2];
+    register int p;
+    FILE *stream;
+
+    if (mypipe (pipefile))
+	return NOREPLOT;
+    ewin();
+    if ((p = myfork ()) == 0) 
+    {
+	close (outfile); dup (pipeout);
+	close (errorfile); dup (pipeout);
+	close (pipein); close (pipeout);
+	if (a == 0) {
+		if (close(infile) || open(b, 0)) {
+			myperror(b);
+			_exit(1);
+		}
+		myexecv (c, &d);
+	}
+	else
+		myexecv (a, &b);
+    }
+    else
+    {
+	stream = fdopen (pipein, "r");
+	close (pipeout);
+	page (stream, "");
+	fclose (stream);
+	join (p);
+    }
+    vwin();
+    return REPLOT;
+}
+
+/* Special interfaces to exec */
+/* Myexecl and myexecv close files numbered > 3 and
+   print their arguments. */
+
+/*VARARGS1*/
+myexecl (a, b) char *a, *b; 
+{
+    myexecv (a, &b);
+}
+
+doexecv (a, b) char *a, **b; 
+{
+    register char **v;
+    register char *s, *t;
+    register char *p;
+    int i;
+    char buf[STRMAX];
+    char c;
+    extern errno;
+
+    v = b;
+    if (**v != '+') 
+    {
+	clearline();
+	hilite(1);
+	while (*v)
+		printf (" %s", *v++);
+	v = b;
+	hilite(0);
+	printf("\r\n");
+    }
+    for (i = 3; i <= _NFILE; i++) close (i);
+    if (*a != '/') {
+	p = PATH;
+	while (*p) {
+		s = buf;
+		t = p;
+		while (*t && *t != ':')
+			*s++ = *t++;
+		if (*p != ':')
+			*s++ = '/';
+		if (*(p = t))
+			p++;
+		t = a;
+		while (*s++ = *t++);
+		execv(buf, v);
+		if (errno == ENOEXEC) {
+			a = buf;
+			break;
+		}
+	}
+    }
+    else
+	execv(a, v);
+    if (errno == ENOEXEC) {
+	*v = a;
+	/* This may be a no-no, but what the hell... */
+	*--v = "sh";
+	p = "/bin/sh";
+	if ((i = open(a, 0)) > 0) {
+		if (read(i, &c, 1) > 0 && c == '#')
+			p = "/bin/csh";
+		close(i);
+	}
+	execv(p, v);
+	printf("%s: No shell\r\n", p);
+	errno = ENOEXEC;
+	sleep(2);
+    }
+}
+
+myexecv(a, b) char *a, **b;
+{
+    doexecv(a, b);
+    myperror (a); getrtn (); _exit (1);
+}
+
+/* Myfork acts like fork but never fails */
+#define	MAXTRIES	50	/* Max tries of a fork */
+myfork () 
+{
+    register int p;	/* process number */
+    register int tries;	/* number of tries */
+
+    for (tries = 1; tries <= MAXTRIES; tries++) 
+    {
+	p = fork ();
+	if (p > 0)
+		signal (SIGINT, SIG_IGN);
+	else if (p == 0) {
+		signal (SIGINT, SIG_DFL);
+		signal (SIGQUIT, SIG_DFL);
+	}
+	if (p != -1) return p;
+	myperror ("Cannot fork");
+	sleep (tries);
+	clearmsg (0);
+    }
+    putmsg ("Fatal error -- cannot fork\r\n");
+    leave ();
+    return -1;
+}
+
+/* Join is the compliment of fork */
+
+join (p) int p; 
+{
+
+    int status [2]; int w;
+
+    status[0] = -1;
+    do
+    {
+	w = wait (status);
+    }
+    while (p != -1 && w != p && w != -1);
+
+    signal (SIGINT, SIG_IGN);		/* dyt, was leave */
+
+    return (status [0]);
+}
+
+/* Exec without fork */
+chain(argv)
+char **argv;
+{
+	if (*argv == CNULL) {
+		putmsg("Chain: missing command");
+		return NOREPLOT;
+	}
+	tty_push(COOKEDMODE);
+	goout();
+	putmsg("Chaining to");
+	signal(SIGINT, SIG_DFL);
+	signal(SIGQUIT, SIG_DFL);
+	doexecv(*argv, argv);
+	signal(SIGINT, SIG_IGN);
+	signal(SIGQUIT, SIG_IGN);
+	myperror(*argv);
+	comein();
+	tty_pop();
+	return NOREPLOT;
+}
+

@@ -1,0 +1,38 @@
+#
+# "after". 21jul86. runs a shell script after a running process has finished
+# Peter S. Shenkin	 Columbia Univ. Biology Dept., NY, NY  10027
+# {philabs,rna}!cubsvax!peters		cubsvax!peters@columbia.ARPA
+
+# parse command line, and set sleep interval if not specified
+if( $#argv == 3 ) then
+	set seconds=$3
+else if( $#argv == 2 ) then
+	set seconds=900
+else
+	echo 'usage: after pid shellscript [seconds, default=900 ]'
+	exit
+endif
+
+# initialize internal variables
+set awkfin=$home/etc/awkfinafter
+set awkfout=/tmp/after$$
+
+# create awk program file
+sed -e s/@@/$1/ $awkfin> $awkfout
+
+# take a breather for $seconds;  check for pid;
+#   when no longer found, run script ($2), cleanup and exit
+while 1
+	sleep $seconds
+	if( 0 == `ps | awk -f $awkfout` ) then
+		$2
+		/bin/rm $awkfout
+		exit
+	endif
+end
+----------------------file $home/bin/after ends here--------------------------
+----------------------file $home/etc/awkfinafter starts here------------------
+BEGIN		{ found = 0 }
+$1 == @@	{ found = 1; exit }
+END		{ print found }
+----------------------file $home/etc/awkfinafter ends here------------------

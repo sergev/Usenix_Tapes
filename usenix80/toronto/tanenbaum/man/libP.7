@@ -1,0 +1,214 @@
+.th LIBP VII 3/21/79
+.sh NAME
+libP \*- library of external routines for pascal programs
+.sh SYNOPSIS
+.ta 11
+const	bufsize = ?;
+.br
+type	br1 =  1..bufsize;
+	br2 =  0..bufsize;
+	br3 = -1..bufsize;
+	buf = packed array[br1] of char;
+	alfa = packed array[1..8] of char;
+	string = ^packed array[1..?] of char;
+	filetype = file of ?;
+.s3
+.s3
+{all routines must be declared extern}
+.s3
+.s3
+function	argc:integer;
+.br
+function	argv(i:integer):string;
+.br
+procedure	argshift;
+.s3
+procedure	buff(var f:filetype);
+.br
+procedure	nobuff(var f:filetype);
+.br
+procedure	notext(var f:text);
+.br
+procedure	diag(var f:text);
+.br
+procedure	pcreat(var f:text);
+.br
+procedure	popen(var f:text);
+.br
+procedure	pclose(var f:filetype);
+.s3
+procedure	procentry(var n:alfa);
+.br
+procedure	procexit(var n:alfa);
+.s3
+function	perrno:integer;
+.br
+function	uread(fd:integer; var b:buf; len:br1):br3;
+.br
+function	uwrite(fd:integer; var b:buf; len:br1):br3;
+.s3
+function	strbuf(var b:buf):string;
+.br
+function	strtobuf(s:string; var b:buf; len:br1):br2;
+.br
+function	strlen(s:string):integer;
+.br
+function	strfetch(s:string; i:integer):char;
+.br
+procedure	strstore(s:string; i:integer; c:char);
+.sh DESCRIPTION
+This library contains some often used external routines for pascal programs.
+Two versions exist: one for the EM1 interpreter and another one
+which is used when programs are translated into PDP-11 code.
+The routines can be divided into several categories:
+.s3
+Argument control:
+.lp +12 10
+argc	gives the number of arguments provided when the program is called.
+.lp +12 10
+argv	selects an arbitrary argument from the argument list and returns a
+pointer to it.
+This pointer is nil if the index is out of bounds (<0 or >=argc).
+.lp +12 10
+argshift	effectively deletes the first argument from the argument list.
+Its function is equivalent to 'shift' in the UNIX shell: argv[2] becomes
+argv[1], argv[3] becomes argv[2], etc.
+It is a very useful procedure to skip optional flag arguments.
+Note that the matching of arguments and files
+is done whenever a file is opened by a call to reset or rewrite.
+.i0
+.s3
+Additional file handling routines:
+.lp +12 10
+buff	turn on buffering of a file. Not very useful, because all
+files are buffered except standard output to a terminal and diagnostic output.
+Input files are always buffered.
+.lp +12 10
+nobuff	turn off buffering of an output file. It causes the current contents of the
+buffer to be flushed.
+.lp +12 10
+notext	only useful for input files.
+End of line characters are not recognized anymore, and character codes out of
+the ASCII range (0..127) do not cause an error message.
+.lp +12 10
+diag	initialize a file for output on the diagnostic output stream (fd=2).
+Output is not buffered.
+.lp +12 10
+pcreat	The same as rewrite(f), except that you must provide the filename yourself.
+The name must be zero terminated. Only textfiles are allowed.
+.lp +12 10
+popen	The same as reset(f), except that you must provide the filename yourself.
+The name must be zero terminated. Only textfiles are allowed.
+.lp +12 10
+pclose	Gives you the opportunity to closed files hidden in records or arrays.
+All other files are close automatically.
+.i0
+.s3
+Procedure tracing:
+.lp +12 10
+procentry	prints the name of the called procedure with up to seven
+argument words in decimal on standard output.
+This routine is automatically called when the 't' option is on (pc:pem(VI)).
+You must declare output in the program heading for this routine to work.
+.lp +12 10
+procexit	prints the name of the procedure when it exits. Same remarks
+as for procentry.
+.i0
+.s3
+String handling:
+.lp +12 10
+strbuf	type conversion from character array to string.
+It is your own responsibility that the string is zero terminated.
+.lp +12 10
+strtobuf	copy string into buffer until the string terminating zero byte
+if found or until the buffer if full, whatever comes first.
+The zero byte is also copied.
+The number of copied characters, excluding the zero byte, is returned, so if
+the result is equal to the buffer length, then the end of buffer is reached
+before the end of string.
+.lp +12 10
+strlen	returns the string length excluding the terminating zero byte.
+.lp +12 10
+strfetch	fetches the i-th character from a string.
+There is no check against the string length.
+.lp +12 10
+strstore	stores a character in a string. There is no check against
+string length, so that it is a dangerous procedure.
+.i0
+.s3
+UNIX system calls:
+.lp +12 10
+uread	equal to the read system call (read(II) and lib2(VII)).
+Its normal name is blocked by the standard pascal routine read.
+.lp +12 10
+uwrite	as above but for write(II).
+.lp +12 10
+perrno	because external data references are not possible in pascal,
+this routine returns the global variable errno, indicating the result of
+the last system call.
+.i0
+.s3
+The next program presents an example of how these routines can be used.
+This program is equivalent to the UNIX command cat(I).
+.nf
+     {$c+}
+     program cat(input,inp,output);
+     var inp:text;
+         s:string;
+     
+     function argc:integer; extern;
+     function argv(i:integer):string; extern;
+     procedure argshift; extern;
+     function strlen(s:string):integer; extern;
+     function strfetch(s:string; i:integer):char; extern;
+     
+     procedure copy(var fi:text);
+     var c:char;
+     begin reset(fi);
+       while not eof(fi) do
+         begin
+           while not eoln(fi) do
+             begin
+               read(fi,c);
+               write(c)
+             end;
+           readln(fi);
+           writeln
+         end
+     end;
+     
+     begin  {main}
+       if argc = 1 then
+         copy(input)
+       else
+         repeat
+           s := argv(1);
+           if (strlen(s) = 1) and (strfetch(s,1) = '-')
+             then copy(input)
+             else copy(inp);
+           argshift;
+         until argc <= 1;
+     end.
+.fi
+.s0
+.sh FILES
+.lp +20 20
+/usr/lib/libP.a	the version for compiled programs
+.lp +20 20
+/usr/lib/em1:P.a	the version for interpreted programs
+.i0
+.sh "SEE ALSO"
+pc(I), pc:pem(VI), pc:prlib(VII), lib2(VII)
+.sh DIAGNOSTICS
+Two routines may cause fatal error messages to be generated.
+These are:
+.lp +12 10
+pcreat	pcreat error (exit code 191).
+.lp +12 10
+popen	popen error (exit code 190).
+.i0
+The routine _fatal out of pc:prlib(VII) is called to handle these errors.
+.sh AUTHOR
+Johan Stevenson, Vrije Universiteit.
+.sh BUGS
+Please report bugs to the author

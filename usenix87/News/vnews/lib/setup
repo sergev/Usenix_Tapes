@@ -1,0 +1,449 @@
+#!/bin/sh
+
+: This shell procedure reads in the config file, generates defaults for
+: all the values not specified, and generated the config.h, newsdefs.h,
+: makedefs, and archive.  It should be run to bring up a new system.
+:
+: This shell procedure uses the value ",,,," to indicate that a variable
+: has not been set.
+
+exec 3<&0
+if test ! -f config
+then	echo "Please create config file and run again."
+	exit 1
+fi
+
+: figure out who is running this program
+user=${LOGNAME-${USER-,,,,}}
+if test "$user" = ,,,,
+then	ls -l config > junk
+	exec < junk
+	read x y user rest
+	rm -f junk
+	if test "$user" = ""
+	then	 user=news
+	fi
+fi
+
+: look for other setup programs
+setups= special=
+for x in ../*
+do	if test -f $x/config.parms
+	then	setups="$setups $x/setup"
+		special="$special`cat $x/config.parms`
+"
+	fi
+done
+
+: set up all the defaults
+lib=/usr/lib/news
+spool=/usr/spool/news
+bin=/usr/bin
+admin=,,,,
+compadmin=no
+newsusr=,,,,
+newsgrp=,,,,
+home=,,,,
+sys=,,,,
+cpu=,,,,
+small=,,,,
+umask=000
+dftexp=14
+tmail=,,,,
+mailer=,,,,
+dftsub=all
+admsub=general,all.announce
+page=,,,,
+notify=,,,,
+dfteditor=,,,,
+manually=
+internet=
+mydomain=,,,,
+myname=,,,,
+myorg=,,,,
+sendmail=,,,,
+uname=,,,,
+ghname=,,,,
+v7mail=
+newsrc=.newsrc
+maxgroups=350
+buflen=,,,,
+lbuflen=1024
+pathlen=512
+datelen=48
+namelen=64
+fpathlen=64
+termcap=,,,,
+
+: read in the config file
+exec <config
+while read name value
+do	case $name in
+	path)		PATH=$value ;;
+	lib)		lib=$value ;;
+	spool)		spool=$value ;;
+	bin)		bin=$value ;;
+	admin)		admin=$value ;;
+	compadmin)	compadmin=$value ;;
+	newsusr)	newsusr=$value ;;
+	newsgrp)	newsgrp=$value ;;
+	home)		home=$value ;;
+	sys)		sys=$value ;;
+	cpu)		cpu=$value ;;
+	small)		small=$value ;;
+	umask)		umask=$value ;;
+	dftexp)		dftexp=$value ;;
+	tmail)		tmail=$value ;;
+	mailer)		mailer=$value ;;
+	dftsub)		dftsub=$value ;;
+	dfltsub)	dftsub=$value ;;
+	admsub)		admsub=$value ;;
+	page)		page=$value ;;
+	notify)		notify=$value ;;
+	dfteditor)	dfteditor=$value ;;
+	manually)	manually=$value ;;
+	internet)	internet=$value ;;
+	mydomain)	mydomain=$value ;;
+	myname)		myname=$value ;;
+	myorg)		myorg=$value ;;
+	uname)		uname=$value ;;
+	ghname)		ghname=$value ;;
+	v7mail)		v7mail=$value ;;
+	newsrc)		newsrc=$value ;;
+	maxgroups)	maxgroups=$value ;;
+	buflen)		buflen=$value ;;
+	lbuflen)	lbuflen=$value ;;
+	pathlen)	pathlen=$value ;;
+	datelen)	datelen=$value ;;
+	namelen)	namelen=$value ;;
+	fpathlen)	fpathlen=$value ;;
+	termcap)	termcap=$value ;;
+	"")	;;
+	"#"*)	;;
+	*)	for x in $special
+		do	if test "$name" = "$x"
+			then	name=
+			fi
+		done
+		if test "$name" != ""
+		then	echo "Unknown config keyword:  $name"
+			exit 2
+		fi
+		;;
+	esac
+done
+
+if test "$sys" = ,,,,
+then	if test -f /usr/include/termio.h
+	then	if test -f /bin/shl -o -f /usr/bin/shl
+		then	sys=sys5r2
+		elif test -f /usr/bin/cflow
+		then	sys=sys5
+		else	sys=sys3
+		fi
+	else	if test -f /usr/include/sys/time.h
+		then	sys=4.2bsd
+		elif test -d /usr/ucb
+		then	sys=4.1bsd
+		else	sys=v7
+		fi
+	fi
+	echo system assumed to be $sys.
+fi
+
+case "$sys" in
+sys3)	USGREL=30 BSDREL=6 ;;
+sys5)	USGREL=50 BSDREL=6 ;;
+sys5r2)	USGREL=52 BSDREL=6 ;;
+v7)	BSDREL=7  USGREL=6 ;;
+4.1bsd)	BSDREL=41 USGREL=6 ;;
+4.2bsd) BSDREL=42 USGREL=6 ;;
+*)	echo "Unknown system type $sys"
+	exit 1 ;;
+esac
+
+if test "$cpu" = ,,,,
+then	cc -P cpu.c
+	cpu=`sed -n s/X//p cpu.i`
+	/bin/rm -f cpu.i
+fi
+case "$cpu" in
+pdp11|vax|u3b|other) ;;
+"")	cpu=other ;;
+*)	echo "Unknown cpu type $cpu"
+	exit 1
+	;;
+esac
+
+if test "$small" = ,,,, -a $cpu = pdp11
+then	small=yes
+fi
+if test "$buflen" = ,,,,
+then	if test "$small" = "no" -o "$small" = ,,,,
+	then	buflen=256
+	else	buflen=128
+	fi
+fi
+
+if test "$uname" = ,,,, -a $USGREL -ge 20
+then	uname=yes
+fi
+if test "$ghname" = ,,,, -a $BSDREL -ge 42
+then	ghname=yes
+fi
+
+: check all the boolean flags
+for x in manually internet uname ghname v7mail small compadmin
+do	eval y=\$$x
+	case "$y" in
+	no|,,,,)eval $x=,,,, ;;
+	""|yes)	eval $x= ;;
+	*)	echo $x is a boolean flag.
+		exit 1 ;;
+	esac
+done
+
+: check that all numeric parameters are set and are numbers
+for x in umask dftexp maxgroups buflen lbuflen pathlen datelen namelen fpathlen
+do	eval y=\$$x
+	case "$y" in
+	[0-9]|[0-9][0-9]|[0-9][0-9][0-9]|[0-9][0-9][0-9][0-9]|[0-9][0-9][0-9][0-9][0-9]) ;;
+	,,,,)	echo "$x not set"
+		exit 1 ;;
+	*)	echo "$x value should be numeric"
+		exit 1 ;;
+	esac
+done
+
+: Check that required values are specified
+for x in myorg mydomain newsusr newsgrp
+do	eval y=\$$x
+	if test "$y" = ,,,,
+	then	echo $x not set
+		exit 1
+	fi
+done
+
+case "$mydomain" in
+""|.*)	;;
+*)	echo domain name should begin with a dot.
+	exit 1 ;;
+esac
+
+if test "$admin" = ,,,,
+then	admin=$user
+fi
+if test "$notify" = ""
+then	notify=$admin
+fi
+if test "$termcap" = ,,,,
+then	if test -f /usr/lib/libtermcap.a
+	then	termcap=-ltermcap
+	elif test -f /usr/lib/libtermlib.a
+	then	termcap=-ltermlib
+	elif test -f /usr/lib/libcurses.a
+	then	termcap=-lcurses
+	else	termcap=-ltermcap
+	fi
+fi
+if test "$sendmail" = ,,,,
+then	if test -f /usr/lib/sendmail
+	then	sendmail=/usr/lib/sendmail
+	fi
+fi
+
+: on BSD systems, prefer /bin/mail over /usr/ucb/mail
+if test "$mailer" = ,,,, -a -f /bin/mail
+then	mailer=/bin/mail
+fi
+
+: do some path searches
+y=
+for x in page more page pg dfteditor vi dfteditor ed mailer mail
+do	if test "$y" = ""
+	then	y=$x
+	else	eval v=\$$y
+		if test "$v" = ,,,,
+		then	IFS=:
+			for z in $PATH
+			do	if test -f $z/$x
+				then	eval $y=$z/$x
+					break
+				fi
+			done
+			IFS=' 	
+'
+		fi
+		y=
+	fi
+done
+
+if test "$mailer" = ,,,
+then	echo Can\'t find mail
+	exit 1
+fi
+if test "$dfteditor" = ,,,,
+then	echo Can\'t find ed
+	exit 1
+fi
+
+for x in admsub page sendmail
+do	eval y=\$$x
+	if test "$y" = ""
+	then	eval $x=,,,,
+	fi
+done
+
+if test "$compadmin" = ""
+then	adminid=,,,,
+else	adminid=`sed -n "s/^$admin:[^:]*:\([^:]*\):.*/\1/p" /etc/passwd`
+	if test "$adminid" = ""
+	then	echo Can\'t find $admin in /etc/passwd file.
+		exit 1
+	fi
+fi
+
+: 2.10.2 moved inews [Grrr!]
+if test -f $lib/inews
+then	inews=$lib/inews
+else	inews=$bin/inews
+fi
+
+if test $USGREL -ge 30
+then	index=strchr
+	rindex=strrchr
+	usg=
+else	index=,,,,
+	rindex=,,,,
+	usg=,,,,
+fi
+
+grep -v ,,,, > config.h.tmp <<!
+#define USGREL $USGREL
+#define BSDREL $BSDREL
+#define USG$usg
+#define SMALL$small
+#define index $index
+#define rindex $rindex
+!
+
+grep -v ,,,, > newsdefs.h.tmp <<!
+/*
+ * newsdefs.h - defines for news related programs.
+ *
+ * This file is created by the setup program, and should be changed
+ * by modifying the entries in config.
+ */
+
+#define N_UMASK	$umask
+#define DFLTEXP	($dftexp*24L*3600L)
+#define DFTEDITOR "$dfteditor"
+#define	DFLTSUB	"$dftsub"
+#define ADMSUB	"$admsub"
+#define PAGE	"$page"
+#define TMAIL	"$tmail"
+#define MAILER	"$mailer"
+#define INEWS	"$inews"
+#define RNEWS	"$bin/rnews"
+#define POSTNM	"$bin/postnm"
+#define LIBDIR	"$lib
+#define SPOOLDIR "$spool
+#define BINDIR	"$bin
+#define HOME	"$home"
+#define NOTIFY	"$notify"
+#define ADMIN	"$admin"
+#define ROOTID	$adminid
+#define MANUALLY$manually
+#define INTERNET$internet
+#define MYDOMAIN "$mydomain"
+#define MYNAME	"$myname"
+#define UNAME$uname
+#define GHNAME$ghname
+#define SENDMAIL "$sendmail"
+#define V7MAIL$v7mail
+#define MYORG	"$myorg"
+#define NEWSRC	"$newsrc"
+#define MAXGROUPS $maxgroups
+#define BUFLEN	$buflen
+#define LBUFLEN	$lbuflen
+#define PATHLEN	$pathlen
+#define DATELEN	$datelen
+#define NAMELEN	$namelen
+#define FPATHLEN $fpathlen
+!
+
+if test "$home" != ,,,,
+then	hdir=`logdir $home`/
+else	hdir=
+fi
+
+grep -v ,,,, > makedefs.tmp <<!
+LIBDIR=$hdir$lib
+SPOOLDIR=$hdir$spool
+BINDIR=$bin
+NEWSUSR=$newsusr
+NEWSGRP=$newsgrp
+HOME=$home
+CPU=$cpu
+USGREL=$USGREL
+BSDREL=$BSDREL
+TERMCAP=$termcap
+!
+
+if cmp -s config.h.tmp config.h
+then	/bin/rm config.h.tmp
+else	/bin/mv config.h.tmp config.h
+fi
+if cmp -s newsdefs.h.tmp newsdefs.h
+then	/bin/rm newsdefs.h.tmp
+else	/bin/mv newsdefs.h.tmp newsdefs.h
+fi
+if cmp -s makedefs.tmp makedefs
+then	/bin/rm makedefs.tmp
+else	/bin/mv makedefs.tmp makedefs
+fi
+
+for x in $setups
+do	$x -M
+done
+echo 'The modified time of this file indicates when setup was last run.' > setuptime
+
+sed -e 's/B,,,,/no/' -e 's/B$/yes/' -e '/,,,,/s/^/#/' -e 's/[ 	],,,,//' > config.used <<!
+path	$PATH
+lib	$lib
+spool	$spool
+bin	$bin
+admin	$admin
+compadmin B$compadmin
+newsusr	$newsusr
+newsgrp	$newsgrp
+home	$home
+sys	$sys
+cpu	$cpu
+small	B$small
+umask	$umask
+dftexp	$dftexp
+tmail	$tmail
+mailer	$mailer
+dftsub	$dftsub
+admsub	$admsub
+page	$page
+notify	$notify
+dfteditor $dfteditor
+manually B$manually
+mydomain $mydomain
+myname	$myname
+myorg	$myorg
+uname	B$uname
+ghname	B$ghname
+v7mail	B$v7mail
+newsrc	$newsrc
+maxgroups $maxgroups
+buflen	$buflen
+lbuflen	$lbuflen
+pathlen	$pathlen
+datelen	$datelen
+namelen	$namelen
+fpathlen $fpathlen
+termcap $termcap
+!

@@ -1,0 +1,50 @@
+:
+#!/bin/sh
+#
+# md directories - make all components in a given path
+#
+# written by Brian L. Matthews, 17-Jul-84
+#
+# md makes a directory path.  Unlike mkdir, it makes all necessary
+# components of the path.  It uses mkdir, so it should fail and succeed in
+# the same ways as mkdir.
+# md tends to be slow, and should be recoded in C someday. Oh well...
+#
+if [ $# = 0 ]				# check for no arguments.  If none,
+then					# print same stuff and use same
+    echo "$0: arg count"		# exit status as mkdir
+    exit 2
+fi
+while [ -n "$1" ]			# Loop through all arguments by
+					# looking at the first and shifting
+					# when done with it.
+do
+    made=				# $made tracks the components made
+					# so far
+    need=$1				# $need tracks what's left to make
+    if [ `expr $need : '/.*'` = 0 ]	# if $need doesn't start with a slash,
+    then				# add a slash, and say we've made
+	made=`pwd`			# the current working directory.
+	need=/$need
+    fi
+    while [ -n "$need" ]		# keep going until we've got it all
+    do
+	made=$made`expr $need : '\(.[^/]*\)/*'`
+					# add the first component of $need to
+					# $made.  If $made was /u and $need
+					# was /blm, $made would become
+					# /u/blm
+	if [ ! -d "$made" -o ! -w "$made" ]
+	then				# if $made isn't a directory or it's
+	    mkdir $made			# not writable (i.e. it doesn't
+	    if [ $? != 0 ]		# exist), do a mkdir.  If the mkdir
+	    then			# fails, exit with it's exit code.
+		exit $?			# mkdir has already printed the error.
+	    fi
+	fi
+	need=`expr $need : '.[^/]*\(/*.*\)'`
+					# remove the first component of $need.
+    done				# we've now made a path, so scoot the
+    shift				# arguments down, and do the next one.
+done
+exit 0

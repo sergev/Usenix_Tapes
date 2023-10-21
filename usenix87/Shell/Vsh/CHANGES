@@ -1,0 +1,205 @@
+VERSION 4.2
+- Added more portable VT100 arrowkey kludge using alarm(), see strings.c.
+- Added kludge to handle VT100 arrow keys. It needs an empty() routine to
+check if there is any tty input. It would be better coded with select() for
+4.2BSD and MINTIME/termio for System V, but it would look ugly and non-portable.
+- Added kludge in page.c to handle long lines more gracefully. Not perfect but
+acceptable.
+- Added facility for defined commands to prompt for arguments. Arguments of the
+form ??message cause the message to be printed and the entered strings to be
+used as the argument.
+VERSION 4.1
+- Added parameter enterpath, a list of directories to be searched when entering
+a file via the keyboard VSH file command.
+- Added an (incomplete, not totally satisfactory) implementation of a reversing
+more-like pager. Many more more features are available including forward and
+reverse string searching and reviewing previous lines and an editor escape.
+The implementation is via a VSH internal ring buffer which keeps the last
+moresize characters. Moresize is a new VSH parameter which determines the
+maximum number of characters to keep. This, of course, limits the ability to
+reverse the pager. It seemed like an efficient way to go, but the code has grown
+to the point where it may have been better to implement the whole thing with
+a temporary file - probably somewhat more straightforward, but maybe slower
+and would require copying all output into a temporary file, not great for
+pipes of possibly unlimited number of bytes. Anyways, there is a command to
+seek to the beginning of a regular file, so the buffering limitation is not
+disasterous.
+  The other major deficit of the VSH pager is that is makes no attempt to
+correct for lines greater in length than the number of columns on the terminal.
+Naturally this is not easy and kinda messy. Maybe someday in the near future...
+  A compile-time define, MBUFSTACK, if defined in hd.h, puts the more buffer in
+the stack segment instead of malloc()'ing it. This is probably best for nonI&D
+PDP-11's and the like, but the VSH parameter moresize is then ignored.
+  Simple cosmetic code for job control has been added. It simply tries to
+redraw the screen (by stuffing a ^L) upon restart.
+VERSION 4.0
+- Added multicolumn directory displays to better use available screen space.
+	Commands were added to move the select pointer around the display
+	directory page much like in a screen editor. Both VI-like and EMACS-
+	like commands, such as hjkl, and ^F, ^B, ^P, ^N, ^A, ^E, ^V.
+	A new parameter 'window' controls how many lines of the screen to
+	dedicate to the directory display and another new parameter 'column'
+	controls how many columns of files to display.
+- If 'window' is less than the full screen, the remaining lines, if greater
+than about 5, is used as a paging and execute scroll window. That is all
+text paging and commands that VSH exec's output in this window.
+- VSH uses many more TERMCAP capabilities like CD, CS, CO, LI. I have added
+three non-standard TERMCAP capabilities, none of which are really necessary
+but are cosmetic. They are mostly found on ANSI-like terminals like the VT100.
+They are CB (Clear from Beginning) which clears the screen from home to the
+current cursor position (as opposed to CD), BO (Blink On), BE (Blink End).
+In addition, VSH uses CS (Change Scroll region) to implement the execute
+window. If a terminal doesn't have it, the display won't be as pretty.
+- Bug: While we're on the subject of TERMCAP, VSH should really modify the
+TERMCAP variable in the environment during the exec in the separate window
+to reflect the few number of lines (LI). I may do this some day but its messy
+and not fool proof. This issue I believe is common to many windowing systems
+and should be solved in a more general way. TERMCAP is too static and is
+showing its age.
+- Bug: My experience is that VI doesn't initialize the terminal properly,
+especially with respect to changes in CS. Thus VI exec'd from a VSH execute
+window, goofs up scrolling. This can be fixed either by typing ^D, ^U in
+VI, which seems to cause VI to reset CS, or by including a CS reset in the
+TERMCAP entry for CL, which clears the whole screen. Changing CL may screw
+up other software, but I doubt it - any program which clears the whole screen
+can't be interested in maintaining an alternate scrolling window (Murphy?)
+- Bug: After an L (longlist) command, the next motion command should redraw
+the display.
+- Bug: For 4.2BSD we should make more use of vfork(), although maybe 4.3BSD
+will eliminate vfork().
+- pexec's now page the standard error port as well as stdout.
+- NDIR, new 4.2BSD directory scheme is now conditionally compiled in.
+- commands which are invoked expecting a selected argument now can prompt for
+arguments if they are missing. The new parameter 'noargprompt' if set,
+inhibits this prompting. Thus a command defined as
+	vi $
+will VI a selected file, or if none, will prompt for a file.
+- The new parameter VImotion if set, allows hjkl to be used as page motion
+commands, but they lose their interpretation as direct select commands.
+- The command ' compensates VImotion by allowing the confirmation of a select
+(that is "entering" the file) instead of hitting the direct select key
+a-z twice (which would be impossible if hjkl are preempted).
+- VSH now understands a few different archive types, PDP-11, Berkeley, 5.0
+see classify.c
+- Added code to track down symbolic links, like 4.2BSD ls -l.
+- Added MAIL parameter and code to report new mail.
+
+Notes:
+- VSH should really allow multiple selects, like diff $ $ to compare two
+selected files, or cp $$ to copy N files somewhere. Maybe someday.
+- VSH should really be a mode within a regular shell, like the C-shell or
+the Bourne shell. That way shell commands can have a history, etc. This
+could also be implemented via pseudo-ttys to a shell constructed by VSH.
+Personally, I'd rather spend the time<>money on a BLIT.
+- help menus are implemented crudely (only limited space, only upon VSH
+entry), but I don't anticipate that this feature will be used much except
+by novices.
+
+VERSION 3.0.1
+- Arranged default commands to my liking:
+	I is now T (typeout)
+	: is deleted (but definable)
+	% is chain to shell
+- Added more characters available for definition (u-z, @, _, etc.)
+- Removed u as a synonym to +
+- Added ^D as a synonym to + (ala VI, and if 'quitchar' is not ^D)
+- Added ^U as a synonym to - (ala VI)
+- Added ^L command to re-display the current page of files
+- Added 'quitchar' parameter to redefine command to quit (instead of always ^D)
+- The 'quitchar' must be struck twice to quit
+- Added 'pagechar' parameter to redefine a command as a synonym to '+',
+	default is ';'
+- Disabled SIGINT and SIGQUIT
+- Added a rename (mv) function to the create (C) command
+- Added code to recognize $PATH, $SHELL, $TERM, $HOME and $EDITOR parameters,
+	$PATH is used by exec
+- Also added code so exec can handle shell command files
+- Fixed bug where a 14-character filename at the end of a directory would print
+	garbage
+- In at.c, now uses TERMCAP parameter CE (Clear to End line) to erase lines
+	instead of printing spaces
+- Altered makefile to place many strings in text space
+- Added commands
+	chain		exec without fork
+	rexecute	re-exec last xecute
+- Added a 'find' command, which accepts a single character, and locates the
+	page in which filenames begin with that character (default 'find' is .)
+- Added a 'pexec' command, identical to exec except that the output is paged
+	by VSH and the input is re-directed to /dev/null
+- The xecute command can now take arguments instead of always prompting for
+	a shell command line. Useful for defining commands like "cc -c $ &",
+	or "(sleep 30; ps -l) &"
+- The xecute command now loops for shell commands, quitting on a blank line
+- Added code in getfname() to recognize ~username as username's login directory
+- Added argument to getfname() to print a message after the stty to COOKEDMODE,
+	which with some tty drivers would flush the output queue. Most calls
+	to getfname() were changed to use this argument
+- Added \ command to chdir to previous directory (undo last chdir)
+- Added code in remove.c and dir.c to attempt to display the previous page
+	viewed after a '\' or a remove
+- Changed code in remove.c and dir.c to allow loading of directories having
+	greater than 200 files, '0' command now goes to the last page rather
+	than the 10th page
+- Added parameter 'vshmode' to switch between 'enter' mode (standard VSH mode)
+	or 'select' mode...
+- Added 'select' mode, where user first selects a filename, and then a command
+	to execute on that filename
+- Any command which goes through getfname() can use a selected file as an
+	argument (e.g. Create:, From: )
+- Added code to exec and xecute to accept a selected filename as an argument
+- Added code to exec and xecute: if the shell command begins with ';', the ';'
+	is removed and the screen is immediately updated after the command
+	returns (rather than prompting for a <CR>)
+- Changed the options command: if it is executed with an argument, that
+	argument is used as a filename to dump the current options list in
+	.vshrc format and VSH does NOT exit. Old vsh, upon seeing an options
+	argument, would dump always to "vsh.out" and then exit
+- Added code in main.c to accept a "-" option to exec (chain to) the shell if
+	VSH can't find a CRT terminal. Useful for making VSH the top-level
+	shell. Also a "-f" option to force VSH to attempt to continue even if
+	it can't find a CRT terminal. Marginally useful for running VSH in
+	shell command files (e.g. vshrc.gen)
+- Added code to test if the editor parameter is VI, if it isn't, VSH does not
+	use the +## to jump to the ##th line, which is VI-specific
+- The fmake command now sends three bells if the make exitted with an error
+- The make commands can now be aborted with a 'q' at the options prompt
+- Ascii <ESC> is no longer an end-of-line character
+- The display now includes uid/username info
+- The longlist command (L) now includes ownership information
+- Arranged the page/display code to page text more to my liking
+	Page/display is now done in RAW mode, so that single keystrokes can
+	answer the More? prompt. However some tty drivers in RAW mode don't
+	honor the CRMOD to output a <CR> after a <LF>, so an extra <CR> is
+	outputted.
+- Fixed the code to handle cpio archives properly (had to change p_exec())
+- Added Huffman encoded file (ala pack/unpack) interpretation (does a pcat)
+- Added code to strip parity bit in getch(), in RAW mode this caused a few
+	problems
+- Added highlighting of the display via reverse video (see termcap SO, SE)
+- Added "entertext" parameter for setting command to perform when "entering"
+	a text file. The default is exec'ing $EDITOR, but "display" is also
+	specially recognized (calling the internal pager). Any other command
+	is exec'ed
+- Added "helpfile" parameter. If the file named by helpfile is present, it is
+	always printed in the file display. Mostly for novices. In a given
+	session, to shut it off, set helptext to "" (via O).
+- Fixed bug in file.c, in create(), which clobbered the first character of
+	a filename to be created in the root dir / via todotdot().
+
+- Note: I looked into adding tar file types, probably a little messy
+- Note undocumented feature:
+	O command can be left by typing "quit"
+- Note that VSH had several bugs, including a few in the usage of the mpages
+	constant (This version doesn't have a mpages or mfiles)
+- Note that VSH does not free() any malloc()'d strings used to define options.
+	This should probably be fixed, but I'm lazy and so far redefining
+	options is rare.
+- Note that VSH currently screws up on filesystems which are not mounted off
+	a root '/' directory entry (e.g. /usr/mnt).
+
+LOCAL specific changes
+- ttyn(2) call used by the V6 getenv() is replaced by the PWB logtty() which is
+	faster
+- main.c checks for the CRT stty() mode as part of its criterion for CRT
+	terminals
+- made the usually V6 changes, most notably related to stat()

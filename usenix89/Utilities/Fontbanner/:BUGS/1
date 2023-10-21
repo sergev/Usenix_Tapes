@@ -1,0 +1,81 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site smeagol.UUCP
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!gamma!epsilon!zeta!sabre!petrus!bellcore!decvax!ittatc!dcdwest!sdcsvax!sdcrdcf!oberon!smeagol!earle
+From: earle@smeagol.UUCP (Greg Earle)
+Newsgroups: net.sources.bugs
+Subject: Bug fix for fontbanner(6)
+Message-ID: <539@smeagol.UUCP>
+Date: 11 Jan 86 06:35:45 GMT
+Date-Received: 14 Jan 86 06:01:01 GMT
+Distribution: net
+Organization: Spacecraft Data Systems, JPL, Pasadena, CA
+Lines: 68
+
+I have made the brazen assumption that if you merely specify a font name
+for use via the -f option in fontbanner, it should go to the current font
+directory (default DEFAULTDIR), and seek out that font.  The source as
+distributed does not do this, because if you do not use the -d option,
+it attempts to use the variable fontsdir inside the call to getoptions
+(while it processes your switches) before 'fontsdir' has been set.  It
+fails because it tries to look up the font name in /.  Here is a quick fix:
+
+( Suitable for use with "patch -c" )
+
+diff -cb fontbanner.*
+*** fontbanner.new.c	Fri Jan 10 21:37:50 1986
+--- fontbanner.c	Fri Jan 10 20:17:26 1986
+***************
+*** 74,80
+  
+      *fontname = *fontsdir = '\0';
+  
+-     (void) strncpy(fontsdir, DEFAULTDIR, sizeof(fontsdir));
+      while ( --argc  && (**++argv == '-') ) /* tratta argomenti */
+          getoptions(&argc, &argv);
+  
+
+--- 74,79 -----
+  
+      *fontname = *fontsdir = '\0';
+  
+      while ( --argc  && (**++argv == '-') ) /* tratta argomenti */
+          getoptions(&argc, &argv);
+  
+***************
+*** 82,89
+      istty = isatty(1);
+  
+      if ( defaultfdir )
+!         if (!accessdir(DEFAULTDIR)) {
+!             fprintf(stderr, ".... Cannot open default fonts directory \"%s\"\n",
+  		    DEFAULTDIR);
+              if ( !interactive_mode )
+  		exit(2);
+
+--- 81,91 -----
+      istty = isatty(1);
+  
+      if ( defaultfdir )
+!         if ( accessdir(DEFAULTDIR) )
+!             (void)strncpy(fontsdir, DEFAULTDIR, sizeof(fontsdir));
+!         else {
+!             fprintf(stderr,
+! 	            ".... Cannot open default fonts directory \"%s\"\n",
+  		    DEFAULTDIR);
+              if ( !interactive_mode )
+  		exit(2);
+
+---------------
+
+	Greg Earle
+	JPL
+	sdcrdcf!smeagol!earle	(UUCP)
+	ia-sun2!smeagol!earle@cit-vax.arpa	(ARPA)
+
+--------------
+Know Your Culture:
+"Calvin and Hobbes"
+Follows the daydreaming adventures
+of a young lad passing through childhood...
+- Hilarious reading in better newspaper comics
+sections everywhere. (Espec. Sunday issues)

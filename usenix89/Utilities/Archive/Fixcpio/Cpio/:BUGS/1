@@ -1,0 +1,159 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!allegra!mit-eddie!rutgers!uwvax!astroatc!prairie!dan
+From: dan@prairie.UUCP
+Newsgroups: net.sources
+Subject: cpfix - salvage damaged cpio archives
+Keywords: cpio repair
+Message-ID: <398@prairie.UUCP>
+Date: 19 Jan 87 22:41:40 GMT
+Reply-To: dan@prairie.UUCP (Daniel M. Frank)
+Distribution: world
+Organization: Prairie Computing, Madison, Wisconsin
+Lines: 148
+Posted: Mon Jan 19 17:41:40 1987
+-- 
+    Dan Frank
+    uucp: ... uwvax!prairie!dan
+    arpa: dan%caseus@spool.wisc.edu
+
+
+/* cpfix:  repair damaged cpio archives.
+ *		cpfix does its best to repair a cpio archive that has had
+ *		extra bytes inserted, destroying sync.  This happens with
+ *		amazing regularity, especially when cpio is used to backup
+ *		damaged file systems.
+ *
+ *		There are two arguments.  The first is the input file name,
+ *		which may be `-' for stdin.  The second is an explicit output 
+ *		filename.  
+ *
+ *		cpfix works only for binary cpio headers.  It shouldn't be
+ *		too hard to add an option for character headers.
+ *
+ *		Operating Systems:  known to work under SVR2, but probably
+ *					  fine under others.  I hear that Sun did something
+ *					  funny to the header.
+ *		Author:	Daniel M. Frank (dan@prairie.uucp)
+ *		Permissions:  Permission is granted for distribution, without
+ *					  charge, of this program.  Anyone who wants to
+ *					  sell it must ask my permission and grease my
+ *					  palm.
+ *		cpfix is Copyright (C) 1987 by Daniel M. Frank.
+ */
+
+#include <stdio.h>
+#include <sys/types.h>
+
+struct Hdr {
+	short	h_magic ,
+			h_dev ;
+	ushort	h_ino,
+			h_mode,
+			h_uid,
+			h_gid;
+	short	h_nlink,
+			h_rdev,
+			h_mtime[2],
+			h_namesize ;
+	ushort	h_filesize[2] ;
+};
+
+main(argc, argv)
+int argc ;
+char **argv ;
+{
+	char name[132] ;
+	struct Hdr header ;
+	int namesize ;
+	long filesize, fsadj, outpos, lastpos ;
+	FILE *inp, *outp ;
+	char buf[1024] ;
+
+	if (argv[1][0] == '-')
+		inp = stdin ;
+	else if ((inp = fopen(argv[1], "r")) == 0) {
+		perror("input file") ;
+		exit(1) ;
+	}
+
+	if ((outp = fopen(argv[2], "w")) == 0) {
+		perror("output file") ;
+		exit(1) ;
+	}
+
+	lastpos = 0 ;
+
+	while(1) {
+		outpos = ftell(outp) ;	/* save current output position */
+		if (fread(&header, sizeof(header), 1, inp) != 1) {
+			perror("header read") ;
+			exit(1) ;
+		}
+		if (header.h_magic != 070707) {
+			printf("No magic - number was %o\n", header.h_magic) ;
+			fseek(outp, lastpos, 0) ;	/* reset to last write postion */
+			outpos = lastpos ;
+			while(1) {
+				if (fread(&header, sizeof(header.h_magic), 1, inp) != 1) {
+					printf("Read failure during recovery scan\n") ;
+					exit(1) ;
+				}
+				if (header.h_magic == 070707) {
+					if (fread(&header.h_dev, 
+							  sizeof(header) - sizeof(header.h_magic), 
+							  1, inp) != 1) {
+						printf("Failure reading rest of header\n") ;
+						exit(1) ;
+					}
+					break ;	/* leave while loop */
+				}
+			}
+		}
+
+		lastpos = outpos ;
+
+		namesize = (header.h_namesize + 1) & ~1 ;
+		if (fread(name, namesize, 1, inp) != 1) {
+			perror("name read") ;
+			exit(1) ;
+		}
+
+		if (fwrite(&header, sizeof(header), 1, outp) != 1) {
+			perror("header write") ;
+			exit(1) ;
+		}
+		if (fwrite(name, namesize, 1, outp) != 1) {
+			perror("name write") ;
+			exit(1) ;
+		}
+
+		if (strcmp(name, "TRAILER!!!") == 0) {
+			/* we have to adjust to a 512-byte boundary */
+			long adjust ;
+			outpos += sizeof(header) + namesize ;
+			adjust = ((outpos - 1) / 512 * 512 + 512) - outpos ;
+			if (adjust)
+				if (fwrite(buf, (int)adjust, 1, outp) != 1) {
+					perror("padding write") ;
+					exit(1) ;
+				}
+			printf("end of the archive!\n") ;
+			exit(0) ;
+		}
+		filesize = ((long)header.h_filesize[0] << 16) + header.h_filesize[1] ;
+		printf("file %s, size %ld\n", name, filesize) ;
+		fsadj = (filesize + 1) & ~1L ;
+		while (fsadj > 0) {
+			if (fread(buf, (fsadj > 1024 ? 1024 : (int)fsadj), 1, inp) != 1) {
+				perror("data read") ;
+				exit(1) ;
+			}
+			if (fwrite(buf, (fsadj > 1024 ? 1024 : (int)fsadj), 1, outp) != 1) {
+				perror("data write") ;
+				exit(1) ;
+			}
+			fsadj -= 1024 ;
+		}
+	}
+}
+		
+

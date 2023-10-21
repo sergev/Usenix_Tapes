@@ -1,0 +1,259 @@
+	Mas80   Users  Manual
+
+					Last revision:	8/10/78
+
+	    This manual is intended as a referance form for the 'mas80'
+	assembler.  A knowage of the 8080 microprossesor and Intels
+	assembler formats is assumed.  This is NOT intened as a tutorial.
+
+	$	is value of current location(start of that current
+		instruction)
+
+    Errors:
+	Errors are preceeded by the line number they occure in.
+	They are preceeded by a  '%%' so that files may be read
+	in with the editor to search for errors (usfull on long
+	programs.)
+
+    Table limits:
+	Max number of symbols = 500
+	Max  "	   "  macros  = 60
+	Max  "     "  char. in a dup = 500
+
+	Lables begin in the first colum.  A colen after the lable
+	is not needed, but if one is there it is ignored.  The lenght
+	of a lable may be up to 20 charactors.
+	A double-colen ( :: ) after a lable forces that lable into the
+	symbol table under all conditions, even in a macro.
+
+	All arithmetic operators have the same priority
+	(there is no order of operations)
+
+    Files produced are:
+	i.out	8080 absolute load file
+	i.lst	listing
+
+	At this point, symbol table overflow is not checked.
+
+Radix Conventions:
+	 Numbers with no post or pre radix tags are initally decimal.
+	Post radix tags are:
+		q	octal
+		h	hex
+		.	decimal
+	Pre-radix tags are:
+		0	octal
+		00	hex
+		000	binary
+	Any numer with a hex digit in it is considered hex
+	irregardless of any radix flags.
+	Othewise, post radix has priority.
+	To change the default radix, use the 'base' psydo-op.
+	the operhand field of the base psydo-op  is allways
+	in base ten.  Usage is:
+	
+	base	16	;to set default radix to base 16
+
+Arithmetic:
+	The arithmetic power of the assembler is that of the
+	'c' languege on the 11/70.  There is NO order of operations,
+	so parentheis () must be used to direct the assembler.
+	(Note: Some operators still don't work too well.  These bugs
+	are being worked on.)
+	The operators are:
+	+ - *	standard.
+	/	divide, get the integer portion
+	%	mod operator (i.e. 16%5 = 1)
+	>>	arithmetic shift right
+	<<	arithmetic shift left
+	^	XOR
+	!	complement
+	~	two's complement
+	&	and
+	|	or
+
+	The operators for the comparisions (used in if statment or
+	anywhere else the result it true or false)
+	==	equal to
+	!=	not equal to
+	<=	less than or equal to
+	>=	greater than or equal to
+	>	  "	 "
+	<	less	 "
+	||	or
+	&&	and
+
+	Also, at any point in the assembly you can re-assign the
+	value of a variable while evaluatin the operhand by using
+	an equals sign.  For example, if 'foo' had a value of 10 :
+	'foo = foo + 2'
+	would have a value 12, and foo would have a value of 12.
+
+	Special re-asignments exist for situations where such
+	constructions are used a great deal.  They are:
+
+	=+	'foo =+ 2' is the same as 'foo = foo + 2'
+	Others:
+	=-  =*  =/  =%  => (shift)  =< (shift) 
+
+	the equal sign in conjuction with the 'eval' psydo-op
+	is used to change the value of a variable in the symbol table.
+
+
+Pysdo Ops:
+
+    org	#
+	   A symbol on an org statement has the value
+	of the org #. i.e.
+
+	foo	org	10h
+
+	'foo' will have a value of 10h.
+
+lable    equ  [expression]
+	   The symbol 'lable' will have the value of the expression.
+	The expression can contain any previously defined symbols.
+	There is NO  'SET' psydo-op.  Use  'eval' instead (see below)
+
+
+    db	# [,#,#...]
+	   Define Byte.  Evaluates the number and stores it.
+	Can stack arguments seperated by commas.  Only the lower eight
+	bits are stored. Any high-order bits are truncated.
+
+    ds	# or "string" [,...]
+	   Define storage.  Evaluates the number and reserves
+	that much room.  If string, initalizes storage area
+	to string.	Special charactors are preceeded by a '\'.
+	'\r' is 15q (carrige return)
+	'\n' is 12q (line feed)
+	'\t' is 11q (tab)
+	'\b' is a 10q (backspace)
+	'\e' is  a 4  (eot)
+	'\0' is 0  (null byte)
+	'\"' for the  "  charactor itself
+	'\\' for a back-slash.  (  \  )
+
+    dw	# [,...]
+	  Define word.  Evaluates the number and stores as a
+	word WITH THE BYTES SWAPPED.  (i.e. in 8080 adress format )
+
+    repeat	n
+	   Repeats the line folling the 'repeat' n times.
+	Nested repeats produce funny but constant results.
+	Lables in the line are passed on the first repetition,
+	and delited for subsiquent repititions.
+	Do not try to repeat a dup.
+
+    dup	n
+	 .
+	[dup field]
+	 .
+	enddup
+	   Duplicates the series of lines between the dup and the
+	enddup n times.
+	Lables in the dup field are passed on the first dup, and
+	deleted for subsiquent dups.  Dups may be nested.
+
+    defmacro	name
+	 .
+	[macro body]
+	 .
+	endmacro
+	   Defines the macro 'name' as the macro body.  Arguments
+	in main are substituted whenever there is a &# , where
+	1 <= # <= 9 .  The number of calling parametors is not
+	specified.  To invoke the macro, type:
+
+	name	arg1,arg2,...arg9
+
+	Be sure the arguments match the call.  mas80 does not
+	check for this.
+	Symbols may be used inside of macros.  They are entered and
+	used like normal symbols for the life of the macro, and
+	then dissapear.  A symbol may be entered into the symbol table
+	for the starting byte of the macro, but symbols in the macro
+	dissapear.  To enter a symbol into the table for the first byte,
+	the symbol is put on the same line as the macro invocation, i.e.
+	symbol	macroname	arg1,arg2
+
+
+
+    if	expression
+    .
+    (code here assembled if value of 'expression' is not-zero)
+    .
+    [else]
+    .
+    (code here assembled if value of 'expression' is zero.
+	This code here is optional.)
+    .
+   endif
+	Conditional assembly.  Done if expression is non-zero.
+	'expression' is any valid 'c' expression.
+	Can be nested.
+
+
+    include	"filename"
+	    Takes the file 'filename' and runs it through the assembler
+	until it is ended, when it returns to the original source.
+	The include file can include other include files.  All assembler
+	pysdo-ops are valid in the include file and code can be generated.
+	Only one file name is allowed in the operhand field.  If you
+	want to include a number of files, use a seperate statement for
+	each one.
+
+    liston, listoff	
+	Turns the source listing (i.lst) on and off.  Binary file (i.out)
+	is still generated.
+
+    macon, macoff
+	Turns the printing in the source of expanded macro code on and
+	off.  Dups are also supressed.
+
+    message
+	message prints out any text in the operhand field
+	on the terminal during pass 1 and on the lising durring
+	pass two.  It increments the error count too. If the
+	expression '%symbol' is encoutered in the line, the
+	value of the symbol is printed.  i.e.  if 'data' had a value
+	of 45, the line:
+		message	data was a %data.
+	would print:
+		data was a 45.
+
+
+    Internal Variables:
+
+	Internal variables exist with certain usefull information in
+    them.  They may be used in expressions like any other varaibles.
+	Valid internal varibles are:
+
+	_NARGS		Number of arguments passed in the most recient
+		macro.  This is NOT a nested variable.
+
+	_NEST		Number of levels of nesting in a macro, repeat,
+		or dup.
+
+	_SECONDS	Seconds of real world clock as of time of assembly
+
+	_MIN		Minutes ...
+	_HOUR		Hours ...
+	_DAY		Day #
+	_MONTH		Month
+	_YEAR		Current year
+	_DOW		Day of week (monday = 1)
+	_DOY		Day of year
+	_DSTF		Daylight saving flag (1 = daylight saving time)
+	_ASSVERNO	Assembler version number.  Changes when major
+		changes in the assember accure.
+
+	A user may change any of these variables with sucsess except
+for '_NARGS' and '_NEST', which the assembler will clobber.  If a user
+defines a lable as any of these except '_NARGS' and '_NEST', the user
+variable has priority and is used.  Do NOT expunge these variables!
+
+
+
+	Any problems mail the the trouble to me. (/v/wa1yyn EE)
+	Tnx -Pete

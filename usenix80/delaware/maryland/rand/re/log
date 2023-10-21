@@ -1,0 +1,326 @@
+THIS IS FILE /rnd/walt/re.d/log - containing Walt Bilofsky's fixes and
+	twiddles to re during his trip of September 7-17.
+
+Date: 8 September 1976
+Bug: Gary Martins' NYT protocol file crash.  Editing near lines over 127
+	characters in length causes re to crash.
+Cause: When a file descriptor segment was broken to allow insertion of an
+	altered line, the routine did not take into account the extra byte
+	required by a long line in allocating the FSD block.  The extra byte
+	was copied, however, clobbering the length word of the following
+	free storage block.
+Fix: in re.e.c, routine breakfsd, replace the line following
+
+		/* now make a new fsd from the remainder of f */
+
+	by the following three lines:
+
+		i = j = f -> fsdnlines - nby; /* number of lines in new fsd */
+		cc = c;
+		while (--i >= 0) if (*cc++ < 0) {j++; cc++; }
+
+
+
+Date: 8 September 1976
+Bug: re source files have very few register statements.
+Fix: Register statements inserted wherever possible.  Resulting savings
+	is 2468 bytes of code, or 8.3% in overall size.
+
+
+
+Date: 9 September 1976
+Bug: When editing an existing file, if the first new line added to the end
+	of it is blank, that blank line is missing on the edited file when
+	it is written out.
+Cause: The routine which reads in the file erroneously creates a 0 length
+	line following the last text line of the file.  Although the proper
+	representation of a blank line is a line of length 1, all the editor
+	routines treat this 0 length line as a blank line -- except the
+	routine which writes out the edited file, which ignores it.  (This
+	is why the left margin always shows a file to be one line longer than
+	it really is.)
+Fix: Replace the following lines in routine file2fsd, re.e.c:
+
+		c = chars();
+		lct = (charskl - kl) + 512 * (charskh - kh);
+		if (lct > 127)
+			{
+			fby[nby++] = -(lct / 128);
+			lct = lct % 128;
+			}
+		fby[nby++] = lct;
+		++nl;
+
+	by the following lines:
+
+		c = chars();
+		lct = (charskl - kl) + 512 * (charskh - kh);
+		if (c != -1 || lct) {
+			if (lct > 127)
+				{
+				fby[nby++] = -(lct / 128);
+				lct = lct % 128;
+				}
+			fby[nby++] = lct;
+			++nl;
+			}
+
+
+
+Date:   9 September 1976
+Known Bug: In a matter related to the above bug fix, the editor does not
+	do a perfect job on files whose last lines do not end in a newline
+	character.  The line is displayed as if it did end in a newline,
+	but written out without the newline, thus appending the next line,
+	if any, to it.  I do not plan to change this.
+
+
+Date: 9 September 1976
+	I copied the re source files with bugs repaired to directory
+	/rnd/walt/goodre.d, in response to Peter Weiner's request to
+	save the editor with bugs repaired before I started screwing
+	around with "improvements".
+
+
+Date: 13 September 1976
+Bug:    Occasionally, a user gets a file /tmp/resav.user which exists but
+	is empty.  When this happens, the editor dies every time it tries
+	to start up.
+Fix:    I still don't know why it happens, but the fix is to change the
+	line with "fopen" in getstate in file re.c to
+
+	if (fopen(rfile,gbuf) < 0 || (nportlist = getw(gbuf)) == -1)
+
+	and remove the line reading "nportlist = ...".
+	This change has been made in re.d but not in goodre.d.
+
+
+Date:   14 September 1976
+Flaw:   The "suck" key only works in insert mode; it might as well work
+	all the time.
+Fix:    It does now.  Two small changes on the first page (60 lines)
+	of mainloop in re.m.c.
+
+
+Date:   14 September 1976
+Bug:    The cursor doesn't always wind up on the line gone to after <GOTO>.
+Fix:    Insert the following lines at the end of gtfcn in re.t.c:
+
+		if ((i = number - curwksp->ulhclno) >= 0)
+			poscursor(cursorcol,i);
+
+Date:   14 September 1976
+Bug:    The editor does not preserve terminal mode (i.e., lock out mail).
+Fix:    It does now.  Mods to re.c: startup and cleanup, the lines
+	involving tbuf and oldttymode.
+
+
+Date:   14 September 1976
+Bug:    The editor doesn't understand that superuser can write anything.
+Fix:    In checkpriv, in re.c, just return the yes code if userid is 0.
+
+
+Date:   16 September 1976
+Bug:    The editor uses a slightly generous definition of the default
+	plus/minus number of lines, resulting in moving several lines
+	in one-line windows.
+Fix:    In chgport, in re.t.c, replace
+
+	  defplline = defmiline = (newport->bmarg - newport->tmarg) / 4 + 1;
+
+	by
+
+	  defplline = defmiline = (newport->btext - newport->ttext) / 4 + 1;
+
+
+Date:   16 September 1976
+Added Feature: Carriage return, on the bottom line of the screen, now has
+	the effect of <+LINE> followed by return.
+Fix:    In mainloop in re.m.c, insert
+
+	  /* Return on bottom line causes plus lines */
+	  if (lread1 == CCRETURN && cursorline == curport->btext)
+							   movew(defplline);
+
+	before
+
+	  if (lread1 != CCQUIT && (i=cntlmotions[lread1]))  movecursor(i);
+
+Date:   16 September 1976
+Added Feature: <ARG>n<position key>, where position key is any cursor
+	motion button, will have the effect of performing that positioning
+	function n times.
+Fix:    In param in re.t.c, delete the code
+
+			else if (cntlmotions[lread1])
+				{
+				error ("Cursor motion not permitted here.");
+				lread1 = -1;
+				goto loop;
+				}
+
+	and add a little code in the second big switch statement in
+	mainloop to do the positioning for the 8 positioning character
+	cases.
+
+Date:   16 September 1976
+Bug:    Left and right margin bullets disappear in insert mode after a
+	backspace or suck is typed.
+Fix:    Partially fixed.  To repair the left margin problem, change putup
+	in re.t.c by replacing
+
+		if (lmc == 0) poscursor(0,l0);
+
+	with
+
+		if (lmc == 0 || lo < 0) poscursor(0,l0);
+
+	Fixing the right margin bullet would have been more complicated so
+	I didn't.
+
+
+Date:   16 September 1976
+Bug:    The screen often gets fouled up when characters are typed after an
+	operation that changes the whole screen.  Any typed character will
+	abort the screen display.
+Fix:    Only a few characters now are allowed to abort the screen display.
+	Putup now calls intrup() to check if a character has been typed.
+	Intrup reads a character ahead if one has been typed, and saves it
+	in intrupchar.  Intrup only returns 1 if a control character, other
+	than a positioning button, <ARG>, or <+/-SRCH>, has been typed.
+	The common cases where interrupt of screen display is desired are
+	<+/-LINE> and <+/-PAGE>, and these are not affected.
+		The changes to the source code are in re.t.c, and consist
+	of splitting some of read1 off to a new routine, read2, and adding
+	intrup.
+
+
+Date:   17 Septembe 1976
+Bug:    Users with userid number 0200 and up can't edit or save files.
+Fix:    Incorrect compares in checkpriv() resulting from sign extension.
+	Changed userid and groupid from int to char in re.defs.
+
+
+Date:   19 September 1976
+	There are two crashes that have been reported.  They are both
+	duplicatable but so far I have not been able to narrow the cause
+	beyond the fact that they both take place in edits using two
+	windows.
+		One crash is the "Rogson crash", reproduceable by doing
+	re zzz, <EXIT>, re -crash.tty (in directory re.zzz).  Files zzz
+	and xxx are edited in this crash.  All known versions of the
+	editor, including system's re, crash on this one.
+		The other crash, the "grm crash", is documented in directory
+	/rnd/grm/re-bugs, and the relevant files have been copied to re.d.
+	The tty file is grm.tty, and it edits files r4 and KW.
+		I have not been able to do anything with these crashes.
+
+	Since the grm crash demonstrates a new problem in the new editor,
+	I have inserted several additional bug fixes into the fixed-up
+	editor in /rnd/walt/goodre.d.  These fixes are reported on above.
+	They are the userid 0200 bug, and the bug involving inability to
+	start up the editor because of the resav file.
+
+
+Date:   10 January 1977
+Bug:    +SRCH in the null workspace causes a crash.  E.g., re nosuch <ARG>
+	<ARG>x<+SRCH> will crash.  This is, I believe, the cause of the
+	"Rogson crash".
+
+
+Date:   11 January 1977
+	Turns out the cause of the "Rogson crash" is that file /re.std was
+	deleted.  It has been replaced.  Further, I am putting an error
+	message into routine editfile on re.m.c to check for the default
+	file being gone.
+
+	Norm reports a hang due to giving rpl the wrong number of arguments.
+	If the re process has more than 4k characters to write, it hangs on
+	a full pipe after the rpl process suicides.  The only solution that
+	seems to make sense is to interpose yet another process, which just
+	waits for the rpl process (or whichever) to die and then sucks the
+	pipe dry.  This has been done, but now re crashes on a clobbered
+	freelist after any ctrl-X; more debugging follows.
+
+Date:   12 January 1977
+Bug:    Crash after execute function.
+Cause:  Clobber in free list due to expand of character buffer cline.
+	In excline, the loop copying the contents of cline to the new
+	expanded buffer terminated after copying down to cline[-1], not
+	cline[0], thus clobbering the header count.
+Fix:    In the while statement in excline in re.e.c, change lcline-- to
+	--lcline.
+
+
+Date:   12 January 1977
+Bug:    Typing on bottom line is lost when a CR is typed, causing scrolling.
+Fix:    The above fix seems to have gotten this problem too.
+
+
+Date:   13 January 1977
+Bug:    Closing a rectangle above and in the neighborhood of a long (> 126)
+	line causes a crash (reported by Sunshine 11/8/76).
+Problem:In breakfsd, when a fsd block is broken above a long line, the
+	length of the lower block is incorrectly set to the number of bytes
+	in the fsdbytes section.
+Fix:    Introduce the variable jj in breakfsd (re.e.c) and substitute it
+	for j where necessary.
+
+
+
+Date:   13 January 1977
+Bug:    The ctrl-x hang.
+Problem:The child processes were only closing file descriptors through 16.
+	The system now allows 25 descriptors per process.  The child is
+	waiting for the pipe to close but it may have the pipe open itself
+	on 17 or greater.  (The bug whereby each ctrl-x used to leave a
+	file open guaranteed that eventually 17 would be reached.)
+	Solution by Zucker.
+Fix:    In mainloop (re.m.c), close the descriptors by th code
+
+			/* This code closes whatever it can open */
+			while ((k = dup(1)) >= 0) if (k > j) j = k;
+			while (j >= 2) close(j--);
+
+
+Date:   January 14, 1977
+Bug:    Puts of rectangular sections sometimes cause the borders to be
+	garbaged.
+Problem:Pspaces (re.e.c) does a putup for each line it alters, without
+	checking to see if this is out of the bottom of the window.
+Fix:    Now it checks.
+
+
+Date:   January 17, 1977
+Bug:    Cursor jumps out of a window sometimes following a GO TO.
+Problem:defplline was computed differently in two places - and incorrectly
+	in one place.  For small windows near the bottom of the screen it
+	was negative.
+Fix:    Both computations of defplline in ned.t.c now use curport->btext
+	only.
+
+Date:   January 19, 1977
+Bug:    When switching ports, certain cursor positions cause the screen to
+	be cleared.
+Problem:The code at the bottom of mainloop (ned.m.c) which resets the margin
+	bullets does not realize that the old cursor position is relative to
+	an old window.  This results in strange characters being output by
+	pcursor.  Sometimes a 214 gets output which clears the screen.
+Fix:    Since the margin on the old window is rewritten by chgport, it is
+	only necessary to avoid trying to blank the old bullets.  This is
+	done by bulsw in ned.m.c.
+
+
+Date:   January 19, 1977
+Problem:The same user can not edit from two terminals simultaneously.
+Fix:    In ned.c, all three editor files in /tmp now contain the terminal
+	name as supplied by ttyn().
+
+
+Date:   January 24, 1977
+Problem:Typing over a 1200 baud line is slowed unacceptably by echoing
+	the cursor tracking bullets.
+Fix:    The variable slowsw is set in startup (ned.c) if the terminal line
+	speed is not 9600 baud, and tested to suppress bullets in mainloop
+	(re.m.c).
+

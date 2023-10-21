@@ -1,0 +1,171 @@
+The Object-Oriented Program Support (OOPS) class library is a portable
+collection of classes similar to those of Smalltalk-80 that has been
+developed using the C++ programming language under the UNIX operating
+system.  The OOPS library includes generally useful data types such as
+String, Date, and Time, and most of the Smalltalk-80 collection
+classes such as OrderedCltn (indexed arrays), LinkedList
+(singly-linked lists), Set (hash tables), and Dictionary (associative
+arrays).  Arbitrarily complex data structures comprised of OOPS and
+user-defined objects can be stored on disk files or moved between UNIX
+processes by means of an Object I/O facility.  Classes Process,
+Scheduler, Semaphore, and SharedQueue provide multiprogramming with
+coroutines.
+
+Here's the hierarchy of the OOPS classes implemented in Version 2, Release 2:
+
+Object -- Root of the OOPS Class Inheritance Tree
+	Bitset -- Set of Small Integers (something like Pascal's type SET)
+	Class -- Class Descriptor
+	Collection -- Abstract Class for Collection Functions
+		ArrayOb -- Array of Object Pointers
+		Arraychar -- Byte Array
+		Bag -- Unordered Collection of Objects
+		Set -- Unordered Collection of Non-Duplicate Objects
+			Dictionary -- Set of Associations
+				IdentDict -- Dictionary Keyed by Object ID
+		SeqCltn -- Abstract Class for Ordered, Indexed Collections
+			LinkedList -- Singly-Linked List
+			OrderedCltn -- Ordered Collection of Object Pointers
+				SortedCltn -- Sorted Collection of Objects
+			Stack -- Stack of Object Pointers
+	Date -- Calendar Date
+	Float -- Floating Point Number Object
+	Fraction -- (Toy) Rational Arithmetic
+	Link -- Abstract Class for LinkedList Links
+		LinkOb -- Link Containing Object Pointer
+		Process -- Co-routine Process Object
+	LookupKey -- Abstract Class for Dictionary Associations
+		Assoc -- Association of Object Pointers
+		AssocInt -- Association of Object Pointer with Integer
+	Integer -- Integer Number Object
+	Iterator -- Collection Iterator
+	Nil -- The Nil Object
+	Point -- X-Y Coordinate Pair
+	Random -- Uniform Random Number Generator
+	Range -- Integer Range
+	Rectangle -- Rectangle
+	Scheduler -- Co-routine Process Scheduler
+	Semaphore -- Process Synchronization Class
+	SharedQueue -- Shared Queue of Objects
+	String -- Character String
+		Regex -- Regular Expression Pattern
+	Time -- Time of Day
+	Vector -- Abstract Class for Math Vector Functions
+		BitVec
+		ByteVec
+		ShortVec
+		IntVec
+		LongVec
+		FloatVec
+		DoubleVec
+		ComplexVec
+
+
+Current Status:
+
+Version 2 Release 2 of OOPS is intended to compile under the AT&T C++
+Translator Release 1.2.1.
+
+OOPS has been ported to MASSCOMP's Real-Time UNIX 3.1, Sun UNIX 3.4, 4.2
+BSD on the VAX, and ACIS 4.2 on the IBM RT-PC. Tim O'Konski has ported
+OOPS to the HP 320.
+
+The documentation is hopelessly incomplete and out-of-date.  The best
+sources of information are the paper "An Object-Oriented Class Library
+for C++ Programs" by Keith E. Gorlen, published in the December, 1987
+issue of "Software -- Practice and Experience" and also in the
+Proceedings of the First USENIX C++ Workshop, and the source code of
+the test suite and library.
+
+The Vector classes are still experimental and are useful mainly as a
+compiler test suite.
+
+
+Differences from Version 2 Release 1:
+
+General:
+
+A new argument, "identification", has been added to the DEFINE_CLASS
+macro.  The arguments now are:
+
+DEFINE_CLASS(classname,basename,version,identification,initor1,initor2)
+
+The identification argument is a char* usually set to "$Header$".  RCS
+replaces this string with the revision identification when the file is
+checked out, and the functions Object::classIdent() and
+Class:classIdent return a pointer to this string.
+
+The name of class Arrayobid is now ArrayOb, the name of class Linkobid
+is now LinkOb, and the typedef obid has been removed.  Just change all
+occurrences of Arrayobid to ArrayOb, Linkobid to LinkOb, and obid to
+Object*.
+
+Type bool has been changed from char to int for compatibility with X
+V11.
+
+Class descriptors are now declared const.
+
+New Classes:
+
+The following classes have been added: Iterator, Range, and Regex.
+
+New String Class:
+
+There is a new, more efficient implementation of class String.  The
+new String class is compatible with the old String class except for
+the following:
+
+	String(char c, unsigned l =1);
+
+is now:
+
+	String(char& c, unsigned l=1, unsigned extra=DEFAULT_STRING_EXTRA);
+
+The argument "unsigned extra" has been added to most of the
+String::String() constructors to allow the programmer to give OOPS a
+hint as to how much space to allocate in the String for additional
+characters.  When properly used, this can reduce the number of calls
+made to the memory allocator.
+
+Assignment to SubStrings has changed slightly.  The old String class
+handled an assignment to a SubString such as:
+
+	String s = "abcdef";
+	s(0,2) = "123";		// result is 12cdef
+
+by truncating the source string to the length of the destination
+SubString.  An assignment such as:
+
+	s(0,2) = "1";		// result is 1\0cdef
+
+would cause a null byte to be inserted in the destination SubString.
+
+The new String class replaces the target SubString with the source
+String, adjusting the length of the target string if necessary.  Thus:
+
+	String s = "abcdef";
+	s(0,2) = "123";		// result is 123cdef
+
+and:	
+
+	s(0,2) = "1";		// result is 1cdef
+
+
+Changes to Class Process:
+
+The arguments to Process::Process() have been changed.  Old:
+
+	Process(const char* name ="", unsigned stacksize =1024, int priority =0);
+
+New:
+
+	Process(const char* name ="", int priority =0, unsigned stacksize =1024);
+
+The old Process class just stored the address of "name", causing
+confusion if it was changed.  The new Process class copies "name" into
+a String.
+
+An interface to select(2) has been added:
+
+	void Process::select(unsigned& rdmask, unsigned& wrmask, unsigned& exmask);
+

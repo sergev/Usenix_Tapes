@@ -1,0 +1,416 @@
+INGTOSAS.QF:
+
+	program ingtosas
+
+c	This program is used to transfer data from ingres to sas.  It is
+c	a temporary solution until someone writes the direct interface allowed
+c	under sas version 5.
+
+c	The method is to read the relation table in Ingres, and produce a quel
+c	script and a sas script.  The quel script copies the data from your
+c	table into a temporary table named ingtosas, and copies that table
+c	to disk in text form.  The sas program reads the text data set and
+c	produces a permanent sas data set.  Data types are preserved.
+
+c	See the ingtosas help file for more information on the use of this
+c	program.
+
+c	You should edit this program in 2 areas to get it to work
+c	on your system.
+
+c	1) This program spawns a call to a help file in the directory
+c	   disk$user1:[utility.source].
+
+c	2) Also, it assumes that the user is writing out the ingres data
+c	   set to the disk$user1 device.
+
+c	Once the above details have been taken care of, compile and link
+c	the program as follows.  Be sure that the ingtosas.hlb file that
+c	is created by the library command is placed in the directory
+c	that you specified when you edited the ingtosas.qf program.
+
+c	$ library/help/create ingtosas ingtosas
+c	$ eqf ingtosas
+c	$ fortran ingtosas
+c	$ link ingtosas,sys_ingres:[ingres.library]libq/library,-
+c		sys_ingres:[ingres.library]compatlib/library
+
+
+
+
+## 	declare
+
+	character*1	answer
+##	character*2	dba
+##	character*3	skipcol
+##	character*8	dates(50), money(50)
+##	character*9	database
+##	character*12	table, varname
+	character*100	directory
+##	integer		iformat, iformatl, ndates, nmoney, iskip
+##	integer		rowcount
+
+c	Instructions
+
+	type 10
+10	format (' Do you need instructions? ', $)
+	accept 20, answer
+20	format (a1)
+	if (answer .eq. 'y' .or. answer .eq. 'Y') call lib$spawn
+     +	('help/library=disk$user1:[utility.source]ingtosas ingtosas'
+     +		,,,6)
+
+c	Name of database and table
+
+	type 100
+100	format (/' Name of database: ', $)
+	accept 200, database
+200	format (a9)
+	type 300
+300	format (' Name of table: ', $)
+	accept 400, table
+400	format (a12)
+	type 450
+450	format (' Name of directory where the output files are to go',
+     +		' (no brackets): ')
+	accept 460, directory
+460	format (a100)
+
+	if (index(table,' ') .eq. 0) then
+		nchars_t = 12
+	else
+		nchars_t = index(table,' ') - 1
+	end if
+
+
+c	Try accessing the database now, so the files aren't created
+c	if there's an error.
+
+##	ingres database
+
+
+c	Open the files to contain the programs.
+
+	open (unit=50, name='ingtosas.qul', status='new',
+     +			carriagecontrol='list')
+
+	open (unit=51, name='ingtosas.sas', status='new',
+     +			carriagecontrol='list')
+
+
+c	Beginning of the Ingres program.
+
+	write (50,500) table
+500	format (' destroy ingtosas\p\g'/
+     +		' retrieve into ingtosas (', a<nchars_t>, '.all)\p\g'/
+     +		' copy ingtosas(')
+
+
+	nchars_d = index(directory,' ') - 1
+
+c	Beginning of the SAS program.
+
+	write (51,550) directory, directory, table, table
+550	format (' options ltype;' //
+     +		' libname save ''[', a<nchars_d>, ']'';'//
+     +		' filename rawdata ''[', a<nchars_d>, ']', a<nchars_t>,
+     +					'.dat'';'//
+     +		' data save.', a8, ';'/
+     +		'      infile rawdata;'/
+     +		'      input')
+
+c	Initialize counters of data and money data types.
+
+	ndates = 0
+	nmoney = 0
+	skipcol = '   '
+
+c	There will be a problem with this retrieve if two non-DBA users
+c	of the database both have tables of the name requested.  Therefore,
+c	be sure to extract only those rows from the attribute table that
+c	come from tables owned by the DBA or by the current user.  The
+c	code for the DBA is discovered by getting the owner of the 
+c	relation table.
+
+##	retrieve (dba = relation.relowner) where relation.relid = "relation"
+##
+##	retrieve (varname = attribute.attname, iformat = attribute.attfrmt,
+##						iformatl = attribute.attfrml)
+##		where attribute.attrelid = table and
+##		   (attribute.attowner = dba or attribute.attowner = usercode)
+##	{
+
+c	Write a line to the .QUL file.
+
+	write (50,600) varname
+600	format (t10, a12, ' = c0sp,')
+
+c	Write a line to the .SAS file.
+
+C	ALL OUTPUT ASSUMES DEFAULT INGRES FORMATS, AS DESCRIBED ON PAGE
+C	4-14 OF THE REFERENCE GUIDE.
+
+c	a quick fix: if the variable is in text format, then the output
+c	length will be 2 characters less than indicated in the attribute
+c	table:
+
+	if (iformat .eq. 37) iformatl = iformatl - 2
+
+c	date format
+
+	if (iformat .eq. 3) then 
+		ndates = ndates + 1
+		dates(ndates) = varname(1:8)
+		write (51,710) skipcol, varname
+710		format (t10, a3, a8, ' date12. +13')
+
+
+c	character or text format
+
+	else if ((iformat .eq. 32 .or. iformat .eq. 37)
+     +				.and. iformatl .le. 200) then
+		ndigits = 1. + alog10(float(iformatl))
+		write (51,720) skipcol, varname, iformatl
+720		format (t10, a3, a8, ' $', i<ndigits>, '.')
+
+	else if (iformat .eq. 32 .or. iformat .eq. 37) then
+		iskip = iformatl - 200
+		ndigits = 1. + alog10(float(iskip))
+		write (51,730) skipcol, varname, iskip
+730		format (t10, a3, a8, ' $200. +', i<ndigits>)
+
+c	floating format
+
+	else if (iformat .eq. 31) then
+		write (51,740) skipcol, varname
+740		format (t10, a3, a8, ' 10.3')
+
+
+c	integer format
+
+	else if (iformat .eq. 30 .and. iformatl .eq. 4) then
+		write (51,750) skipcol, varname
+750		format (t10, a3, a8, ' 13.')
+
+	else if (iformat .eq. 30) then
+		write (51,760) skipcol, varname
+760		format (t10, a3, a8, ' 6.')
+
+
+c	money format
+
+	else if (iformat .eq. 5) then
+		nmoney = nmoney + 1
+		money(nmoney) = varname(1:8)
+		write (51,770) skipcol, varname
+770		format (t10, a3, a8, ' comma20.2')
+
+
+c	unrecognized format
+
+	else
+		rewind 50
+		rewind 51
+		close (unit=50)
+		close (unit=51)
+		type 780, iformat
+780		format (/' ABORT.  The program does not recognize',
+     +				' data type: ', i3)
+		stop ' '
+	end if
+
+c	from now on, skip a column when start to read a variable.
+
+	skipcol = '+1 '
+
+##	}
+
+c	In case of error above, empty out the files written so far, and finish.
+
+##	inquire_equel (rowcount = "rowcount")
+
+	if (rowcount .eq. 0) then
+		rewind 50
+		rewind 51
+		write (50,790)
+		write (51,790)
+790		format (' ')
+		close (unit=50)
+		close (unit=51)
+		stop 'No such table'
+	end if
+
+
+c	Finish writing the sas program
+
+	write (51,800)
+800	format (t10, ';')
+
+	if (ndates .ne. 0) then
+
+c	    add a sas format for any dates.
+
+	    do 900 i=1,ndates
+900		write (51,1000) dates(i)
+1000		format (t7 'format ', a8, ' worddate12.;')
+
+	else if (nmoney .ne. 0) then
+
+c	    add a sas format for money values
+
+	    do 1200 i=1,nmoney
+1200		write (51,1300) money(i)
+1300		format (t7 'format ', a8, ' dollar24.2;')
+
+	end if
+
+	write (51,1410)
+1410	format ( / 'run;')
+	close (unit=51)
+
+
+c	Finish writing the Ingres program.
+
+	if (nchars_t .gt. 9) nchars_t = 9
+
+	write (50,1500) directory, table
+1500	format (t10, 'nl=d1)'/
+     +		' into "disk$user1:[', a<nchars_d>, ']', a<nchars_t>,
+     +						'.dat,text"\p\g'/
+     +		' destroy ingtosas\p\g')
+
+	close (unit=50)
+
+
+	type 1600, database
+1600	format (/' To create the disk data set from Ingres, ',
+     +				'give the command:' // 
+     +		9x, 'ingres ', a9, ' <ingtosas.qul >ingtosas.log' ///
+     +		' To create the SAS data base, enter the command:'//
+     +		9x, 'sas ingtosas'/)
+
+	end
+
+
+
+
+
+
+
+INGTOSAS.HLP:
+
+
+1 INGTOSAS
+
+    This writes two programs that will create a SAS data set from an
+Ingres table or view.  The first is a QUEL program that copies the
+data from Ingres to text format on disk.  The second is a SAS
+program that reads the text data file and creates the SAS save
+set.
+
+    The data types in the SAS data set will be the same as they were
+in Ingres.  (The money data type is transferred as a floating point
+number, but a SAS money format is assigned to it).  Warnings: date
+and time intervals (stored as date type "date") will not be read
+correctly by the SAS program, and any control characters or carriage
+returns in "text" data types will cause a SAS error.
+
+    Syntax:
+
+        $ ingtosas
+
+2 USE
+    You will be queried for:
+
+        1) Whether you need instructions.
+        2) Database name.
+        3) Name of table or view in the data base.
+        4) Name of the directory where the data file is to be
+           stored.  Do not include the brackets in the specification.
+
+    The files left behind by this procedure are:
+
+        1) INGTOSAS.QUL = the QUEL program that you will use to copy
+           the raw data to disk.
+        2) INGTOSAS.SAS = the SAS program that you use to create
+           the SAS data set.
+
+
+2 TEXT_FILE_CREATION
+
+    I haven't found any problems with this step.
+
+    Syntax:
+
+        $ ingres DATABASE_NAME <ingtosas.qul >ingtosas.log
+
+    The resulting data file will have the same name as the table
+in Ingres, with an extension of ".dat".
+
+
+
+2 FORMAT_OF_THE_DATA_FILE
+
+    One line is created for each record in the Ingres table.  The
+data form columns.  The width of the columns is equal to whatever
+the default widths are for the data base.  Usually, these are:
+
+        data type         format
+
+            c          declared length
+            text       declared length
+            f              10.3
+            i1 or i2        6
+            i4             13
+            date           25
+
+        A single space separates all columns.
+
+
+
+2 PERMANENT_SAS_DATA_SET_CREATION
+
+    The procedure does not create the SAS data set, but instead
+a SAS program with the name INGTOSAS.SAS; you may need to edit this
+program prior to using it.
+
+    Syntax:
+
+        $ sas ingtosas
+
+
+
+2 REASONS_TO_EDIT_THE_SAS_PROGRAM
+
+    1) The most important: Ingres allows variable names to be 12 char-
+       acters long, SAS allows 8 characters.  The procedure just truncates
+       the variable names to 8 characters.  There is NO check to see if
+       this creates duplicate variable names.
+
+    2) This procedure assumes that all date fields contain only dates.
+       They could also contain the time of day or a time interval.
+        a) Time of day.  This is stored in the second half of the
+           date field.  The SAS program will ignore it unless you
+           edit the program to recognize the information.  NO ERROR
+           WILL BE GENERATED.
+        b) Time intervals.  This will cause an error when you try
+           to run the program.
+
+    3) Ingres allows character variables to be longer than the SAS
+       limit of 200.  The SAS program reads only the first 200 characters
+       in the field, and skips the rest.  This is indicated by a
+       "+n" at the end of an input line; n = the excess number of
+       characters.  You can replace the "+n" by a variable and format
+       specification of length n.
+
+    4) The data set declares all variables to be of the same type as
+       they were in Ingres.  Many Ingres variables are listed as
+       character variables, and you may want to use them as numeric
+       variables.  Just delete the "$" specification in the SAS input line.
+
+    5) You may want to change the format of the date variables from
+       "worddate12." to something else.
+
+    6) You may want to add variable labels and formats.
+
+UUCP:		{decvax, allegra, seismo, cmcl2}!rochester!ur-msbvax!edc

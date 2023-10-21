@@ -1,0 +1,170 @@
+.so tmac.anx
+.TH MAKENORM 1 "ENEA DATA  March 1985"
+.SH NAME
+makenorm - include statement normalizer
+.SH SYNOPSIS
+.B makenorm
+.SP r rules ]
+.SP R rules ]
+.SP I list ]
+.SP a list ]
+.SF i
+makedir
+sourcefiles
+.SH DESCRIPTION
+.I Makenorm
+accepts C preprocessor include statements
+of the form
+.IP
+	file1: #include "file"
+.br
+	file2: #include <file>
+.P
+from the standard input
+with possible extra white space and trailing comments,
+and writes them to the standard output in the normal form
+.IP
+	file1 < file2
+.P
+This form is suitable for later processing by the
+.I depend
+command to generate 
+.I make
+dependencies.
+.P
+When the top directory of a system is moved to a new position
+in a global file system, all
+.I make
+dependencies should still be valid.
+The file names must therefore be expressed in a form
+that is insensitive to relocation.
+In most cases,
+file references relative to the current
+.I make
+directory have this property.
+Some references, however, are global in nature.
+The dependency
+.IP
+	prog.o: ../../../../../../usr/include/time.h
+.P
+becomes invalid when the system is moved downwards in
+a file system.
+.P
+Therefore, whenever a file name refers to an absolute directory,
+it is expressed in absolute form,
+otherwise it is made relative to the given
+.I make
+directory.
+The directory
+.I /usr/include
+is always considered absolute,
+but additional absolute directories may be specified.
+.P
+Whether a reference is absolute or not,
+it is always reduced to the shortest possible path
+(loops eliminated),
+so that file names can later be unambiguously identified by the
+.I depend
+command.
+.P
+Include file references are normally interpreted by
+the C preprocessor as relative to
+the directory of the file in which the statement occurred.
+However, if the referenced file cannot be found,
+a user directory list is first searched, if specified,
+and then the system directory
+.I /usr/include.
+The '#include <file>' form searches only the user list
+and the system directory.
+.P
+Generated files may be missing or obsolete
+at the time of the
+.I make
+dependency generation,
+so include statements must extracted from source files.
+However, include statements may reference generated files,
+like e.g. a 
+.I lex
+generated 'scanner.c' which is included in a
+.I yacc
+file.
+Therefore, a set of standard include suffix rules
+are used to deduce,
+from the given list of source files,
+which files will be present at C compile time
+(see the SP & E article below).
+Include file references are thus resolved without requiring
+any of the files to be present when
+.I makenorm
+is run.
+.P
+Arguments:
+.A1 r rules The
+standard include suffix rules
+.IP
+	.o: .c .p .f
+.br
+	.c= .y .l .q
+.br
+	.h= .y
+.IP
+are augmented by the specified rules.
+The argument is a string of rules, separated by semicolon.
+.A1 R rules The
+standard include suffix rules are replaced by
+the specified rules.
+.A1 I list Add
+the specified directories to the 
+user include directory search list.
+.A1 a list Add
+the specified directories to the 
+absolute directory list.
+.AR i Since
+it is often convenient to exclude
+dependencies to standard system include files,
+references that cannot be resolved by examining the explicit
+.I sourcefiles
+list,
+are silently ignored if they are found in the
+.I /usr/include
+directory.
+The
+.B -i
+option forces system include references to be treated like
+any other references.
+.C1 makedir The
+full path name of the
+.I make
+directory.
+It must be given in absolute form.
+.C1 sourcefiles The
+complete list of source files,
+from which the include statements were extracted.
+This is needed to identify source files which do not
+contain include statements.
+.SH IDENTIFICATION
+.de VL
+\\$2
+..
+Author: Kim Walden,
+ENEA DATA and University of Stockholm, Sweden.
+.sp 0
+Revision Number:
+.VL $Revision: 2.2 $
+; Release Date:
+.VL $Date: 1985-03-13  18:39:30 $
+\h'-1'.
+.sp 0
+Copyright \(co 1983.
+.SH "SEE ALSO"
+depend(1), makedep(1), make(1)
+.sp 0
+K. Walden, "Automatic Generation of Make Dependencies",
+.IR "Softw. Practice & Exper." ,
+vol. 14, no. 6, June 1984.
+.sp 0
+.IR "Make - A Program for Maintaining Computer Programs" ,
+by S. I. Feldman.
+.sp 0
+.IR "An Augmented Version of Make" ,
+by E. G. Bradford.

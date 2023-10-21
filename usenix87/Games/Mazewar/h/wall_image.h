@@ -1,0 +1,9 @@
+/* RCS Information: $Header: wall_image.h,v 1.1 84/08/25 17:25:02 jcoker Exp $ */
+
+#ifdef sun
+static short	wall_data[16] = {
+	0xAA80, 0x5540, 0xAA80, 0x5540, 0xAA80, 0x5540, 0xAA80, 0x5540,
+	0xAA80, 0x5540, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000, 0x0000,
+};
+mpr_static(wall_pr, 10, 10, 1, wall_data);
+#endif

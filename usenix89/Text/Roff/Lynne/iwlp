@@ -1,0 +1,178 @@
+#
+#	$Header: iw,v 1.0 86/06/17 14:50:23 rgb Exp $
+#	$Locker:  $
+#
+# lp interface for Apple Imagewriter printers I/II
+#
+#	SCCS @(#)iw	1.0
+
+version="1.2"
+
+x1="iwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiw"
+x2="wiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwiwi"
+
+# parse arg's first
+#
+copies=$4
+siz=-e
+qual=-S
+lines=-6
+slashzero=0
+pageoffset=1
+coverpage=1
+for i in $5
+do
+	case "$i" in
+	-c | c) # compressed print
+		siz=-c;
+		;;
+	-u | u) # ultra compressed print
+		siz=-u;
+		;;
+	-s | s) # semi condesened print
+		siz=-s;
+		;;
+	-x | x) # expanded print
+		siz=-x;
+		;;
+	-e | e) # elite 12 cps
+		siz=-e		
+		;;
+	-E | E) # elite proportional
+		siz=-E
+		pageoffset=0
+		;;
+	-p | p) # pica 10 cps
+		siz=-p
+		;;
+	-P | P) # pica proportional
+		siz=-P
+		pageoffset=0
+		;;
+	-D | D | -d | d) # draft 
+		qual=-D
+		;;
+	-S | S | -s | s) # standard
+		qual=-S
+		;;
+	-N | N | -n | n) # near letter quality
+		qual=-N
+		;;
+	-6 | 6) # six lines per inch
+		lines=-6
+		;;
+	-8 | 8) # eight lines per inch
+		lines=-8
+		;;
+	-0 | 0) # slash zero's
+		slashzero=1
+		;;
+	-z | z | -Z | Z) # do not add half inch offset
+		pageoffset=0
+		;;
+	-h | h | -H | H) # do add half inch offset
+		pageoffset=1
+		;;
+	-t | t | -T | T) # do not print cover page
+		coverpage=0
+		;;
+
+	esac
+done
+
+# reset printer
+echo "\033c\c"
+
+# print cover page?
+#
+if [ X$coverpage = X1 ]
+then
+#echo "\014\c"
+echo "\033L010\c"		#  offset left margin by 10
+echo "\n$x1\n$x2\n$x1\n$x2\n"
+banner "$2"
+echo "\n"
+user=`grep "^$2:" /etc/passwd | line | cut -d: -f5`
+if [ -n "$user" ]
+then
+	echo "User: $user\n"
+else
+	echo "\n"
+fi
+echo "Request id: $1    Printer: `basename $0`  Interface: IW1 "$version"\n"
+date
+echo "\n"
+if [ -n "$3" ]
+then
+	banner $3
+fi
+echo "\014\c"
+echo "\033L000\c"		#  offset left margin by 0
+fi
+if [ X$siz = X-x ]
+then
+	echo "\033n\c"	# expanded		9 cpi		72 cli
+elif [ X$siz = X-c ]
+then
+	echo "\033q\c"	# condensed 		15 cpi		120 cli
+elif [ X$siz = X-s ]
+then
+	echo "\033e\c"	# semi condensed 	13.4 cpi	107 cli
+elif [ X$siz = X-u ]
+then
+	echo "\033Q\c"	# ultra condensed 	17 cpi 		136 cli
+elif [ X$siz = X-p ]
+then
+	echo "\033N\c"	# pica 			10 cpi
+elif [ X$siz = X-P ]
+then
+	echo "\033p\c"	# pica proportional
+elif [ X$siz = X-e ]
+then
+	echo "\033E\c"	# elite			12 cpi
+elif [ X$siz = X-E ]
+then
+	echo "\033P\c"	# elite proportional
+fi
+if [ X$qual = X-D ]
+then
+	echo "\033a1\c"	# draft mode
+elif [ X$qual = X-S ]
+then
+	echo "\033a0\c"	# standard quality
+elif [ X$qual = X-N ]	
+then
+	echo "\033a2\c"	# near letter quality
+fi
+if [ X$lines = X-6 ]
+then
+	echo "\033A\c"
+elif [ X$lines = X-8 ]
+then
+	echo "\033B\c"
+fi
+if [ X$slashzeros = X1 ]
+then
+	echo "\033D\001\000\c"
+	#echo "\033D\000\001\c"
+fi
+if [ X$pageoffset = X1 ]
+then
+echo "\033L005\c"		#  offset left margin by 5
+fi
+#
+#
+shift; shift; shift; shift; shift
+files="$*"
+i=1
+while [ $i -le $copies ];
+do
+	for file in $files;
+	do
+		cat "$file" 2>&1
+		echo "\014\c"
+	done
+	i=`expr $i + 1`
+done
+#echo "\033c\c"	# reset to power on defaults 
+exit 0

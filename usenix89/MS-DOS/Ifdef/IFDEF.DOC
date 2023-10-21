@@ -1,0 +1,260 @@
+IFDEF(1)            TURBO Programmer's Manual            IFDEF(1)
+
+
+NAME:
+   ifdef -- ersatz conditional compilation for Turbo-Pascal.
+
+
+ABSTRACT:
+   Turbo-Pascal  does  not yet support  conditional  compilation.
+   IFDEF  is  a simple filter that may be used to comment in  and
+   out sections of the source code, so that one single source may
+   be used to produce object code for different environments.
+
+
+SYNOPSIS:
+   ifdef [ option ... ] filename
+
+   Valid options:
+      -?          : print brief help
+      -f filename : read definitions from file
+      -d symbol   : "define"   symbol
+      -u symbol   : "undefine" symbol
+      -k          : keep backup copy
+      -s          : run silent
+
+
+DESCRIPTION:
+   This  is simple filter for Turbo Pascal programs that  uses  a
+   special  comment syntax to simulate something like conditional
+   compilation. (I've always wondered why Borland left it out.)
+
+   IFDEF provides two mechanisms to be used by the programmer:
+      1) Files may be conditionally included.
+      2) Statements may be conditonally commented out (or in).
+
+   Both mechanisms are based on symbols,  which may be in one  of
+   two states:  "defined" or "undefined". These terms are used in
+   a  fairly  liberal  sense,  because symbols  does  not  become
+   "undefined"  before the programmer actually define them to  be
+   in  that  state.  If  a symbol is not explictly stated  to  be
+   either "defined" or "undefined",  it is unknown to IFDEF,  and
+   no action is taken when IFDEF encounters it.
+
+   The  "symbols" known by IFDEF are strings exactly three  char-
+   acters  long.  You "define" and "undefine" a symbol using  the
+   command line switches -D and -U.
+
+   For example, the command line:
+
+      ifdef -dFOO -uBAR file.ext
+
+   will "define" the symbol FOO and "undefine"  the  symbol  BAR.
+   I.e:  it will have roughly the same effect as the C-preproces-
+   sor statements:
+
+      #define FOO
+      #undef  BAR
+
+
+   1) Conditional inclusion
+
+   When IFDEF comes across a string with the form:
+
+      (*symbol<IFDEF*)
+
+   anywhere  on  a line,  it will replace the second character on
+   that line with a "$" if the symbol is  "defined",  and replace
+   it with a space if the symbol is undefined.
+
+   Given the command line shown above, and that the file FILE.EXT
+   contains the following lines (the "{" in column 1),
+
+      { I FOOSTUFF.INC} (*FOO<IFDEF*)
+      {$I BARSTUFF.INC} (*BAR<IFDEF*)
+
+   IFDEF will transform those two lines to:
+
+      {$I FOOSTUFF.INC} (*FOO<IFDEF*)
+      { I BARSTUFF.INC} (*BAR<IFDEF*)
+
+
+   2) Conditional commenting
+
+   IFDEF  then  assumes  that the source  of  the  file  FILE.EXT
+   contains comments of the following syntax:
+
+       (*FOO<--
+       write('foo');
+       -->FOO*)
+       (*BAR<*)
+       write('bar');
+       (*>BAR*)
+
+   Again, given the command line:
+
+       ifdef -dFOO -uBAR file.ext
+
+   the source above is transformed into:
+
+       (*FOO<*)
+       write('foo');
+       (*>FOO*)
+       (*BAR<--
+       write('bar');
+       -->BAR*)
+
+   which, of course, means that the block containing  the  state-
+   ment "write('foo');" is compiled; while the  block  containing
+   the statement "write('bar');" is commented out.
+
+   In  other  words,  the comment syntax  above may be considered
+   analogus to this input to the standard C-preprocessor:
+
+       #ifdef FOO
+       write('foo');
+       #endif
+       #ifdef BAR
+       write('bar');
+       #endif
+
+
+   3) Summary of options and usage
+
+   The  -d and -u options described above may be repeated as many
+   times  you like (or there is room for on a command  line),  to
+   define and undefine several symbols.
+
+   You  may  also  read  the set of -d and  -u  options  from  an
+   external file.  You do this using the -f option followed by  a
+   filename.  The should file contain a list of symbols, with one
+   symbol  per line.  Each symbol should be prefixed by either -d
+   or -u, and there should be no blanks on the line. You may have
+   comments  in  the line,  by starting the line  with  a  symbol
+   different from "-".
+
+   IFDEF  will normally leave its output on a file with the  same
+   name  as the input file.  You main retain a backup-copy of the
+   original  file  (with  extension .BAK) by  specifying  the  -k
+   option.  Note however,  that if you have a main file with  the
+   same name as an include file, only the original main file will
+   be retained: E.g. if your main file is named FOO.PAS, and that
+   includes  a file named FOO.INC,  the backup-file FOO.BAK  will
+   contain  the  original source of FOO.PAS,  while the  original
+   FOO.INC is lost.
+
+   IFDEF accept one additional switch.  This is -s,  and indicate
+   "silent" mode.  This means that the program is much less  ver-
+   bose. It will still print error messages.
+
+
+RATIONALE:
+   Why use a limited utility like IFDEF, instead of a proper pre-
+   processor (there are several in the public domain), or the K&P
+   "MACRO"-program (1, p. 305)?
+
+   Well,  the main rationale behind IFDEF is Turbo-Pascals closed
+   development  environment,  where it is very easy to jump  from
+   the built-in-editor to the compiler, but very difficult to run
+   a pre-processor in-between.
+
+   I  maintain several large programs written in Turbo-Pascal  in
+   several environments (CP/M,  generic MS-DOS, PC-DOS), and find
+   it painful to maintain parallell sources.
+
+   IFDEF  allows  me  to maintain one master source that  may  be
+   moved between all systems. The output from IFDEF is essentialy
+   the same as the input (i.e.  statements may be commented in or
+   out,  but  they are never altered or  deleted).  Hence,  after
+   filtering the source through IFDEF,  the filtered file becomes
+   the new master source, and this may be edited and compiled.
+
+   When  there is some maintenance to be done on a  program  (bug
+   fixes, adding features, etc), I select one environment to work
+   in, and filters the program to this environment using IFDEF. I
+   then fire up Turbo,  and may hack away for hours doing several
+   edits and compilations,  until I am confident the job is done.
+   To  export  the new version to the other environments,  it  is
+   usually  sufficient to filter the edited file  through  IFDEF,
+   recompile and test.
+
+   The  main point is that after filtering the file and firing up
+   Turbo,  I may alternate between editing and compiling  without
+   filtering  the file again,  and without worrying about keeping
+   track  of  changes that shall need to be pasted  back  into  a
+   master file.
+
+   A  macro-package  or something like the  C-preprocessor  would
+   produce  a  environment specific file that may be compiled  to
+   run on a particular system. But any edits had do be done on an
+   unprocessed  master file which then had to be  filtered  again
+   before it could be recompiled for a specific environment.
+
+
+DIAGNOSTICS:
+   The  program will print out an error message and abort if  the
+   it find bogus switches and start-up parameters.
+
+   Unless you specify the -S (silent) option,  it will, before it
+   starts,  tell  you  what  it  considers defined  and  what  it
+   considers  undefined,  and after it has terminated,  how  many
+   blocks and include files it commented in or out. If the number
+   of  blocks  started  is different from the  number  of  blocks
+   ended, it will print both numbers like this:
+
+      FOO: commented in: started 7; ended 6 blocks.
+
+   This  proably  means  that you spelled one of  the  end  block
+   delimiters wrong.
+
+
+BUGS:
+   * IFDEF is a very feeble hack,  compared to something like the
+     C preprocessor.
+
+   * Having ordinary comments of the type (* *) anywhere within a
+     block  that is intended to be commented in or out  by  IFDEF
+     will not work. You must use the { } comment type.
+
+   * IFDEF  will  scan  through include files included  with  the
+     Turbo {$I directive. It will not scan include files included
+     using the alternative (*$I directive.  This is  intentional,
+     and  means that you select which files in a large system you
+     want IFDEF to massage, by using the appropriate directive.
+
+   * Blocks may not be nested.
+
+   * IFDEF does not know about text strings. If you happen to put
+     something like "(*FOO<" or ">FOO*)" inside a quoted  string,
+     IFDEF will do its thing to it.
+
+   * Error checking and diagnostics is not very clever.
+
+   * Toggling between reading and writing a  single  textline  is
+     ridiculously slow in Turbo-Pascal.  Some  trivial multi-line
+     buffering could improve on this,  but I always liked to keep
+     my distributed code as simple as possible.  Hence, this fea-
+     ture  is left as an exercise to users worried about wear and
+     and tear on their disks stepping motors.
+
+
+AUTHOR:
+   Gisle Hannemyr, Bragevn. 3a, 0452 Oslo, Norway;
+   (gisle@ifi.uio.no.arpa)
+
+   This hack is hereby placed in the public domain.  You may use,
+   copy and distribute it in any way you like. Please remember to
+   include  the  file  with this manual page (ifdef.doc)  in  any
+   redistribution.  If you improve or extend IFDEF in any way,  I
+   would appreiciate a copy of of your version.
+
+
+ENVIRONMENT:
+   IFDEF should work under any version of Borlands  Turbo-Pascal,
+   but  I've  only  tested  it with Turbo  version  3.01A  (under
+   generic MS-DOS, PC-DOS, CP/M-80, CP/M-86 and C-DOS).
+
+
+REFERENCES:
+   1) Kernignan and Plauger:  Software Tools in Pascal;  Addison-
+      Wesley, 1981.

@@ -1,0 +1,41 @@
+:
+#! /bin/sh
+#	hi user msg
+#	Write a message on every tty that a user is logged onto.
+#	With the -m flag, the message will be mailed if the user
+#	is not logged in (useful in shell scripts).
+#	Author : Oscar Nierstrasz @ ..!utcsrgv!oscar
+
+case $# in
+0 )	echo "Usage: hi user [-m] msg"
+	echo "       hi user -f <file> ..."
+	echo "       <cmd> | hi user"
+	exit ;;
+esac
+u=$1
+shift
+case $# in
+0 )	f=/tmp/hi$$
+	cat > $f ;;
+1 )	;;
+* )	case $1 in
+	-f )	shift
+		f=$* ;;
+	-m )	shift
+		m=y ;;
+	esac ;;
+esac
+w=`who | fgrep $u`
+case $w in
+"" )	case $m in
+	y )	echo "$*" | mail $u ;;
+	*)	echo "$u not logged in" ;;
+	esac ;;
+* )	case $f in
+	"" )	echo "$w" | sed -e "s%^.*tty%/dev/tty%" -e "s/ .*$//" \
+			-e "s/^/echo \"$*\" > /" | /bin/sh ;;
+	* )	echo "$w" | sed -e "s%^.*tty%/dev/tty%" -e "s/ .*$//" \
+			-e "s%^%cat $f > %" | /bin/sh ;;
+	esac ;;
+esac
+rm -f /tmp/hi$$

@@ -1,0 +1,4379 @@
+To: allegra!umcp-cs!aplvax!lwt1
+Subject: xfernews
+
+# Here is the source for xfernews.  Feed the body of this letter into the
+# shell to extract.
+# 
+# The file NROFFME is the standard documentation.  It should be run
+# through nroff without using any macro packages.  Be warned that there
+# may be pieces that are out of date.  The file batch_grammar attempts to
+# document the batch file format.
+# 
+# The binary batching code, which is what you are interested in, resides
+# in mkbat_b.c and unbat_b.c.  You can forget about the sendnews.c and the
+# *_a.c files since they are for unbatched transfers and ascii (no
+# compression) transfers, respectively.
+# 
+# The file pack.h contains definitions relating to the batching format.
+# To regenerate this file, compile the mkpack program and type
+# 	mkpack < pack.ph > pack.h
+# Be warned that the mkpack program is a quick hack that is probably not
+# very portable.  
+# 
+# The program charfreq accepts a set of files containing USENET articles
+# and gives character frequency counts for the bodies of the articles. 
+# You can use it if you want to try to tune the character code lengths
+# specified in pack.ph.  Note that the maximum character length that you
+# can specify in pack.ph is 10.  You can increase this by changing the
+# definition of MAXBITS in mkpacky.y, but that would increase the size of
+# the decoding table.  The EXTCHAR entry is a way of getting around this
+# limitation.  If no character length entry appears for a character, that
+# character is encoded as EXTCHAR followed by a 5 bit sequence.
+# 
+# If you have any questions, please let me know.
+# 				Kenneth Almquist
+
+cat > NROFFME <<\!
+.hy
+.de p
+.sp
+.ti +5
+..
+.de Np
+'bp
+'sp 5
+.ns
+..
+.wh 61 Np
+.de h
+.sp 2
+.ne 4
+.nr h +1
+\\nh)\ \ \\$1
+.p
+..
+.h "What is xfernews?"
+Xfernews is a package of software for transporting news,
+and optionally mail, between machines.
+It is designed to be efficient, reliable, and to run on top of
+vanilla uucp.
+.p
+The memo is divided into five sections.
+Section 2 documents the protocal used by xfernews.
+Section 3 gives an overview of how the xfernews software works.
+Section 4 and 5 discuss the compilation and installation of xfernews.
+Finally, section 6 talks about error messages.
+.h "The xfernews protocal"
+The two news transport methods described in the
+.ul
+USENET Interchange Standard
+are based upon remote execution and mail, respectively.
+Xfernews is based upon file transfer,
+which is handled better by uucp and certain other networks.
+.p
+Assuming that two systems communicate using the xfernews
+protocal, each systems has an input directory which the other
+system sends files to.
+Each system periodicly checks its input directory and processes
+any files which it may find there.
+The name of the file identifies its contents.
+The first character of the name is the type;
+a list of types is given below.
+The next 9 characters contain the value in decimal returned by time(2)
+when the file was queued for transfer.
+This should be used by the receiving system to process
+news in the same order that it was queued.
+The final character of the filename is a letter chosen to make the
+file name unique.
+.p
+There are four file types currently defined.
+Type 'n' files contain news articles.
+Type 'm' files contain mail.
+The use of this protocal for mail is optional,
+but is recomended for links which carry large amounts of mail.
+The first line of the file contains the three characters "To "
+followed by the destination of the mail.
+The rest of the file contains the letter.
+Type 'a' files are acknowledgement files.
+An acknowledgement file contains a list of files received
+by the system which sent the acknowledgement file.
+If a system fails to acknowledge a file,
+the file should be resent.
+.p
+[If the batching version of the protocal is used, then files of the
+preceding three types are combined into batches which are sent across
+as type 'b' files.  The first byte of a type 'b' file specifies the
+format of the batch.  (Currently two formats are defined: 'a' format
+is a simple ascii compaction scheme and 'b' format compresses the data
+into a binary form.)]
+.h "The Xfernews Software"
+This gives an overview of the implementation of the xfernews protocal
+for use with uucp.
+Three programs are provided.
+Qnews queues news or mail for transmission to another system.
+Sendnews sends the news which has been queued up
+to another system.
+Recvnews processes news files sent from another system.
+.p
+For each system talked to using xfernews,
+there is a spool directory.
+The contents of this directory are:
+.de l
+.sp
+.ti 0
+.ta 16
+\\$1	\c
+.ta 8,16,24,32,40,48,56,64,72,80
+..
+.in 16
+.l in
+The input directory used by the remote system (see section 2).
+.l out
+News to be sent to the remote system is placed here by queuenews.
+.l sent
+When sendnews sends news to the remote system, it moves it from
+the out directory to the sent directory.
+The news remains in the sent directory
+until the remote system acknowledges it.
+.l [unbatch
+When a batch file is unpacked, the resulting files are placed in this
+directory.]
+.l [newslist
+A list of news articles to be sent.
+This file is written directly by inews, making it unnecessary
+for qnews to be invoked for each article to be transmitted.]
+.l ackfile
+This file contains a list of input files
+which have been processed.
+Sendnews sends the contents of this file
+to the remote system
+as an acknowledgement file.
+.l lastack
+This file contains the time of the last file acknowledged
+by the remote system.
+It is used to avoid resending files which haven't been acknowledged
+because the remote system is down.
+.l resentflag
+When sendnews resends some news,
+it creates this file.
+The next time sendnews is invoked, it will not resend any news
+in order to give the remote system time to acknowledge the files
+already resent.
+.l bad
+When a file is found in one of the directories "in", "out", or "sent"
+which cannot be processed,
+it is moved to this directory
+and you are informed of the fact by mail.
+.in 0
+.h "Compiling the Xfernews Software"
+Compiling the xfernews software is simple:  all you have to do
+is to type "make".
+However, you will probably want to modify
+some compile time parameters first.
+.p
+If you are not running System 3 or System 5,
+you should remove the "#define USG 1" line
+from common.h.
+This will get you code which should run using Version 6 system calls.
+The version of the library routines provided with 4.1 BSD should
+work with this code.
+If you have 4.2 BSD, the directory format is different;
+eliminate the 4.2 compatability routines in dir.c and dir.h,
+and use the real routines provided by Berkeley.
+.p
+There are several compile time parameters which you may want to change:
+.in 16
+.l RNEWS
+is the path name of the rnews program
+used for processing news.
+Be warned that no path search will be performed.
+Furthermore, the rnews program cannot be a
+shell procedure.
+The default is "/usr/bin/rnews".
+.l RMAIL
+is the path name of a program for processing mail.
+If you don't use xfernews for transferring mail,
+this isn't used.
+The default is "/bin/rmail".
+.l UUCP
+is the path name of the uucp command.
+The default is "/usr/bin/uucp".
+.l MAILCMD
+is the command passed to popen to inform the system administrator
+of problems.
+The default is "mail\ usenet".
+.L [LIBDIR
+is the directory where the unbatcher programs reside.
+The first character of a batch file specifies which unbatcher to use;
+if this character is 'X', then the program LIBDIR/unbat_X will be run
+to unpack the batch.
+The default is "/usr/lib/news".]
+.l RECVLOCK
+is the name of the lock file used to prevent two copies of recvnews
+from running simultaneously.
+Having two copies of recvnews running simultaneously in the same directory
+will cause problems.
+We have one system wide lock rather than one lock per directory
+because inews running multiple copies of inews
+seems to result in "news system locked up" messages.
+.l NETNEWS
+is the numeric user id which is to be used by sendnews
+and recvnews when they are invoked as root.
+If they are not invoked as root then this has no effect.
+.l DESTLEN
+is the maximum length of a mail destination.
+.l MAXARGS
+is the maximum number of files which can be processed
+by a given invokation of sendnews or recvnews.
+.l MINACK
+specifies the minimum number of files needing to be acknowledged
+before an acknowledgement file will be sent.
+Setting this to zero causes the systems to keep trading acknowledgements
+even when the link is idle.  (Each acknowledgement has to be acked.)  Note
+that any pending acknowledgements are always sent if a connection has
+to be established to transfer news or mail anyway.
+MINACK is specified as the number of bytes; since each file currently
+takes 12 bytes, divide by 12 to get the number of files.
+.l [MAXBATSIZE
+is the approxmiate maximum size of a batch.
+The default is 66000, which means that a single batch will take about
+10 minutes to transfer at 1200 baud.
+This may be increased or decreased depending on how reliable your phone
+connections are.]
+.l [MAXBATCH
+The maximum number of outstanding batches.
+The number of outstanding batches is limited so that you will not run out
+of file space if you are unable to contact the remote system for a long
+period of time.]
+.in 0
+.h " Installing Xfernews"
+Once xfernews is compiled,
+you can set up links to other machines using the xfernews protocal.
+.p
+The first step is to create xfernews spool directories
+for the systems you want to talk to.
+The shell procedure mkspool creates an xfernews spool directory.
+Typically the last component of the path will be the name of the
+remote system.
+Thus to talk to spanky you might use the spool directory
+/usr/spool/spanky.
+If you think you might have to move the spool directory to a different
+file system at some point, create a login called netnews with a home
+directory of "/usr/spool", and tell the spanky adminstrator that the
+name of the spool directory is "~netnews/spanky".
+.p
+Recvnews is invoked as "recvnews directory...".
+Each directory is the name of an xfernews spool directory.
+It is recomended that xfernews be invoked from cron
+quite frequently, say once every 10 or 15 minutes,
+so that news will be processed as quickly as possible.
+.p
+Sendnews is invoked as "sendnews [\ -r\ ] directory to".
+Directory is the name of an xfernews spool directory.
+To is the name of the input directory on the remote system
+in uucp format (see example below).
+The -r option is passed directly to uucp;
+it tells uucp not to start up the uucp daemon.
+.p
+It is recomended that both systems using xfernews
+invoke sendnews simultaneously.
+[You can ignore any of the recomendations in this paragraph
+and xfernews will still run.]
+To avoid extra phone calls, one system should specify
+the -r option.
+Normally you will want to alternate specifying the -r option
+in order to share the phone bill.
+For example, if a link exists between spanky and tpsa,
+the crontab entries on spanky might look like
+.in +4
+.nf
+0  * * * * /etc/sendnews /netnews/tpsa tpsa!/usr/spool/spanky/in
+30 * * * * /etc/sendnews -r /netnews/tpsa tpsa!/usr/spool/spanky/in
+.fi
+.in -4
+and the corresponding entries on tpsa would be
+.in +4
+.nf
+0 * * * * /etc/sendnews -r /usr/spool/spanky spanky!/netnews/tpsa/in
+30 * * * * /etc/sendnews /usr/spool/spanky spanky!/netnews/tpsa/in
+.fi
+.in -4
+This arranges systems to alternate the job of calling each other.
+In this example, news is transferred every half hour;
+over a long distance telephone connection you would want to
+transfer it less frequently.
+.p
+Once the connection is set up, you can begin feeding news into it
+using the qnews program.
+For a normal interface with netnews, place the entry
+"qnews directory/out" in to fourth field to the sys file
+for the system you wish to talk to.
+Directory should be replaced by the name of the spool directory
+for the system you wish to talk to.
+This will cause qnews to read its standard input
+and copy it to a file in the directory specified as its argument.
+.p
+In version 2.10 of netnews, it is possible to reference the name
+of the article as it is stored in the netnews spool directory,
+thereby allowing the article to be linked into the spool directory
+rather than being copied there.
+To use this feature, the netnews spool directory and the xfernews
+spool directory must be in the same file system.
+Add the U flag to the third field of the entry in the sys file,
+and in the fourth field say:  "qnews directory/out %s"
+The %s will be replaced by the name of the article in the spool
+directory.
+If the article is a control message and you are running a prerelease of 2.10,
+the article is not placed in
+the netnews spool directory and the %s is passed to qnews unchanged.
+Qnews checks for this case and reads the article from its standard input.
+.p
+[If you are using batching, then you do not need to use qnews to queue news
+(although you will still need qnews to transfer mail).
+Instead, add an 'F' flag to the third field and specify "directory/newslist"
+in the fourth field.  This will cause inews to write the names of the files
+containing the articles to the file "newslist".
+If you use this approach, you should keep all articles around for at least
+a week so that the articles will not be expired before they can be sent.]
+.p
+If the cost of a phone connection is very high, or you are
+having problems with mail being lost, you may want to transfer mail
+as well as news using xfernews.
+You will probably have to modify your mailer code.
+The basic idea is you first figure out how your mail system transfers
+mail using uux.
+It will invoke uux by saying something like:
+.nf
+
+      sprintf(cmd, "uux - %s!rnews \\(%s\\)", system, dest) ;
+      fp = popen(cmd, "w") ;
+
+.fi
+Assuming spanky is the system you want to send mail to using xfernews,
+change this to:
+.nf
+
+      if (strcmp(system, "spanky") == 0) {
+            sprintf(cmd, "qnews -tm %s /usr/spool/spanky", dest) ;
+            fp = popen(cmd, "w") ;
+            if (fp != NULL)
+                  fprintf(fp, "To %s\\n", dest) ;
+      } else {
+            sprintf(cmd, "uux - %s!rnews \\(%s\\)", system, dest) ;
+            fp = popen(cmd) ;
+      }
+
+.fi
+The -t option to qnews specifies the type of file to be created;
+in this case 'm' or mail.
+.h "Administration of xfernews"
+When an error occurs in the xfernews package,
+you will be informed by mail.
+It is important that the mail command work;
+try invoking sendnews without any arguments and see if an error message
+is mailed to you.
+Most error messages refer to errors which "can't happen" (i. e.
+the problem is either a bug in the package or an error in installation).
+You may have to grep through the code or contact the author to identify these.
+You are also informed when the RNEWS or RMAIL programs exit with non-zero
+status.
+When one of these programs fails, the mail or news is still acknowledged
+and the file is linked into the directory "bad" where you can fix the
+problem manually.
+The exit status of the program and any error messages generated by the program
+are included in in the message.
+Sometimes the problem is transient, so just running rnews again will fix
+the problem.
+If you run 2.10, you may want to inews to exit with an error indication
+when an unknown newsgroup is received.
+This way you can fix the problem and resubmit the article.
+The following version of the routine getapproval (in inews.c)
+does the trick, at least for the beta release:
+
+.nf
+
+getapproval(ng)
+char	*ng;
+{
+	char buf[128] ;
+	sprintf(buf, "inews:  unrecognized newsgroup %s\n", ng) ;
+	log(buf) ;
+	printf("%s", buf) ;
+	xxit(4) ;
+}
+
+.fi
+Files in the directories "in", "out", and "sent" with unrecognized names
+will also be moved to the directory "bad".
+If rnews dies with a core dump, the core file will be left in "in",
+and the next invocation of recvnews will move it to "bad".
+!
+
+cat > batch_grammar <<\!
+/*
+ * The file is read, and all numbers are interpreted, with low order
+ * bit first.
+ *
+ * The pattern "4 bits" matches any four bits.  The pattern '1011'
+ * matches those particular bits.
+ */
+
+
+
+batch:  header file* END_OF_BATCH
+
+header:  version sub_version batch_size
+
+version:  One character		/* currently 'b' */
+
+sub_version:  4 bits		/* more version info (currently 0) */
+
+batch_size:  20 bits		/* size of batch (in bytes) */
+
+file:  NEWS_TYPE news_header text
+|      MAIL_TYPE text
+|      ACK_TYPE text
+
+NEWS_TYPE:  '00'
+MAIL_TYPE:  '10'
+ACK_TYPE:   '01'
+
+text: VARYING_LENGTH_CHARACTER* EOF_MARK
+
+VARYING_LENGTH_CHARACTER:  Characters are represented using bits sequences
+	of differing lengths.  The lengths are chosen so that the most
+	frequently occurring characters have the shortest length.
+
+EOF_MARK:  This is a bit sequence marks the end of a file.
+
+news_header:  USE_OLD_RELAY header_line* end_of_header
+
+USE_OLD_RELAY:  1 bit		/* set if this news item has the same relay
+	version as the preceeding news item. */
+
+header_line:  SUBJECT nltext
+|             RELAY_VERSION nltext
+  and so on for each type of header
+
+nltext:  VARYING_LENGTH_CHARACTER* NL_CHAR
+
+NL_CHARACTER:  bit sequence used to represent a newline.
+
+end_of_header:  NHSEP		/* header terminated with a blank line */
+|               NHEND		/* simple end of header (no blank line) */
+!
+
+cat > brecvnews.c <<\!
+#define RECVNEWS 1
+#include "common.h"
+
+char *directory ;	/* directory currently being processed */
+int errflag ;		/* set if any errors */
+char lockfile[] = RECVLOCK ;
+char unbatch[] = "unbatch" ;
+char in_dir[] = "in" ;
+
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      char **ap ;
+
+      nice(10) ;
+      setuid(NETNEWS) ;		/* in case invoked as root by cron */
+      if (setlock(lockfile) == 0) {
+            printf("recvnews locked\n") ;
+            exit(0) ;
+      }
+      ap = argv + 1 ;
+      setexit() ;
+      while (*ap != NULL) {
+            directory = *ap++ ;
+            cd(directory) ;
+            inputnews() ;
+      }
+      if (unlink(lockfile) < 0)
+            msg("can't unlink lock") ;
+      exit(errflag) ;
+}
+
+
+
+inputnews() {
+      struct arglist in ;
+
+      in.nargs = 0 ;
+      lsdir(unbatch, &in) ;
+      proclist(&in, unbatch) ;
+      in.nargs = 0 ;
+      lsdir(in_dir, &in) ;
+      sleep(5) ;		/* in case any files half written */
+      proclist(&in, in_dir) ;
+}
+
+
+proclist(l, dir)
+      struct arglist *l ;
+      char *dir ;
+      {
+      int i ;
+      char *p ;
+      
+      if (l->nargs == 0)
+            return ;
+      for (i = 0 ; i < l->nargs ; i++) {
+            p = l->arg[i] ;
+            procfile(p, dir) ;
+            free(p) ;
+      }
+      cd("") ;
+}
+
+
+
+procfile(name, dir)
+      char *name ;
+      char *dir ;
+      {
+      FILE *fp ;
+      int rc ;
+      struct arglist batch ;
+
+      cd(dir) ;
+      if (badname(name) || dir == unbatch && name[0] == 'b') {
+            msg("bad input file name %s", name) ;
+            movebad(name) ;
+            return ;
+      }
+      if ((fp = fopen(name, "r")) == NULL) {
+            msg("unreadable file %s", name) ;
+            movebad(name) ;
+            return ;
+      }
+      switch (name[0]) {
+      case 'a':
+            rc = procack(name, fp) ;
+            break ;
+      case 'n':
+            rc = procnews(name, fp) ;
+            break ;
+      case 'm':
+            rc = procmail(name, fp) ;
+            break ;
+      case 'b':
+            rc = procbatch(name, fp) ;
+            break ;
+      default:
+            fatal("can't happen %s", name) ;
+            break ;
+      }
+      cd(dir) ;
+      if (rc < 0)
+            movebad(name) ;
+      else
+            rm(name) ;
+      fclose(fp) ;
+      if (dir == in_dir && rc != -2) {
+            fp = ckopen("../ackfile", "a") ;
+            fprintf(fp, "%s\n", name) ;
+            fclose(fp) ;
+      }
+      if (name[0] == 'b' && rc >= 0) {
+            cd("") ;
+            lsdir(unbatch, &batch) ;
+            proclist(&batch, unbatch) ;
+      }
+}
+
+
+
+procnews(name, fp)
+      char *name ;
+      FILE *fp ;
+      {
+      char *arg[2] ;
+
+      arg[0] = RNEWS, arg[1] = NULL ;
+      return chkrun(arg, name, fp) ;
+}
+
+
+procmail(name, fp)
+      char *name ;
+      FILE *fp ;
+      {
+      char *arg[4] ;
+      char buf[DESTLEN] ;
+      char *p ;
+
+      setbuf(fp, NULL) ;		/* turn off buffering */
+      if (fgets(buf, DESTLEN, fp) == NULL) {
+            msg("%s: empty file", name) ;
+            return -1 ;
+      }
+      if (strncmp(buf, "To ", 3) != 0) {
+            msg("corrupted mail %s", name) ;
+            return -1 ;
+      }
+      if ((p = index(buf, '\n')) == NULL) {
+            msg("destination too long, file %s", name) ;
+            return -1 ;
+      }
+      *p = '\0' ;
+      arg[0] = RMAIL, arg[1] = buf + 3, arg[2] = NULL ;
+      return chkrun(arg, name, fp) ;
+}
+
+
+
+procack(name, fp)
+      char *name ;
+      FILE *fp ;
+      {
+      char line[FNLEN+2] ;
+      char *p ;
+
+      cd("sent") ;
+      while (fgets(line, FNLEN + 2, fp) != NULL) {
+            if ((p = index(line, '\n')) == NULL) {
+                  msg("line too long, file %s", name) ;
+bad:              return -1 ;
+            }
+            *p = '\0' ;
+            if (badname(line)) {
+                  msg("bad file %s acked in %s", line, name) ;
+                  goto bad ;
+            }
+            if (unlink(line) < 0)
+                  printf("Can't unlink %s/in/%s, ack file %s\n",
+                        directory, line, name) ;
+      }
+      if ((fp = fopen("../lastack", "w")) == NULL)
+            fatal("can't open lastack") ;
+      fprintf(fp, "%.9s\n", line + 1) ;
+      fclose(fp) ;
+      return 0 ;
+}
+
+
+procbatch(name, fp)
+      char *name ;
+      FILE *fp ;
+      {
+      char c ;
+      char batcher[PATHLEN] ;
+      char *arg[2] ;
+      int i ;
+
+      if (read(fileno(fp), &c, 1) != 1) {
+            msg("empty batch file %s", name) ;
+            return -2 ;
+      }
+      lseek(fileno(fp), 0L, 0) ;
+      sprintf(batcher, "%s/unbat_%c", LIBDIR, c) ;
+      arg[0] = batcher, arg[1] = NULL ;
+      cd(unbatch) ;
+      if ((i = chkrun(arg, name, fp)) < 0) {
+            rmall() ;
+            return i ;
+      }
+      return 0 ;
+}
+
+
+
+/*
+ * Remove all files in the current directory
+ */
+
+rmall() {
+      DIR *dp ;
+      struct direct *d ;
+      int nfail ;
+
+      nfail = 0 ;
+      if ((dp = opendir(".")) == NULL)
+            fatal("Can't open unbatch/.") ;
+      while ((d = readdir(dp)) != NULL) {
+            if (badname(d->d_name))
+                  continue ;
+            if (unlink(d->d_name))
+                  nfail++ ;
+      }
+      closedir(dp) ;
+      if (nfail)
+            fatal("%d files could not be removed from unbatch", nfail) ;
+}
+
+
+
+setlock(name)
+      char *name ;
+      {
+      FILE *fp ;
+      char buf[10] ;
+
+      if ((fp = fopen(name, "r")) != NULL) {
+            if (fgets(buf, 10, fp) == NULL) {
+                  msg("empty lock file") ;
+                  fclose(fp) ;
+                  goto lock ;
+            }
+            fclose(fp) ;
+            if (buf[0] < '0' || buf[0] > '9') {
+                  msg("no pid in lock file") ;
+                  goto lock ;
+            }
+            if (! procexists(atoi(buf))) {
+                  msg("previous recvnews didn't remove lock") ;
+                  goto lock ;
+            }
+            return 0 ;
+      }
+lock:
+      if ((fp = fopen(name, "w")) == NULL)
+            fatal("cannot create lock file") ;
+      fprintf(fp, "%d\n", getpid()) ;
+      fclose(fp) ;
+      return 1 ;
+}
+
+
+#include "common.c"
+!
+
+cat > bsendnews.c <<\!
+#define DEBUG
+#include "common.h"
+
+#define ASKIP 4
+
+struct arglist uuargs ;
+struct arglist outfiles ;
+char *directory ;
+int errflag ;
+int nfiles ;
+int nbatches ;
+FILE *newsfp ;
+FILE *batfp ;
+
+char resentflag[] = "resentflag" ;
+char lastack[] = "lastack" ;
+char ackfile[] = "ackfile" ;
+char batchtmp[] = "batch.tmp" ;
+char newslist[] = "newslist" ;
+char news1[] = "newslist.tmp1" ;
+char news2[] = "newslist.tmp2" ;
+
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      register char **ap ;
+      int rflag ;
+      char *p ;
+      int i ;
+      FILE *fp ;
+
+      setuid(NETNEWS) ;
+      ap = argv + 1 ;
+      rflag = 0 ;
+      while ((p = *ap++) != NULL && *p == '-') {
+            if (strcmp(p, "-r") == 0)
+                  rflag++ ;
+            else
+usage:            fatal("usage: bsendnews [ -r ] from to") ;
+      }
+      if (p == NULL || *ap == NULL)
+            goto usage ;
+      cd(directory = p) ;
+      uuargs.nargs = ASKIP ;
+
+      chksent() ;
+      if (nbatches >= MAXBATCH)
+            exit(errflag) ;
+      lsdir("out", &outfiles) ;
+      nextnewslist() ;
+      if ((fp = fopen(ackfile, "r")) != NULL && fsize(fileno(fp)) > MINACK
+       || outfiles.nargs > 0 || newsfp != NULL) {
+            mkbatch() ;
+            if (fp) {
+                  rm(ackfile) ;		/* should move it and delete later? */
+                  addfile('a', fp) ;
+                  nfiles++ ;
+            }
+      }
+      if (fp)
+            fclose(fp) ;
+      dofiles() ;
+      uucp(*ap, rflag) ;
+      exit(errflag) ;
+}
+
+
+
+/*
+ * Look through the sent directory, resending files and counting batch files.
+ * If the link appears to be down, try to restart and inform administrator.
+ */
+
+chksent() {
+      char sentname[PATHLEN] ;
+      DIR *dp ;
+      FILE *fp ;
+      struct direct *d ;
+      long curtime ;
+      long last ;
+      long t ;
+      int resend ;		/* if set, consider resending articles */
+      int nresent ;		/* # articles resent */
+      int restart ;		/* if set, link is down */
+
+      nresent = 0 ;
+      resend = 1 ;
+      restart = 1 ;
+      fp = ckopen(lastack, "r") ;
+      if (fgets(sentname, FNLEN, fp) == NULL) {
+            /* Can occur bacause no locking done */
+            msg("lastack is empty file") ;
+            last = 0L ;
+      } else {
+            last = atol(sentname) ;
+      }
+      fclose(fp) ;
+      if ((fp = fopen(resentflag, "r")) != NULL) {
+            if (fgets(sentname, FNLEN, fp) == NULL) {
+                  msg("%s is empty file", resentflag) ;
+                  unlink(resentflag) ;
+            } else if (atol(sentname) > last)
+                  resend = 0 ;
+            else
+                  unlink(resentflag) ;
+            fclose(fp) ;
+      }
+      time(&curtime) ;
+      last -= 3600 ;
+      if ((dp = opendir("sent")) == NULL)
+            fatal("no sent directory") ;
+      while ((d = readdir(dp)) != NULL) {
+            if (d->d_name[0] == '.')
+                  continue ;
+            else if (badname(d->d_name)) {
+                  msg("bad file %s in sent", d->d_name) ;
+                  cd("sent") ;
+                  movebad(d->d_name) ;
+                  cd("") ;
+                  continue ;
+            }
+            t = atol(d->d_name + 1) ;
+            if (curtime - t < 24L*3600L)
+                  restart = 0 ;
+            if (resend && t < last) {
+                  printf("resending %s\n", d->d_name) ;
+                  addarg(d->d_name, &uuargs) ;
+                  nresent++ ;
+            }
+            if (d->d_name[0] == 'b')
+                  nbatches++ ;
+      }
+      closedir(dp) ;
+      if (nbatches >= MAXBATCH && nresent == 0 && restart) {
+            sprintf(sentname, "sent/a%09ld", curtime) ;
+            if (close(creat(sentname, 0644)) < 0)
+                  fatal("can't create %s", sentname) ;
+            addarg(sentname+5, &uuargs) ;
+            msg("link appears to be down") ;
+      }
+      if (nresent) {
+            if ((fp = fopen(resentflag, "w")) == NULL)
+                  msg("Can't create resentflag") ;
+            else {
+                  fprintf(fp, "%ld\n", curtime) ;
+                  fclose(fp) ;
+            }
+            msg("Resent %d files", nresent) ;
+      }
+}
+
+
+
+/*
+ * Create the batch files.
+ */
+
+dofiles() {
+      FILE *fp ;
+      int ftype ;
+      char file[PATHLEN] ;
+
+      while ((ftype = nextfile(file)) != EOF) {
+            if ((fp = fopen(file, "r")) == NULL) {
+                  msg("Can't open %s", file) ;
+                  continue ;
+            }
+            if (nfiles >= 194 || nfiles > 0 && fsize(fileno(fp)) + ftell(batfp) > MAXBATSIZE) {
+                  if (nbatches >= MAXBATCH - 1) {
+                        fclose(fp) ;
+                        break ;
+                  }
+                  sendbatch() ;
+                  zapfiles() ;
+                  mkbatch() ;
+                  nbatches++ ;
+                  nfiles = 0 ;
+            }
+            addfile(ftype, fp) ;
+            fclose(fp) ;
+            nfiles++ ;
+      }
+      sendbatch() ;
+      zapfiles() ;
+      nbatches++ ;
+}
+
+
+/*
+ * Regrettably, the code for finding the files to batch is rather convoluted.
+ *
+ * Nextfile returns the next file to add to the batch.  First, any files in
+ * out are considered.  Then the files news.tmp1 and news.tmp2 are processed
+ * if they exist.  (They may if the previous bsendnews died in the middle.)
+ * Finally, newslist is moved to news.tmp1 (or news.tmp2 if news.tmp1 already
+ * exists), and is read.
+ *
+ * Zapfiles eliminates the files which have been placed in the last batch from
+ * further consideration.  (Note that the last file returned by nextfile has
+ * NOT been processed when zapfiles is called.)  Files in out are deleted.
+ * Files listed in news.tmp[12] are overwritten with nulls if there are entries
+ * in these files which have not been processed yet.  Otherwise news.tmp[12]
+ * are deleted.
+ */
+
+static char lline[PATHLEN] ;
+static int outind = 0 ;
+static int ateof ;
+static char *curfile ;
+static int zap1 ;
+
+nextfile(name)
+      char *name ;
+      {
+      char *p ;
+
+      if (outind < outfiles.nargs) {
+            p = outfiles.arg[outind++] ;
+            sprintf(name, "out/%s", p) ;
+            return *p ;
+      } else {
+            while (newsfp == NULL || fgets(lline, PATHLEN, newsfp) == NULL) {
+                  if (nextnewslist() == 0)
+                        return EOF ;
+            }
+            strcpy(name, lline) ;
+            if ((p = index(name, '\n')) == NULL)
+                  fatal("missing newline in newslist") ;
+            *p = '\0' ;
+            return 'n' ;
+      }
+}
+
+
+zapfiles() {
+      static int outdel ;
+      FILE *fp ;
+      int len ;
+
+      if (outdel < outind) {
+            cd("out") ;
+            while (outdel < outind)
+                  rm(outfiles.arg[outdel++]) ;
+            cd("") ;
+      }
+      if (outind >= outfiles.nargs && curfile != NULL) {
+            cd("") ;
+            if (zap1 && curfile != news1) {
+                  rm(news1) ;
+                  zap1 = 0 ;
+            }
+            if (newsfp == NULL)
+                  rm(curfile) ;
+            else {
+                  fp = ckopen(curfile, "r+") ;
+                  len = ftell(newsfp) - strlen(lline) ;
+                  while (--len >= 0)
+                        if (putc('\0', fp) == EOF)
+                              fatal("write error on newstmp") ;
+                  fclose(fp) ;
+            }
+      }
+}
+
+
+/*
+ * Open the next newslist file.  First try the temp files, and then open
+ * newslist.
+ */
+
+nextnewslist() {
+      static int did1 ;
+      static int state = -1 ;
+      register c ;
+      char *p ;
+
+      if (newsfp != NULL) {
+            fclose(newsfp) ;
+            newsfp = NULL ;
+      }
+      for (;;) switch (++state) {
+            case 0:
+                  if ((newsfp = fopen(news1, "r")) != NULL) {
+                        did1 = zap1 = 1 ;
+                        curfile = news1 ;
+                        goto found ;
+                  }
+                  break ;
+            case 1:
+                  if ((newsfp = fopen(news2, "r")) != NULL) {
+                        state = 3 ;
+                        curfile = news2 ;
+                        goto found ;
+                  }
+                  break ;
+            case 2:
+                  if (link(newslist, p = did1? news2 : news1) >= 0) {
+                        curfile = p ;
+                        rm(newslist) ;
+                        newsfp = ckopen(curfile, "r") ;
+                        goto found ;
+                  }
+                  break ;
+            default:
+                  return 0 ;
+      }
+found:
+      while ((c = getc(newsfp)) == '\0') ;
+      ungetc(c, newsfp) ;
+      return 1 ;
+}
+
+
+/*
+ * Add current batch to list of files to be processed.
+ */
+sendbatch() {
+      long len ;
+      long t ;
+      static long lastt ;
+      char name[FNLEN + 5] ;
+
+      if (batfp == NULL)
+            return ;
+      closebatch() ;
+      time(&t) ;
+      if (t <= lastt)
+            t = lastt + 1 ;
+      lastt = t ;
+      sprintf(name, "sent/b%09ld", t) ;
+      mv(batchtmp, name) ;
+      addarg(name + 5, &uuargs) ;
+   /* nbatches++ ; */
+}
+
+
+
+uucp(to, rflag)
+      char *to ;
+      {
+      char **ap ;
+
+      if (uuargs.nargs == ASKIP)
+            return ;
+      cd("sent") ;
+      qsort((char *)(uuargs.arg + ASKIP), uuargs.nargs - ASKIP, sizeof(char *), comp) ;
+      addarg(to, &uuargs) ;
+      addarg(NULL, &uuargs) ;
+      ap = uuargs.arg + ASKIP ;
+      if (rflag)  *--ap = "-r" ;
+      *--ap = "-c" ;			/* default on most uucps */
+      *--ap = UUCP ;
+      if (run(ap, 0, 1) != 0)
+            fatal("uucp failed") ;
+}
+
+
+#include "common.c"
+!
+
+cat > charfreq.c <<\!
+#include <stdio.h>
+
+int nfiles ;
+long freq[128] ;
+
+
+main(argc, argv)
+	char **argv ;
+	{
+	char **ap ;
+	FILE *fp ;
+
+	for (ap = argv + 1 ; *ap ; ap++) {
+		if ((fp = fopen(*ap, "r")) == NULL)
+			printf("Can't open %s\n", *ap) ;
+		else {
+			charcnt(fp) ;
+			nfiles++ ;
+			fclose(fp) ;
+		}
+	}
+	printcounts() ;
+}
+
+
+charcnt(fp)
+	register FILE *fp ;
+	{
+	register c ;
+
+	while ((c = getc(fp)) != EOF) {
+		if (c == '\n' && getc(fp) == '\n')
+			break ;
+	}
+	while ((c = getc(fp)) != EOF)
+		freq[c]++ ;
+}
+
+
+printcounts() {
+	int i ;
+	long total ;
+
+	total = 0 ;
+	for (i = 0 ; i < 128 ; i++)
+		total += freq[i] ;
+	total += nfiles ;
+	for (i = 0 ; i < 128 ; i++) {
+		if (freq[i]) {
+			if (i >= '!' && i <= '~')
+				printf("%c   ", i) ;
+			else
+				printf("%-4d", i) ;
+			printf("%6ld %4.1f\n", freq[i], 100.0 * (double)freq[i] / total) ;
+		}
+	}
+	printf("EOF %6ld %4.1f\n", nfiles, (double)nfiles / (total * 100.0)) ;
+}
+!
+
+cat > common.c <<\!
+/*
+ * This file is #included by sendnews.c and recvnews.c.  It contains
+ * shared routines.
+ */
+
+
+/*
+ * list all the files in a directory.
+ */
+
+lsdir(dname, l)
+      char *dname ;
+      struct arglist *l ;
+      {
+      DIR *dp ;
+      struct direct *d ;
+      int oflow ;
+
+      l->nargs = 0 ;
+      oflow = 0 ;
+      if ((dp = opendir(dname)) == NULL)
+            fatal("Can't open %s", dname) ;
+      while ((d = readdir(dp)) != NULL) {
+            if (d->d_name[0] == '.')
+                  continue ;
+            if (badname(d->d_name)) {
+                  msg("bad file name %s", d->d_name) ;
+                  cd(dname) ;
+                  movebad(d->d_name) ;
+                  cd("") ;
+                  continue ;
+            }
+            if (l->nargs < MAXARGS)
+                  addarg(d->d_name, l) ;
+            else
+                  oflow++ ;
+      }
+      closedir(dp) ;
+      if (oflow)
+            msg("Too many files in %s; %d not processed", dname, oflow) ;
+      qsort((char *)(l->arg), l->nargs, sizeof(char *), comp) ;
+}
+
+
+
+/*
+ * Return true if fname is not the name of a file generated by xfernews.
+ */
+
+badname(fname)
+      char *fname ;
+      {
+      register c ;
+
+      if ((c = *fname++) != 'a' && c != 'n' && c != 'm' && c != 'b')
+            return -1 ;
+      if ((c = *fname++) < '0' || c > '9')
+            return -1 ;
+      return 0 ;
+}
+
+
+
+movebad(fname)
+      char *fname ;
+      {
+      char bad[PATHLEN] ;
+
+      sprintf(bad, "../bad/%s", fname) ;
+      mv(fname, bad, 1) ;
+}
+
+
+
+comp(a, b)
+      char **a, **b ;
+      {
+      return strcmp(*a, *b) ;
+}
+
+
+
+addarg(fname, argl)
+      struct arglist *argl ;
+      char *fname ;
+      {
+      char *p ;
+
+      if (argl->nargs >= MAXARGS)
+            fatal("too many articles") ;
+      if (fname == NULL)
+            p = NULL ;
+      else {
+            if ((p = malloc(strlen(fname) + 1)) == NULL)
+                  fatal("out of space") ;
+            strcpy(p, fname) ;
+      }
+      argl->arg[argl->nargs++] = p ;
+}
+
+
+
+#ifdef RECVNEWS
+/*
+ * Run a program, informing the system administrator if it fails.
+ */
+
+chkrun(arg, name, fp)
+      char *arg[] ;
+      char *name ;
+      FILE *fp ;
+      {
+      char *p ;
+      int outfd ;
+      int rc ;
+      FILE *mailfp ;
+      static char outfile[24] ;
+
+      if (outfile[0] == '\0')
+            sprintf(outfile, "/tmp/recvnews%d", getpid()) ;
+      if ((outfd = creat(outfile, 0666)) < 0)
+            fatal("Can't create %s", outfile) ;
+      rc = run(arg, fileno(fp), outfd) ;
+      close(outfd) ;
+      if (rc != 0) {
+            if ((mailfp = popen(MAILCMD, "w")) == NULL)
+                  fatal("Can't popen MAILCMD") ;
+            fprintf(mailfp, "Subject:  error in recvnews\n\n") ;
+            if ((rc & 0177) == 0) {
+                  fprintf(mailfp, "exit status %d from %s", rc >> 8, arg[0]) ;
+            } else {
+                  fprintf(mailfp, "%s died with signal %d", arg[0], rc & 0177) ;
+                  if (rc & 0200)
+                        fprintf(mailfp, " - core dumped") ;
+            }
+            fprintf(mailfp, "\nfile %s/bad/%s\n", directory, name) ;
+            if ((fp = fopen(outfile, "r")) == NULL)
+                  fprintf(mailfp, "Can't open %s\n", outfile) ;
+            else {
+                  fprintf(mailfp, "Output of program:\n") ;
+                  while ((rc = getc(fp)) != EOF)
+                        putc(rc, mailfp) ;
+                  fclose(fp) ;
+            }
+            pclose(mailfp) ;
+            if (unlink(outfile) < 0)
+                  msg("can't unlink %s", outfile) ;
+            return rc == (33<<8)? -2 : -1 ;
+      }
+      if (unlink(outfile) < 0)
+            msg("can't unlink %s", outfile) ;
+      return 0 ;
+}
+#endif
+
+
+/*
+ * Run a program.  In and out are the file descriptors to redirect to.
+ */
+
+run(args, in, out)
+      char *args[] ;
+      int in, out ;
+      {
+      int pid ;
+      int status ;
+      int i ;
+
+#ifdef DEBUG
+      printf("run") ;				/*DEBUG*/
+      for (i = 0 ; args[i] != NULL ; i++)	/*DEBUG*/
+            printf(" %s", args[i]) ;		/*DEBUG*/
+      putchar('\n') ;				/*DEBUG*/
+#endif
+      if ((pid = fork()) == -1)
+            fatal("Cannot fork") ;
+      if (pid == 0) {
+            if (in != 0) {
+                  close(0) ;
+                  if (dup(in) != 0) {
+                        msg("Cannot redirect input") ;
+                        exit(127) ;
+                  }
+                  close(in) ;
+            }
+            if (out != 1) {
+                  close(1) ;
+                  if (dup(out) != 1) {
+                        msg("Cannot redirect output") ;
+                        exit(127) ;
+                  }
+                  close(out) ;
+                  close(2) ;
+                  if (dup(1) != 2) {
+                        msg("Cannot dup 1") ;
+                        exit(127) ;
+                  }
+            }
+            execv(args[0], args) ;
+            msg("exec failed") ;
+            exit(127) ;
+      }
+      while ((i = wait(&status)) != pid && i != -1) ;
+      return status ;
+}
+
+
+
+/*
+ * Return the size of an open file.
+ */
+
+long
+fsize(fd) {
+      struct stat st ;
+
+      if (fstat(fd, &st) < 0)
+            return 0L ;
+      return st.st_size ;
+}
+
+
+/*
+ * Remove a file, with fatal message on error.
+ */
+
+rm(fname)
+      char *fname ;
+      {
+      if (unlink(fname) < 0)
+            fatal("Can't unlink %s", fname) ;
+}
+
+
+
+/*
+ * Rename a file.  If zapflag is set, then "to" is deleted if it exists.
+ */
+
+mv(from, to, zapflag)
+      char *from, *to ;
+      {
+      if (link(from, to) < 0) {
+            if (errno != EEXIST || ! zapflag)
+bad:              fatal("mv %s %s failed", from, to) ;
+            if (unlink(to) < 0 || link(from, to) < 0)
+                  goto bad ;
+      }
+      rm(from) ;
+}
+
+
+/*
+ * Change directory.  If the directory name begins with a slash, then it
+ * is interpreted relative to the root.  Otherwise, it is relative to the
+ * last directory changed to that did begin with a slash.
+ */
+
+cd(dir)
+      char *dir ;
+      {
+      static char *olddir ;
+      char dstr[20] ;
+
+      if (dir[0] == '/')
+            olddir = "" ;
+      else if (equal(dir, olddir))
+            return ;
+      else if (olddir[0]) {
+            olddir = dir ;
+            if (dir[0]) {
+                  sprintf(dstr, "../%s", dir) ;
+                  dir = dstr ;
+            } else
+                  dir = ".." ;
+      } else
+            olddir = dir ;
+      if (chdir(dir) < 0)
+            fatal("Can't chdir to %s", dir) ;
+}
+
+
+
+FILE *
+ckopen(fname, mode)
+      char *fname, *mode ;
+      {
+      FILE *fp ;
+
+      if ((fp = fopen(fname, mode)) == NULL)
+            fatal(equal(mode, "w")? "Can't create %s" : "Can't open %s", fname) ;
+      return fp ;
+}
+
+
+
+/*
+ * Fatal error.
+ * Print error message and send mail to administrator.
+ */
+
+fatal(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      static int reentered = 0 ;
+
+      if (reentered) {
+            fprintf(stderr, "fatal entered recursively\n") ;
+            fprintf(stderr, fmt, a1, a2, a3, a4) ;
+            exit(3) ;
+      }
+      reentered = 1 ;
+      msg(fmt, a1, a2, a3, a4) ;
+      reentered = 0 ;
+#ifdef RECVNEWS
+      reset() ;
+#else
+      exit(2) ;
+#endif
+}
+
+
+/*
+ * Send mail to administrator.
+ */
+
+msg(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      FILE *fp ;
+      int fd ;
+
+      errflag = 1 ;
+      fprintf(stderr, fmt, a1, a2, a3, a4) ;
+      putc('\n', stderr) ;
+
+      /* be sure stdin is open; otherwise popen won't work */
+      if ((fd = open("/dev/null", 0)) > 0)
+            close(fd) ;
+      if ((fp = popen(MAILCMD, "w")) == NULL)
+            fatal("popen failed") ;
+#ifdef RECVNEWS
+      fputs("Subject:  error in recvnews\n\n", fp) ;
+#else
+      fputs("Subject:  error in sendnews\n\n", fp) ;
+#endif
+      fprintf(fp, fmt, a1, a2, a3, a4) ;
+      if (directory != NULL) {
+            fputs("\nprocessing ", fp) ;
+            fputs(directory, fp) ;
+      }
+      putc('\n', fp) ;
+      if (pclose(fp) != 0)
+            fatal("msg failed") ;
+}
+!
+
+cat > common.h <<\!
+#define USG 1
+
+#include <stdio.h>
+#include <sys/types.h>
+#ifdef USG
+#define u_short ushort
+#endif
+#include "dir.h"
+#include <sys/stat.h>
+#include <signal.h>
+#include <errno.h>
+#ifdef USG
+#include <fcntl.h>
+#endif
+
+#define FNLEN	15	/* max file name length (including nul) */
+#define PATHLEN	100	/* max path name length */
+#define DESTLEN 256	/* max length of mail destination */
+#define MAXARGS	200	/* max number of args to uucp */
+#define RNEWS	"/usr/bin/rnews"
+#define RMAIL	"/bin/rmail"
+#define UUCP	"/usr/bin/uucp"
+#define MAILCMD	"/bin/mail usenet"
+#define RECVLOCK "/tmp/recv.lock"
+#define LIBDIR	"/usr/lib/news"
+#define MAXBATSIZE 66000L	/* approximate max size of batch */
+#define MAXBATCH 6	/* max # batches outstanding */
+#define MINACK (10 * 12)
+#define NETNEWS	72	/* netnews user id */
+#define ENDMARK 0203	/* char to mark end of file in batch format 'a' */
+
+struct arglist {
+      int nargs ;
+      char *arg[MAXARGS] ;
+} ;
+
+#ifdef USG
+#define index strchr
+#endif
+
+/* routine to determine if a process exists */
+#define procexists(pid)	(kill(pid, 0) >= 0 || errno == EPERM)
+#define equal(s1, s2) (strcmp(s1, s2) == 0)
+
+#ifdef USG
+#include <setjmp.h>
+#define setexit() setjmp(nextdir)
+#define reset() longjmp(nextdir, 1)
+#ifdef RECVNEWS
+jmp_buf nextdir ;	/* label to jump to on major error */
+#endif
+#endif
+
+long time(), atol() ;
+char *strcpy(), *index() ;
+char *malloc() ;
+FILE *popen() ;
+int comp() ;
+FILE *ckopen() ;
+long fsize() ;
+
+extern int errno ;
+!
+
+cat > dir.c <<\!
+#include <sys/types.h>
+#include <sys/param.h>
+#define u_short unsigned short
+#include "dir.h"
+
+/*
+ * close a directory.
+ */
+void
+closedir(dirp)
+	register DIR *dirp;
+{
+	close(dirp->dd_fd);
+	dirp->dd_fd = -1;
+	dirp->dd_loc = 0;
+	free(dirp);
+}
+
+
+
+/*
+ * open a directory.
+ */
+DIR *
+opendir(name)
+	char *name;
+{
+	register DIR *dirp;
+	register int fd;
+
+	if ((fd = open(name, 0)) == -1)
+		return NULL;
+	if ((dirp = (DIR *)malloc(sizeof(DIR))) == NULL) {
+		close (fd);
+		return NULL;
+	}
+	dirp->dd_fd = fd;
+	dirp->dd_loc = 0;
+	return dirp;
+}
+
+
+
+/*
+ * read an old style directory entry and present it as a new one
+ */
+#define	ODIRSIZ	14
+
+struct	olddirect {
+	ino_t	od_ino;
+	char	od_name[ODIRSIZ];
+};
+
+/*
+ * get next entry in a directory.
+ */
+struct direct *
+readdir(dirp)
+	register DIR *dirp;
+{
+	register struct olddirect *dp;
+	static struct direct dir;
+
+	for (;;) {
+		if (dirp->dd_loc == 0) {
+			dirp->dd_size = read(dirp->dd_fd, dirp->dd_buf, 
+			    DIRBLKSIZ);
+			if (dirp->dd_size <= 0)
+				return NULL;
+		}
+		if (dirp->dd_loc >= dirp->dd_size) {
+			dirp->dd_loc = 0;
+			continue;
+		}
+		dp = (struct olddirect *)(dirp->dd_buf + dirp->dd_loc);
+		dirp->dd_loc += sizeof(struct olddirect);
+		if (dp->od_ino == 0)
+			continue;
+		dir.d_ino = dp->od_ino;
+		strncpy(dir.d_name, dp->od_name, ODIRSIZ);
+		dir.d_name[ODIRSIZ] = '\0'; /* insure null termination */
+		dir.d_namlen = strlen(dir.d_name);
+		dir.d_reclen = DIRBLKSIZ;
+		return (&dir);
+	}
+}
+!
+
+cat > dir.h <<\!
+/*	dir.h	4.4	82/07/25	*/
+
+/*
+ * A directory consists of some number of blocks of DIRBLKSIZ
+ * bytes, where DIRBLKSIZ is chosen such that it can be transferred
+ * to disk in a single atomic operation (e.g. 512 bytes on most machines).
+ *
+ * Each DIRBLKSIZ byte block contains some number of directory entry
+ * structures, which are of variable length.  Each directory entry has
+ * a struct direct at the front of it, containing its inode number,
+ * the length of the entry, and the length of the name contained in
+ * the entry.  These are followed by the name padded to a 4 byte boundary
+ * with null bytes.  All names are guaranteed null terminated.
+ * The maximum length of a name in a directory is MAXNAMLEN.
+ *
+ * The macro DIRSIZ(dp) gives the amount of space required to represent
+ * a directory entry.  Free space in a directory is represented by
+ * entries which have dp->d_reclen >= DIRSIZ(dp).  All DIRBLKSIZ bytes
+ * in a directory block are claimed by the directory entries.  This
+ * usually results in the last entry in a directory having a large
+ * dp->d_reclen.  When entries are deleted from a directory, the
+ * space is returned to the previous entry in the same directory
+ * block by increasing its dp->d_reclen.  If the first entry of
+ * a directory block is free, then its dp->d_ino is set to 0.
+ * Entries other than the first in a directory do not normally have
+ * dp->d_ino set to 0.
+ */
+#define DIRBLKSIZ	512
+#define	MAXNAMLEN	255
+
+
+struct	direct {
+	long	d_ino;			/* inode number of entry */
+	u_short	d_reclen;		/* length of this record */
+	u_short	d_namlen;		/* length of string in d_name */
+	char	d_name[MAXNAMLEN + 1];	/* name must be no longer than this */
+};
+
+/*
+ * The DIRSIZ macro gives the minimum record length which will hold
+ * the directory entry.  This requires the amount of space in struct direct
+ * without the d_name field, plus enough space for the name with a terminating
+ * null byte (dp->d_namlen+1), rounded up to a 4 byte boundary.
+ */
+#undef DIRSIZ
+#define DIRSIZ(dp) \
+    ((sizeof (struct direct) - (MAXNAMLEN+1)) + (((dp)->d_namlen+1 + 3) &~ 3))
+
+#ifndef KERNEL
+/*
+ * Definitions for library routines operating on directories.
+ */
+typedef struct _dirdesc {
+	int	dd_fd;
+	long	dd_loc;
+	long	dd_size;
+	char	dd_buf[DIRBLKSIZ];
+} DIR;
+#ifndef NULL
+#define NULL 0
+#endif
+extern	DIR *opendir();
+extern	struct direct *readdir();
+extern	long telldir();
+extern	void seekdir();
+#define rewinddir(dirp)	seekdir((dirp), (long)0)
+extern	void closedir();
+#endif KERNEL
+!
+
+cat > makefile <<\!
+YFLAGS=-d
+
+all: brecvnews bsendnewsa bsendnewsb qnews unbat_a unbat_b
+
+brecvnews: brecvnews.o dir.o
+	$(CC) -o $@ brecvnews.o dir.o
+
+sendnews: sendnews.o dir.o
+	$(CC) -o $@ sendnews.o dir.o
+
+bsendnewsa: bsendnews.o mkbat_a.o dir.o
+	$(CC) -o $@ bsendnews.o mkbat_a.o dir.o
+
+bsendnewsb: bsendnews.o mkbat_b.o dir.o
+	$(CC) -o $@ bsendnews.o mkbat_b.o dir.o
+
+qnews: qnews.c common.h
+	$(CC) -o $@ $(CFLAGS) qnews.c
+
+unbat_a: unbat_a.c common.h
+	$(CC) -o $@ $(CFLAGS) unbat_a.c
+
+unbat_b: unbat_b.c common.h pack.h
+	$(CC) -o $@ $(CFLAGS) unbat_b.c
+
+sendnews.o recvnews.o mkbat_a.o: common.h
+bsendnews.o brecvnews.o: common.h common.c
+mkbat_b.o: common.h pack.h
+
+mkpack: mkpackl.o
+	cc -o mkpack mkpacky.o mkpackl.o -ly -ll
+
+mkpackl.o: mkpacky.o
+!
+
+cat > mkbat_a.c <<\!
+/*
+ * This is a sample batch generator.  The three routines are:
+ *	mkbatch - set up a batch
+ *	addfile - add a file to the current batch
+ *	closebatch - finish processing the current batch
+ */
+
+#include "common.h"
+
+extern FILE *batfp ;
+extern char batchtmp[] ;
+
+
+
+mkbatch() {
+      batfp = ckopen(batchtmp, "w") ;
+      fputs("a000000\n", batfp) ;
+}
+
+
+closebatch() {
+      long len ;
+
+      if ((len = ftell(batfp)) <= 0L)
+            fatal("bad ftell") ;
+      if (fseek(batfp, 1L, 0))
+            fatal("batch file seek error") ;
+      fprintf(batfp, "%06ld", len) ;
+      if (fclose(batfp) == EOF)
+            fatal("batch file close error") ;
+      batfp = NULL ;
+}
+
+
+addfile(type, fp)
+      register FILE *fp ;
+      {
+      register int c ;
+
+      if (putc(type, batfp) == EOF)
+bad:        fatal("batch file write error") ;
+      while ((c = getc(fp)) != EOF)
+            if (c != (ENDMARK & 0377) && putc(c, batfp) == EOF)
+                  goto bad ;
+      if (putc(ENDMARK, batfp) == EOF)
+            goto bad ;
+}
+!
+
+cat > mkbat_b.c <<\!
+#include "common.h"
+#include "pack.h"
+
+extern FILE *batfp ;
+extern char batchtmp[] ;
+
+long bits ;
+int nbits ;
+char saverelay[200] ;
+char relaysite[64] ;
+char postsite[64] ;
+char artid[16] ;
+
+
+mkbatch() {
+      batfp = ckopen(batchtmp, "w") ;
+      fputs("bXXX", batfp) ;
+      saverelay[0] = '\0' ;
+      nbits = 0 ;
+}
+
+
+closebatch() {
+      long len ;
+
+      addbits(3, LFTYPE) ;		/* EOF marker */
+      if (nbits > 0)
+            addbits(0, BS - nbits) ;		/* pad to byte length */
+      if ((len = ftell(batfp)) <= 0L)
+            fatal("bad ftell") ;
+      if (fseek(batfp, 1L, 0))
+            fatal("batch file seek error") ;
+      putc(len << 4 | BVERSION, batfp) ;
+      putc(len >> 4, batfp) ;
+      putc(len >>12, batfp) ;
+      if (fclose(batfp) == EOF)
+            fatal("batch file close error") ;
+      batfp = NULL ;
+}
+
+
+addfile(type, fp)
+      FILE *fp ;
+      {
+      int count ;
+      char buf[200] ;
+      char *p ;
+
+      if ((p = index(ftypes, type)) == NULL)
+            fatal("bad file type %c", type) ;
+      addbits(p - ftypes, LFTYPE) ;
+      if (type == 'n') {
+            newshead(fp) ;
+      }
+      while ((count = fread(buf, 1, 200, fp)) > 0)
+            bputchars(buf, count) ;
+      addbits(PKEOFMARK, LEOFMARK) ;
+}
+
+
+newshead(fp) {
+      char line[1024] ;
+      char temp[512] ;
+      char *p, *q ;
+      char *lp, *endp ;
+      int ltype ;
+      int first ;
+
+      first = 1 ;
+      postsite[0] = '\0' ;
+      while ((line[0] = '\0', fgets(line, 1024, fp)) != NULL
+	&& line[0] != '\n' && (endp = index(line, '\n')) != NULL) {
+            *endp = '\0' ;
+            for (ltype = 0 ; !prefix(line, hprefix[ltype]) ; ltype++) ;
+            lp = line + strlen(hprefix[ltype]) ;
+            if (first) {
+                  first = 0 ;
+                  if (ltype == NHRELAY && equal(lp, saverelay)) {
+                        addbits(1, 1) ;
+                        continue ;
+                  } else
+                        addbits(0, 1) ;
+            }
+            switch (ltype) {
+            case NHRELAY:
+            case NHVERSION:
+                  if ((p = index(lp, ';')) != NULL && ! prefix(p, "; site "))
+                        goto unknown ;
+                  p += 7 ;
+                  if (ltype == NHRELAY) {
+                        strcpy(saverelay, lp) ;
+                        strcpy(relaysite, p) ;
+                  } else
+                        strcpy(postsite, p) ;
+                  do *(p-6) = *p ;
+                  while (*p++) ;
+                  break ;
+            case NHMESSAGEID:
+                  if (endp[-1] != '>' || (p = index(lp, '@')) == NULL)
+                        goto unknown ;
+                  *--endp = '\0' ;
+                  getartid(lp) ;
+                  if (equal(p+1, postsite) && index(p+1, '@') == NULL)
+                        endp = p ;
+                  break ;
+            case NHARTICLEID:
+                  if (artid[0]) {
+                        if (! equal(lp, artid))
+                              goto unknown ;
+                        
+                        lp = NULL ;
+                  }
+                  break ;
+/*
+            case NHDATE:
+            case NHPOSTED:
+            case NHEXPIRES:
+                  tim = getdate(lp) ;
+                  if (tim <= 0)
+                        goto unknown ;
+                  addbits(ltype, 5) ;
+                  addbits(tim & 077777, 15) ;
+                  addbits(tim >> 15 & 077777, 15) ;
+                  break ;
+*/
+            case NHUNKNOWN:
+                  if (prefix(line, "Date-Received:"))
+                        continue ;
+                  break ;
+            unknown:
+                  ltype = NHUNKNOWN ;
+                  lp = line ;
+            }
+            addbits(ltype, 5) ;
+            if (lp) {
+                  *endp++ = '\n' ;
+                  bputchars(lp, endp - lp) ;
+            }
+      }
+      if (line[0] == '\n')
+            addbits(NHSEP, 5) ;
+      else {
+            addbits(NHEND, 5) ;
+            bputchars(line, strlen(line)) ;
+      }
+}
+
+
+genartid(msgid)
+      char *msgid ;
+      {
+      register char *p, *q ;
+
+      strcpy(temp, line);
+      p = index(temp, '@');
+      *p++ = '\0';
+      q = index(p, '.');
+      if (q)
+            *q++ = '\0';
+      p[8] = '\0';
+      sprintf(artid, "%s.%s", p, temp);
+}
+
+
+bputchars(p, count)
+      register char *p ;
+      {
+      register long rbits ;
+      register int rnbits ;
+      register struct encode *ep ;
+
+      rbits = bits ;
+      rnbits = nbits ;
+      while (--count >= 0) {
+            ep = &etab[*p++ & 0177] ;
+            rbits |= ep->cbits << rnbits ;
+            if ((rnbits += ep->clen) >= BS) {
+                  do {
+                        if (putc(rbits, batfp) == EOF)
+                              fatal("batch file write error") ;
+                        rbits >>= BS ;
+                  } while ((rnbits -= BS) >= BS) ;
+            }
+      }
+      bits = rbits ;
+      nbits = rnbits ;
+}
+
+
+addbits(b, nb) {
+      bits |= (long)b << nbits ;
+      if ((nbits += nb) >= BS) {
+            do {
+                  if (putc(bits, batfp) == EOF)
+                        fatal("batch file write error") ;
+                  bits >>= BS ;
+            } while ((nbits -= BS) >= BS) ;
+      }
+}
+
+
+prefix(full, pref)
+      register char *full, *pref;
+      {
+      register c ;
+      while ((c = *pref++)) {
+            if (*full++ != c)
+                  return 0 ;
+
+      }
+      return 1 ;
+}
+!
+
+cat > mkpack.h <<\!
+#include <stdio.h>
+
+
+struct pair {
+      char *name ;
+      char *pval ;
+}
+headers[[] = {
+	"NHFROM",	"From: ",
+	"NHPATH",	"Path: ",
+	"NHSUBJECT",	"Subject: ",
+	"NHDATE",	"Date: ",
+	"NHPOSTED",	"Posted: ",
+	"NHEXPIRES",	"Expires: ",
+	"NHARTID",	"Article-I.D.: ",
+	"NHMSGID",	"Message-ID: ",
+	"NHREPLYTO",	"Reply-To: ",
+	"NHREFERENCES",	"References: ",
+	"NHCONTROL",	"Control: ",
+	"NHSENDER",	"Sender: ",
+	"NHFOLLOWTO",	"Followup-To: ",
+	"NHVERSION",	"Posting-Version: version ",
+	"NHRELAY",	"Relay-Version: version ",
+	"NHDISTRIB",	"Distribution: ",
+	"NHORG",	"Organization: ",
+	"NHLINES",	"Lines: ",
+	"NHKEYWORDS",	"Keywords: ",
+	"NHAPPROVED",	"Approved: ",
+	0,		0
+};
+
+char *special[] = {
+	"PKEOFMARK",
+	0,
+};
+
+
+
+
+
+main() {
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+#include "y.tab.h"
+
+%%
+
+
+
+
+[A-Za-z_][A-Za-z_0-9]*	{
+	yylval = savestr(yytext) ;
+	return WORD ;
+	}
+
+\"([^"\n]|\\.)*\"	{
+	yylval = savestr(yytext) ;
+	return STRING ;
+	}
+
+[01]+	{
+	yylval = savestr(yytext) ;
+	return BITSTRING ;
+	}
+
+[0-9]+	{
+	yylval = savestr(yytext) ;
+	return NUMBER ;
+	}
+
+%%
+
+savestr(s)
+	char *s ;
+	{
+	char *p ;
+
+	if ((p = malloc(strlen(s) + 1)) == NULL)
+		yyerror("Out of space") ;
+	strcpy(p, s) ;
+	return p ;
+}
+!
+
+cat > mkpackl.l <<\!
+%{
+#include "y.tab.h"
+#define V(val) yylval = savestr(yytext); return val;
+extern int yylval ;
+%}
+
+%%
+
+[A-Za-z_][A-Za-z_0-9]*	{ V(WORD) }
+\"([^"\n]|\\.)*\"	{ V(STRING) }
+[0-9]+			{ V(NUMBER) }
+:.*\n			{ yylval = savestr(yytext+1); return DIRECT; }
+\'.\'			{ yylval = yytext[1]; return CCONST; }
+"Usenet header lines:"	{ return NHTYPES; }
+"Character lengths:"	{ return CHARTAB; }
+"/*"	{
+		char c1, c2 ;
+/*
+		ECHO ;
+		while (putchar(input()) != '*' || putchar(input()) != '/') ;
+		putchar('\n') ;
+*/		while (input() != '*' || input() != '/') ;
+	}
+\#.*\n	{;}
+[ \t\n]	{;}
+.	{ yyerror("lexical error") ; }
+
+%%
+
+savestr(s)
+	char *s ;
+	{
+	char *p ;
+
+	if ((p = malloc(strlen(s) + 1)) == NULL)
+		yyerror("Out of space") ;
+	strcpy(p, s) ;
+	return p ;
+}
+!
+
+cat > mkpacky.y <<\!
+%token NHTYPES CHARTAB SPECIAL
+%token WORD STRING NUMBER CCONST DIRECT
+
+%{
+#include <stdio.h>
+
+#define HDBITS 5	/* number of bits in a new header line type */
+#define EXTBITS 5	/* number of bits for extended character type */
+#define MAXBITS 10	/* max number of bits in an encoded character */
+
+#define equal(s1, s2)	(strcmp(s1, s2) == 0)
+
+struct values {
+	int nvalues ;
+	int value[100] ;
+}
+value[MAXBITS+1] ;
+
+struct etab {
+	short cbits ;
+	short clen ;
+}
+etab[256] ;
+
+struct dtab {
+	char cval ;
+	char clen ;
+}
+dtab[1<<MAXBITS] ;
+
+struct pair {
+	char *name ;
+	char *pval ;
+}
+htypes[1<<HDBITS] ;
+int nhead, nprthead ;
+
+char *special[128] ;
+int nspecials ;
+
+char extchar[1<<EXTBITS] ;
+int nechars ;
+%}
+
+%%
+
+input:	input NHTYPES nhtypes = {
+	printnhtypes() ;
+	}
+|	input CHARTAB chartab = {
+	printctabs() ;
+	}
+|	input DIRECT ={
+	fputs($2, stdout) ;
+	free($2) ;
+	}
+|	/* empty */
+;
+
+
+nhtypes: nhtypes WORD optstring ={
+	if (nhead >= 1<<HDBITS)
+		yyerror("Too many header types") ;
+	if ($3) {
+		if (nprthead != nhead)
+			yyerror("Bad header type order") ;
+		nprthead++ ;
+	}
+	htypes[nhead].name = $2 ;
+	htypes[nhead].pval = $3 ;
+	nhead++ ;
+	}
+|	/* empty */
+;
+
+optstring: STRING
+|	/* empty */ = {
+	$$ = NULL ;
+	}
+;
+
+chartab: chartab val number ={
+	value[$3].value[value[$3].nvalues++] = $2 ;
+	}
+|	chartab WORD number ={
+	special[nspecials] = $2 ;
+	value[$3].value[value[$3].nvalues++] = nspecials + 128 ;
+	nspecials++ ;
+	}
+|	/* empty */
+;
+
+number:	NUMBER ={
+	$$ = atoi($1) ;
+	free($1) ;
+	}
+
+val:	number
+|	CCONST
+;
+
+%%
+
+printnhtypes() {
+	int i ;
+
+	for (i = 0 ; i < nhead ; i++) {
+		printf("#define %s %d\n", htypes[i].name, i) ;
+	}
+	printf("\nchar *hprefix[%d] = {\n", nprthead + 1) ;
+	for (i = 0 ; i < nprthead ; i++) {
+		printf("\t%s,\n", htypes[i].pval) ;
+	}
+	printf("\t0\n} ;\n") ;
+}
+
+
+printctabs() {
+	int len, i, v ;
+	int bitpat, mask ;
+	int rc ;
+
+	bitpat = 0 ;
+	rc = 0 ;
+	for (len = 1 ; len <= MAXBITS ; len++) {
+		for (i = 0 ; i < value[len].nvalues ; i++) {
+			if (rc < 0)
+				yyerror("ran out of bit patterns") ;
+			v = value[len].value[i] ;
+			etab[v].cbits = bitpat ;
+			etab[v].clen = len ;
+			rc = nextpat(&bitpat, len) ;
+		}
+	}
+	for (i = 0 ; i < 256 ; i++) {
+		if (etab[i].clen)
+			setcode(etab[i].cbits, etab[i].clen, i) ;
+	}
+	for (i = 0 ; i < 128 ; i++) {
+		if (etab[i].clen == 0) {
+			if (nechars > (1<<EXTBITS))
+				yyerror("too many extended characters") ;
+			extchar[nechars] = i ;
+			if ((v = lookspecial("EXTCHAR")) < 0)
+				yyerror("EXTCHAR not defined") ;
+			etab[i].clen = etab[v+128].clen + EXTBITS ;
+			etab[i].cbits = etab[v+128].cbits + (nechars << etab[v+128].clen) ;
+			nechars++ ;
+		}
+	}
+
+	printf("#ifdef UNBAT\n\n") ;
+	for (i = 0 ; i < nspecials ; i++) {
+		printf("#define %s %d\n", special[i], i) ;
+	}
+	printf("\nstruct decode dtab[%d] = {\n", 1<<MAXBITS) ;
+	for (i = 0 ; i < 1<<MAXBITS ; i++) {
+		printf("\t{0%03o, %d},", dtab[i].cval, dtab[i].clen) ;
+		if (i & 01)  putchar('\n') ;
+	}
+	printf("} ;\n\n") ;
+	printf("char extchar[%d] = {\n", 1<<EXTBITS) ;
+	for (i = 0 ; i < nechars ; i++) {
+		printf("\t0%03o,\n", extchar[i]) ;
+	}
+	printf("} ;\n\n#else\n\n") ;
+	for (i = 0 ; i < nspecials ; i++) {
+		if (! equal(special[i], "EXTCHAR")) {
+			printf("#define PK%s 0%o\n", special[i], etab[i+128].cbits) ;
+			printf("#define L%s %d\n", special[i], etab[i+128].clen) ;
+		}
+	}
+	printf("\nstruct encode etab[128] = {\n") ;
+	for (i = 0 ; i < 128 ; i++) {
+		printf("\t{0%o, %d},\n", etab[i].cbits, etab[i].clen) ;
+	}
+	printf("} ;\n\n#endif\n") ;
+}
+
+
+
+nextpat(b, len)
+	int *b ;
+	{
+	int bit = 1 << (len - 1) ;
+
+	if (len <= 0)
+		return -1 ;
+	*b ^= bit ;
+	if ((*b & bit) == 0)
+		return nextpat(b, len - 1) ;
+	return 0 ;
+}
+
+
+setcode(b, len, val) {
+	int i ;
+
+	b &= (1 << len) - 1 ;
+	for (i = b ; i < 1<<MAXBITS ; i += 1 << len) {
+		dtab[i].cval = val ;
+		dtab[i].clen = len ;
+	}
+}
+
+
+lookspecial(s)
+	char *s ;
+	{
+	int i ;
+
+	for (i = 0 ; i < nspecial ; i++)
+		if (equal(special[i], s))
+			return i ;
+	return -1 ;
+}
+
+
+yyerror(msg)
+	char *msg ;
+	{
+	extern int yylineno ;
+	extern int yytext ;
+
+	fprintf(stderr, "%s, line %d\n", msg, yylineno) ;
+	fprintf(stderr, "	input token = \"%s\"\n", yytext) ;
+}
+!
+
+cat > mkspool <<\!
+# Create an xfernews spool directory
+if test "$1" = ""
+then	echo usage: mkspool directory-name
+	exit 1
+fi
+if test -d $1 || mkdir $1
+then	mkdir $1/in
+	mkdir $1/sent
+	mkdir $1/out
+	mkdir $1/unbatch
+	mkdir $1/bad
+	if test ! -f $1/lastack
+	then	echo 0 > $1/lastack
+	fi
+fi
+!
+
+cat > oldpack.ph <<\!
+:/*
+: * Binary batching
+: */
+:
+:#define BVERSION 0		/* version number */
+:
+:#define LFTYPE 2		/* length of an (encoded) file type */
+:char ftypes[] = "nma" ;	/* file types */
+:
+:#define BS 8			/* size of a byte */
+:
+
+Usenet header lines:
+NHRELAY		"Relay-Version: version "
+NHVERSION	"Posting-Version: version "
+NHPATH		"Path: "
+NHFROM		"From: "
+NHNEWSGROUPS	"Newsgroups: "
+NHSUBJECT	"Subject: "
+NHRESUBJECT	"Subject: Re: "
+NHMESSAGEID	"Message-ID: <"
+NHDATE		"Date: "
+NHARTICLEID	"Article-I.D.: "
+NHPOSTED	"Posted: "
+NHEXPIRES	"Expires: "
+NHREF		"References: "
+NHCONTROL	"Control: "
+NHSENDER	"Sender: "
+NHREPLYTO	"Reply-To: "
+NHFOLLOWUPTO	"Followup-To: "
+NHDIST		"Distribution: "
+NHORG		"Organization: "
+NHLINES		"Lines: "
+NHKEYWORDS	"Keywords: "
+NHAPPROVED	"Approved: "
+NHSUMMARY	"Summary: "
+NHPRIORITY	"Priority: "
+NHNFID		"NF-ID: #"
+NHNFFROM	"NF-From: "
+NHUNKNOWN	""
+NHSEP
+NHEND
+:
+:#ifdef UNBAT
+:
+:struct decode {	/* decoding table */
+:      char cval ;	/* decoded character */
+:      char clen ;	/* length */
+:} ;
+:
+:#else
+:
+:struct encode {	/* encoding table */
+:      short cbits ;	/* character length */
+:      short clen ;	/* character length */
+:} ;
+:
+:#endif
+:
+Character lengths:
+' '	3
+'e'	4
+'t'	4
+'o'	4
+'a'	4
+'n'	4
+'i'	5
+'s'	5
+'r'	5
+'h'	5
+'l'	5
+'d'	5
+10	6	/* newline */
+'u'	6
+'c'	6
+'m'	6
+'p'	6
+'f'	6
+'y'	7
+'g'	7
+'w'	7
+'b'	7
+'.'	7
+'v'	7
+','	7
+9	8	/* horizontal tab */
+'-'	8
+'k'	8
+'I'	8
+'O'	8
+'T'	8
+'S'	8
+39	8	/* single quote "'" */
+'"'	8
+8	9	/* backspace */
+'!'	9
+'#'	9
+'$'	9
+'%'	9
+'&'	9
+'('	9
+')'	9
+'*'	9
+'+'	9
+'/'	9
+'0'	9
+'1'	9
+'2'	9
+'3'	9
+'4'	9
+'5'	9
+'6'	9
+'7'	9
+'8'	9
+'9'	9
+':'	9
+';'	9
+'<'	9
+'='	9
+'>'	9
+'?'	9
+'@'	9
+'A'	9
+'B'	9
+'C'	9
+'D'	9
+'E'	9
+'F'	9
+'G'	9
+'H'	9
+'J'	9
+'K'	9
+'L'	9
+'M'	9
+'N'	9
+'P'	9
+'Q'	9
+'R'	9
+'U'	9
+'V'	9
+'W'	9
+'X'	9
+'Y'	9
+'Z'	9
+'['	9
+'\'	9
+']'	9
+'^'	9
+'_'	9
+'`'	9
+'j'	9
+'q'	9
+'x'	9
+'z'	9
+'{'	9
+'|'	9
+'}'	9
+'~'	9
+EOFMARK	9
+EXTCHAR	9
+!
+
+cat > pack.h <<\!
+/*
+ * Binary batching
+ */
+
+#define BVERSION 0		/* version number */
+
+#define LFTYPE 2		/* length of an (encoded) file type */
+char ftypes[] = "nma" ;	/* file types */
+
+#define BS 8			/* size of a byte */
+
+#define NHRELAY 0
+#define NHVERSION 1
+#define NHPATH 2
+#define NHFROM 3
+#define NHNEWSGROUPS 4
+#define NHSUBJECT 5
+#define NHRESUBJECT 6
+#define NHMESSAGEID 7
+#define NHDATE 8
+#define NHARTICLEID 9
+#define NHPOSTED 10
+#define NHEXPIRES 11
+#define NHREF 12
+#define NHCONTROL 13
+#define NHSENDER 14
+#define NHREPLYTO 15
+#define NHFOLLOWUPTO 16
+#define NHDIST 17
+#define NHORG 18
+#define NHLINES 19
+#define NHKEYWORDS 20
+#define NHAPPROVED 21
+#define NHSUMMARY 22
+#define NHPRIORITY 23
+#define NHNFID 24
+#define NHNFFROM 25
+#define NHUNKNOWN 26
+#define NHSEP 27
+#define NHEND 28
+
+char *hprefix[28] = {
+	"Relay-Version: version ",
+	"Posting-Version: version ",
+	"Path: ",
+	"From: ",
+	"Newsgroups: ",
+	"Subject: ",
+	"Subject: Re: ",
+	"Message-ID: <",
+	"Date: ",
+	"Article-I.D.: ",
+	"Posted: ",
+	"Expires: ",
+	"References: ",
+	"Control: ",
+	"Sender: ",
+	"Reply-To: ",
+	"Followup-To: ",
+	"Distribution: ",
+	"Organization: ",
+	"Lines: ",
+	"Keywords: ",
+	"Approved: ",
+	"Summary: ",
+	"Priority: ",
+	"NF-ID: #",
+	"NF-From: ",
+	"",
+	0
+} ;
+
+#ifdef UNBAT
+
+struct decode {	/* decoding table */
+      char cval ;	/* decoded character */
+      char clen ;	/* length */
+} ;
+
+#else
+
+struct encode {	/* encoding table */
+      short cbits ;	/* character length */
+      short clen ;	/* character length */
+} ;
+
+#endif
+
+#ifdef UNBAT
+
+#define EOFMARK 0
+#define EXTCHAR 1
+
+struct decode dtab[1024] = {
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0055, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0105, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0041, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0010, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0124, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0131, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0064, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0114, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0111, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0120, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0057, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0075, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0047, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0175, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0100, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0137, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0153, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0116, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0050, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0046, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0123, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0170, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0072, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0132, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0060, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0125, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0062, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0107, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0042, 9},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0065, 10},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0103, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0172, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0055, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0115, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0043, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0044, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0124, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0134, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0067, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0126, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0111, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0122, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0061, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0077, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0047, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0201, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0102, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0152, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0153, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0117, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0051, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0053, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0123, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0173, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0074, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0135, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0060, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0127, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0063, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0112, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0101, 9},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0070, 10},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0104, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0176, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0055, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0105, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0041, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0015, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0124, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0131, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0064, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0121, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0111, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0120, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0057, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0076, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0047, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0175, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0100, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0140, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0153, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0116, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0050, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0052, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0123, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0170, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0072, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0133, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0060, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0125, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0062, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0110, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0042, 9},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0066, 10},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0103, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0174, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0055, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0115, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0043, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0045, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0124, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0134, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0067, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0130, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0111, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0122, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0061, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0106, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0047, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0201, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0102, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0161, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0153, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0117, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0051, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0056, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0073, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0123, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0167, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0173, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0074, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0054, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0136, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0155, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0060, 8},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0147, 6},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0127, 9},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0146, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0063, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0166, 7},
+	{0040, 2},	{0165, 6},
+	{0156, 5},	{0113, 10},
+	{0040, 2},	{0151, 5},
+	{0145, 4},	{0160, 6},
+	{0040, 2},	{0154, 5},
+	{0157, 4},	{0101, 9},
+	{0040, 2},	{0162, 5},
+	{0164, 4},	{0142, 7},
+	{0040, 2},	{0012, 5},
+	{0141, 5},	{0071, 10},
+	{0040, 2},	{0163, 5},
+	{0145, 4},	{0171, 6},
+	{0040, 2},	{0144, 5},
+	{0157, 4},	{0104, 9},
+	{0040, 2},	{0150, 5},
+	{0164, 4},	{0011, 7},
+	{0040, 2},	{0143, 6},
+	{0156, 5},	{0200, 10},
+} ;
+
+char extchar[32] = {
+	0000,
+	0001,
+	0002,
+	0003,
+	0004,
+	0005,
+	0006,
+	0007,
+	0013,
+	0014,
+	0016,
+	0017,
+	0020,
+	0021,
+	0022,
+	0023,
+	0024,
+	0025,
+	0026,
+	0027,
+	0030,
+	0031,
+	0032,
+	0033,
+	0034,
+	0035,
+	0036,
+	0037,
+	0177,
+} ;
+
+#else
+
+#define PKEOFMARK 01777
+#define LEOFMARK 10
+
+struct encode etab[128] = {
+	{0557, 14},
+	{01557, 14},
+	{02557, 14},
+	{03557, 14},
+	{04557, 14},
+	{05557, 14},
+	{06557, 14},
+	{07557, 14},
+	{037, 10},
+	{0173, 7},
+	{015, 5},
+	{010557, 14},
+	{011557, 14},
+	{01037, 10},
+	{012557, 14},
+	{013557, 14},
+	{014557, 14},
+	{015557, 14},
+	{016557, 14},
+	{017557, 14},
+	{020557, 14},
+	{021557, 14},
+	{022557, 14},
+	{023557, 14},
+	{024557, 14},
+	{025557, 14},
+	{026557, 14},
+	{027557, 14},
+	{030557, 14},
+	{031557, 14},
+	{032557, 14},
+	{033557, 14},
+	{00, 2},
+	{027, 9},
+	{0347, 9},
+	{0427, 9},
+	{0437, 10},
+	{01437, 10},
+	{0237, 10},
+	{0147, 8},
+	{0227, 9},
+	{0627, 9},
+	{01237, 10},
+	{0637, 10},
+	{073, 7},
+	{07, 8},
+	{033, 7},
+	{0127, 9},
+	{0307, 8},
+	{0527, 9},
+	{0327, 9},
+	{0727, 9},
+	{067, 9},
+	{0357, 10},
+	{01357, 10},
+	{0467, 9},
+	{0757, 10},
+	{01757, 10},
+	{0267, 9},
+	{01637, 10},
+	{0667, 9},
+	{0137, 10},
+	{01137, 10},
+	{0537, 10},
+	{0167, 9},
+	{0747, 9},
+	{0567, 9},
+	{0367, 9},
+	{0767, 9},
+	{017, 9},
+	{01537, 10},
+	{0337, 10},
+	{01337, 10},
+	{0107, 8},
+	{0737, 10},
+	{01737, 10},
+	{077, 10},
+	{0417, 9},
+	{0217, 9},
+	{0617, 9},
+	{0117, 9},
+	{01077, 10},
+	{0517, 9},
+	{0247, 8},
+	{047, 8},
+	{0317, 9},
+	{0477, 10},
+	{0717, 9},
+	{01477, 10},
+	{057, 9},
+	{0277, 10},
+	{01277, 10},
+	{0457, 9},
+	{0677, 10},
+	{01677, 10},
+	{0177, 10},
+	{01177, 10},
+	{016, 5},
+	{0153, 7},
+	{075, 6},
+	{025, 5},
+	{02, 4},
+	{023, 6},
+	{013, 6},
+	{031, 5},
+	{01, 5},
+	{0577, 10},
+	{0207, 8},
+	{05, 5},
+	{03, 6},
+	{036, 5},
+	{06, 4},
+	{043, 6},
+	{01577, 10},
+	{011, 5},
+	{021, 5},
+	{012, 4},
+	{035, 6},
+	{0133, 7},
+	{053, 7},
+	{0257, 9},
+	{063, 6},
+	{0377, 10},
+	{0657, 9},
+	{01377, 10},
+	{0157, 9},
+	{0777, 10},
+	{034557, 14},
+} ;
+
+#endif
+!
+
+cat > pack.ph <<\!
+:/*
+: * Binary batching
+: */
+:
+:#define BVERSION 0		/* version number */
+:
+:#define LFTYPE 2		/* length of an (encoded) file type */
+:char ftypes[] = "nma" ;	/* file types */
+:
+:#define BS 8			/* size of a byte */
+:
+
+Usenet header lines:
+NHRELAY		"Relay-Version: version "
+NHVERSION	"Posting-Version: version "
+NHPATH		"Path: "
+NHFROM		"From: "
+NHNEWSGROUPS	"Newsgroups: "
+NHSUBJECT	"Subject: "
+NHRESUBJECT	"Subject: Re: "
+NHMESSAGEID	"Message-ID: <"
+NHDATE		"Date: "
+NHARTICLEID	"Article-I.D.: "
+NHPOSTED	"Posted: "
+NHEXPIRES	"Expires: "
+NHREF		"References: "
+NHCONTROL	"Control: "
+NHSENDER	"Sender: "
+NHREPLYTO	"Reply-To: "
+NHFOLLOWUPTO	"Followup-To: "
+NHDIST		"Distribution: "
+NHORG		"Organization: "
+NHLINES		"Lines: "
+NHKEYWORDS	"Keywords: "
+NHAPPROVED	"Approved: "
+NHSUMMARY	"Summary: "
+NHPRIORITY	"Priority: "
+NHNFID		"NF-ID: #"
+NHNFFROM	"NF-From: "
+NHUNKNOWN	""
+NHSEP
+NHEND
+:
+:#ifdef UNBAT
+:
+:struct decode {	/* decoding table */
+:      char cval ;	/* decoded character */
+:      char clen ;	/* length */
+:} ;
+:
+:#else
+:
+:struct encode {	/* encoding table */
+:      short cbits ;	/* character length */
+:      short clen ;	/* character length */
+:} ;
+:
+:#endif
+:
+Character lengths:
+' '	2
+'e'	4
+'t'	4
+'o'	4
+'a'	5
+'n'	5
+'i'	5	/* second half of table begins here */
+'s'	5
+'r'	5
+'h'	5
+'l'	5
+'d'	5
+10	5	/* newline */
+'u'	6	/* final quarter of table should begin here */
+'c'	6
+'m'	6	/* final quarter of table */
+'p'	6
+'f'	6
+'y'	6
+'g'	6
+'w'	7
+'b'	7	/* final eighth of table should begin here */
+'.'	7
+'v'	7
+','	7
+9	7	/* horizontal tab */
+'-'	8	/* final eighth of table begins here */
+'k'	8
+'I'	8
+'0'	8
+'T'	8
+'S'	8
+39	8	/* single quote "'" */
+'"'	9
+'A'	9
+'!'	9
+'#'	9
+'('	9
+')'	9
+'/'	9
+'1'	9
+'2'	9
+'3'	9
+'4'	9
+'5'	10
+'6'	10
+'7'	9
+'8'	10
+'9'	10
+':'	9
+'<'	9
+'@'	9
+'B'	9
+'C'	9
+'D'	9
+'E'	9
+'M'	9
+'N'	9
+'O'	9
+'P'	9
+'R'	9
+'U'	9
+'W'	9
+'Y'	9
+'\'	9
+'x'	9
+'{'	9
+'}'	9
+8	10	/* backspace */
+13	10	/* carriage return (could be left to EXTCHAR) */
+'$'	10
+'%'	10
+'&'	10
+'*'	10
+'+'	10
+';'	10
+'='	10
+'>'	10
+'?'	10
+'F'	10
+'G'	10
+'H'	10
+'J'	10
+'K'	10
+'L'	10
+'Q'	10
+'V'	10
+'X'	10
+'Z'	10
+'['	10
+']'	10
+'^'	10
+'_'	10
+'`'	10
+'j'	10
+'q'	10
+'z'	10
+'|'	10
+'~'	10
+EOFMARK	10
+EXTCHAR	9
+!
+
+cat > prtbits.c <<\!
+/*
+ * Display the contents of a file in binary.
+ * The bits are printed with the *low* order bit first.
+ */
+
+#include <stdio.h>
+
+FILE *in ;
+
+main(argc, argv)
+	char **argv ;
+	{
+	long offset ;
+	register c ;
+	register i ;
+
+	in = stdin ;
+	if (argc > 1)
+		in = fopen(argv[1], "r") ;
+	if (in == NULL) {
+		fprintf(stderr, "Can't open %s\n", argv[1]) ;
+		exit(1) ;
+	}
+	offset = 0 ;
+	while ((c = getc(in)) != EOF) {
+		if ((offset & 07) != 0)
+			putc(' ', stdout) ;
+		else if (offset != 0)
+			putc('\n', stdout) ;
+		for (i = 8 ; --i >= 0 ; ) {
+			putc('0' + (c & 01), stdout) ;
+			c >>= 1 ;
+		}
+		offset++ ;
+	}
+	putc('\n', stdout) ;
+}
+!
+
+cat > qnews.c <<\!
+#include "common.h"
+
+
+char *directory ;
+char *file ;
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      long t ;
+      char *from, *lastc ;
+      char to[PATHLEN] ;
+      char **ap ;
+      char prefix ;
+      int fd ;
+
+      prefix = 'n' ;
+      ap = argv + 1 ;
+      if (ap[0][0] == '-' && ap[0][1] == 't') {
+            if ((prefix = ap[0][2]) == '\0')
+usage:            fatal("usage: qnews [ -tc ] directory [ file ]") ;
+            ap++ ;
+      }
+      if ((directory = *ap++) == NULL)
+            goto usage ;
+      from = *ap ;
+      if (from != NULL && strcmp(from, "%s") == 0)
+            from = NULL ;
+      time(&t) ;
+      sprintf(to, "%s/%c%lda", directory, prefix, t) ;
+      lastc = to + strlen(to) - 1 ;
+      signal(SIGTERM, SIG_IGN) ;
+      for (;;) {
+            if (from != NULL)
+                  fd = link(from, to) ;
+            else {
+#ifdef USG
+                  fd = open(to, O_WRONLY | O_CREAT | O_EXCL, 0444) ;
+#else
+                  fd = creat(to, 0444) ;
+#endif
+            }
+            if (fd >= 0)
+                  break ;
+            if (errno != EEXIST && errno != EPERM || *lastc == 'z')
+                  fatal("can't create %s", to) ;
+            *lastc += 1 ;
+      }
+      if (from == NULL) {
+            char buf[BUFSIZ] ;
+            int count ;
+
+            file = to ;
+            while ((count = read(0, buf, BUFSIZ)) > 0) {
+                  if (write(fd, buf, count) != count) {
+                        fatal("write error") ;
+                  }
+            }
+            if (count < 0) {
+                  fatal("read error") ;
+            }
+      }
+      exit(0) ;
+}
+
+
+
+/*
+ * Fatal error.
+ * Print error message and send mail to administrator.
+ */
+
+fatal(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      static int reentered = 0 ;
+
+      if (reentered) {
+            fprintf(stderr, "fatal entered recursively\n") ;
+            fprintf(stderr, fmt, a1, a2, a3, a4) ;
+            if (file != NULL)
+                  unlink(file) ;
+            exit(3) ;
+      }
+      reentered = 1 ;
+      msg(fmt, a1, a2, a3, a4) ;
+      if (file != NULL)
+            if (unlink(file) < 0)
+                  msg("unlink failed: %s", file) ;
+      exit(2) ;
+}
+
+
+/*
+ * Send mail to administrator.  Flag is set to indicate fatal error.
+ */
+
+msg(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      FILE *fp ;
+      int e = errno ;
+
+      fprintf(stderr, fmt, a1, a2, a3, a4) ;
+      putc('\n', stderr) ;
+      if ((fp = popen(MAILCMD, "w")) == NULL)
+            fatal("popen failed") ;
+      fputs("Subject:  error in qnews\n\n", fp) ;
+      fprintf(fp, fmt, a1, a2, a3, a4) ;
+      if (directory != NULL) {
+            fputs("\nprocessing ", fp) ;
+            fputs(directory, fp) ;
+      }
+      putc('\n', fp) ;
+      fprintf(fp, "errno = %d\n", e) ;
+      if (pclose(fp) != 0)
+            fatal("msg failed") ;
+}
+!
+
+cat > sendnews.c <<\!
+#define DEBUG
+#include "common.h"
+
+#define ASKIP 3
+
+struct arglist uuargs ;
+char *directory ;
+char **firstarg ;
+int errflag ;
+char resentflag[] = "resentflag" ;
+char lastack[] = "lastack" ;
+char ackfile[] = "ackfile" ;
+
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      register char **ap ;
+      int rflag ;
+      char *p ;
+      int i ;
+      struct stat statb ;
+
+      setuid(NETNEWS) ;
+      ap = argv + 1 ;
+      rflag = 0 ;
+      while ((p = *ap++) != NULL && *p == '-') {
+            if (strcmp(p, "-r") == 0)
+                  rflag++ ;
+            else
+usage:            fatal("usage: sendnews [ -r ] from to") ;
+      }
+      if (p == NULL || *ap == NULL)
+            goto usage ;
+      directory = p ;
+      if (chdir(p) < 0)
+            fatal("no directory") ;
+      firstarg = &uuargs.arg[ASKIP] ;
+      uuargs.nargs = ASKIP ;
+      if (unlink(resentflag) < 0) {
+            sendnews(1) ;
+      }
+      if (uuargs.nargs > ASKIP) {
+            if ((i = creat(resentflag, 0666)) < 0)
+                  msg("can't create resent flag") ;
+            close(i) ;
+            msg("resent %d files", uuargs.nargs - ASKIP) ;
+      }
+      sendnews(0) ;
+      if (stat(ackfile, &statb) >= 0
+       && (uuargs.nargs > ASKIP || statb.st_size >= MINACK)) {
+            long t ;
+            char buf[FNLEN + 5] ;
+
+            time(&t) ;
+            sprintf(buf, "sent/a%lda", t) ;
+            if (link(ackfile, buf) < 0) {
+                  msg("can't link ackfile") ;
+                  goto uu ;
+            }
+            if (unlink(ackfile) < 0) {
+                  msg("can't unlink ackfile") ;
+                  goto uu ;
+            }
+            insarg(buf + 5) ;
+      }
+uu:
+      uucp(*ap, rflag) ;
+      exit(errflag) ;
+}
+
+
+
+sendnews(resend) {
+      char *dir ;
+      char sentname[PATHLEN] ;
+      DIR *dp ;
+      FILE *fp ;
+      struct direct *d ;
+      long last ;
+      int oflow ;
+
+      if (resend == 0) {
+            dir = "out" ;
+      } else {
+            dir = "sent" ;
+            if ((fp = fopen(lastack, "r")) == NULL) {
+                  msg("can't open lastack") ;
+                  return ;
+            }
+            if (fgets(sentname, FNLEN, fp) == NULL) {
+                  /* Can occur bacause no locking done */
+                  msg("lastack is empty file") ;
+                  fclose(fp) ;
+                  return ;
+            }
+            fclose(fp) ;
+            last = atol(sentname) - 3600L ;
+      }
+      if (chdir(dir) < 0)
+            fatal("chdir %s failed", dir) ;
+      if ((dp = opendir(".")) == NULL)
+            fatal("no .") ;
+      oflow = 0 ;
+      while ((d = readdir(dp)) != NULL) {
+            if (d->d_name[0] == '.')
+                  continue ;
+            else if (badname(d->d_name)) {
+                  msg("bad file %s in %s", d->d_name, dir) ;
+                  movebad(d->d_name) ;
+                  continue ;
+            }
+            if (resend) {
+                  if (atol(d->d_name + 1) > last)
+                        continue ;
+                  printf("resending %s\n", d->d_name) ;
+            }
+            if (uuargs.nargs >= MAXARGS - 3) {
+                  oflow++ ;
+                  continue ;
+            }
+            addarg(d->d_name, &uuargs) ;
+            if (! resend) {
+                  sprintf(sentname, "../sent/%s", d->d_name) ;
+                  if (link(d->d_name, sentname) < 0)
+                        msg("link %s failed", d->d_name) ;
+                  else if (unlink(d->d_name) < 0)
+                        msg("unlink %s failed", d->d_name) ;
+            }
+      }
+      closedir(dp) ;
+      if (oflow > 0)
+            msg("too many files: %d not sent", oflow) ;
+      if (chdir("..") < 0)
+            fatal("no ..") ;
+}
+
+
+
+uucp(to, rflag)
+      char *to ;
+      {
+      if (firstarg == uuargs.arg + uuargs.nargs)
+            return ;
+      if (chdir("sent") < 0)
+            fatal("no sent dir") ;
+      qsort((char *)(uuargs.arg + ASKIP), uuargs.nargs - ASKIP, sizeof(char *), comp) ;
+      addarg(to, &uuargs) ;
+      addarg(NULL, &uuargs) ;
+      if (rflag)  insarg("-r") ;
+      insarg(UUCP) ;
+      if (run(firstarg, 0, 0) != 0)
+            fatal("uucp failed") ;
+      if (chdir("..") < 0)
+            fatal("no ..") ;
+}
+
+
+
+badname(fname)
+      char *fname ;
+      {
+      register c ;
+
+      if ((c = *fname++) != 'a' && c != 'n' && c != 'm')
+            return -1 ;
+      if ((c = *fname++) < '0' || c > '9')
+            return -1 ;
+      return 0 ;
+}
+
+
+
+movebad(fname)
+      char *fname ;
+      {
+      char bad[PATHLEN] ;
+
+      sprintf(bad, "../bad/%s", fname) ;
+      unlink(bad) ;
+      if (link(fname, bad) < 0)
+            fatal("link to bad failed for %s", fname) ;
+      if (unlink(fname) < 0)
+            fatal("unlink bad file %s failed", fname) ;
+}
+
+
+
+comp(a, b)
+      char **a, **b ;
+      {
+      return strcmp(*a, *b) ;
+}
+
+
+
+addarg(fname, argl)
+      struct arglist *argl ;
+      char *fname ;
+      {
+      char *p ;
+
+      if (argl->nargs >= MAXARGS)
+            fatal("too many articles") ;
+      if (fname == NULL)
+            p = NULL ;
+      else {
+            if ((p = malloc(strlen(fname) + 1)) == NULL)
+                  fatal("out of space") ;
+            strcpy(p, fname) ;
+      }
+      argl->arg[argl->nargs++] = p ;
+}
+
+
+insarg(fname)
+      char *fname ;
+      {
+      char *p ;
+
+      if (firstarg <= uuargs.arg)
+            fatal("insarg failed") ;
+      if (fname == NULL)
+            p = NULL ;
+      else {
+            if ((p = malloc(strlen(fname) + 1)) == NULL)
+                  fatal("out of space") ;
+            strcpy(p, fname) ;
+      }
+      *--firstarg = p ;
+}
+
+
+
+run(args, flags, fd)
+      char *args[] ;
+      int flags ;
+      int fd ;
+      {
+      int pid ;
+      int status ;
+      int i ;
+
+#ifdef DEBUG
+      printf("run") ;				/*DEBUG*/
+      for (i = 0 ; args[i] != NULL ; i++)	/*DEBUG*/
+            printf(" %s", args[i]) ;		/*DEBUG*/
+      putchar('\n') ;				/*DEBUG*/
+#endif
+      if ((pid = fork()) == -1)
+            fatal("Cannot fork") ;
+      if (pid == 0) {
+            execv(args[0], args) ;
+            msg("exec failed") ;
+            exit(127) ;
+      }
+      while ((i = wait(&status)) != pid && i != -1) ;
+      return status ;
+}
+
+
+/*
+ * Fatal error.
+ * Print error message and send mail to administrator.
+ */
+
+fatal(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      static int reentered = 0 ;
+
+      if (reentered) {
+            fprintf(stderr, "fatal entered recursively\n") ;
+            fprintf(stderr, fmt, a1, a2, a3, a4) ;
+            exit(3) ;
+      }
+      reentered = 1 ;
+      msg(fmt, a1, a2, a3, a4) ;
+      exit(2) ;
+}
+
+
+/*
+ * Send mail to administrator.  Flag is set to indicate fatal error.
+ */
+
+msg(fmt, a1, a2, a3, a4)
+      char *fmt ;
+      {
+      FILE *fp ;
+
+      errflag = 1 ;
+      fprintf(stderr, fmt, a1, a2, a3, a4) ;
+      putc('\n', stderr) ;
+      if ((fp = popen(MAILCMD, "w")) == NULL)
+            fatal("popen failed") ;
+      fputs("Subject:  error in sendnews\n\n", fp) ;
+      fprintf(fp, fmt, a1, a2, a3, a4) ;
+      if (directory != NULL) {
+            fputs("\nprocessing ", fp) ;
+            fputs(directory, fp) ;
+      }
+      putc('\n', fp) ;
+      if (pclose(fp) != 0)
+            fatal("msg failed") ;
+}
+!
+
+cat > unbat_a.c <<\!
+/*
+ * This is a sample unbatcher.  It is called with the batch file on stdin
+ * and creates the unbatched files in the current directory.  Exit status:
+ * 2  => wrong batcher invoked.
+ * 33 => batch file was truncated.
+ * 34 => write error occurred.
+ * 1  => illegal batch file.
+ */
+
+#include "common.h"
+
+char unbattmp[] = "../unbatch.tmp" ;
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      register c ;
+      FILE *ufp ;
+      int seqno ;
+      char hdline[64] ;
+      char fname[FNLEN] ;
+
+      seqno = getpid() % 9000 ;
+      if (fgets(hdline, 64, stdin) == NULL) {
+            printf("empty batch file\n") ;
+            exit(2) ;
+      }
+      if (hdline[0] != 'a') {
+            printf("bad version\n") ;
+            exit(2) ;
+      }
+      if (atol(hdline + 1) != fsize(fileno(stdin))) {
+            printf("bad size\n") ;
+            exit(33) ;
+      }
+      if (index(hdline, '\n') == NULL) {
+            printf("header too long\n") ;
+            exit(1) ;
+      }
+      while ((c = getc(stdin)) != EOF) {
+            sprintf(fname, "%c%04d", c, seqno++) ;
+            if (badname(fname) || fname[0] == 'b') {
+                  printf("bad file type\n") ;
+                  exit(1) ;
+            }
+            if ((ufp = fopen(unbattmp, "w")) == NULL) {
+                  printf("can't create unbatch.tmp") ;
+                  exit(34) ;
+            }
+            while ((c = getc(stdin)) != ENDMARK) {
+                  if (c == EOF) {
+                        printf("unexpected EOF\n") ;
+                        exit(1) ;
+                  }
+                  if (putc(c, ufp) == EOF) {
+                        printf("write error on unbatch.tmp\n") ;
+                        exit(34) ;
+                  }
+            }
+            if (fclose(ufp) == EOF) {
+                  printf("close error on unbatch.tmp\n") ;
+                  exit(34) ;
+            }
+            if (link(unbattmp, fname) < 0) {
+                  printf("link to %s failed\n", fname) ;
+                  exit(34) ;
+            }
+            if (unlink(unbattmp) < 0) {
+                  unlink(fname) ;
+                  printf("can't unlink unbatch.tmp\n") ;
+                  exit(34) ;
+            }
+      }
+      exit(0) ;
+}
+
+
+badname(fname)
+      char *fname ;
+      {
+      register c ;
+
+      if ((c = *fname++) != 'a' && c != 'n' && c != 'm' && c != 'b')
+            return -1 ;
+      if ((c = *fname++) < '0' || c > '9')
+            return -1 ;
+      return 0 ;
+}
+
+
+fsize(fd) {
+      struct stat st ;
+
+      if (fstat(fd, &st) < 0)
+            return 0L ;
+      return st.st_size ;
+}
+!
+
+cat > unbat_b.c <<\!
+/*
+ * This is a sample unbatcher.  It is called with the batch file on stdin
+ * and creates the unbatched files in the current directory.  Exit status:
+ * 2  => wrong batcher invoked.
+ * 33 => batch file was truncated.
+ * 34 => write error occurred.
+ * 1  => illegal batch file.
+ */
+
+#include "common.h"
+#define UNBAT 1
+#include "pack.h"
+
+char unbattmp[] = "../unbatch.tmp" ;
+
+long bits ;		/* current input bits */
+int nbits ;		/* number of bits currently in "bits" */
+int bversion ;		/* sub-version of batching used */
+char line[1025] ;	/* place to unpack verying length characters */
+char temp[1024] ;	/* temporary strings */
+char saverelay[200] ;	/* old Relay-Version */
+char relaysite[64] ;	/* site name from Relay-Version */
+char postsite[64] ;	/* site name of posting site */
+char artid[16] ;	/* article ID generated by message ID */
+
+#define MOREBITS(n) while(nbits < n) bits |= getc(stdin) << nbits, nbits += BS
+#define USEUP(n) bits >>= n, nbits -= n
+long gbits() ;
+
+
+main(argc, argv)
+      char **argv ;
+      {
+      register c ;
+      FILE *ufp ;
+      int seqno ;
+      char hdline[64] ;
+      char fname[FNLEN] ;
+
+      seqno = getpid() % 9000 ;
+      if ((c = getc(stdin)) == EOF) {
+            printf("empty batch file\n") ;
+            exit(2) ;
+      }
+      if (c != 'b') {
+            printf("bad version\n") ;
+            exit(2) ;
+      }
+      bversion = gbits(4) ;
+      if (gbits(20) != fsize(fileno(stdin))) {
+            printf("bad size\n") ;
+            exit(33) ;
+      }
+      if ((BVERSION - bversion & 017) > 1)
+            die(2, "bad sub-version") ;
+      while ((c = ftypes[gbits(LFTYPE)]) != '\0') {
+            sprintf(fname, "%c%04d", c, seqno++) ;
+            if ((ufp = fopen(unbattmp, "w")) == NULL) {
+                  die(34, "can't create unbatch.tmp") ;
+            }
+            getfile(c, ufp) ;
+            if (fclose(ufp) == EOF) {
+                  printf("close error on unbatch.tmp\n") ;
+                  exit(34) ;
+            }
+            if (link(unbattmp, fname) < 0) {
+                  printf("link to %s failed\n", fname) ;
+                  exit(34) ;
+            }
+            if (unlink(unbattmp) < 0) {
+                  unlink(fname) ;
+                  printf("can't unlink unbatch.tmp\n") ;
+                  exit(34) ;
+            }
+      }
+      exit(0) ;
+}
+
+
+getfile(type, ufp)
+      FILE *ufp ;
+      {
+      if (type == 'n')
+            newshead(ufp) ;
+      readfile(ufp) ;
+}
+
+
+newshead(ufp)
+      FILE *ufp ;
+      {
+      int ltype ;
+      char *p, *q ;
+
+      if (gbits(1)) {
+            fputs(saverelay, ufp) ;
+            printf("Old relay used\n") ;	/*DEBUG*/
+      }
+      else  printf("Old relay not used\n") ;	/*DEBUG*/
+      postsite[0] = '\0' ;
+      exchg('\n', EOFMARK|0200) ;
+      for (;;) {
+            switch (ltype = gbits(5)) {
+            case NHRELAY:
+            case NHVERSION:
+                  readfile(NULL) ;
+                  if ((p = index(line, ';')) == NULL)
+                        die(1, "bad Version line") ;
+                  *p++ = '\0' ;
+                  sprintf(temp, "%s%s; site %s\n", hprefix[ltype], line, p) ;
+                  fputs(temp, ufp) ;
+                  if (ltype == NHRELAY) {
+                        strcpy(saverelay, temp) ;
+                        strcpy(relaysite, p) ;
+                  } else {
+                        strcpy(postsite, p) ;
+                  }
+                  break ;
+            case NHMESSAGEID:
+                  readfile(NULL) ;
+                  if (index(line, '@') == NULL) {
+			printf("Messageid taken from postsite\n") ;   /*DEBUG*/
+                        strcat(line, "@") ;
+                        strcat(line, postsite) ;
+                  }
+                  genartid(line) ;
+                  strcat(line, ">") ;
+                  goto outline ;
+            case NHARTICLEID:
+                  if (artid[0])
+                        strcpy(line, artid) ;
+                  else
+                        readfile(NULL) ;
+                  goto outline ;
+            default:
+                  readfile(NULL) ;
+            outline:
+                  fputs(hprefix[ltype], ufp) ;
+                  fputs(line, ufp) ;
+                  putc('\n', ufp) ;
+                  break ;
+            case NHSEP:
+                  putc('\n', ufp) ;
+                  goto out ;
+            case NHEND:
+                  goto out ;
+            }
+      }
+out:  exchg('\n', EOFMARK|0200) ;
+}
+
+
+genartid(msgid)
+      char *msgid ;
+      {
+      register char *p, *q ;
+
+      strcpy(temp, line);
+      p = index(temp, '@');
+      *p++ = '\0';
+      q = index(p, '.');
+      if (q)
+            *q++ = '\0';
+      p[8] = '\0';
+      sprintf(artid, "%s.%s", p, temp);
+}
+
+
+readfile(ufp)
+      FILE *ufp ;
+      {
+      register char *lp ;
+      register struct decode *dp ;
+
+      lp = line ;
+      for (;;) {
+            MOREBITS(16) ;
+            dp = &dtab[bits & 01777] ;
+            USEUP(dp->clen) ;
+            if ((dp->cval & 0200) == 0) {
+                  if (lp >= line + 1024) {
+                        if (ufp == NULL)
+                              die(1, "header line too long") ;
+                        if (fwrite(line, 1, 1024, ufp) != 1024)
+                              die(33, "write error") ;
+                        lp = line ;
+                  }
+                  *lp++ = dp->cval ;
+                  continue ;
+            }
+            if (lp >= line + 1024) {
+                  if (ufp == NULL)
+                        die(1, "header line too long") ;
+                  if (fwrite(line, 1, 1024, ufp) != 1024)
+                        die(33, "write error") ;
+                  lp = line ;
+            }
+            switch (dp->cval & 0177) {
+            case EOFMARK:
+                  goto out ;
+            case EXTCHAR:
+                  *lp++ = extchar[bits & 037] ;
+                  USEUP(5) ;
+                  break ;
+            }
+      }
+out:
+      if (ufp) {
+            if (lp > line && fwrite(line, 1, lp - line, ufp) != lp - line)
+                  die(33, "write error") ;
+      } else
+            *lp = '\0' ;
+}
+
+
+long
+gbits(n) {
+      register long ret ;
+
+      MOREBITS(n) ;
+      ret = bits &~ (-1 << n) ;
+      USEUP(n) ;
+      printf("gbits(%d) => %ld\n", n, ret) ;	/*DEBUG*/
+      return ret ;
+}
+
+
+exchg(c1, c2)
+      char c1, c2 ;
+      {
+      register struct decode *dp ;
+
+      for (dp = dtab ; dp < &dtab[1024] ; dp++) {
+            if (dp->cval == c1)
+                  dp->cval = c2 ;
+            else if (dp->cval == c2)
+                  dp->cval = c1 ;
+      }
+}
+
+
+
+die(status, msg)
+      char *msg ;
+      {
+      printf("%s\n", msg) ;
+      exit(status) ;
+}
+
+
+fsize(fd) {
+      struct stat st ;
+
+      if (fstat(fd, &st) < 0)
+            return 0L ;
+      return st.st_size ;
+}
+!

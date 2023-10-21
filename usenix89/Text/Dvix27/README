@@ -1,0 +1,85 @@
+The use of this program may not be readily apparent.  If your
+printer's name is "laser", you would use a command sequence that
+looked something like this:
+
+	% tex myfile
+	% lpr -Plaser -d myfile.dvi
+
+If you are using your own fonts, or want to restrict the range of printing,
+you should use something like
+
+	% tex myfile
+	% dvix27 -a '.:/usr/lib/tex/fonts' -f 1 -t 5 myfile > myfile.x27
+	% lpr -Plaser -l myfile.x27
+
+
+Installation comments:
+======================
+
+The font area is assumed to be /usr/lib/tex/fonts.  I do not believe that
+that this filter supports the TEXFONTS environment path.  The font area is
+arranged in a new fashion that will probably be showing up in other device
+drivers as well.  All the tfm files are contained in /usr/lib/tex/fonts.  If
+a file named SUBDIR is present in /usr/lib/tex/fonts (or whatever directory
+name you select), then the name of the font is taken as the name of a
+subdirectory in searching for the pxl file associated with the font.  In
+other words, amr10.1500pxl will be found in
+/usr/lib/tex/fonts/amr10/amr10.1500pxl.  When the file named SUBDIR is not
+present, all pxl files are looked for in the directory itself, in other
+words, /usr/lib/tex/fonts/amr10.1500pxl in the above example.
+
+There are some constants in dvix27 which may need to be changed, TOP
+and LEFT define the (0,0) point on the page, measured in 1/300" from
+the *bottom* and left edge (TOP = 3500 gives the top edge of the paper
+on A4).  The margin setting command is for A4 paper (search for %cm).
+
+Note that the fonts which come ready made with TeX are not much good
+on the Xerox (they are too pale and weedy) - you should go back to the
+METAFONT input and re-create them.  The 'qms' mode from waits.mf seems
+to be a good first approximation.  Make up a METAFONT which includes
+the waits base (insert 'input waits ;' before the 'dump' in inimf),
+and use lots of lines like
+
+	mf \\mode=qms \; mag=magstep 0.5 \; input cmr10
+
+then use gftopk on the GF files to produce PK files that dvix27 can
+read.
+
+I'm afraid there is no man page for this.
+
+printcap information
+====================
+
+Warwick use another program called dvix27f when the LaserWriter is
+used with the /etc/printcap file.  dvix27f invokes dvix27 and laserf.
+laserf is basically the standard lpf, but is *really* transparent when
+given the -c flag (well almost ...).  It uses a file which it expects
+to find in /usr/local/lib/laser/setup to initialize the printer.
+Change the definition of setup in laserf.c if you want to move this.
+A sample setup file is in laser.setup, this will need changing for
+printers with different built in fonts or different paper sizes.  Both
+dvix27f.c and laserf.c are included here.  Warwick's printcap entry
+for the 2700 reads:
+
+#
+# Laser Printer
+#
+laser|Laser Printer:\
+	:lp=/dev/laser:br#9600:fs#06360:mx#0:ff=\Eo\f:tr=\f:\
+	:of=/usr/local/lib/laserf:if=/usr/local/lib/laserf:\
+	:df=/usr/lib/tex/dvix27f:\
+	:af=/usr/adm/laseracct:\
+	:rf=/usr/local/ansicc:sd=/usr/spool/lpd/laser:xs#20:
+
+
+History and acknowledgements
+============================
+
+The driver was converted by Neal Holtz of Carleton University from a
+Sun previewer originally written by Mark Senn and later modified by
+others (see dvi2ps for specifics).  Additional modifications and
+enhancements have been done by Scott Jones and Chris Lindblad at MIT.
+Conversion to Xerox 2700 and to read PK files was done by Rob McMahon
+at Warwick University (cudcv@uk.ac.warwick.daisy).
+
+(These notes added by Richard Furuta)

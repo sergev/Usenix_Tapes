@@ -1,0 +1,300 @@
+
+  DPR - Screendump printer utility manual.
+  ----------------------------------------
+
+  This document describes the structure and installation procedure for
+  the screendump printer system implemented for the Sun UNIX* operating
+  system.
+
+
+
+  1. Overview.
+
+  The screendump printer utility program allows output of raster images
+  to various printers via serial lines which require line initialisation
+  such as baud rate.
+
+  The screendump printer system consists mainly of the following files:
+
+  /etc/dumpcap             screendump configuration and capability data base.
+  /usr/bin/dpr             program to start a screendump to the printer.
+  /usr/lib/libdpr.a        library containing print window routines.
+  /usr/man/man1/dpr.1      manual page describing parameters for dpr.
+  /usr/man/man5/dumpcap.5  manual page showing layout of /etc/dumpcap file.
+
+  The file /etc/dumpcap is a master data base file describing screen dump
+  printers attached to the machine. The manual page dumpcap(5) provides the
+  ultimate definition of the format of this data base, as well as indicating
+  default values for important items such as the baud rate of the printer.
+  This document highlights the important information which may be placed in
+  dumpcap.
+
+
+
+  2. Commands.
+
+  2.1.  dpr - screendump printer utility.
+
+  The dpr(1) program will output screen dumps to the specified printer or to
+  a named file depending upon information found in the appropriate entry of
+  /etc/dumpcap.
+
+  2.2.  print_window - window dumping facility.
+
+  A call to print_window can be incorporated within a program, to allow
+  dumping of the programs window to the named printer.
+
+
+
+  3. Setting up.
+
+  Your release of the screendump utilities comes with the following files:
+
+  dpr            the screendump printer utility program.
+  dpr.1          manual page describing parameters for dpr.
+  dpr.manual     what you are reading now.
+  dumpcap        screendump configuration and capability data base.
+  dumpcap.5      manual page showing layout of /etc/dumpcap file.
+  libdpr.a       library containing print window routines.
+  testpw_c.c     source of a C program using print_window.
+  testpw_c       binary of testpw_c.c
+  testpw_p.p     source of a Pascal program using print_window.
+  testpw_p       binary of testpw_p.p
+  testpw_f.f     source of a Fortran program using priwin (print_window).
+  testpw_f       binary of testpw_f.f
+
+  Several files should be copied as follows:
+
+  Filename      Directory        Owner       Permission.
+  --------      ---------        -----       -----------
+
+  dpr           /usr/bin         root        755
+  dpr.1         /usr/man/man1    bin         644
+  dumpcap       /etc             bin         644
+  dumpcap.5     /usr/man/man5    bin         644
+  libdpr.a      /usr/lib         root        644
+
+
+
+  4.  Setting up a dumpcap entry for your printer.
+
+  When a printer is connected via a serial communication line, it must have
+  the proper baud rate and terminal modes set. Dpr the screendump utility
+  takes this one stage further. It uses the file /etc/dumpcap which is a
+  simplified version of the termcap / printcap data bases. This allows for
+  dynamic addition and deletion of printers. Each entry in the database
+  describes one printer.
+
+  The default printer is lp, though the environment variable PRINTER may be
+  used to override this.
+
+  Printer capabilities.
+  ---------------------
+
+  Each entry in the dumpcap file describes a printer and is a line consisting
+  of a number of fields separated by ':' characters. The format of each entry
+  is identical to the printcap format, consisting of boolean, numeric and
+  string entries describing printer capabilities. The following is a list of
+  those capability codes, their type and default values plus a brief
+  description.
+
+  Name  Type      Default  Description
+  ----  ----      -------  -----------
+
+  br    numeric   9600     Set the baud rate. This is only applicable if the
+                           output device is a tty line. Valid values are 110,
+                           150, 300, 1200, 1800, 2400, 4800 and 9600.
+
+  co    numeric   1        Number of colors in output. The default is for black
+                           and white. If a number is given then the closest power
+                           of 8 less than or equal to this number is used, and
+                           a table is set up to reduce 16 million plus colors
+                           to that given number.
+
+  dd    boolean   false    The printed screen image should be double sized.
+                           This means that for every single pixel of the screen
+                           image, a 2x2 matrix is printed.
+
+  ed    string    null     Sequence to output at end of dump. In a normal
+                           situation this usually achieves a return to text mode
+                           (from graphics mode) and setting the line spacing to
+                           default.
+
+  el    string    null     Sequence to output at end of 'line'. Line here is
+                           considered to mean one horizontal pass. This sequence
+                           usually is a linefeed.
+
+
+  Name  Type      Default  Description
+  ----  ----      -------  -----------
+
+  fn    string    null     Screen image file to use. If this is not supplied
+                           then a copy of the current screen is printed. Files
+                           produced by screendump (or something similar) in
+                           standard Sun rasterfile format may also be used.
+
+  ha    numeric   0        Handshake between the Sun and the printer.
+                           (0 = None, 1 = XON/XOFF, 2 = DTR, 3 = CTS, 4 = RTS).
+                           In cases 2-4 the Sun will look at the state of the
+                           pin inside the RS232 plug (using a special ioctl call),
+                           and either send or stop sending data depending upon
+                           whether it is high or low. This will require a special
+                           cable being produced to allow this operation to
+                           happen successfully.
+
+  lp    string    /dev/lp  Name to open for output. This normally is a tty line.
+                           It should be noted that this can also be a Unix file-
+                           name (see example /etc/dumpcap entries below).
+
+  ma    numeric   0        Mask to be used for preparing output. Some printers
+                           require that certain bits in each graphics byte be
+                           set, as well as the data image bits. The Phillips
+                           GP300 is a typical example.
+
+  nb    numeric   8        Bits per byte for output of image. This is the number
+                           of image bits in one byte that the printer requires.
+                           Normally 6,7 or 8.
+
+  ro    boolean   false    Reverse the order the bits are output in each graphics
+                           byte. Normally they are output "left to right".
+
+  sb    string    null     Sequence to output before printing the burst page. This
+                           will usually achieve the initialisation of the printer,
+                           selection of any required fonts etc.
+
+  sd    string    null     Sequence to output at start of dump. This usually will
+                           achieve the setting of graphics mode and the required
+                           line spacing.
+
+  sh    numeric   900      Height of the screen dump. 900 is the whole of the
+                           screen. It is possible to dump any single rectangular
+                           portion of that.
+
+
+  Name  Type      Default  Description
+  ----  ----      -------  -----------
+ 
+  sl    string    null     Sequence to output at start of 'line'. Line here is
+                           considered to mean one horizontal pass. Some printers
+                           require graphics mode to be set at the start of each
+                           'line'. That would be achieved using this parameter.
+
+  sw    numeric   1152     Width of the screen dump. 1152 is for the width of the
+                           whole screen. It is possible to dump any single
+                           rectangular portion of that.
+
+  sx    numeric   0        X origin of screen dump. This can be anything in the
+                           range 0-1151. 0 is at the left side of the screen.
+
+  sy    numeric   0        Y origin of screen dump. This can be anything in the
+                           range 0-899. 0 is at the top of the screen.
+
+  vs    numeric   1        Number of vertical lines, printer uses in one pass.
+                           Certain printers have several pins on the printer
+                           head which will either fire or not depending whether
+                           the associated pixel is black or white. Usually these
+                           are arranged vertically on the print head.
+
+  Examples.
+  ---------
+
+  To output a complete image of the current screen at double size to a
+  Toshiba P1350 printer using a CTS handshake over /dev/ttyb at 4800 baud,
+  the following entry in /etc/dumpcap would be used:
+
+  lp|to|Toshiba P1350:\
+            :br#4800:lp=/dev/ttyb:ha#3:vs#24:nb#6:dd:\
+            :sd=\E^^\b:ed=\E^^\t:sl=\E;2304:el=\n:
+
+
+  To output a screen image from the file "screen.saved" into the file
+  "screen.filtered", so that it will be correctly formatted for later
+  sending to a Toshiba P1350, would use the following entry:
+
+  fi|Toshiba P1350 filtered:\
+            :fn=screen.saved:lp=screen.filtered:vs#24:nb#6:\
+            :sd=\E^^\b:ed=\E^^\t:sl=\E;1152:el=\n:
+
+  This is particularly useful if the printer is normally being used for
+  standard lpr Unix spooling, and the image of the screen can be
+  incorporated with that.
+
+
+
+  5. Utilities available.
+
+  5.1. Dpr
+
+  Dpr is the utility that will output the screen image to the printer.
+  It has several command line parameters:
+
+   -Pprinter
+        Force output to a named printer. Normally the default printer
+        is used (site dependent), or the value of the PRINTER environment
+        variable may be used.
+
+   -#num
+        Produce multiple copies of output using num as the number of
+        copies.
+
+   -Cclass
+        Print class as the job classification on the burst page. This
+        replaces the system name (the name returned by hostname).
+
+   -Jjob
+        Print job as the job name on the burst page. Normally dpr uses
+        the filename specified by the "fn" capability switch in the
+        /etc/dumpcap file, or "current" if no switch was specified.
+   -r
+        Remove the screen dump file (if specified by "fn" in /etc/dumpcap),
+        upon completion of spooling.
+
+   -m
+        Send mail upon completion.
+
+   -h
+        Suppress printing the burst page.
+
+   -Ddumpcap
+        Alternate dumpcap file to use instead of /etc/dumpcap to specify
+        printer characteristics.
+
+
+
+  5.2. print_window
+
+  Libdpr.a contains print_window and its associated routines, which when
+  called from a user program which is running in the window environment,
+  allows the window to be screen dumped to a named printer.
+
+  Three small example programs are provided to show you how this is achieved:
+  Note that the call from a Fortran program is priwin and not print_window.
+
+  Print_window determines which window it is running in, and puts a copy of
+  the windows image in a file in the /tmp directory using the process id to
+  achieve a unique name. It also creates an alternate dumpcap file in /tmp
+  using the current window height and taking the remaining details from the
+  /etc/dumpcap file using the printer name specified as the parameter to
+  print_window. It should be notes that the /etc/dumpcap printer entry should
+  be written as if the whole of the screen was being printer. This is because
+  print_window has no idea what size window it will be dumping and therefore
+  has to generalise. From all thes details it forks dpr as another process
+  before returning.
+
+
+
+  6. Limitations.
+
+  Be aware that a very unusual printer may expose deficiencies in the ability
+  of the dumpcap file to describe it, or bugs in dpr.
+
+  As is to be expected with any piece of software that attempts to generalise,
+  it is slower than something which is optimised and tuned. This could still
+  be improved.
+
+  The burst (header) page could be improved.
+
+  Currently color screen dumping is not allowed for.
+
+  The print_window routine should be amended to expose the window or open the
+  iconic form if necessary.

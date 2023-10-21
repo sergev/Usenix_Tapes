@@ -1,0 +1,153 @@
+	A Fix to a pdp-11 C compiler
+	      George Rosenberg
+		  1 Feb 81
+		  6 May 81
+
+There seems to be an anomaly in the code generation
+of some pdp-11 C compilers.
+In certain contexts the wrong type of
+conditional branch instruction is generated.
+Instructions such as "jge" may occur
+rather than instructions such as "jpl".
+I have observed the problem with a Whitesmith compiler
+and both of the compilers distributed with UNIX version 7,
+Dennis M. Ritchie's compiler and Stephen C. Johnson's compiler.
+The expression,
+	"(j-i < 0) == (j-i < zero)",
+evaluates to zero (i.e. false)
+in the accompanying program, "bug.c",
+as compiled with the UNIX compilers.
+The expression evaluates as one (i.e. true),
+in the Whitesmith compiler,
+only because it also incorrectly evaluates
+a previous expression in the program.
+I suggest trying this program with your compiler
+even if it isn't one of the above.
+
+This directory has changes for what I believe to be
+a working fixed version of Dennis M. Ritchie's compiler.
+In making the changes, the original sources were examined
+only superficially (e.g. grep jlt), to find the
+offending code.  This code was then patched up.
+Programs compiled with the modified compiler seem to work.
+By "seem to work", I mean that as far as I know the coding
+anomalies described here are fixed and no new bugs are introduced.
+Due to my ignorance of the global workings of the compiler,
+there may be a possibility of some unknown global effect
+coming back to haunt you.  Here is a summary of coding changes
+applicable in certain contexts.
+
+
+		Old Coding		New Coding
+
+1.		jlt L001		jmi L001
+
+2.		jge L002		jpl L002
+
+3.		jle L003		jmi L003
+					jeq L003
+
+4.		jgt L004		jmi L005
+					jne L004
+				L005:
+
+
+The differences are "ed" scripts.
+They should be used with the source to Dennis M. Ritchie's 
+pdp-11 C compiler as distributed with UNIX v7.
+They may be adaptable to variants of this compiler
+(e.g. v6 compiler or photo-typesetter release),
+if there is a problem with their coding.
+Here is a "wc" summary of our original sources.
+
+
+File   Affected?  Lines  Words   Bytes
+c0.h		    458   1314    7658
+c00.c		    884   2160   14371
+c01.c		    644   1636   10563
+c02.c		    792   1950   14619
+c03.c		    695   1816   12908
+c04.c		    428    951    6575
+c05.c		    184    845    4520
+c1.h		    327    801    4641
+c10.c	  yes	   1200   3520   24315
+c11.c	  yes	   1167   2577   18854
+c12.c		   1080   2651   20662
+c13.c	  yes	    385   1104    6377
+c2.h	  yes	    132    319    1813
+c20.c	  yes	    695   1780   12434
+c21.c		    791   1854   12439
+cvopt.c		    363    686    4475
+table.s		   1601   2096   12082
+
+
+The ed scripts are in the directory "scripts".
+There are three command files to simplify
+manipulating the scripts.  The command files
+were written for S. R. Bourne's command interpreter
+(i.e. UNIX v7 shell).
+If you don't have that interpreter, then try:
+	ed ORIG-DIR-PATH/FILE <scripts/FILE.ed
+for each script, and copy any other originals here.
+The command "MAKSRC" places changed sources in this directory.
+The commands "SAVE" and "RESTORE" are for manipulating
+individual files.
+Each one has a variable "SYS" which is supposed to be set to
+a directory containing original sources as described above.
+Change your current working directory to the one containing
+this READ-ME file.
+
+
+Step 1:
+		Test your compiler.
+	cc bug.c
+	a.out
+		This should print some values,
+		followed by an expression,
+		followed by either "true" or "false"
+
+		If "true" is typed, then omit the following steps.
+
+Step 2:
+		Generate modified sources
+		in the current directory.
+	MAKSRC
+
+Step 3:
+		Compile the sources
+		to fix the code generation.
+	make	;: or whatever
+
+Step 4:
+		Recompile the sources
+		to fix the compiler's code.
+	rm *.o cvopt
+	mkdir c-dir
+	mv c0 c-dir
+	mv c1 c-dir
+	mv c2 c-dir
+	cp /lib/cpp c-dir
+	echo /bin/cc -Bc-dir/ '$@' >cc	;: The "@" may need to be escaped
+	chmod 755 cc
+	make
+	rm c-dir/*
+
+Step 5:
+		Test the modified compiler.
+	cp /lib/cpp .
+	rm cc
+	cc -B./ bug.c
+	rm cpp
+	a.out
+		If "true" isn't typed, then it is too bad.
+
+Step 6:
+		You are on your own.
+
+
+
+
+
+Note:
+	"UNIX" is a trademark of Bell Laboratories
+	"pdp" is a trademark of Digital Equipment Corporation

@@ -1,0 +1,251 @@
+%!
+% TEMPLATE: This does nothing yet. It is a bunch of useful routines that you
+% may want to incorporate into your PostScript programs. They probably work.
+
+% copyright 1987 by Peter Greenberg. You can copy, use, and redistribute this
+% work so long as the copyright message and this message are retained.
+
+/ArrayToStr % array -> string
+% Takes array of integers and makes a string containing the integers ASCII
+% characters
+{
+	/Array exch def
+	/Length Array length def
+	/Str Length string def
+	
+	0 1 Length 1 sub { Str exch dup Array exch get put } for
+	Str
+} def
+
+/IntToChar % string -> int
+% Returns character code of first character in string
+{
+	/Int exch def
+	/Str 1 string def
+	Str 0 Int put
+	Str
+} def
+
+/SetFont %  -> 
+% sets currentfont to Font in size Size, which are preset variables. 
+{
+	findfont Size scalefont setfont
+} def
+
+/CenterShow { % string -> 
+% Shows string in middle of page. Y coordinate is not changed. Assumes 
+% definition of Left and Right.
+	/Str exch def
+	/Ycoord currentpoint exch pop def 
+	Right Left sub Str stringwidth pop sub 
+	2 div Left add Ycoord moveto
+	Str show
+} def
+
+/FlushRightShow { % string ->
+% Shows string flush to right hand side of the page. 
+% Y coordinate is not changed. Assumes definition of Left and Right.
+	/Str exch def
+	currentpoint /Ycoord exch def pop
+	Right Str stringwidth pop sub Ycoord moveto
+	Str show
+} def
+
+/MirrorShow % string ->
+% Like ordinary show, but string is shown in mirror image.
+{
+        gsave
+        dup /Str exch def
+        stringwidth /Ydisp exch def /Xdisp exch def
+        currentpoint /Y exch def /X exch def
+        X Xdisp add Y Ydisp add translate 0 0 moveto
+        [ -1 0 0 1 0 0 ] concat
+        Str show
+        grestore
+        Xdisp Ydisp rmoveto
+} def
+
+/ConcatStr % string1 string2 -> newstring
+% Concatenates string1 and string2, returns newstring of combined length.
+{
+	/Str2 exch def
+	/Str1 exch def
+	/NewStr Str1 length Str2 length add string def
+	NewStr Str1 length Str2 putinterval
+	NewStr 0 Str1 putinterval
+	NewStr
+} def
+
+/NextLine { % ->
+% Goes to nextline as given by preset Lineheight.
+	Left 
+	currentpoint exch pop Lineheight sub dup Bottom lt 
+	  { 
+	  	pop copypage erasepage Top
+	  }
+	if
+	moveto
+} def
+
+% The following procedures all help in wrapping text. See comment on
+% last procedure.
+
+/SP 32 def
+
+/WhitespaceSearch {
+	/Str exch def
+	/StrLen Str length def
+
+	/i 0 def
+	{
+	   i StrLen lt
+	     {
+		Str i get 32 gt 
+		 {
+	 	 	/i i 1 add def
+	 	 }
+	 	 {
+	 	 	exit
+	 	 }
+	        ifelse
+	     }
+	     {
+	   	exit
+	     }
+ 	  ifelse
+	} loop	
+	
+	i StrLen lt
+	  {	
+		/j i def
+		{
+			j StrLen lt 
+			  {
+			  	Str j get 32 le 
+		 	  	  {
+			  		/j j 1 add def
+			  	  }
+		 	 	  {
+		  			exit
+		 	 	  }
+				ifelse
+			  }
+			  {
+			  	exit
+			  }
+			ifelse
+		} loop
+		
+		j StrLen lt 
+		  {
+			Str j StrLen j sub getinterval % Put Post on Stack
+		  }
+		  { () % put an empty string on the stack
+		  }
+		ifelse 
+		Str i j i sub getinterval % Put Whitespace on Stack
+		Str 0 i getinterval % Put Pre on stack
+		true	
+	  }
+	  {	
+	  	Str
+	  	false
+	  }
+	ifelse
+   	
+} def
+ 	   	
+
+/WrapShow % string     returns true if newline inserted after word
+{
+	/Str exch def 
+				
+	Str stringwidth pop dup /StrW exch def
+	Right Left sub gt 
+	  {
+		NextLine
+		Str show %just get out
+		NextLine true
+	  }
+	  {	
+	  	StrW currentpoint pop add dup /Xcoord exch def
+		WrapZone gt % Xcoord would extend past Wrapzone
+		  {	
+			Xcoord Right le
+			  { Str show NextLine true } % word ends in WrapZone
+			  { NextLine Str show false } 
+			  			% word extends past Rt. Margin
+			ifelse
+		  }
+		  { Str show false }
+		ifelse
+	  }
+	ifelse
+} def
+
+/Tabulate {
+	currentpoint exch Tab div ceiling Tab mul Left add exch moveto
+} def
+
+/ShowWhitespace % bool string (whitespace)
+{
+	% a true will be on the stack if a newline had been inserted before
+	% whitespace
+	/WhiteSp exch def
+	/NewLineBefore exch def
+	WhiteSp 0 get 
+	dup dup
+	32 eq NewLineBefore not and { ( ) show } if
+	9 eq { Tabulate } if
+	10 eq NewLineBefore not and { NextLine } if
+	WhiteSp 1 WhiteSp length 1 sub getinterval {
+	    	dup dup 
+	    	32 eq { ( ) show } if
+	   	9 eq { Tabulate } if
+	    	10 eq { NextLine }  if
+	} forall
+	  
+	
+} def   
+	
+/WrapText % string (perhaps very long) ->
+% Shows the string from current point. Wraps text according to preset 
+% Lineheight, Left, Right, Top, Bottom. Puts in page breaks, line breaks, etc.
+% Does not justify text. Takes newlines literally and prints them, so this
+% is not quite like a ?roff fill routine, and it may be a bit flaky, but it is
+% cool nonetheless.
+{
+	/Str exch def
+	 
+	   Str WhitespaceSearch % loop until all words are eaten
+	      { 
+	        /TextWord exch def /WhiteSpace exch def /Rest exch def
+	        TextWord WrapShow % returns true if newline inserted after word
+	        WhiteSpace ShowWhitespace
+	        Rest WrapText
+	      } 
+	      { 
+	      	WrapShow
+	         %no spaces so this is the last word
+	      } 
+	   ifelse
+} def
+
+
+
+/inch { 72 mul } def
+
+/Top 10.5 inch def
+/Bottom 0.5 inch def
+/Left 1 inch def
+/Right 8 inch def
+/WrapZone 7 inch def
+/Size 10 def
+/Lineheight Size 5 add def
+/Font1 /Courier def
+/Font2 /ZapfDingbats def  % all symbols, no real letters
+/Font3  /AvantGarde-Book def
+/LineChr (-) def % boxes in ZapfDingbats
+/Tab 1 inch def
+
+% PUT PROGRAM HERE!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!

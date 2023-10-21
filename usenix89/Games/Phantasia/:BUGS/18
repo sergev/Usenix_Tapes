@@ -1,0 +1,162 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site ttrda.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ltuxa!ttrdc!ttrda!estes
+From: estes@ttrda.UUCP (Edward Estes )
+Newsgroups: net.sources.games
+Subject: Phantasia 3.3 (new setup.c)
+Message-ID: <128@ttrda.UUCP>
+Date: 9 Jul 85 17:52:01 GMT
+Date-Received: 10 Jul 85 19:32:37 GMT
+Organization: AT&T Teletype Corp., Skokie, IL
+Lines: 150
+
+The posted version of 'setup.c' for Phantasia 3.3 was missing a semicolon.
+Here is a fixed version.  Sorry about that.
+
+Ted Estes
+AT&T Teletype Corporation
+Skokie, IL
+...!ihnp4!ttrdc!ttrda!estes
+===============
+: This is a shar archieve.  Extract with sh, not csh.
+: The rest of this file will extract:
+: setup.c
+echo extracting - setup.c
+sed 's/^X//' > setup.c << '!EOR!'
+X/*
+X * setup.c  Program to set up all files for Phantasia
+X *
+X *	This program tries to verify the parameters specified in
+X *	the Makefile.  Since Phantasia assumes its files exist,
+X *	simple errors can result in core dumps.
+X *
+X *	This program tries to check against this.
+X * 
+X *	Note that this is not fool-proof, and that this could
+X *	be much more clever in checking everything.
+X */
+X
+X#include "phant.h"
+X#include <sys/types.h>
+X#include <sys/stat.h>
+X
+Xmain(argc,argv) 		/* program to init. files for Phantasia */
+Xint argc;
+Xchar	**argv;
+X{
+XFILE	*fp;
+Xstruct	stats	sbuf;
+Xstruct	nrgvoid grail;
+Xstruct	stat	fbuf;
+Xregister    int loop;
+Xchar	stbuf[128];
+X
+X    srand((int) time(NULL));	/* prime random numbers */
+X    /* try to check RAND definition */
+X    for (loop = 1000; loop; loop--)
+X	{
+X	if (rand() > ((int) RAND))
+X	    {
+X	    sprintf(stbuf,"%.1f",(double) RAND);
+X	    Error("%s is a bad value for RAND.\n",stbuf);
+X	    }
+X	}
+X    umask(077);
+X    /* check where Phantasia lives */
+X    if (stat(PATH",&fbuf) < 0)
+X	{
+X	perror(PATH");
+X	exit(1);
+X	/*NOTREACHED*/
+X	}
+X    if (fbuf.st_mode & S_IFDIR == 0)
+X	Error("%s is not a directory.\n",PATH");
+X    /* try to create data files */
+X    if ((fp = fopen(goldfile,"w")) == NULL)
+X	Error("cannot create %s.\n",goldfile);
+X    else
+X	fclose(fp);
+X    if ((fp = fopen(motd,"w")) == NULL)
+X	Error("cannot create %s.\n",motd);
+X    else
+X	fclose(fp);
+X    if ((fp = fopen(messfile,"w")) == NULL)
+X	Error("cannot create %s.\n",messfile);
+X    else
+X	fclose(fp);
+X    /* do not reset character file if it already exists */
+X    if (stat(peoplefile,&fbuf) < 0)
+X	{
+X	buildchar(&sbuf);
+X	strcpy(sbuf.name,"<null>");
+X	if ((fp = fopen(peoplefile,"w")) == NULL)
+X	    Error("cannot create %s.\n",peoplefile);
+X	else
+X	    {
+X	    fwrite(&sbuf,sizeof(sbuf),1,fp);
+X	    fclose(fp);
+X	    }
+X	}
+X    grail.active = TRUE;
+X    grail.x = roll(-1.0e6,2.0e6);
+X    grail.y = roll(-1.0e6,2.0e6);
+X    if ((fp = fopen(voidfile,"w")) == NULL)
+X	Error("cannot create %s.\n",voidfile);
+X    else
+X	{
+X	fwrite(&grail,sizeof(grail),1,fp);
+X	fclose(fp);
+X	}
+X    if ((fp = fopen(lastdead,"w")) == NULL)
+X	Error("cannot create %s.\n",lastdead);
+X    else
+X	{
+X	fputs(" ",fp);
+X	fclose(fp);
+X	}
+X#ifdef ENEMY
+X    if ((fp = fopen(enemyfile,"w")) == NULL)
+X	Error("cannot create %s.\n",enemyfile);
+X    else
+X	fclose(fp);
+X#endif
+X    if ((fp = fopen(sbfile,"w")) == NULL)
+X	Error("cannot create %s.\n",sbfile);
+X    else
+X	fclose(fp);
+X    if (getuid() != UID)
+X	fprintf(stderr,"Warning: UID (%d) is not equal to current uid.\n",UID);
+X    exit(0);
+X}
+X
+Xbuildchar(stat) 	    /* put in some default values */
+X/* Note that this function is almost the same as initchar().
+X   It is used to insure that unexpected values will not be found in a
+X   new character file.				*/
+Xstruct	stats	*stat;
+X{
+X    stat->x = roll(-125,251);
+X    stat->y = roll(-125,251);
+X    stat->exp = stat->lvl = stat->sin = 0;
+X    stat->crn = stat->psn = 0;
+X    stat->rng.type = NONE;
+X    stat->rng.duration = 0;
+X    stat->pal = FALSE;
+X    stat->hw = stat->amu = stat->bls = 0;
+X    stat->chm = 0;
+X    stat->gem = 0.1;
+X    stat->gld = roll(25,50) + roll(0,25) + 0.1;
+X    stat->quks = stat->swd = stat->shd = 0;
+X    stat->vrg = FALSE;
+X    stat->typ = 0;
+X}
+X
+XError(str,file)     /* print an error message, and exit */
+Xchar	*str, *file;
+X{
+X    fprintf(stderr,"Error: ");
+X    fprintf(stderr,str,file);
+X    exit(1);
+X    /*NOTREACHED*/
+X}
+!EOR!

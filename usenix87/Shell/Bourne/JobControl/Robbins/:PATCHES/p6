@@ -1,0 +1,3370 @@
+:::::::: name.c :::::::
+*** ../orig.u/name.c	Wed May 15 17:08:24 1985
+--- name.c	Tue May 21 19:02:42 1985
+***************
+*** 15,21
+  struct namnod ps2nod =
+  {
+  	(struct namnod *)NIL,
+! 	&acctnod,
+  	ps2name
+  };
+  struct namnod cdpnod = 
+
+--- 15,21 -----
+  struct namnod ps2nod =
+  {
+  	(struct namnod *)NIL,
+! 	(struct namnod *)NIL,
+  	ps2name
+  };
+  struct namnod cdpnod = 
+***************
+*** 32,38
+  };
+  struct namnod ifsnod =
+  {
+! 	&homenod,
+  	&mailnod,
+  	ifsname
+  };
+
+--- 32,38 -----
+  };
+  struct namnod ifsnod =
+  {
+! 	&histfnod,
+  	&mailnod,
+  	ifsname
+  };
+***************
+*** 39,45
+  struct namnod ps1nod =
+  {
+  	&pathnod,
+! 	&ps2nod,
+  	ps1name
+  };
+  struct namnod homenod =
+
+--- 39,45 -----
+  struct namnod ps1nod =
+  {
+  	&pathnod,
+! 	&acctnod,
+  	ps1name
+  };
+  struct namnod homenod =
+***************
+*** 44,50
+  };
+  struct namnod homenod =
+  {
+- 	&cdpnod,
+  	(struct namnod *)NIL,
+  	homename
+  };
+
+--- 44,49 -----
+  };
+  struct namnod homenod =
+  {
+  	(struct namnod *)NIL,
+  	(struct namnod *)NIL,
+  	homename
+***************
+*** 46,51
+  {
+  	&cdpnod,
+  	(struct namnod *)NIL,
+  	homename
+  };
+  struct namnod mailnod =
+
+--- 45,51 -----
+  struct namnod homenod =
+  {
+  	(struct namnod *)NIL,
++ 	(struct namnod *)NIL,
+  	homename
+  };
+  struct namnod mailnod =
+***************
+*** 62,67
+  };
+  struct namnod acctnod =
+  {
+  	(struct namnod *)NIL,
+  	(struct namnod *)NIL,
+  	acctname
+
+--- 62,71 -----
+  };
+  struct namnod acctnod =
+  {
++ 	&ps2nod,
++ #if pyr
++ 	&univnod,
++ #else
+  	(struct namnod *)NIL,
+  #endif
+  	acctname
+***************
+*** 63,69
+  struct namnod acctnod =
+  {
+  	(struct namnod *)NIL,
+! 	(struct namnod *)NIL,
+  	acctname
+  };
+  struct namnod mailpnod =
+
+--- 67,73 -----
+  	&univnod,
+  #else
+  	(struct namnod *)NIL,
+! #endif
+  	acctname
+  };
+  struct namnod mailpnod =
+***************
+*** 72,77
+  	(struct namnod *)NIL,
+  	mailpname
+  };
+  
+  
+  struct namnod *namep = &mchknod;
+
+--- 76,95 -----
+  	(struct namnod *)NIL,
+  	mailpname
+  };
++ struct namnod histfnod =
++ {
++ 	&cdpnod,
++ 	&homenod,
++ 	histfilename
++ };
++ #if pyr
++ struct namnod univnod =
++ {
++ 	(struct namnod *)NIL,
++ 	(struct namnod *)NIL,
++ 	univname
++ };
++ #endif
+  
+  
+  struct namnod *namep = &mchknod;
+***************
+*** 86,91
+  	int	low;
+  	int	high;
+  	int	mid;
+  	register int cond;
+  
+  	if (w == 0 || *w == 0)
+
+--- 104,112 -----
+  	int	low;
+  	int	high;
+  	int	mid;
++ #if gould
++ 	int	cond;	/* DAG -- avoid optimizer bug */
++ #else
+  	register int cond;
+  #endif
+  
+***************
+*** 87,92
+  	int	high;
+  	int	mid;
+  	register int cond;
+  
+  	if (w == 0 || *w == 0)
+  		return(0);
+
+--- 108,114 -----
+  	int	cond;	/* DAG -- avoid optimizer bug */
+  #else
+  	register int cond;
++ #endif
+  
+  	if (w == 0 || *w == 0)
+  		return(0);
+***************
+*** 228,233
+  readvar(names)
+  char	**names;
+  {
+  	struct fileblk	fb;
+  	register struct fileblk *f = &fb;
+  	register char	c;
+
+--- 250,256 -----
+  readvar(names)
+  char	**names;
+  {
++ 	extern long lseek();	/* DAG -- bug fix (was missing) */
+  	struct fileblk	fb;
+  	register struct fileblk *f = &fb;
+  	register char	c;
+***************
+*** 238,244
+  	push(f);
+  	initf(dup(0));
+  
+! 	if (lseek(0, 0L, 1) == -1)
+  		f->fsiz = 1;
+  
+  	/*
+
+--- 261,267 -----
+  	push(f);
+  	initf(dup(0));
+  
+! 	if (lseek(0, 0L, 1) == -1L)	/* DAG */
+  		f->fsiz = 1;
+  
+  	/*
+:::::::: name.h :::::::
+No differences encountered
+:::::::: print.c :::::::
+*** ../orig.u/print.c	Wed May 15 17:08:25 1985
+--- print.c	Mon May 20 15:32:21 1985
+***************
+*** 7,12
+   */
+  
+  #include	"defs.h"
+  #include	<sys/param.h>
+  
+  #define		BUFLEN		256
+
+--- 7,15 -----
+   */
+  
+  #include	"defs.h"
++ #if JOBS
++ #define		HZ	60
++ #else
+  #include	<sys/param.h>
+  #endif
+  
+***************
+*** 8,13
+  
+  #include	"defs.h"
+  #include	<sys/param.h>
+  
+  #define		BUFLEN		256
+  
+
+--- 11,17 -----
+  #define		HZ	60
+  #else
+  #include	<sys/param.h>
++ #endif
+  
+  #define		BUFLEN		256
+  
+***************
+*** 66,73
+  		prc_buff('h');
+  	}
+  
+! 	prn_buff(min);
+! 	prc_buff('m');
+  	prn_buff(sec);
+  	prc_buff('s');
+  }
+
+--- 70,80 -----
+  		prc_buff('h');
+  	}
+  
+! 	if (min)	/* BRL... for consistency */
+! 	{
+! 		prn_buff(min);
+! 		prc_buff('m');
+! 	}
+  	prn_buff(sec);
+  	prc_buff('s');
+  }
+***************
+*** 230,233
+  	itos(n);
+  
+  	prs_buff(numbuf);
+  }
+
+--- 237,357 -----
+  	itos(n);
+  
+  	prs_buff(numbuf);
++ }
++ 
++ void
++ pr_prompt (str)
++ register char *str;
++ {
++ 	for (; *str; str++)
++ 	{
++ 		if (*str != '%')
++ 			prc_buff (*str);
++ 		else if (*(str+1) == 'd')
++ 		{
++ 			/* current directory */
++ 			str++;
++ 			prs_buff (retcwd());
++ 		}
++ 		else if (*(str+1) == 'e')
++ 		{
++ 			/* event count */
++ 			str++;
++ 			if ((flags & nohistflg) == 0)
++ 				prn_buff (event_count);
++ 		}
++ 		else if (*(str+1) == 'h')
++ 		{
++ 			/* hostname */
++ 			static char *cp = 0;
++ 			static int didhost = FALSE;
++ 			static int didgt = FALSE;
++ #ifdef JOBS
++ 			static char buf[257];
++ 
++ 			if (! didhost)
++ 			{
++ 				gethostname (buf, sizeof buf);
++ 				didhost = TRUE;
++ 				cp = buf;
++ 			}
++ #else
++ #include <sys/utsname.h>	/* has an extern declaration in it */
++ 			static struct utsname name;
++ 
++ 			if (! didhost)
++ 			{
++ 				uname (& name);
++ 				/* avoid emulation bug */
++ 				name.sysname[sizeof(name.sysname)-1] = '\0';
++ 				didhost = TRUE;
++ 				cp = name.sysname;
++ 			}
++ #endif
++ 
++ #ifdef GATECH
++ 			/*
++ 			 * this is to get rid of the dumb gt- convention.
++ 			 * a gt w/out the - is also removed.
++ 			 */
++ 			if (! didgt)
++ 			{
++ 				didgt = TRUE;
++ 				if (cp[0] == 'g' && cp[1] == 't' && cp[2])
++ 				{
++ 					cp += 2;
++ 					if (cp[0] == '-' && cp[1])
++ 						cp++;
++ 				}
++ 			}
++ #endif
++ 			prs_buff (cp);
++ 			str++;
++ 		}
++ 		else if (*(str+1) == 'l')
++ 		{
++ 			/* login name */
++ 			static char *cp = 0;
++ 			static int didname = FALSE;
++ 
++ 			str++;
++ 			if (! didname)
++ 			{
++ 				cp = username ();
++ 				didname = TRUE;
++ 			}
++ 
++ 			if (cp)
++ 				prs_buff (cp);
++ 		}
++ 		else if (*(str+1) == 't')
++ 		{
++ 			/* current time, HH:MM */
++ 			long l;
++ 			char *cp, *ctime ();
++ 
++ 			str++;
++ 			time (& l);
++ 			cp = ctime (& l);
++ 			cp[16] = '\0';
++ 			cp += 11;
++ 			prs_buff (cp);
++ 		}
++ #if pyr
++ 		else if (*(str+1) == 'u')
++ 		{
++ 			/* current univeserse */
++ 			str++;
++ 			prs_buff (univ_name[cur_univ-1]);
++ 		}
++ #endif
++ 		else if (*(str+1) == '\0')	/* % was last char in string */
++ 		{
++ 			prc_buff (*str);
++ 			continue;
++ 		}
++ 		else
++ 			prc_buff (*(++str));
++ 	}
++ 	flushb();
+  }
+:::::::: profile.c :::::::
+No differences encountered
+:::::::: pwd.c :::::::
+*** ../orig.u/pwd.c	Wed May 15 17:08:27 1985
+--- pwd.c	Mon May 20 17:20:51 1985
+***************
+*** 4,9
+   *
+   *	Bell Telephone Laboratories
+   *
+   */
+  
+  #include		"mac.h"
+
+--- 4,14 -----
+   *
+   *	Bell Telephone Laboratories
+   *
++  *	DAG -- Two ways of handling symbolic links in directory paths:
++  *		Define SYMLINK if you want "cd .." to do just that.
++  *		Otherwise, "cd .." takes you back the way you came.
++  *	The first method was implemented by Ron Natalie and the
++  *	second method was implemented by Douglas Gwyn, both of BRL.
+   */
+  
+  #include		"defs.h"	/* DAG -- was just "mac.h" */
+***************
+*** 6,12
+   *
+   */
+  
+! #include		"mac.h"
+  
+  #define	DOT		'.'
+  #define	NULL	0
+
+--- 11,19 -----
+   *	second method was implemented by Douglas Gwyn, both of BRL.
+   */
+  
+! #include		"defs.h"	/* DAG -- was just "mac.h" */
+! #include	<sys/types.h>		/* DAG -- moved for SYMLINK */
+! #include	<sys/stat.h>		/* DAG -- moved for SYMLINK */
+  
+  #if defined(SYMLINK) && !defined(S_IFLNK)
+  #define	S_IFLNK	0120000
+***************
+*** 8,13
+  
+  #include		"mac.h"
+  
+  #define	DOT		'.'
+  #define	NULL	0
+  #define	SLASH	'/'
+
+--- 15,24 -----
+  #include	<sys/types.h>		/* DAG -- moved for SYMLINK */
+  #include	<sys/stat.h>		/* DAG -- moved for SYMLINK */
+  
++ #if defined(SYMLINK) && !defined(S_IFLNK)
++ #define	S_IFLNK	0120000
++ #endif
++ 
+  #define	DOT		'.'
+  #define	NULL	0
+  #define	SLASH	'/'
+***************
+*** 11,16
+  #define	DOT		'.'
+  #define	NULL	0
+  #define	SLASH	'/'
+  #define MAXPWD	256
+  
+  extern char	longpwd[];
+
+--- 22,30 -----
+  #define	DOT		'.'
+  #define	NULL	0
+  #define	SLASH	'/'
++ #if defined(JOBS)
++ #define MAXPWD	(24*256)	/* who knows */
++ #else
+  #define MAXPWD	256
+  #endif
+  
+***************
+*** 12,17
+  #define	NULL	0
+  #define	SLASH	'/'
+  #define MAXPWD	256
+  
+  extern char	longpwd[];
+  
+
+--- 26,32 -----
+  #define MAXPWD	(24*256)	/* who knows */
+  #else
+  #define MAXPWD	256
++ #endif
+  
+  extern char	longpwd[];
+  
+***************
+*** 17,22
+  
+  static char cwdname[MAXPWD];
+  static int 	didpwd = FALSE;
+  
+  cwd(dir)
+  	register char *dir;
+
+--- 32,41 -----
+  
+  static char cwdname[MAXPWD];
+  static int 	didpwd = FALSE;
++ #if SYMLINK
++ /* Stuff to handle chdirs around symbolic links */
++ static char	*symlink = 0;	/* Pointer to after last symlink in cwdname */
++ #endif
+  
+  cwd(dir)
+  	register char *dir;
+***************
+*** 21,26
+  cwd(dir)
+  	register char *dir;
+  {
+  	register char *pcwd;
+  	register char *pdir;
+  
+
+--- 40,48 -----
+  cwd(dir)
+  	register char *dir;
+  {
++ #if SYMLINK
++ 	struct stat statb;
++ #endif
+  	register char *pcwd;
+  	register char *pdir;
+  
+***************
+*** 44,51
+  		if (*pdir) 
+  			pdir++;
+  	}
+! 	if(*(--pdir)==DOT && pdir>dir && *(--pdir)==SLASH)
+! 		*pdir = NULL;
+  	
+  
+  	/* Remove extra /'s */
+
+--- 66,73 -----
+  		if (*pdir) 
+  			pdir++;
+  	}
+! 	if(pdir>dir && *(--pdir)==DOT && pdir>dir && *(--pdir)==SLASH)	/* DAG -- bug fix (added first test) */
+! 		*pdir = '\0';	/* DAG -- not NULL */
+  	
+  
+  	/* Remove extra /'s */
+***************
+*** 65,70
+  
+  		pcwd = cwdname;
+  		didpwd = TRUE;
+  	}
+  	else
+  	{
+
+--- 87,95 -----
+  
+  		pcwd = cwdname;
+  		didpwd = TRUE;
++ #if SYMLINK
++ 		symlink = 0;		/* Starting over, no links yet */
++ #endif
+  	}
+  	else
+  	{
+***************
+*** 71,76
+  		/* Relative path */
+  
+  		if (didpwd == FALSE) 
+  			return;
+  			
+  		pcwd = cwdname + length(cwdname) - 1;
+
+--- 96,104 -----
+  		/* Relative path */
+  
+  		if (didpwd == FALSE) 
++ #if !defined(SYMLINK) && defined(JOBS)
++ 			pwd();		/* Get absolute pathname into cwdname[] */
++ #else
+  			return;
+  #endif
+  			
+***************
+*** 72,77
+  
+  		if (didpwd == FALSE) 
+  			return;
+  			
+  		pcwd = cwdname + length(cwdname) - 1;
+  		if(pcwd != cwdname+1)
+
+--- 100,106 -----
+  			pwd();		/* Get absolute pathname into cwdname[] */
+  #else
+  			return;
++ #endif
+  			
+  		pcwd = cwdname + length(cwdname) - 1;
+  		if(pcwd != cwdname+1)
+***************
+*** 93,98
+  				;
+  			pcwd++;
+  			dir += 2;
+  			if(*dir==SLASH)
+  			{
+  				dir++;
+
+--- 122,135 -----
+  				;
+  			pcwd++;
+  			dir += 2;
++ #if SYMLINK
++ 			/* Just undid symlink, so pwd the hard way */
++ 			if(pcwd < symlink)
++ 			{
++ 				pwd();
++ 				return;
++ 			}
++ #endif
+  			if(*dir==SLASH)
+  			{
+  				dir++;
+***************
+*** 102,107
+  		*pcwd++ = *dir++;
+  		while((*dir) && (*dir != SLASH))
+  			*pcwd++ = *dir++;
+  		if (*dir) 
+  			*pcwd++ = *dir++;
+  	}
+
+--- 139,161 -----
+  		*pcwd++ = *dir++;
+  		while((*dir) && (*dir != SLASH))
+  			*pcwd++ = *dir++;
++ #if SYMLINK
++ 		/* Check to see if this path component is a symbolic link */
++ 		*pcwd = 0;
++ 		if(lstat(cwdname, &statb) != 0)
++ 		{
++ 			prs(cwdname);	/* DAG */
++ 			error(nolstat);	/* DAG -- made string sharable */
++ 			pwd();
++ 			return;
++ 		}
++ 		if((statb.st_mode & S_IFMT) == S_IFLNK)
++ 			/* Set fence so that when we attempt to
++ 			 * "cd .." past it, we know that it is invalid
++ 			 * and have to do it the hard way
++ 			 */
++ 			symlink = dir;
++ #endif
+  		if (*dir) 
+  			*pcwd++ = *dir++;
+  	}
+***************
+*** 105,111
+  		if (*dir) 
+  			*pcwd++ = *dir++;
+  	}
+! 	*pcwd = NULL;
+  
+  	--pcwd;
+  	if(pcwd>cwdname && *pcwd==SLASH)
+
+--- 159,165 -----
+  		if (*dir) 
+  			*pcwd++ = *dir++;
+  	}
+! 	*pcwd = '\0';	/* DAG -- not NULL */
+  
+  	--pcwd;
+  	if(pcwd>cwdname && *pcwd==SLASH)
+***************
+*** 112,118
+  	{
+  		/* Remove trailing / */
+  
+! 		*pcwd = NULL;
+  	}
+  	return;
+  }
+
+--- 166,172 -----
+  	{
+  		/* Remove trailing / */
+  
+! 		*pcwd = '\0';	/* DAG -- not NULL */
+  	}
+  	return;
+  }
+***************
+*** 168,174
+   *	Find the current directory the hard way.
+   */
+  
+! #include	<sys/types.h>
+  #include	<sys/dir.h>
+  #include	<sys/stat.h>
+  
+
+--- 222,230 -----
+   *	Find the current directory the hard way.
+   */
+  
+! #if JOBS
+! #include	<dir.h>
+! #else
+  #include	<sys/dir.h>
+  #endif
+  
+***************
+*** 170,176
+  
+  #include	<sys/types.h>
+  #include	<sys/dir.h>
+! #include	<sys/stat.h>
+  
+  
+  static char dotdots[] =
+
+--- 226,232 -----
+  #include	<dir.h>
+  #else
+  #include	<sys/dir.h>
+! #endif
+  
+  
+  static char dotdots[] =
+***************
+*** 176,181
+  static char dotdots[] =
+  "../../../../../../../../../../../../../../../../../../../../../../../..";
+  
+  extern struct direct	*getdir();
+  extern char		*movstrn();
+  
+
+--- 232,240 -----
+  static char dotdots[] =
+  "../../../../../../../../../../../../../../../../../../../../../../../..";
+  
++ #if JOBS
++ #define	getdir(dirf)	readdir(dirf)
++ #else
+  extern struct direct	*getdir();
+  extern char		*movstrn();
+  #endif
+***************
+*** 178,183
+  
+  extern struct direct	*[etdir();
+  extern char		*movstrn();
+  
+  static
+  pwd()
+
+--- 237,243 -----
+  #else
+  extern struct direct	*getdir();
+  extern char		*movstrn();
++ #endif
+  
+  static
+  pwd()
+***************
+*** 185,190
+  	struct stat		cdir;	/* current directory status */
+  	struct stat		tdir;
+  	struct stat		pdir;	/* parent directory status */
+  	int				pdfd;	/* parent directory file descriptor */
+  
+  	struct direct	*dir;
+
+--- 245,253 -----
+  	struct stat		cdir;	/* current directory status */
+  	struct stat		tdir;
+  	struct stat		pdir;	/* parent directory status */
++ #if JOBS
++ 	DIR				*pdfd;	/* parent directory stream */
++ #else
+  	int				pdfd;	/* parent directory file descriptor */
+  #endif
+  
+***************
+*** 186,191
+  	struct stat		tdir;
+  	struct stat		pdir;	/* parent directory status */
+  	int				pdfd;	/* parent directory file descriptor */
+  
+  	struct direct	*dir;
+  	char 			*dot = dotdots + sizeof(dotdots) - 3;
+
+--- 249,255 -----
+  	DIR				*pdfd;	/* parent directory stream */
+  #else
+  	int				pdfd;	/* parent directory file descriptor */
++ #endif
+  
+  	struct direct	*dir;
+  	char 			*dot = dotdots + sizeof(dotdots) - 3;
+***************
+*** 193,198
+  	int				cwdindex = MAXPWD - 1;
+  	int 			i;
+  	
+  	cwdname[cwdindex] = 0;
+  	dotdots[index] = 0;
+  
+
+--- 257,265 -----
+  	int				cwdindex = MAXPWD - 1;
+  	int 			i;
+  	
++ #if SYMLINK
++ 	symlink = 0;			/* Starting over, no links yet */
++ #endif
+  	cwdname[cwdindex] = 0;
+  	dotdots[index] = 0;
+  
+***************
+*** 206,212
+  	for(;;)
+  	{
+  		cdir = pdir;
+! 
+  		if ((pdfd = open(dot, 0)) < 0)
+  		{
+  			error("pwd: cannot open ..");
+
+--- 273,281 -----
+  	for(;;)
+  	{
+  		cdir = pdir;
+! #if JOBS
+! 		if ((pdfd = opendir(dot)) == (DIR *)0)
+! #else
+  		if ((pdfd = open(dot, 0)) < 0)
+  #endif
+  		{
+***************
+*** 208,213
+  		cdir = pdir;
+  
+  		if ((pdfd = open(dot, 0)) < 0)
+  		{
+  			error("pwd: cannot open ..");
+  		}
+
+--- 277,283 -----
+  		if ((pdfd = opendir(dot)) == (DIR *)0)
+  #else
+  		if ((pdfd = open(dot, 0)) < 0)
++ #endif
+  		{
+  			error("pwd: cannot open ..");
+  		}
+***************
+*** 211,217
+  		{
+  			error("pwd: cannot open ..");
+  		}
+! 
+  		if(fstat(pdfd, &pdir) < 0)
+  		{
+  			close(pdfd);
+
+--- 281,289 -----
+  		{
+  			error("pwd: cannot open ..");
+  		}
+! #if JOBS
+! 		if(fstat(pdfd->dd_fd, &pdir) < 0)
+! #else
+  		if(fstat(pdfd, &pdir) < 0)
+  #endif
+  		{
+***************
+*** 213,218
+  		}
+  
+  		if(fstat(pdfd, &pdir) < 0)
+  		{
+  			close(pdfd);
+  			error("pwd: cannot stat ..");
+
+--- 285,291 -----
+  		if(fstat(pdfd->dd_fd, &pdir) < 0)
+  #else
+  		if(fstat(pdfd, &pdir) < 0)
++ #endif
+  		{
+  #if JOBS
+  			closedir(pdfd);
+***************
+*** 214,219
+  
+  		if(fstat(pdfd, &pdir) < 0)
+  		{
+  			close(pdfd);
+  			error("pwd: cannot stat ..");
+  		}
+
+--- 287,295 -----
+  		if(fstat(pdfd, &pdir) < 0)
+  #endif
+  		{
++ #if JOBS
++ 			closedir(pdfd);
++ #else
+  			close(pdfd);
+  #endif
+  			error("pwd: cannot stat ..");
+***************
+*** 215,220
+  		if(fstat(pdfd, &pdir) < 0)
+  		{
+  			close(pdfd);
+  			error("pwd: cannot stat ..");
+  		}
+  
+
+--- 291,297 -----
+  			closedir(pdfd);
+  #else
+  			close(pdfd);
++ #endif
+  			error("pwd: cannot stat ..");
+  		}
+  
+***************
+*** 223,228
+  			if(cdir.st_ino == pdir.st_ino)
+  			{
+  				didpwd = TRUE;
+  				close(pdfd);
+  				if (cwdindex == (MAXPWD - 1))
+  					cwdname[--cwdindex] = SLASH;
+
+--- 300,308 -----
+  			if(cdir.st_ino == pdir.st_ino)
+  			{
+  				didpwd = TRUE;
++ #if JOBS
++ 				closedir(pdfd);
++ #else
+  				close(pdfd);
+  #endif
+  				if (cwdindex == (MAXPWD - 1))
+***************
+*** 224,229
+  			{
+  				didpwd = TRUE;
+  				close(pdfd);
+  				if (cwdindex == (MAXPWD - 1))
+  					cwdname[--cwdindex] = SLASH;
+  
+
+--- 304,310 -----
+  				closedir(pdfd);
+  #else
+  				close(pdfd);
++ #endif
+  				if (cwdindex == (MAXPWD - 1))
+  					cwdname[--cwdindex] = SLASH;
+  
+***************
+*** 235,240
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+  				{
+  					close(pdfd);
+  					reset_dir();
+  					error("pwd: read error in ..");
+
+--- 316,324 -----
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+  				{
++ #if JOBS
++ 					closedir(pdfd);
++ #else
+  					close(pdfd);
+  					reset_dir();
+  #endif
+***************
+*** 237,242
+  				{
+  					close(pdfd);
+  					reset_dir();
+  					error("pwd: read error in ..");
+  				}
+  			}
+
+--- 321,327 -----
+  #else
+  					close(pdfd);
+  					reset_dir();
++ #endif
+  					error("pwd: read error in ..");
+  				}
+  			}
+***************
+*** 244,250
+  		}
+  		else
+  		{
+! 			char name[512];
+  			
+  			movstr(dot, name);
+  			i = length(name) - 1;
+
+--- 329,335 -----
+  		}
+  		else
+  		{
+! 			char name[256+MAXPWD];	/* DAG -- (was 512) */
+  			
+  			movstr(dot, name);
+  			i = length(name) - 1;
+***************
+*** 251,256
+  
+  			name[i++] = '/';
+  
+  			do
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+
+--- 336,342 -----
+  
+  			name[i++] = '/';
+  
++ 			tdir.st_dev = pdir.st_dev;	/* DAG -- (safety) */
+  			do
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+***************
+*** 255,260
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+  				{
+  					close(pdfd);
+  					reset_dir();
+  					error("pwd: read error in ..");
+
+--- 341,349 -----
+  			{
+  				if ((dir = getdir(pdfd)) == 0)
+  				{
++ #if JOBS
++ 					closedir(pdfd);
++ #else
+  					close(pdfd);
+  					reset_dir();
+  #endif
+***************
+*** 257,262
+  				{
+  					close(pdfd);
+  					reset_dir();
+  					error("pwd: read error in ..");
+  				}
+  				*(movstrn(dir->d_name, &name[i], DIRSIZ)) = 0;
+
+--- 346,352 -----
+  #else
+  					close(pdfd);
+  					reset_dir();
++ #endif
+  					error("pwd: read error in ..");
+  				}
+  #if JOBS
+***************
+*** 259,264
+  					reset_dir();
+  					error("pwd: read error in ..");
+  				}
+  				*(movstrn(dir->d_name, &name[i], DIRSIZ)) = 0;
+  				stat(name, &tdir);
+  			}		
+
+--- 349,357 -----
+  #endif
+  					error("pwd: read error in ..");
+  				}
++ #if JOBS
++ 				movstr(dir->d_name, &name[i]);
++ #else
+  				*(movstrn(dir->d_name, &name[i], DIRSIZ)) = 0;
+  #endif
+  				stat(name, &tdir);
+***************
+*** 260,265
+  					error("pwd: read error in ..");
+  				}
+  				*(movstrn(dir->d_name, &name[i], DIRSIZ)) = 0;
+  				stat(name, &tdir);
+  			}		
+  			while(tdir.st_ino != cdir.st_ino || tdir.st_dev != cdir.st_dev);
+
+--- 353,359 -----
+  				movstr(dir->d_name, &name[i]);
+  #else
+  				*(movstrn(dir->d_name, &name[i], DIRSIZ)) = 0;
++ #endif
+  				stat(name, &tdir);
+  			}		
+  			while(tdir.st_ino != cdir.st_ino || tdir.st_dev != cdir.st_dev);
+***************
+*** 264,269
+  			}		
+  			while(tdir.st_ino != cdir.st_ino || tdir.st_dev != cdir.st_dev);
+  		}
+  		close(pdfd);
+  		reset_dir();
+  
+
+--- 358,366 -----
+  			}		
+  			while(tdir.st_ino != cdir.st_ino || tdir.st_dev != cdir.st_dev);
+  		}
++ #if JOBS
++ 		closedir(pdfd);
++ #else
+  		close(pdfd);
+  		reset_dir();
+  #endif
+***************
+*** 266,271
+  		}
+  		close(pdfd);
+  		reset_dir();
+  
+  		for (i = 0; i < DIRSIZ; i++)
+  			if (dir->d_name[i] == 0)
+
+--- 363,369 -----
+  #else
+  		close(pdfd);
+  		reset_dir();
++ #endif
+  
+  #if JOBS
+  		i = dir->d_namlen;
+***************
+*** 267,272
+  		close(pdfd);
+  		reset_dir();
+  
+  		for (i = 0; i < DIRSIZ; i++)
+  			if (dir->d_name[i] == 0)
+  				break;
+
+--- 365,373 -----
+  		reset_dir();
+  #endif
+  
++ #if JOBS
++ 		i = dir->d_namlen;
++ #else
+  		for (i = 0; i < DIRSIZ; i++)
+  			if (dir->d_name[i] == 0)
+  				break;
+***************
+*** 270,275
+  		for (i = 0; i < DIRSIZ; i++)
+  			if (dir->d_name[i] == 0)
+  				break;
+  
+  		if (i > cwdindex - 1)
+  				error(longpwd);
+
+--- 371,377 -----
+  		for (i = 0; i < DIRSIZ; i++)
+  			if (dir->d_name[i] == 0)
+  				break;
++ #endif
+  
+  		if (i > cwdindex - 1)
+  				error(longpwd);
+***************
+*** 284,287
+  		if (dot<dotdots) 
+  			error(longpwd);
+  	}
+  }
+
+--- 386,419 -----
+  		if (dot<dotdots) 
+  			error(longpwd);
+  	}
++ }
++ #if !defined(SYMLINK) && defined(JOBS)
++ 
++ /* The following chdir() interface is used to outwit symbolic links. */
++ 
++ int
++ cwdir( dir )				/* attempt a full-pathname chdir */
++ 	char		*dir;		/* name to feed to chdir() */
++ 	{
++ 	char		savname[MAXPWD];	/* saved cwdname[] */
++ 	register int	retval;		/* chdir() return value */
++ 
++ 	(void)movstr( cwdname, savname );	/* save current name */
++ 
++ 	cwd( dir );			/* adjust cwdname[] */
++ 
++ 	if ( (retval = chdir( cwdname )) < 0 )
++ 		(void)movstr( savname, cwdname );	/* restore name */
++ 
++ 	return retval;
++ 	}
++ #endif
++ 
++ char *
++ retcwd()
++ {
++ 	if (didpwd == FALSE)
++ 		pwd ();
++ 	
++ 	return (cwdname);
+  }
+:::::::: service.c :::::::
+*** ../orig.u/service.c	Wed May 15 17:08:28 1985
+--- service.c	Wed May 29 15:54:16 1985
+***************
+*** 8,13
+  
+  #include	"defs.h"
+  #include	<errno.h>
+  
+  #define ARGMK	01
+  
+
+--- 8,17 -----
+  
+  #include	"defs.h"
+  #include	<errno.h>
++ #if JOBS
++ extern int	errno;
++ #include	"/usr/include/sys/wait.h"
++ #endif
+  
+  #define ARGMK	01
+  
+***************
+*** 24,29
+  	struct ionod	*iop;
+  	int		save;
+  {
+  	register char	*ion;
+  	register int	iof, fd;
+  	int		ioufd;
+
+--- 28,34 -----
+  	struct ionod	*iop;
+  	int		save;
+  {
++ 	extern long	lseek();	/* DAG -- bug fix (was missing) */
+  	register char	*ion;
+  	register int	iof, fd;
+  	int		ioufd;
+***************
+*** 70,75
+  				else
+  					fd = dup(fd);
+  			}
+  			else if ((iof & IOPUT) == 0)
+  				fd = chkopen(ion);
+  			else if (flags & rshflg)
+
+--- 75,85 -----
+  				else
+  					fd = dup(fd);
+  			}
++ 			else if (iof & IORDW)
++ 			{
++ 				if ((fd = open(ion, 2)) < 0)
++ 					failed(ion, badopen);
++ 			}
+  			else if ((iof & IOPUT) == 0)
+  				fd = chkopen(ion);
+  			else if (flags & rshflg)
+***************
+*** 145,150
+  	 */
+  	register char	*scanp = path;
+  	register char	*argp = locstak();
+  
+  	while (*scanp && *scanp != COLON)
+  		*argp++ = *scanp++;
+
+--- 155,162 -----
+  	 */
+  	register char	*scanp = path;
+  	register char	*argp = locstak();
++ 	char	*save = argp;
++ 	char	*cp;
+  
+  	while (*scanp && *scanp != COLON)
+  		*argp++ = *scanp++;
+***************
+*** 148,153
+  
+  	while (*scanp && *scanp != COLON)
+  		*argp++ = *scanp++;
+  	if (scanp != path)
+  		*argp++ = '/';
+  	if (*scanp == COLON)
+
+--- 160,172 -----
+  
+  	while (*scanp && *scanp != COLON)
+  		*argp++ = *scanp++;
++ 	*argp = '\0';
++ 	/* try a tilde expansion */
++ 	if (*save == SQUIGGLE && (cp = homedir (save + 1)) != nullstr)
++ 	{
++ 		movstr (cp, save);
++ 		argp = save + length (save) - 1;
++ 	}
+  	if (scanp != path)
+  		*argp++ = '/';
+  	if (*scanp == COLON)
+***************
+*** 232,237
+  		if (input)
+  			close(input);
+  		input = chkopen(p);
+  	
+  #ifdef ACCT
+  		preacct(p);	/* reset accounting */
+
+--- 251,271 -----
+  		if (input)
+  			close(input);
+  		input = chkopen(p);
++ #if JOBS
++ 		/* don't try to interpret directories etc. */
++ 		{
++ #include	<sys/types.h>
++ #include	<sys/stat.h>
++ 			struct stat	sbuf;
++ 
++ 			if (fstat(input, &sbuf) == 0
++ 				&& (sbuf.st_mode&S_IFMT) != S_IFREG)
++ 			{
++ 				close (input);
++ 				goto def;	/* badexec unless other found */
++ 			}
++ 		}
++ #endif
+  	
+  #ifdef ACCT
+  		preacct(p);	/* reset accounting */
+***************
+*** 254,259
+  		failed(p, txtbsy);
+  
+  	default:
+  		xecmsg = badexec;
+  	case ENOENT:
+  		return(prefix);
+
+--- 288,296 -----
+  		failed(p, txtbsy);
+  
+  	default:
++ #if JOBS
++ 	def:
++ #endif
+  		xecmsg = badexec;
+  	case ENOENT:
+  		return(prefix);
+***************
+*** 268,273
+  static int	pwlist[MAXP];
+  static int	pwc;
+  
+  postclr()
+  {
+  	register int	*pw = pwlist;
+
+--- 305,355 -----
+  static int	pwlist[MAXP];
+  static int	pwc;
+  
++ #if JOBS
++ static int	*wf_pwlist;
++ static int	wf_pwc;
++ 
++ void
++ set_wfence()
++ {
++ 	wf_pwlist = &pwlist[pwc];
++ 	wf_pwc = 0;
++ }
++ 
++ BOOL
++ unpost(pcsid)
++ 	int	pcsid;
++ {
++ 	register int	*pw = pwlist;
++ 
++ 	if (pcsid)
++ 	{
++ 		while (pw <= &pwlist[pwc])
++ 		{
++ 			if (pcsid == *pw)
++ 			{
++ 				if (pw >= wf_pwlist)
++ 					wf_pwc--;
++ 				else
++ 					wf_pwlist--;
++ 				while (pw <= &pwlist[pwc])
++ 				{
++ 					*pw = pw[1];
++ 					pw++;
++ 				}
++ 				pw[pwc] = 0;
++ 				pwc--;
++ 				return TRUE;
++ 			}
++ 			pw++;
++ 		}
++ 		return FALSE;
++ 	}
++ 	else
++ 		return TRUE;
++ }
++ #endif
++ 
+  postclr()
+  {
+  	register int	*pw = pwlist;
+***************
+*** 273,278
+  	register int	*pw = pwlist;
+  
+  	while (pw <= &pwlist[pwc])
+  		*pw++ = 0;
+  	pwc = 0;
+  }
+
+--- 355,364 -----
+  	register int	*pw = pwlist;
+  
+  	while (pw <= &pwlist[pwc])
++ 	{
++ #if JOBS
++ 		j_child_clear(*pw);
++ #endif
+  		*pw++ = 0;
+  	}
+  	pwc = 0;
+***************
+*** 274,279
+  
+  	while (pw <= &pwlist[pwc])
+  		*pw++ = 0;
+  	pwc = 0;
+  }
+  
+
+--- 360,366 -----
+  		j_child_clear(*pw);
+  #endif
+  		*pw++ = 0;
++ 	}
+  	pwc = 0;
+  }
+  
+***************
+*** 285,291
+  	if (pcsid)
+  	{
+  		while (*pw)
+! 			pw++;
+  		if (pwc >= MAXP - 1)
+  			pw--;
+  		else
+
+--- 372,383 -----
+  	if (pcsid)
+  	{
+  		while (*pw)
+! #if JOBS
+! 			if (pcsid == *pw)
+! 				return;
+! 			else
+! #endif
+! 				pw++;
+  		if (pwc >= MAXP - 1)
+  			pw--;
+  		else
+***************
+*** 289,294
+  		if (pwc >= MAXP - 1)
+  			pw--;
+  		else
+  			pwc++;
+  		*pw = pcsid;
+  	}
+
+--- 381,387 -----
+  		if (pwc >= MAXP - 1)
+  			pw--;
+  		else
++ 		{
+  			pwc++;
+  #if JOBS
+  			wf_pwc++;
+***************
+*** 290,295
+  			pw--;
+  		else
+  			pwc++;
+  		*pw = pcsid;
+  	}
+  }
+
+--- 383,392 -----
+  		else
+  		{
+  			pwc++;
++ #if JOBS
++ 			wf_pwc++;
++ #endif
++ 		}
+  		*pw = pcsid;
+  	}
+  }
+***************
+*** 297,302
+  await(i, bckg)
+  int	i, bckg;
+  {
+  	int	rc = 0, wx = 0;
+  	int	w;
+  	int	ipwc = pwc;
+
+--- 394,404 -----
+  await(i, bckg)
+  int	i, bckg;
+  {
++ #if JOBS
++ #include	"/usr/include/sys/time.h"
++ #include	"/usr/include/sys/resource.h"
++ 	struct rusage	ru;
++ #endif
+  	int	rc = 0, wx = 0;
+  	int	w;
+  	int	ipwc = pwc;
+***************
+*** 300,305
+  	int	rc = 0, wx = 0;
+  	int	w;
+  	int	ipwc = pwc;
+  
+  	post(i);
+  	while (pwc)
+
+--- 402,409 -----
+  	int	rc = 0, wx = 0;
+  	int	w;
+  	int	ipwc = pwc;
++ #if JOBS
++ 	BOOL	update_only = i == -2;
+  
+  	if (update_only)
+  		i = -1;
+***************
+*** 301,307
+  	int	w;
+  	int	ipwc = pwc;
+  
+! 	post(i);
+  	while (pwc)
+  	{
+  		register int	p;
+
+--- 405,418 -----
+  #if JOBS
+  	BOOL	update_only = i == -2;
+  
+! 	if (update_only)
+! 		i = -1;
+! 	if ((flags&jobflg) == 0 || i != -1)
+! #endif
+! 		post(i);
+! #if JOBS
+! 	while (pwc || (flags&jobflg))
+! #else
+  	while (pwc)
+  #endif
+  	{
+***************
+*** 303,308
+  
+  	post(i);
+  	while (pwc)
+  	{
+  		register int	p;
+  		register int	sig;
+
+--- 414,420 -----
+  	while (pwc || (flags&jobflg))
+  #else
+  	while (pwc)
++ #endif
+  	{
+  		register int	p;
+  		register int	sig;
+***************
+*** 310,315
+  		int	found = 0;
+  
+  		{
+  			register int	*pw = pwlist;
+  
+  			p = wait(&w);
+
+--- 422,428 -----
+  		int	found = 0;
+  
+  		{
++ #ifndef JOBS
+  			register int	*pw = pwlist;
+  #endif
+  
+***************
+*** 311,316
+  
+  		{
+  			register int	*pw = pwlist;
+  
+  			p = wait(&w);
+  			if (wasintr)
+
+--- 424,430 -----
+  		{
+  #ifndef JOBS
+  			register int	*pw = pwlist;
++ #endif
+  
+  #if JOBS
+  			if (i == 0 && (flags&jobflg) && wf_pwc == 0)
+***************
+*** 312,317
+  		{
+  			register int	*pw = pwlist;
+  
+  			p = wait(&w);
+  			if (wasintr)
+  			{
+
+--- 426,447 -----
+  			register int	*pw = pwlist;
+  #endif
+  
++ #if JOBS
++ 			if (i == 0 && (flags&jobflg) && wf_pwc == 0)
++ 				break;
++ 			if ((pwc == 0 && (flags&jobflg)) || update_only)
++ 			{
++ 				if ((p = wait3(&w, WUNTRACED|WNOHANG, &ru)) == 0)
++ 				{
++ 					unpost (i);
++ 					break;
++ 				}
++ 				if (pwc == 0 && p == -1)
++ 					break;
++ 			}
++ 			else
++ 				p = wait3(&w, WUNTRACED, &ru);
++ #else
+  			p = wait(&w);
+  #endif
+  			if (wasintr)
+***************
+*** 313,318
+  			register int	*pw = pwlist;
+  
+  			p = wait(&w);
+  			if (wasintr)
+  			{
+  				wasintr = 0;
+
+--- 443,449 -----
+  				p = wait3(&w, WUNTRACED, &ru);
+  #else
+  			p = wait(&w);
++ #endif
+  			if (wasintr)
+  			{
+  				wasintr = 0;
+***************
+*** 321,326
+  					break;
+  				}
+  			}
+  			while (pw <= &pwlist[ipwc])
+  			{
+  				if (*pw == p)
+
+--- 452,462 -----
+  					break;
+  				}
+  			}
++ 
++ #if JOBS
++ 			if (unpost(p))
++ 				found++;
++ #else
+  			while (pw <= &pwlist[ipwc])
+  			{
+  				if (*pw == p)
+***************
+*** 332,337
+  				else
+  					pw++;
+  			}
+  		}
+  		if (p == -1)
+  		{
+
+--- 468,474 -----
+  				else
+  					pw++;
+  			}
++ #endif
+  		}
+  		if (p == -1)
+  		{
+***************
+*** 337,342
+  		{
+  			if (bckg)
+  			{
+  				register int *pw = pwlist;
+  
+  				while (pw <= &pwlist[ipwc] && i != *pw)
+
+--- 474,483 -----
+  		{
+  			if (bckg)
+  			{
++ #if JOBS
++ 				j_child_clear(i);
++ 				unpost(i);
++ #else
+  				register int *pw = pwlist;
+  
+  				while (pw <= &pwlist[ipwc] && i != *pw)
+***************
+*** 346,351
+  					*pw = 0;
+  					pwc--;
+  				}
+  			}
+  			continue;
+  		}
+
+--- 487,493 -----
+  					*pw = 0;
+  					pwc--;
+  				}
++ #endif
+  			}
+  			continue;
+  		}
+***************
+*** 354,360
+  		{
+  			if (sig == 0177)	/* ptrace! return */
+  			{
+- 				prs("ptrace: ");
+  				sig = w_hi;
+  			}
+  			if (sysmsg[sig])
+
+--- 496,501 -----
+  		{
+  			if (sig == 0177)	/* ptrace! return */
+  			{
+  				sig = w_hi;
+  #if JOBS
+  				if ((flags&jobflg) &&
+***************
+*** 356,361
+  			{
+  				prs("ptrace: ");
+  				sig = w_hi;
+  			}
+  			if (sysmsg[sig])
+  			{
+
+--- 497,512 -----
+  			if (sig == 0177)	/* ptrace! return */
+  			{
+  				sig = w_hi;
++ #if JOBS
++ 				if ((flags&jobflg) &&
++ 					(sig == SIGSTOP || sig == SIGTSTP ||
++ 					 sig == SIGTTOU || sig == SIGTTIN))
++ 				{
++ 					j_child_stop(p, sig);
++ 					goto j_bypass;
++ 				}
++ #endif
++ 				prs("ptrace: ");
+  			}
+  			if (sysmsg[sig])
+  			{
+***************
+*** 371,376
+  			}
+  			newline();
+  		}
+  		if (rc == 0 && found != 0)
+  			rc = (sig ? sig | SIGFLG : w_hi);
+  		wx |= w;
+
+--- 522,558 -----
+  			}
+  			newline();
+  		}
++ #if JOBS
++ 		if (flags&infoflg)
++ 		{
++ 			register int	k;
++ 			long		l;
++ 
++ 			prc('[');
++ 			l = ru.ru_utime.tv_sec * 1000000L + ru.ru_utime.tv_usec
++ 			  + ru.ru_stime.tv_sec * 1000000L + ru.ru_stime.tv_usec;
++ 			prn((int)(l / 1000000));	/* integral seconds */
++ 			k = (int)(l % 1000000L) / 1000;	/* thousandths */
++ 			prc('.');
++ 			if (k < 100)
++ 				prc('0');
++ 			if (k < 10)
++ 				prc('0');
++ 			prn(k);
++ 			blank();
++ 			prn((int)ru.ru_inblock);
++ 			blank();
++ 			prn((int)ru.ru_oublock);
++ 			blank();
++ 			prn((int)ru.ru_minflt);
++ 			blank();
++ 			prn((int)ru.ru_majflt);
++ 			prc(']');
++ 			newline();
++ 		}
++ 		j_child_die(p);
++ 	j_bypass:
++ #endif
+  		if (rc == 0 && found != 0)
+  			rc = (sig ? sig | SIGFLG : w_hi);
+  		wx |= w;
+:::::::: setbrk.c :::::::
+No differences encountered
+:::::::: sh.mk :::::::
+*** ../orig.u/sh.mk	Wed May 15 17:08:30 1985
+--- sh.mk	Wed May 29 16:28:26 1985
+***************
+*** 5,11
+  ROOT=
+  INS = /etc/install -n $(ROOT)/bin
+  INSDIR =
+! CFLAGS = -O -DNICE -DACCT -DNICEVAL=4
+  LDFLAGS = -n -s
+  
+  OFILES = setbrk.o blok.o stak.o cmd.o fault.o main.o word.o string.o\
+
+--- 5,11 -----
+  ROOT=
+  INS = /etc/install -n $(ROOT)/bin
+  INSDIR =
+! CFLAGS = -O -DNICE -DNICEVAL=4 -DJOBS
+  LDFLAGS = -n -s
+  
+  OFILES = setbrk.o blok.o stak.o cmd.o fault.o main.o word.o string.o\
+***************
+*** 10,15
+  
+  OFILES = setbrk.o blok.o stak.o cmd.o fault.o main.o word.o string.o\
+  name.o args.o xec.o service.o error.o io.o print.o macro.o expand.o\
+  ctype.o msg.o test.o defs.o echo.o hash.o hashserv.o pwd.o func.o
+  
+  all: sh
+
+--- 10,17 -----
+  
+  OFILES = setbrk.o blok.o stak.o cmd.o fault.o main.o word.o string.o\
+  name.o args.o xec.o service.o error.o io.o print.o macro.o expand.o\
++ history.o homedir.o \
++ jobs.o signal.o ulimit.o \
+  ctype.o msg.o test.o defs.o echo.o hash.o hashserv.o pwd.o func.o
+  
+  all: sh
+***************
+*** 20,34
+  $(OFILES):	defs.h $(FRC)
+  
+  ctype.o:	ctype.h
+! 		if [ "${_ID_}" ];\
+! 		then \
+! 			$(CC) $(CFLAGS) -c ctype.c; \
+! 		elif [ "${_SH_}" ]; \
+! 		then \
+! 			CC=$(CC) AS=$(AS) $(_SH_) ./:fix ctype; \
+! 		else \
+! 			CC=$(CC) AS=$(AS) sh ./:fix ctype; \
+! 		fi
+  
+  xec.o:		xec.c
+  	set +e; if u370;\
+
+--- 22,32 -----
+  $(OFILES):	defs.h $(FRC)
+  
+  ctype.o:	ctype.h
+! 		$(CC) $(CFLAGS) -S ctype.c
+! 		sed '/^[ 	]*\.data/s/data/text/' < ctype.s > x.s
+! 		mv x.s ctype.s
+! 		$(AS) ctype.s -o ctype.o
+! 		rm ctype.s
+  
+  xec.o:		xec.c
+  	set +e; if u370;\
+***************
+*** 55,69
+  
+  
+  msg.o:		msg.c $(FRC)
+! 		if [ "${_ID_}" ];\
+! 		then \
+! 			$(CC) $(CFLAGS) -c msg.c; \
+! 		elif [ "${_SH_}" ]; \
+! 		then \
+! 			CC=$(CC) AS=$(AS) $(_SH_) ./:fix msg; \
+! 		else \
+! 			CC=$(CC) AS=$(AS) sh ./:fix msg; \
+! 		fi
+  
+  test:
+  	  rtest $(TESTDIR)/sh
+
+--- 53,63 -----
+  
+  
+  msg.o:		msg.c $(FRC)
+! 		$(CC) $(CFLAGS) -S msg.c
+! 		sed '/^[ 	]*\.data/s/data/text/' < msg.s > x.s
+! 		mv x.s msg.s
+! 		$(AS) msg.s -o msg.o
+! 		rm msg.s
+  
+  test:
+  	  rtest $(TESTDIR)/sh
+:::::::: stak.c :::::::
+No differences encountered
+:::::::: stak.h :::::::
+No differences encountered
+:::::::: string.c :::::::
+No differences encountered
+:::::::: sym.h :::::::
+*** ../orig.u/sym.h	Wed May 15 17:08:32 1985
+--- sym.h	Sun May 19 16:37:20 1985
+***************
+*** 45,47
+  #define ESCAPE	'\\'
+  #define BRACE	'{'
+  #define COMCHAR '#'
+
+--- 45,48 -----
+  #define ESCAPE	'\\'
+  #define BRACE	'{'
+  #define COMCHAR '#'
++ #define PERCENT '%'	/* DAG -- useful addition */
+:::::::: test.c :::::::
+*** ../orig.u/test.c	Wed May 15 17:08:33 1985
+--- test.c	Mon May 20 15:57:01 1985
+***************
+*** 126,131
+  		if (eq(a, "-k"))
+  			return(ftype(nxtarg(0), S_ISVTX));
+  		if (eq(a, "-p"))
+  			return(filtyp(nxtarg(0),S_IFIFO));
+     		if (eq(a, "-s"))
+  			return(fsizep(nxtarg(0)));
+
+--- 126,134 -----
+  		if (eq(a, "-k"))
+  			return(ftype(nxtarg(0), S_ISVTX));
+  		if (eq(a, "-p"))
++ #if JOBS && !defined(pyr)
++ #define	S_IFIFO		S_IFSOCK	/* fifo - map to socket on 4.2BSD */
++ #endif
+  			return(filtyp(nxtarg(0),S_IFIFO));
+     		if (eq(a, "-s"))
+  			return(fsizep(nxtarg(0)));
+:::::::: timeout.h :::::::
+No differences encountered
+:::::::: word.c :::::::
+*** ../orig.u/word.c	Wed May 15 17:08:34 1985
+--- word.c	Thu Jun  6 14:37:41 1985
+***************
+*** 19,24
+  	struct argnod	*arg = (struct argnod *)locstak();
+  	register char	*argp = arg->argval;
+  	int		alpha = 1;
+  
+  	wdnum = 0;
+  	wdset = 0;
+
+--- 19,25 -----
+  	struct argnod	*arg = (struct argnod *)locstak();
+  	register char	*argp = arg->argval;
+  	int		alpha = 1;
++ 	char		*save;
+  
+  	wdnum = 0;
+  	wdset = 0;
+***************
+*** 23,28
+  	wdnum = 0;
+  	wdset = 0;
+  
+  	while (1)
+  	{
+  		while (c = nextc(0), space(c))		/* skipc() */
+
+--- 24,30 -----
+  	wdnum = 0;
+  	wdset = 0;
+  
++ 	catcheof = TRUE;
+  	while (1)
+  	{
+  		while (c = nextc(0), space(c))		/* skipc() */
+***************
+*** 38,43
+  			break;	/* out of comment - white space loop */
+  		}
+  	}
+  	if (!eofmeta(c))
+  	{
+  		do
+
+--- 40,46 -----
+  			break;	/* out of comment - white space loop */
+  		}
+  	}
++ 	save = argp;	/* save start of word */
+  	if (!eofmeta(c))
+  	{
+  		do
+***************
+*** 69,74
+  							chkpr();
+  					}
+  				}
+  			}
+  		} while ((c = nextc(0), !eofmeta(c)));
+  		argp = endstak(argp);
+
+--- 72,93 -----
+  							chkpr();
+  					}
+  				}
++ 				else if (c == SQUIGGLE &&
++ 						validtilde (save, argp))
++ 				{
++ 					char *name, *home;
++ 
++ 					name = argp;
++ 					while ((c = nextc(0)) != '/' &&
++ 							!eofmeta(c))
++ 						*name++ = c;
++ 					peekc = c;
++ 					*name = '\0';
++ 					home = homedir (argp);
++ 					if(*home)
++ 						movstr (home, --argp);
++ 					argp += length (argp) - 1;
++ 				}
+  			}
+  		} while ((c = nextc(0), !eofmeta(c)));
+  		argp = endstak(argp);
+***************
+*** 117,122
+  			wdval = EOFSYM;
+  		if (iopend && eolchar(c))
+  		{
+  			copy(iopend);
+  			iopend = 0;
+  		}
+
+--- 136,144 -----
+  			wdval = EOFSYM;
+  		if (iopend && eolchar(c))
+  		{
++ 			int histon = (flags&nohistflg) == 0;
++ 
++ 			flags |= nohistflg;	/* no history for here docs */
+  			copy(iopend);
+  			if (histon)		/* turn history back on */
+  				flags &= ~nohistflg;
+***************
+*** 118,123
+  		if (iopend && eolchar(c))
+  		{
+  			copy(iopend);
+  			iopend = 0;
+  		}
+  	}
+
+--- 140,147 -----
+  
+  			flags |= nohistflg;	/* no history for here docs */
+  			copy(iopend);
++ 			if (histon)		/* turn history back on */
++ 				flags &= ~nohistflg;
+  			iopend = 0;
+  		}
+  	}
+***************
+*** 121,126
+  			iopend = 0;
+  		}
+  	}
+  	reserv = FALSE;
+  	return(wdval);
+  }
+
+--- 145,151 -----
+  			iopend = 0;
+  		}
+  	}
++ 	catcheof = FALSE;
+  	reserv = FALSE;
+  	return(wdval);
+  }
+***************
+*** 157,162
+  
+  readc()
+  {
+  	register char	c;
+  	register int	len;
+  	register struct fileblk *f;
+
+--- 182,188 -----
+  
+  readc()
+  {
++ 	static int	eofcount = 0;	/* to break endless catcheof loop */
+  	register char	c;
+  	register int	len;
+  	register struct fileblk *f;
+***************
+*** 200,209
+  	}
+  	else if ((len = readb()) <= 0)
+  	{
+! 		close(f->fdes);
+! 		f->fdes = -1;
+! 		c = EOF;
+! 		f->feof++;
+  	}
+  	else
+  	{
+
+--- 226,260 -----
+  	}
+  	else if ((len = readb()) <= 0)
+  	{
+! 		if (catcheof
+! #if JOBS
+! 		 && (flags&(ttyflg|prompt|dotflg)) == (ttyflg|prompt)
+! 		 && ((flags&noeotflg) || j_finish(FALSE))
+! #else
+! 		 && (flags&(ttyflg|prompt|noeotflg|dotflg)) == (ttyflg|prompt|noeotflg)
+! #endif
+! 		 && ++eofcount < 10)	/* in case terminal is disconnected */
+! 		{
+! #if JOBS
+! 			if ((flags&(ttyflg|prompt|noeotflg))
+! 			 == (ttyflg|prompt|noeotflg))
+! #endif
+! 				prs ("use \"exit\"\n");
+! #if JOBS
+! 			/* else "there are stopped jobs" was printed */
+! #endif
+! 			c = NL;
+! 		}
+! 		else
+! 		{
+! 			close(f->fdes);
+! 			f->fdes = -1;
+! 			c = EOF;
+! 			f->feof++;
+! #if JOBS
+! 			j_finish(TRUE);
+! #endif
+! 		}
+  	}
+  	else
+  	{
+***************
+*** 207,213
+  	}
+  	else
+  	{
+! 		f->fend = (f->fnxt = f->fbuf) + len;
+  		goto retry;
+  	}
+  	return(c);
+
+--- 258,265 -----
+  	}
+  	else
+  	{
+! 		f->fend = f->fnxt + len;
+! 		eofcount = 0;
+  		goto retry;
+  	}
+  	return(c);
+***************
+*** 214,220
+  }
+  
+  static
+! readb()
+  {
+  	register struct fileblk *f = standin;
+  	register int	len;
+
+--- 266,272 -----
+  }
+  
+  static
+! readblock ()	/* ADR -- changed the name */
+  {
+  	register struct fileblk *f = standin;
+  	register int	len;
+***************
+*** 234,237
+  		}
+  	} while ((len = read(f->fdes, f->fbuf, f->fsiz)) < 0 && trapnote);
+  	return(len);
+  }
+
+--- 286,486 -----
+  		}
+  	} while ((len = read(f->fdes, f->fbuf, f->fsiz)) < 0 && trapnote);
+  	return(len);
++ }
++ 
++ /* readb --- read a block from the outside world, and history process it */
++ 
++ /*
++  * In BSD systems, using the literal next capability of the tty driver, it
++  * is actually possible to put a newline in the middle of the input line,
++  * and then hit return, so that the shell sees two lines of input.
++  *
++  * As a design decision, if there is a \n in the middle of what we've read
++  * from a terminal, treat the commands as two separately typed commands. I.e.
++  *
++  *	echo hi ^J echo there
++  *
++  * is the same as
++  *
++  *	echo hi
++  *	echo there
++  *
++  * The major reason for doing it this way is that the history mechanism knows
++  * that a \n is the end of a line.
++  *
++  * Finally, on USG systems, we just leave this code alone, since it won't
++  * get executed anyway.
++  */
++ 
++ /*
++  * In word.c, the readc() function keeps a pointer to what standin pointed to
++  * when readc first gets called.  Therefore, where standin points to can not 
++  * not change across calls to readb().  To get around this, we change the
++  * contents of the structure pointed to by standin, saving and restoring
++  * it as necessary.
++  */
++ 
++ #define LARGEBUF	(HISTSIZE / 2)	/* size of expanded history */
++ 
++ static
++ readb()
++ {
++ 	int ilen, i, j;
++ 	char ibuf[BUFSIZ];	/* input into scratch area, pass to history */
++ 	static char expansion[LARGEBUF];
++ 	static int moreinbuf = FALSE;
++ 	static int saved_ilen = 0;
++ 	static int start_here = 0;
++ 	static struct fileblk *f = 0;
++ 	auto int gotoutofbuf = 0;
++ 
++ 	if (expanded)	/* just did a history substitution */
++ 		expanded = 0;
++ 
++ 	if ((flags & nohistflg) || (flags & prompt) == 0 || ! isatty (input)
++ 			|| standin->fstak != 0)
++ 	{
++ 		ilen = readblock ();
++ 		if (ilen > 0)
++ 			standin->fnxt = standin->fbuf;
++ 		return (ilen);
++ 		/* not doing history expansion at all */
++ 	}
++ 
++ 	if (f == 0)
++ 		f = standin;
++ 
++ 	ilen = 0;
++ 
++ 	/*
++ 	 * First, if there was more stuff in the last buffer, go and get it.
++ 	 * If not get some more from the outside world.
++ 	 *
++ 	 * Then, make sure we've read up to a newline.
++ 	 * This is basically in case someone has done something bizarre
++ 	 * like 'stty raw', and input is coming in one character at a time.
++ 	 *
++ 	 * We use a heuristic.  If amount read is just 1, keep reading till
++ 	 * we get a newline.  Else, read in a complete line from the terminal.
++ 	 * Once we're in raw mode, can't reset it until a newline is typed.
++ 	 *
++ 	 * If not reading one character at a time, then do the stuff for
++ 	 * embedded newlines.
++ 	 */
++ 
++ 	if (moreinbuf)
++ 	{
++ 		for (i = 0, j = start_here; f->fbuf[j] != NL && j < saved_ilen; i++, j++)
++ 			ibuf[i] = f->fbuf[j];
++ 
++ #ifdef notdef
++ 		if (f->fbuf[j] != NL)
++ 		{
++ 			prs ("internal i/o error C in readb\n");
++ 			return (0);
++ 		}
++ #endif
++ 
++ 		if (f->fbuf[j] == NL)
++ 			ibuf[i++] = NL;
++ 		ibuf[i] = '\0';
++ 		ilen = i;
++ 		/* embedded newline */
++ 		moreinbuf = (++j < saved_ilen - 1);
++ 		if (moreinbuf)
++ 			start_here = j;	/* where to start next time */
++ 		gotoutofbuf = 1;
++ 	}
++ 	else	/* wasn't an embedded \n last time */
++ 	{
++ 		ilen = readblock ();
++ 	
++ 		if (ilen <= 0)	/* EOF or error */
++ 			return (ilen);
++ 
++ 		if (ilen == 1)	/* either in raw mode, or an empty line */
++ 		{
++ 			i = 0;
++ 			ibuf[i++] = f->fbuf[0];
++ 			if (f->fbuf[0] == NL)
++ 			{
++ 				ibuf[i] = '\0';
++ 				goto dohist;
++ 			}
++ 
++ 			while ((ilen = readblock()) > 0)
++ 			{
++ 				if (ilen != 1)
++ 				{
++ 					prs ("internal i/o error A in readb\n");
++ 					return (0);
++ 				}
++ 				ibuf[i++] = f->fbuf[0];
++ 				if (f->fbuf[0] == NL)
++ 				{
++ 					ibuf[i] = '\0';
++ 					break;	/* while */
++ 				}
++ 			}
++ 			ilen = i;
++ 			gotoutofbuf = TRUE;
++ 			/* force code below to use collected string */
++ 		}
++ 		else
++ 		{
++ 			/* reading bunches of characters at once */
++ 			for (i = 0; f->fbuf[i] != NL && i < ilen; i++)
++ 				ibuf[i] = f->fbuf[i];
++ 
++ #ifdef notdef
++ 			if (f->fbuf[i] != NL)
++ 			{
++ 				prs ("internal i/o error B in readb\n");
++ 				return (0);
++ 			}
++ #endif
++ 
++ 			ibuf[i++] = NL;
++ 			ibuf[i] = '\0';
++ 			/* ilen was set by readblock() */
++ 			/* embedded newline */
++ 			moreinbuf = (i < ilen - 1);
++ 			if (moreinbuf)
++ 			{
++ 				saved_ilen = ilen;
++ 				start_here = i;
++ 				/* where to start next time */
++ 				gotoutofbuf = 1;
++ 			}
++ 		}
++ 	}
++ 
++ dohist:
++ 	/* quick heuristic */
++ 	if (! gotoutofbuf && ilen == 1 && f->fbuf[0] == NL)
++ 	{
++ 		f->fnxt = f->fbuf;
++ 		return (ilen);
++ 	}
++ 
++ 	if (histsub (ibuf, expansion, sizeof expansion))
++ 	{
++ 		int olen = length (expansion) - 1;
++ 		if (! expanded && ! gotoutofbuf)
++ 		{
++ 			standin->fnxt = standin->fbuf;
++ 			return (ilen);
++ 		}
++ 		/* else
++ 			expanded == TRUE or from buffer */
++ 		standin->fnxt = expansion;
++ 		return (olen);
++ 	}
++ 	else
++ 	{
++ 		/* hist expansion failed, return an empty line */
++ 		standin->fnxt = standin->fbuf;
++ 		standin->fbuf[0] = NL;
++ 		return (1);
++ 	}
+  }
+:::::::: xec.c :::::::
+*** ../orig.u/xec.c	Wed May 15 17:08:37 1985
+--- xec.c	Wed Jun  5 11:11:18 1985
+***************
+*** 27,32
+  	 */
+  	register struct trenod	*t;
+  	char		*sav = savstak();
+  
+  	sigchk();
+  	if (!errorflg)
+
+--- 27,42 -----
+  	 */
+  	register struct trenod	*t;
+  	char		*sav = savstak();
++ #if pyr
++ 	auto int change_univ = FALSE;
++ 	auto int new_univ = 0;
++ 	/*
++ 	 * univesrses run from 1 to NUMUNIV: We start out at 0
++ 	 * and increment new_univ in the switch for internal
++ 	 * commands, below.  new_univ must *not* be assigned to, directly
++ 	 * or via side effects, any place else.
++ 	 */
++ #endif
+  
+  	sigchk();
+  	if (!errorflg)
+***************
+*** 109,114
+  					if (flags & execpr)
+  						execprint(com);
+  
+  					if (comtype == NOTFOUND)
+  					{
+  						pos = hashdata(cmdhash);
+
+--- 119,130 -----
+  					if (flags & execpr)
+  						execprint(com);
+  
++ 					/*
++ 					 * fix a bug which caused the shell
++ 					 * to do not do a second command if
++ 					 * the first was not found. (bug fix
++ 					 * from USENET)
++ 					 */
+  					if (comtype == NOTFOUND)
+  					{
+  						char *errstr;
+***************
+*** 111,116
+  
+  					if (comtype == NOTFOUND)
+  					{
+  						pos = hashdata(cmdhash);
+  						if (pos == 1)
+  							failed(*com, notfound);
+
+--- 127,134 -----
+  					 */
+  					if (comtype == NOTFOUND)
+  					{
++ 						char *errstr;
++ 
+  						pos = hashdata(cmdhash);
+  						if (pos == 1)
+  							errstr = notfound;
+***************
+*** 113,119
+  					{
+  						pos = hashdata(cmdhash);
+  						if (pos == 1)
+! 							failed(*com, notfound);
+  						else if (pos == 2)
+  							failed(*com, badexec);
+  						else
+
+--- 131,137 -----
+  
+  						pos = hashdata(cmdhash);
+  						if (pos == 1)
+! 							errstr = notfound;
+  						else if (pos == 2)
+  							errstr = badexec;
+  						else
+***************
+*** 115,121
+  						if (pos == 1)
+  							failed(*com, notfound);
+  						else if (pos == 2)
+! 							failed(*com, badexec);
+  						else
+  							failed(*com, badperm);
+  						break;
+
+--- 133,139 -----
+  						if (pos == 1)
+  							errstr = notfound;
+  						else if (pos == 2)
+! 							errstr = badexec;
+  						else
+  							errstr = badperm;
+  						prp();
+***************
+*** 117,123
+  						else if (pos == 2)
+  							failed(*com, badexec);
+  						else
+! 							failed(*com, badperm);
+  						break;
+  					}
+  
+
+--- 135,147 -----
+  						else if (pos == 2)
+  							errstr = badexec;
+  						else
+! 							errstr = badperm;
+! 						prp();
+! 						prs_cntl(*com);
+! 						prs (colon);
+! 						prs (errstr);
+! 						newline();
+! 						exitval = 1;
+  						break;
+  					}
+  
+***************
+*** 148,153
+  								if ((f = pathopen(getpath(a1), a1)) < 0)	
+  									failed(a1, notfound);	
+  								else	
+  									execexp(0, f);	
+  							}	
+  							break;	
+
+--- 172,181 -----
+  								if ((f = pathopen(getpath(a1), a1)) < 0)	
+  									failed(a1, notfound);	
+  								else	
++ 								{
++ 									int	savedot = flags&dotflg;
++ 
++ 									flags |= dotflg;
+  									execexp(0, f);	
+  									flags &= ~dotflg;
+  									flags |= savedot;
+***************
+*** 149,154
+  									failed(a1, notfound);	
+  								else	
+  									execexp(0, f);	
+  							}	
+  							break;	
+  				
+
+--- 177,185 -----
+  
+  									flags |= dotflg;
+  									execexp(0, f);	
++ 									flags &= ~dotflg;
++ 									flags |= savedot;
++ 								}
+  							}	
+  							break;	
+  				
+***************
+*** 163,169
+  								prc_buff(NL);	
+  							}	
+  							break;	
+! 				
+  						case SYSEXIT:	
+  							flags |= forked;	/* force exit */	
+  							exitsh(a1 ? stoi(a1) : retval);
+
+--- 194,200 -----
+  								prc_buff(NL);	
+  							}	
+  							break;	
+! 
+  						case SYSEXIT:	
+  #if JOBS
+  							if (j_finish(FALSE))
+***************
+*** 165,170
+  							break;	
+  				
+  						case SYSEXIT:	
+  							flags |= forked;	/* force exit */	
+  							exitsh(a1 ? stoi(a1) : retval);
+  				
+
+--- 196,207 -----
+  							break;	
+  
+  						case SYSEXIT:	
++ #if JOBS
++ 							if (j_finish(FALSE))
++ 								break;
++ #endif
++ 							histsave (histfnod.namval);
++ 							/* save before setting flag */
+  							flags |= forked;	/* force exit */	
+  
+  							exitsh(a1 ? stoi(a1) : retval);
+***************
+*** 166,171
+  				
+  						case SYSEXIT:	
+  							flags |= forked;	/* force exit */	
+  							exitsh(a1 ? stoi(a1) : retval);
+  				
+  						case SYSNULL:	
+
+--- 203,209 -----
+  							histsave (histfnod.namval);
+  							/* save before setting flag */
+  							flags |= forked;	/* force exit */	
++ 
+  							exitsh(a1 ? stoi(a1) : retval);
+  				
+  						case SYSNULL:	
+***************
+*** 248,256
+  							}	
+  		
+  #ifdef RES	/* Research includes login as part of the shell */	
+! 		
+! 						case SYSLOGIN:	
+! 							oldsigs();	
+  							execa(com, -1);
+  							done();	
+  #else	
+
+--- 286,296 -----
+  							}	
+  		
+  #ifdef RES	/* Research includes login as part of the shell */	
+! 
+! 						case SYSLOGIN:
+! 							histsave (histfnod.namval);
+! 							flags |= forked;	/* DAG -- bug fix (force bad exec to terminate shell) */
+! 							oldsigs();
+  							execa(com, -1);
+  							done();
+  #else
+***************
+*** 252,260
+  						case SYSLOGIN:	
+  							oldsigs();	
+  							execa(com, -1);
+! 							done();	
+! #else	
+! 			
+  						case SYSNEWGRP:	
+  							if (flags & rshflg)	
+  								failed(com[0], restricted);	
+
+--- 292,299 -----
+  							flags |= forked;	/* DAG -- bug fix (force bad exec to terminate shell) */
+  							oldsigs();
+  							execa(com, -1);
+! 							done();
+! #else
+  						case SYSNEWGRP:	
+  							if (flags & rshflg)	
+  								failed(com[0], restricted);	
+***************
+*** 260,265
+  								failed(com[0], restricted);	
+  							else	
+  							{	
+  								flags |= forked;	/* force bad exec to terminate shell */	
+  								oldsigs();	
+  								execa(com, -1);
+
+--- 299,305 -----
+  								failed(com[0], restricted);	
+  							else	
+  							{	
++ 								histsave (histfnod.namval);
+  								flags |= forked;	/* force bad exec to terminate shell */	
+  								oldsigs();	
+  								execa(com, -1);
+***************
+*** 266,272
+  								done();	
+  							}	
+  		
+! #endif	
+  		
+  						case SYSCD:	
+  							if (flags & rshflg)	
+
+--- 306,312 -----
+  								done();	
+  							}	
+  		
+! #endif
+  		
+  						case SYSCD:	
+  							if (flags & rshflg)	
+***************
+*** 273,278
+  								failed(com[0], restricted);	
+  							else if ((a1 && *a1) || (a1 == 0 && (a1 = homenod.namval)))	
+  							{	
+  								char *cdpath;	
+  								char *dir;	
+  								int f;	
+
+--- 313,319 -----
+  								failed(com[0], restricted);	
+  							else if ((a1 && *a1) || (a1 == 0 && (a1 = homenod.namval)))	
+  							{	
++ 								register char *safe;	/* DAG -- added (see note, below) */
+  								char *cdpath;	
+  								char *dir;	
+  								int f;	
+***************
+*** 279,286
+  		
+  								if ((cdpath = cdpnod.namval) == 0 ||	
+  								     *a1 == '/' ||	
+! 								     cf(a1, ".") == 0 ||	
+! 								     cf(a1, "..") == 0 ||	
+  								     (*a1 == '.' && (*(a1+1) == '/' || *(a1+1) == '.' && *(a1+2) == '/')))	
+  									cdpath = nullstr;	
+  		
+
+--- 320,327 -----
+  		
+  								if ((cdpath = cdpnod.namval) == 0 ||	
+  								     *a1 == '/' ||	
+! 								     cf(a1, ".") == 0 ||
+! 								     cf(a1, "..") == 0 ||
+  								     (*a1 == '.' && (*(a1+1) == '/' || *(a1+1) == '.' && *(a1+2) == '/')))	
+  									cdpath = nullstr;	
+  		
+***************
+*** 284,289
+  								     (*a1 == '.' && (*(a1+1) == '/' || *(a1+1) == '.' && *(a1+2) == '/')))	
+  									cdpath = nullstr;	
+  		
+  								do	
+  								{	
+  									dir = cdpath;	
+
+--- 325,337 -----
+  								     (*a1 == '.' && (*(a1+1) == '/' || *(a1+1) == '.' && *(a1+2) == '/')))	
+  									cdpath = nullstr;	
+  		
++ /* DAG -- catpath() leaves the trial directory above the top of the "stack".
++ 	This is too dangerous; systems using directory access routines may
++ 	alloc() storage and clobber the string.  Therefore I have changed the
++ 	code to alloc() a safe place to put the trial strings.  Most of the
++ 	changes involved replacing "curstak()" with "safe".
++ */								safe = alloc((unsigned)(length(cdpath) + length(a1)));	/* DAG -- added */
++ 
+  								do	
+  								{	
+  									dir = cdpath;	
+***************
+*** 288,293
+  								{	
+  									dir = cdpath;	
+  									cdpath = catpath(cdpath,a1);	
+  								}	
+  								while ((f = (chdir(curstak()) < 0)) && cdpath);
+  		
+
+--- 336,342 -----
+  								{	
+  									dir = cdpath;	
+  									cdpath = catpath(cdpath,a1);	
++ 									(void)movstr(curstak(),safe);	/* DAG -- added (see note, above) */
+  								}	
+  #if !defined(SYMLINK) && defined(JOBS)
+  								while ((f = (cwdir(safe) < 0)) && cdpath);	/* DAG */
+***************
+*** 289,295
+  									dir = cdpath;	
+  									cdpath = catpath(cdpath,a1);	
+  								}	
+! 								while ((f = (chdir(curstak()) < 0)) && cdpath);
+  		
+  								if (f)	
+  									failed(a1, baddir);	
+
+--- 338,348 -----
+  									cdpath = catpath(cdpath,a1);	
+  									(void)movstr(curstak(),safe);	/* DAG -- added (see note, above) */
+  								}	
+! #if !defined(SYMLINK) && defined(JOBS)
+! 								while ((f = (cwdir(safe) < 0)) && cdpath);	/* DAG */
+! #else
+! 								while ((f = (chdir(safe) < 0)) && cdpath);	/* DAG */
+! #endif
+  		
+  								if (f)	
+  								{
+***************
+*** 292,297
+  								while ((f = (chdir(curstak()) < 0)) && cdpath);
+  		
+  								if (f)	
+  									failed(a1, baddir);	
+  								else 
+  								{
+
+--- 345,352 -----
+  #endif
+  		
+  								if (f)	
++ 								{
++ 									free(safe);	/* DAG -- added (see note, above) */
+  									failed(a1, baddir);	
+  								}
+  								else 
+***************
+*** 293,298
+  		
+  								if (f)	
+  									failed(a1, baddir);	
+  								else 
+  								{
+  									cwd(curstak());
+
+--- 348,354 -----
+  								{
+  									free(safe);	/* DAG -- added (see note, above) */
+  									failed(a1, baddir);	
++ 								}
+  								else 
+  								{
+  #if defined(SYMLINK) || !defined(JOBS)
+***************
+*** 295,301
+  									failed(a1, baddir);	
+  								else 
+  								{
+! 									cwd(curstak());
+  									if (cf(nullstr, dir) &&	
+  									    *dir != ':' &&	
+  									 	any('/', curstak()) &&	
+
+--- 351,359 -----
+  								}
+  								else 
+  								{
+! #if defined(SYMLINK) || !defined(JOBS)
+! 									cwd(safe);	/* DAG */
+! #endif
+  									if (cf(nullstr, dir) &&	
+  									    *dir != ':' &&	
+  									 	any('/', safe) &&	/* DAG */
+***************
+*** 298,304
+  									cwd(curstak());
+  									if (cf(nullstr, dir) &&	
+  									    *dir != ':' &&	
+! 									 	any('/', curstak()) &&	
+  									 	flags & prompt)	
+  									{	
+  										prs_buff(curstak());	
+
+--- 356,362 -----
+  #endif
+  									if (cf(nullstr, dir) &&	
+  									    *dir != ':' &&	
+! 									 	any('/', safe) &&	/* DAG */
+  									 	flags & prompt)	
+  										cwdprint();	/* DAG -- improvement */
+  									free(safe);	/* DAG -- added (see note, above) */
+***************
+*** 300,309
+  									    *dir != ':' &&	
+  									 	any('/', curstak()) &&	
+  									 	flags & prompt)	
+! 									{	
+! 										prs_buff(curstak());	
+! 										prc_buff(NL);	
+! 									}
+  								}
+  								zapcd();
+  							}	
+
+--- 358,365 -----
+  									    *dir != ':' &&	
+  									 	any('/', safe) &&	/* DAG */
+  									 	flags & prompt)	
+! 										cwdprint();	/* DAG -- improvement */
+! 									free(safe);	/* DAG -- added (see note, above) */
+  								}
+  								zapcd();
+  							}	
+***************
+*** 452,458
+  								if (command == 1 || command == 4)	
+  								{	
+  									prl(i);	
+! 									prc_buff('\n');	
+  								}	
+  								break;	
+  							}				
+
+--- 508,514 -----
+  								if (command == 1 || command == 4)	
+  								{	
+  									prl(i);	
+! 									prc_buff(NL);	
+  								}	
+  								break;	
+  							}				
+***************
+*** 478,486
+  								prc_buff(NL);	
+  							}	
+  							break;	
+! 		
+! #endif	
+! 		
+  						case SYSTST:
+  							exitval = test(argn, com);
+  							break;
+
+--- 534,540 -----
+  								prc_buff(NL);	
+  							}	
+  							break;	
+! 
+  						case SYSTST:
+  							exitval = test(argn, com);
+  							break;
+***************
+*** 484,489
+  						case SYSTST:
+  							exitval = test(argn, com);
+  							break;
+  
+  						case SYSECHO:
+  							exitval = echo(argn, com);
+
+--- 538,544 -----
+  						case SYSTST:
+  							exitval = test(argn, com);
+  							break;
++ #endif	/* RES (DAG -- bug fix: SYSTST not in RES) */
+  
+  						case SYSECHO:
+  							exitval = echo(argn, com);
+***************
+*** 548,553
+  							}
+  							break;
+  
+  						default:	
+  							prs_buff("unknown builtin\n");
+  						}	
+
+--- 603,675 -----
+  							}
+  							break;
+  
++ #if JOBS
++ 						case SYSJOBS:
++ 
++ 							j_print();
++ 							break;
++ 
++ 						case SYSFG:
++ 
++ 							j_resume(a1, FALSE);
++ 							break;
++ 
++ 						case SYSBG:
++ 
++ 							j_resume(a1, TRUE);
++ 							break;
++ 
++ 						case SYSSUSPEND:
++ 							exitval = 1;
++ 							if (getppid() == 1)
++ 								prs ("cannot suspend a login shell\n");	/* yet ... */
++ 							else
++ 							{
++ 								exitval = 0;
++ 								kill (getpid(), SIGSTOP);
++ 							}
++ 							break;
++ #endif
++ 
++ #if pyr
++ 						/*
++ 						 * UCB is Universe 2
++ 						 * ATT is Universe 1
++ 						 * new_univ == 0
++ 						 */
++ 						case SYSUCB:
++ 							new_univ++;
++ 							/* fall thru */
++ 						case SYSATT:
++ 							new_univ++;
++ 							if (argn > 1)
++ 							{
++ 								change_univ = TRUE;
++ 								com++;
++ 								goto doit;
++ 							}
++ 							else
++ 							{
++ 								setuniverse (cur_univ = new_univ);
++ 								univnod.namflg &= ~N_RDONLY;
++ 								assign (& univnod, univ_name[cur_univ - 1]);
++ 								attrib ((& univnod), N_RDONLY);
++ 								break;
++ 							}
++ 						
++ 						case SYSUNIVERSE:
++ 							if (eq(com[1], "-l"))
++ 								prs_buff (univ_longname[cur_univ - 1]);
++ 							else
++ 								prs_buff (univ_name[cur_univ - 1]);
++ 							prc_buff (NL);
++ 							break;
++ #endif
++ 
++ 						case SYSHISTORY:
++ 							exitval = history (argn, com);
++ 							break;
++ 
+  						default:	
+  							prs_buff("unknown builtin\n");
+  						}	
+***************
+*** 586,591
+  			}
+  
+  		case TFORK:
+  			exitval = 0;
+  			if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
+  				parent = 0;
+
+--- 708,716 -----
+  			}
+  
+  		case TFORK:
++ #if pyr
++ 		doit:
++ #endif
+  			exitval = 0;
+  			if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
+  				parent = 0;
+***************
+*** 625,630
+  					alarm(forkcnt);
+  					pause(); 
+  				}
+  			}
+  			if (parent)
+  			{
+
+--- 750,759 -----
+  					alarm(forkcnt);
+  					pause(); 
+  				}
++ #if JOBS
++ 				if (parent == 0)
++ 					j_top_level = FALSE;
++ #endif
+  			}
+  			if (parent)
+  			{
+***************
+*** 633,638
+  				 * it may or may not wait for the child
+  				 */
+  				if (treeflgs & FPRS && flags & ttyflg)
+  				{
+  					prn(parent);
+  					newline();
+
+--- 762,770 -----
+  				 * it may or may not wait for the child
+  				 */
+  				if (treeflgs & FPRS && flags & ttyflg)
++ #if JOBS
++ 				if ((flags&jobflg) == 0)
++ #endif
+  				{
+  					prn(parent);
+  					newline();
+***************
+*** 639,644
+  				}
+  				if (treeflgs & FPCL)
+  					closepipe(pf1);
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
+  					await(parent, 0);
+  				else if ((treeflgs & FAMP) == 0)
+
+--- 771,779 -----
+  				}
+  				if (treeflgs & FPCL)
+  					closepipe(pf1);
++ #if JOBS
++ 				j_child_post(parent, treeflgs&FAMP, treeflgs&FPIN, t);
++ #endif
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
+  				{
+  					await(parent, 0);
+***************
+*** 640,645
+  				if (treeflgs & FPCL)
+  					closepipe(pf1);
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
+  					await(parent, 0);
+  				else if ((treeflgs & FAMP) == 0)
+  					post(parent);
+
+--- 775,781 -----
+  				j_child_post(parent, treeflgs&FAMP, treeflgs&FPIN, t);
+  #endif
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
++ 				{
+  					await(parent, 0);
+  #if JOBS
+  					j_reset_pg();
+***************
+*** 641,646
+  					closepipe(pf1);
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
+  					await(parent, 0);
+  				else if ((treeflgs & FAMP) == 0)
+  					post(parent);
+  				else
+
+--- 777,786 -----
+  				if ((treeflgs & (FAMP | FPOU)) == 0)
+  				{
+  					await(parent, 0);
++ #if JOBS
++ 					j_reset_pg();
++ #endif
++ 				}
+  				else if ((treeflgs & FAMP) == 0)
+  					post(parent);
+  				else
+***************
+*** 650,655
+  			}
+  			else	/* this is the forked branch (child) of execute */
+  			{
+  				flags |= forked;
+  				fiotemp  = 0;
+  /* tA
+{ned *	
+!save omin/* ttyflg)ewsgrobe rtic, 52	(vtyflg)the radptyflg)hist)open(ioegu },
+***;
++ 	}
++84,4hknif (*sS_IFMT)84,4rror  (84,4hkn cp  	ifsrce 84,4hilN_RDUOTE
+--- 42N_RDN_RD  	ifshknERN_RDN_RDtyflg)e, oif (e	
+!.h :/* t#!simpls aawaned *ned *  (ny('/'	(v	
+!tyflg)ERtyflg).h>
+ N_RDif (e -----
+   #!fault(.h>
+ ndif
+  
+  extc*/
+  			{
+tat(frrortat(f*	( ("ad atended  (52;
+
+--- 42))
+  #e	(v*/
+  			{
+tyflg)*/
+  			{
+tyflg)tyflg)*/
+  			{
+N_RDtyflg)docs;
+
+--- 42tyflg)], Dtyflg)*/
+  			{
+*/
+  			{
+.h>
+ 84,4  #def	(vif (e*/
+  			{
+*/
+  			{
+  			{
+*/
+  			{
+*/
+  			{
+	(v file i+ 				84,4/* tPORT
+  	h*/
+  			{
+wlist[ityflg)tyflg)N_RD*/
+  			{
+pdfd);
+  (com*/
+  			{
+)
+  #def*/
+  			{
+*/
+  			{
+(com*/
+  			{
+  			{
+*/
+  			{
+)
+  #defe, orencestyflg)large , orencesrenceshil - 1;ended+ #if JOBS
++ 	cpdfd);
+  	else isimpltyflg)awa;
+
+--- 42
+--- 285	(vif (e*/
+  			{
+*/
+  			{
+rror*/
+  			{
+llstr	(v*/
+  			{
+HAfault(*/
+  			{
+ned **/
+  			{
+*/
+  			{
+PORTster*/
+  			{
+if (euns*/
+  			{
+		regrencestyflg)msg.c arsegu
+  	hawaif (eord,N_RDed ined in file i52))
+  #e*/
+  			{
+N_RD*/
+  			{
+tyflg)N_RDUOTE.h>
+ wlist[ilarge + 				docs], Drrorster32 	/* UN#!large tat(f  		fN_RDxecsl adp#!--arg], D[];	/tyflg)*/
+  			{
+S_IFMT)t in nditios a*/
+  			{
+dir) N_RDdocstyflg)tyflg).h>
+ */
+  			{
+return(ftN_RD
+--- 285ofco*/
+  			{
+extc*/
+  			{
+r32 pdfd);
+  */
+  			{
+save ))
+  #e*/
+  			{
+the rtyflg)hil file i(com#!*/
+  			{
+*
+   */
+  			{

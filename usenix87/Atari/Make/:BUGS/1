@@ -1,0 +1,86 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!allegra!princeton!caip!im4u!ut-sally!seismo!mcvax!ukc!reading!minster!martin
+From: martin@minster.UUCP (martin)
+Newsgroups: net.sources,net.sources.bugs,net.micro.atari16
+Subject: PD make: 2 bugs with 1 fix!
+Message-ID: <884@minster.UUCP>
+Date: 21 Aug 86 13:11:11 GMT
+Reply-To: martin@minster.UUCP (martin)
+Organization: University of York, England
+Lines: 74
+Xref: plus5 net.sources:3938 net.sources.bugs:916 net.micro.atari16:1428
+Posted: Thu Aug 21 08:11:11 1986
+
+I have found two problems in the version of make which was posted to
+net.sources recently. These problems are also present in the port of this
+program to the Atari ST, and the same fix can be used.
+(I originally found this problem on the Atari)
+
+The first problem is that the first rule in the makefile is taken to be the
+default target to be built. However the definitions of default rules
+are not distinguished, so that the wrong default target is seen.
+An example makefile:
+	.SUFFIXES:
+	.SUFFIXES: .b .a
+	
+	.a.b:
+		cp $*.a $*.b
+	
+	fred.b:	fred.a
+
+When make is run, the following is output:
+	make: Don't know how to make .c
+
+Real make happily makes fred.b, by copying fred.a.
+(I don't know where the `.c' comes from, perhaps a built in default rule?)
+
+This can be fixed by changing the function `input' in the file `input.c'
+from:
+		while ((p = gettok(&q)) != (char *)0)	/* Get list of targ's */
+		{
+			np = newname(p);		/*  Intern name  */
+			newline(np, dp, cp);
+			if (!firstname)
+			{
+				if(!Is_special(p))
+				    firstname = np;
+			}
+			
+		}
+
+to:
+		while ((p = gettok(&q)) != (char *)0)	/* Get list of targ's */
+		{
+			np = newname(p);		/*  Intern name  */
+			newline(np, dp, cp);
+			if (!firstname)
+			{
+				if(!Is_special(p) && p[0] != '.')
+				    firstname = np;
+			}
+			
+		}
+Note that only one line is changed, but I gave more for context since
+I can't easily find the line numbers.  This is a rather kludgy fix, but I am
+informed that the `real' make dosn't do anything more, and a quick
+experiment appears to support this!
+
+In writing this article I also found another problem, but as yet have no fix.
+I tried the makefile:
+	.c.o:
+		echo making $*.o
+		cc $(CFLAGS) -c $*.c
+	
+	fred.o: fred.c
+
+and got the error message:
+	make: Commands defined twice for target .c.o on line 5
+
+Real `make' allows the redefinition of `.c.o' to remove the previous one.
+(This still dosn't work, even if a null `.SUFFIXES:' rule is added)
+
+Apart from these difficulties I am very pleased with this make,
+and would like to take this opportunity to thank both the original
+poster, Neil Russell, and Jwahar Bammi, who ported it to the Atari.
+
+	Martin C. Atkins
+usenet: mcvax!ukc!minster!martin

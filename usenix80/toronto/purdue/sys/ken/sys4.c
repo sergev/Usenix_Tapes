@@ -1,0 +1,433 @@
+#
+/*
+ */
+
+/*
+ * Everything in this file is a routine implementing a system call.
+ */
+
+#include "../param.h"
+#include "../user.h"
+#include "../reg.h"
+#include "../inode.h"
+#include "../systm.h"
+#include "../proc.h"
+#include "../file.h"
+
+clrtty()		/* clear controlling tty */
+{
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	u.u_procp->p_ttyp = 0;
+}
+getswit()
+{
+
+	u.u_ar0[R0] = SW->integ;
+}
+
+gtime()
+{
+
+	u.u_ar0[R0] = time[0];
+	u.u_ar0[R1] = time[1];
+}
+
+stime()
+{
+
+	if(suser()) {
+		time[0] = u.u_ar0[R0];
+		time[1] = u.u_ar0[R1];
+		wakeup(tout);
+	}
+}
+
+setuid()
+{
+	register uid;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	uid = u.u_ar0[R0];
+	if(u.u_ruid == uid || suser()) {
+		u.u_uid = uid;
+		u.u_procp->p_uid = uid;
+		u.u_ruid = uid;
+	}
+}
+
+getuid()
+{
+
+	u.u_ar0[R0] = u.u_ruid;
+}
+
+geteuid()	/* returns 16 bit effective uid, getuid() returns real uid */
+{
+	u.u_ar0[R0] = u.u_uid;
+}
+
+setgid()
+{
+}
+
+getgid()
+{
+
+	u.u_ar0[R0] = 0;
+}
+
+getpid()
+{
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	u.u_ar0[R0] = u.u_procp->p_pid;
+}
+
+sync()
+{
+
+	update();
+}
+
+nice()
+{
+	register n;
+	register cpri;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	cpri = u.u_procp->p_nice;
+	n = u.u_ar0[R0];
+	  if(n > 30)
+		n = 30;   
+	if(n < cpri && !suser())
+		n = cpri;
+	u.u_procp->p_nice = n;
+}
+
+/*
+ * Nicer system call (do a nice on another job)
+ * ghg 3/27/77
+ *
+ * Used code from "kill" to allow one to lower (more positive)
+ * own priority if not su.
+ * -J. Bruner 11/12/77.
+ */
+nicer()
+{
+	register struct proc *p, *q;
+	register a;
+	int f;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	f = 0;
+	a = u.u_ar0[R0];
+	q = u.u_procp;
+
+	for (p = &proc[0]; p < &proc[NPROC]; p++){
+		if (a != 0 && p->p_pid != a) continue;
+		if (a == 0 && (p->p_ttyp != q->p_ttyp || p <= &proc[1]))
+			continue;
+		if (u.u_uid != 0 && u.u_uid != p->p_uid) continue;
+		f++;
+		if (u.u_uid != 0 && p->p_nice > u.u_arg[0]) continue;
+		p->p_nice = u.u_arg[0] <= 127 ? u.u_arg[0] : 127;  
+	}
+	if (f == 0) u.u_error = ESRCH;
+}
+/*
+ * Unlink system call.
+ * Hard to avoid races here, especially
+ * in unlinking directories.
+ * If inode 1 and nlinks == 127, don't decrement link count.
+ * See comments in sys2.c/link().
+ */
+unlink()
+{
+	register *ip, *pp;
+	extern uchar;
+
+	pp = namei(&uchar, 2);
+	if(pp == NULL)
+		return;
+	/*
+	 * Check for unlink(".")
+	 * to avoid hanging on the iget
+	 */
+	if (pp->i_number != u.u_dent.u_ino)
+		ip = iget(pp->i_dev, u.u_dent.u_ino);
+	else {
+		ip = pp;
+		ip->i_count++;
+	}
+	if(ip == NULL)
+		goto out1;
+	if((ip->i_mode&IFMT)==IFDIR && !suser())
+		goto out;
+	/*
+	 * Don't unlink a mounted file or a text busy file.
+	 */
+	if (ip->i_dev != pp->i_dev) {
+		u.u_error = EBUSY;
+		goto out;
+	}
+	if (ip->i_flag&ITEXT && ip->i_nlink==1) {
+		u.u_error = ETXTBSY;
+		goto out;
+	}
+	u.u_offset[1] =- DIRSIZ+2;
+	u.u_base = &u.u_dent;
+	u.u_count = DIRSIZ+2;
+	u.u_dent.u_ino = 0;
+	writei(pp);
+	if (ip->i_nlink != 127 || ip->i_number != ROOTINO)
+		ip->i_nlink--;
+	ip->i_flag =| IUPD;
+
+out:
+	iput(ip);
+out1:
+	iput(pp);
+}
+
+chdir()
+{
+	register *ip;
+	extern uchar;
+
+	ip = namei(&uchar, 0);
+	if(ip == NULL)
+		return;
+	if((ip->i_mode&IFMT) != IFDIR) {
+		u.u_error = ENOTDIR;
+	bad:
+		iput(ip);
+		return;
+	}
+	if(access(ip, IEXEC))
+		goto bad;
+	prele(ip);
+	plock2(u.u_cdir);
+	iput(u.u_cdir);
+	u.u_cdir = ip;
+}
+
+chmod()
+{
+	register *ip;
+
+	if ((ip = owner()) == NULL)
+		return;
+	if (u.u_uid) {
+		ip->i_mode =& ~07707; /* Can't clear group bits if not su */
+		u.u_arg[1] =& ~(ISVTX|00070);  /* disallow group bits */
+	}
+	else
+		ip->i_mode =& ~07777;
+	ip->i_mode =| u.u_arg[1]&07777;
+	ip->i_flag =| IUPD;
+	iput(ip);
+}
+
+chown()
+{
+	register *ip;
+
+	if (!suser() || (ip = owner()) == NULL)
+		return;
+	ip->i_uid0 = u.u_arg[1].lobyte;
+	ip->i_uid1 = u.u_arg[1].hibyte;
+	ip->i_flag =| IUPD;
+	iput(ip);
+}
+
+/*
+ * Change modified date of file:
+ * time to r0-r1; sys smdate; file
+ * This call has been withdrawn because it messes up
+ * incremental dumps (pseudo-old files aren't dumped).
+ * It works though and you can uncomment it if you like.
+
+smdate()
+{
+	register struct inode *ip;
+	register int *tp;
+	int tbuf[2];
+
+	if ((ip = owner()) == NULL)
+		return;
+	ip->i_flag =| IUPD;
+	tp = &tbuf[2];
+	*--tp = u.u_ar0[R1];
+	*--tp = u.u_ar0[R0];
+	iupdat(ip, tp);
+	ip->i_flag =& ~IUPD;
+	iput(ip);
+}
+*/
+
+ssig()
+{
+	register a;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	a = u.u_arg[0];
+	if(a<=0 || a>=NSIG || a ==SIGKIL) {
+		u.u_error = EINVAL;
+		return;
+	}
+	u.u_ar0[R0] = u.u_signal[a];
+	u.u_signal[a] = u.u_arg[1];
+	if(u.u_procp->p_sig == a)
+		u.u_procp->p_sig = 0;
+}
+
+kill()
+{
+	register struct proc *p, *q;
+	register a;
+	int f;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	f = 0;
+	a = u.u_ar0[R0];
+	q = u.u_procp;
+	for(p = &proc[0]; p < &proc[NPROC]; p++) {
+		if(p == q)
+			continue;
+		if(a != 0 && p->p_pid != a)
+			continue;
+		if(a == 0 && (p->p_ttyp != q->p_ttyp || p <= &proc[1]))
+			continue;
+		if(u.u_uid != 0 && u.u_uid != p->p_uid)
+			continue;
+		f++;
+		psignal(p, u.u_arg[0]);
+	}
+	if(f == 0)
+		u.u_error = ESRCH;
+}
+
+times()
+{
+	register *p;
+
+	for(p = &u.u_utime; p  < &u.u_utime+6;) {
+		suword(u.u_arg[0], *p++);
+		u.u_arg[0] =+ 2;
+	}
+}
+
+profil()
+{
+
+	u.u_prof[0] = u.u_arg[0] & ~1;	/* base of sample buf */
+	u.u_prof[1] = u.u_arg[1];	/* size of same */
+	u.u_prof[2] = u.u_arg[2];	/* pc offset */
+	u.u_prof[3] = (u.u_arg[3]>>1) & 077777; /* pc scale */
+}
+
+/* New system calls which will also be in Unix ver 7 */
+
+/*
+ * Tell -- discover offset of file R/W pointer
+ */
+tell()
+{
+	register struct file *fp;
+
+	if (fp = getf(u.u_ar0[R0])) {
+		u.u_ar0[R0] = fp->f_offset[0];
+		u.u_ar0[R1] = fp->f_offset[1];
+	}
+}
+/*
+ * access system call
+ */
+saccess()
+{
+	extern uchar;
+	register svuid;
+	register *ip;
+
+	svuid = u.u_uid;
+	u.u_uid = u.u_ruid;
+	ip = namei(&uchar, 0);
+	if (ip != NULL) {
+		if (u.u_arg[1]&(IREAD>>6))
+			access(ip, IREAD);
+		if (u.u_arg[1]&(IWRITE>>6))
+			access(ip, IWRITE);
+		if (u.u_arg[1]&(IEXEC>>6))
+			access(ip, IEXEC);
+		iput(ip);
+	}
+	u.u_uid = svuid;
+}
+
+/*
+ * alarm clock signal
+ */
+alarm()
+{
+	register c, *p;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	p = u.u_procp;
+	c = p->p_clktim;
+	p->p_clktim = u.u_ar0[R0];
+	u.u_ar0[R0] = c;
+}
+
+/*
+ * indefinite wait.
+ * no one should wakeup(&u)
+ */
+pause()
+{
+
+	for(;;)
+		sleep(&u, PSLEP);
+}
+
+/* end of ver 7 system calls */
+
+/*
+ * wakeup system call -- used mostly for system debugging
+ */
+wake()
+{
+
+	if (suser())
+		wakeup(u.u_ar0[R0]);
+}
+
+/*
+ * time limit - works like alarm() except SIGTIM is sent when
+ * u.u_stime + u.u_time == value set by this system call.
+ * number of ticks at which to interrupt is in u.u_timlim.
+ * Old value of u.u_timlim is returned.
+ * --ghg 05/12/79.
+ */
+timlim()
+{
+	register c;
+
+	c = u.u_timlim/HZ;
+	u.u_timlim = u.u_ar0[R0] * HZ;
+	u.u_ar0[R0] = c;
+}

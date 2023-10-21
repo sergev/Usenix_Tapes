@@ -1,0 +1,51 @@
+/*
+ * The file is read, and all numbers are interpreted, with low order
+ * bit first.
+ *
+ * The pattern "4 bits" matches any four bits.  The pattern '1011'
+ * matches those particular bits.
+ */
+
+
+
+batch:  header file* END_OF_BATCH
+
+header:  version sub_version batch_size
+
+version:  One character		/* currently 'b' */
+
+sub_version:  4 bits		/* more version info (currently 0) */
+
+batch_size:  20 bits		/* size of batch (in bytes) */
+
+file:  NEWS_TYPE news_header text
+|      MAIL_TYPE text
+|      ACK_TYPE text
+
+NEWS_TYPE:  '00'
+MAIL_TYPE:  '10'
+ACK_TYPE:   '01'
+
+text: VARYING_LENGTH_CHARACTER* EOF_MARK
+
+VARYING_LENGTH_CHARACTER:  Characters are represented using bits sequences
+	of differing lengths.  The lengths are chosen so that the most
+	frequently occurring characters have the shortest length.
+
+EOF_MARK:  This is a bit sequence marks the end of a file.
+
+news_header:  USE_OLD_RELAY header_line* end_of_header
+
+USE_OLD_RELAY:  1 bit		/* set if this news item has the same relay
+	version as the preceeding news item. */
+
+header_line:  SUBJECT nltext
+|             RELAY_VERSION nltext
+  and so on for each type of header
+
+nltext:  VARYING_LENGTH_CHARACTER* NL_CHAR
+
+NL_CHARACTER:  bit sequence used to represent a newline.
+
+end_of_header:  NHSEP		/* header terminated with a blank line */
+|               NHEND		/* simple end of header (no blank line) */

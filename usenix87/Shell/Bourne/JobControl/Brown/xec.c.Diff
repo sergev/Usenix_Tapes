@@ -1,0 +1,692 @@
+*** xec.c	Mon Nov 24 17:49:32 1986
+--- /cs/simon/c/shdiff-sources/xec.c	Fri Feb 20 14:36:02 1987
+***************
+*** 13,18
+  #include	"sym.h"
+  #include	"hash.h"
+  
+  static int	parent;
+  
+  /* ========	command execution	========*/
+
+--- 13,22 -----
+  #include	"sym.h"
+  #include	"hash.h"
+  
++ #ifdef JOB
++ #include "job.h"
++ #endif JOB
++ 
+  static int	parent;
+  
+  
+***************
+*** 15,20
+  
+  static int	parent;
+  
+  /* ========	command execution	========*/
+  
+  
+
+--- 19,25 -----
+  
+  static int	parent;
+  
++ 
+  /* ========	command execution	========*/
+  
+  
+***************
+*** 87,92
+  				struct ionod	*io = t->treio;
+  				short 	cmdhash;
+  				short	comtype;
+  
+  				exitval = 0;
+  
+
+--- 92,100 -----
+  				struct ionod	*io = t->treio;
+  				short 	cmdhash;
+  				short	comtype;
++ #ifdef JOB
++ 				char *fgcom[3];
++ #endif
+  
+  				exitval = 0;
+  
+***************
+*** 95,100
+  				com = scan(argn);
+  				a1 = com[1];
+  				gchain = schain;
+  
+  				if (argn != 0)
+  					cmdhash = pathlook(com[0], 1, comptr(t)->comset);
+
+--- 103,118 -----
+  				com = scan(argn);
+  				a1 = com[1];
+  				gchain = schain;
++ #ifdef JOB
++ 				if (com[0][0]=='%'){
++ 				    /* this is incredibly kludgy! */
++ 					fgcom[0] = "fg";
++ 					fgcom[1] = com[0];
++ 					fgcom[2] = 0;
++ 					com = fgcom;
++ 					argn=2;
++ 				}
++ #endif JOB
+  
+  				if (argn != 0)
+  					cmdhash = pathlook(com[0], 1, comptr(t)->comset);
+***************
+*** 165,171
+  							break;	
+  				
+  						case SYSEXIT:	
+! 							flags |= forked;	/* force exit */	
+  							exitsh(a1 ? stoi(a1) : retval);
+  				
+  						case SYSNULL:	
+
+--- 183,192 -----
+  							break;	
+  				
+  						case SYSEXIT:	
+! #ifdef JOBSXT
+!         						if ((flags&ttyflg)==ttyflg && stpjobs())
+!                 						error("There are blocked jobs");
+! #endif JOBSXT
+  							exitsh(a1 ? stoi(a1) : retval);
+  				
+  						case SYSNULL:	
+***************
+*** 250,255
+  #ifdef RES	/* Research includes login as part of the shell */	
+  		
+  						case SYSLOGIN:	
+  							oldsigs();	
+  							execa(com, -1);
+  							done();	
+
+--- 271,283 -----
+  #ifdef RES	/* Research includes login as part of the shell */	
+  		
+  						case SYSLOGIN:	
++ #ifdef JOBSXT
++         						if ((flags&ttyflg)==ttyflg && stpjobs())
++                 						error("There are blocked jobs");
++ 							sxtrelease(0);
++ 							nattrib(&TTYnod,N_VAR|N_EXPORT);
++ #endif JOBSXT
++ 							flags |= forked;
+  							oldsigs();	
+  							execa(com, -1);
+  							done();	
+***************
+*** 260,265
+  								failed(com[0], restricted);	
+  							else	
+  							{	
+  								flags |= forked;	/* force bad exec to terminate shell */	
+  								oldsigs();	
+  								execa(com, -1);
+
+--- 288,299 -----
+  								failed(com[0], restricted);	
+  							else	
+  							{	
++ #ifdef JOBSXT
++         							if ((flags&ttyflg)==ttyflg && stpjobs())
++                 							error("There are blocked jobs");
++ 								sxtrelease(0);
++ 								nattrib(&TTYnod,N_EXPORT);
++ #endif JOBSXT
+  								flags |= forked;	/* force bad exec to terminate shell */	
+  								oldsigs();	
+  								execa(com, -1);
+***************
+*** 335,340
+  							break;	
+  				
+  						case SYSWAIT:	
+  							await(a1 ? stoi(a1) : -1, 1);	
+  							break;	
+  				
+
+--- 369,377 -----
+  							break;	
+  				
+  						case SYSWAIT:	
++ #ifdef JOB
++ 							await(a1 ? stoi(a1) : -1, WAIT_BG);	
++ #else
+  							await(a1 ? stoi(a1) : -1, 1);	
+  #endif
+  							break;	
+***************
+*** 336,341
+  				
+  						case SYSWAIT:	
+  							await(a1 ? stoi(a1) : -1, 1);	
+  							break;	
+  				
+  						case SYSREAD:	
+
+--- 373,379 -----
+  							await(a1 ? stoi(a1) : -1, WAIT_BG);	
+  #else
+  							await(a1 ? stoi(a1) : -1, 1);	
++ #endif
+  							break;	
+  				
+  						case SYSREAD:	
+***************
+*** 547,552
+  									unset_name(*com);
+  							}
+  							break;
+  
+  						default:	
+  							prs_buff("unknown builtin\n");
+
+--- 585,615 -----
+  									unset_name(*com);
+  							}
+  							break;
++ #ifdef JOB
++ 						case SYSKILL:
++ 							zipkill(argn,com);
++ 							break;
++ 						case SYSSTOP:
++ 							zipstop(argn,com);
++ 							break;
++ 						case SYSJOBS:
++ 							listjobs(com[1]);
++ 							break;
++ 						case SYSFG:
++ # ifdef JOBSXT
++ 							if (sxtchan==-1)
++ 								failed(com[0],badexec);
++ 							else 
++ # endif JOBSXT
++ 	  						fg(findjob(com[1]));
++ 							break;
++ 						case SYSBG:
++ 							bg(findjob(com[1]));
++ 							break;
++ 						case SYSNOTIFY:
++ 							notify(findjob(com[1]));
++ 							break;
++ # ifdef JOBSXT
+  
+  						case SYSSXT1:
+  							{
+***************
+*** 548,553
+  							}
+  							break;
+  
+  						default:	
+  							prs_buff("unknown builtin\n");
+  						}	
+
+--- 611,632 -----
+  							break;
+  # ifdef JOBSXT
+  
++ 						case SYSSXT1:
++ 							{
++ 								int chsxt;
++ 								extern int crisps;
++ 
++ 								if (com[1]){
++ 									chsxt = hide_sxt();
++ 									execexp(com[1],&com[2]);
++ 									if (chsxt)
++ 										restore_sxt();	
++ 								}
++ 							}
++ 							break;
++ # endif JOBSXT
++ #endif JOB
++ 
+  						default:	
+  							prs_buff("unknown builtin\n");
+  						}	
+***************
+*** 586,591
+  			}
+  
+  		case TFORK:
+  			exitval = 0;
+  			if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
+  				parent = 0;
+
+--- 665,674 -----
+  			}
+  
+  		case TFORK:
++ #ifdef JOB
++ 			forkprocess(t,treeflgs,com,pf1,pf2,type,execflg,errorflg,pos,exec_link,linked);
++ 			break;
++ #else
+  			exitval = 0;
+  			if (execflg && (treeflgs & (FAMP | FPOU)) == 0)
+  				parent = 0;
+***************
+*** 719,724
+  				}
+  				done();
+  			}
+  
+  		case TPAR:
+  			execute(parptr(t)->partre, exec_link, errorflg);
+
+--- 802,808 -----
+  				}
+  				done();
+  			}
++ #endif JOB
+  
+  		case TPAR:
+  			execute(parptr(t)->partre, exec_link, errorflg);
+***************
+*** 857,862
+  int	f;
+  {
+  	struct fileblk	fb;
+  
+  	push(&fb);
+  	if (s)
+
+--- 941,949 -----
+  int	f;
+  {
+  	struct fileblk	fb;
++ #ifdef JOBSXT
++ 	BOOL chsxt=FALSE;
++ #endif JOBSXT
+  
+  	push(&fb);
+  	if (s)
+***************
+*** 864,870
+  		estabf(s);
+  		fb.feval = (char **)(f);
+  	}
+! 	else if (f >= 0)
+  		initf(f);
+  	execute(cmd(NL, NLFLG | MTFLG), 0, (int)(flags & errflg));
+  	pop();
+
+--- 951,957 -----
+  		estabf(s);
+  		fb.feval = (char **)(f);
+  	}
+! 	else if (f >= 0){
+  		initf(f);
+  #ifdef JOBSXT
+  		chsxt = hide_sxt();
+***************
+*** 866,871
+  	}
+  	else if (f >= 0)
+  		initf(f);
+  	execute(cmd(NL, NLFLG | MTFLG), 0, (int)(flags & errflg));
+  	pop();
+  }
+
+--- 953,963 -----
+  	}
+  	else if (f >= 0){
+  		initf(f);
++ #ifdef JOBSXT
++ 		chsxt = hide_sxt();
++ #endif JOBSXT
++ 	}
++ 	else error("execexp: no args");
+  	execute(cmd(NL, NLFLG | MTFLG), 0, (int)(flags & errflg));
+  	pop();
+  #ifdef JOBSXT
+***************
+*** 868,873
+  		initf(f);
+  	execute(cmd(NL, NLFLG | MTFLG), 0, (int)(flags & errflg));
+  	pop();
+  }
+  
+  execprint(com)
+
+--- 960,969 -----
+  	else error("execexp: no args");
+  	execute(cmd(NL, NLFLG | MTFLG), 0, (int)(flags & errflg));
+  	pop();
++ #ifdef JOBSXT
++ 	if (chsxt)
++ 		restore_sxt();
++ #endif JOBSXT
+  }
+  
+  
+***************
+*** 870,875
+  	pop();
+  }
+  
+  execprint(com)
+  	char **com;
+  {
+
+--- 966,974 -----
+  #endif JOBSXT
+  }
+  
++ 
++ 
++ 
+  execprint(com)
+  	char **com;
+  {
+***************
+*** 885,887
+  
+  	newline();
+  }
+
+--- 984,1275 -----
+  
+  	newline();
+  }
++ 
++ #ifdef JOB
++ /*
++  * service-things for job-control.
++  */
++ /*ARGSUSED*/
++ zipkill(argc,argv)
++ char **argv;
++ {
++ 	int signo, procid, ret;
++ 	char * a1 = argv[1];
++ 	extern char * sys_errlist[];
++ 
++ 	if (!a1) failed(argv[0],synmsg);
++ 	if (*a1=='-'){
++ 		a1++;
++ 		signo=stoi(a1);
++ 		argv++;
++ 	} else signo=SIGTERM;
++ 	while (*++argv){
++ 		if (**argv=='%'){
++ 			procid = jobs[findjob(argv[0])]->jb_pgrp;
++ 			ret = killpg(procid,signo);
++ 		} else {
++ 			procid = stoi(*argv);
++ 			ret = kill(procid,signo);
++ 			if (ret==-1) ret=errno;
++ 		}
++ 		if (ret!=0){
++ 			prn_buff(procid);
++ 			prs_buff(" ");
++ 			prs_buff(procid,sys_errlist[ret]);
++ 			newline();
++ 		}
++ 	}
++     }
++ 
++ /* ------------------------------- stop ------------------------------ */
++ /*ARGSUSED*/
++ zipstop(argc,argv)
++ char **argv;
++ {
++ 	int id;
++ 
++ 	if (argv[1]==0){
++ 		register int i;
++ 
++ 		for (i=1; i<JOB_MAX; i++)
++ 			if (jobs[i]){
++ # ifdef JOBSXT
++ 				sxtblk(i);
++ # endif JOBSXT
++ 			}
++ 	} else {
++ 		argv++;
++ 		while (argv[1]){
++ 			if (jobs[id=findjob(argv[1])]){
++ # ifdef JOBSXT
++ 				sxtblk(id);
++ # endif JOBSXT
++ 			}
++ 			argv++;
++ 		}
++ 	}
++ }
++ 
++ 
++ #ifdef JOBSXT
++ #undef	 input
++ #include	<sys/types.h>
++ #include	<sys/tty.h>
++ #include	<sys/sxt.h>
++ #include	<sys/ipc.h>
++ #include	<sys/msg.h>
++ #endif JOBSXT
++ 
++ /*
++  *	fork a process, exec the child and deal with job initialization, etc...
++  *	(the parameter-passing is a bit crude)
++  */
++ forkprocess(t,treeflgs,com,pf1,pf2,type,execflg,errorflg,pos,exec_link,linked)
++ register struct trenod * t;
++ register int treeflgs;
++ register char * *com;
++ int *pf1, *pf2;
++ int type,errorflg,pos,exec_link,linked;
++ {
++ #ifdef JOBSXT
++ 	struct msgbuf msgbuffer;
++ 	int msgqid = -1;
++ #endif JOBSXT
++ 
++ 	exitval=0;
++ 	if (execflg && (treeflgs&(FAMP|FPOU))==0)
++ 		parent=0;
++ 	else {
++ 		int forkcnt = 1;
++ 
++ 		if (treeflgs & (FAMP | FPOU))
++ 		{
++ 			link_iodocs(iotemp);
++ 			linked = 1;
++ 		}
++ 		if ((treeflgs&FPIN)==0){
++ 			bookjob();	/* set up a job slot */
++ #ifdef JOBSXT
++ 			if (sxtchan!=-1)
++ 				msgqid = msgget(IPC_PRIVATE,0);
++ #endif JOBSXT
++ 		}
++ 		while ((parent=fork()) == -1){
++ 			if ((forkcnt = (forkcnt * 2)) > FORKLIM)	/* 32 */
++ 			{
++ 				switch (errno)
++ 				{
++ 				case ENOMEM:
++ 					error(noswap);
++ 					break;
++ 				default:
++ 				case EAGAIN:
++ 					error(nofork);
++ 					break;
++ 				}
++ 			}
++ 			if (trapnote&SIGSET){
++ 				postjclr(currentjob);
++ #ifdef JOBSXT
++ 				if (sxtchan!=-1)
++ 					msgctl(msgqid, IPC_RMID, (struct msqid_ds *)0);
++ #endif JOBSXT
++ 				sigchk();
++ 			}
++ 			alarm(forkcnt);
++ 			pause();
++ 		}
++ 	}
++ 
++ 
++ 	if (parent){
++ 		/* This is the parent branch of fork;	 */
++ 		/* it may or may not wait for the child. */
++ 		struct argnod *Dcom;
++ 
++ 		if (treeflgs&FPCL) closepipe(pf1);
++ 		while (type==TLST || type==TFIL || type==TFORK){
++ 			if (type==TFORK)
++ 				t=forkptr(t)->forktre;
++ 			else	t=lstptr(t)->lstlef;
++ 			type=(t->tretyp)&COMMSK;
++ 		}
++ 		if (type==TCOM)
++ 			Dcom = comptr(t)->comarg;
++ 		else	Dcom = 0;
++ 		if ((treeflgs&FPIN)==0){
++ #ifdef JOBSXT
++ 			if (sxtchan!=-1){
++ 				msgrcv(msgqid, &msgbuffer,0,0,0);
++ 				msgctl(msgqid, IPC_RMID, (struct msqid_ds *)0);
++ 				sxtchan = sxtopen(SXT(currentjob));
++ 				newjob(parent,Dcom,treeflgs&FAMP,sxtchan);
++ 				if (sxtchan==-1) sxtchan=0;	/* fix */
++ 			} else  newjob(parent,Dcom,treeflgs&FAMP,-1);
++ #else
++ 			newjob(parent,Dcom,treeflgs&FAMP,0);
++ #endif JOBSXT
++ 		}
++ 		if (treeflgs&FPRS && (flags&(ttyflg|prompt))==(ttyflg|prompt)){
++ 			prc('[');
++ 			prn(currentjob);
++ 			prs("]\t");
++ 			prn(parent);
++ 			newline();
++ 		}
++ 		if ((treeflgs&(FAMP|FPOU))==0)
++ 			await(parent,WAIT_FG);	/* a process, in the foreground */
++ 		else if ((treeflgs&FAMP)==0)
++ 			post(parent);
++ 		else {
++ 			assnum(&pcsadr, parent);
++ 			post(parent);
++ 			bg(currentjob);		/* set it running in bg, and reset current job to 0 */
++ 		}
++ 
++ 		chktrap();
++ 		return;
++ 
++ 
++ 	} else	{	/* this is the forked branch (child) of execute */
++ 		flags |= forked;
++ 		fiotemp  = 0;
++ 
++ 		if (linked == 1)
++ 		{
++ 			swap_iodoc_nm(iotemp);
++ 			exec_link |= 06;
++ 		}
++ 		else if (linked == 0)
++ 			iotemp = 0;
++ 
++ #ifdef ACCT
++ 		suspacct();
++ #endif
++ 
++ 		setchildjob(currentjob,0);
++ 		postclr();
++ 		settmp();
++ 
++ 		/* Turn off INTR and QUIT if `FINT'  */
++ 		/* Reset ramaining signals to parent */
++ 		/* except for those `lost' by trap   */
++ 		oldsigs();
++ 		fixsigs();
++ #ifdef JOBSXT
++ 		if ((iflags&jobflg)==0)
++ #endif JOBSXT
++ 		  if (treeflgs&FINT){
++ 			signal(SIGINT,SIG_IGN);
++ 			signal(SIGQUIT,SIG_IGN);
++ #ifdef NICE
++ 			if (treeflgs&FAMP)
++ 				nice(NICEVAL);
++ #endif
++ 		  }
++ 
++ #ifdef JOBSXT
++ 		/* reset fildes 0,1,2 through sxt channel */
++ 		if (sxtchan!=-1){
++ 			if (currentjob<SXTMAX)
++ 				setpgrp();
++ 			sxtchan=sxtopen(SXT(currentjob));
++ 			if ((treeflgs&(FPIN|FPOU))!=FPOU)	/*pipes once*/
++ 				setchildjob(currentjob, ((treeflgs&FAMP)==0)?1:2);
++ 			if (sxtchan != -1){
++ 				close(0); close(1); close(2);
++ 				dup(sxtchan);
++ 				dup(0); dup(0); /* stdout and stderr */
++ 			}
++ 			sxtchan = -1;	/* prevent subshell jobs */
++ #ifdef SXT_SUSPEND
++ 			if (treeflgs&FAMP)
++ #endif
++ 				close(sxt_fd);
++ 			msgbuffer.mtype = 1;
++ 			msgsnd(msgqid, msgbuffer, 0, 0);
++ 			msgctl(msgqid, IPC_RMID, (struct msqid_ds *)0);	/* delete in kid too */
++ 		}
++ 		if ((iflags&jobflg) && (treeflgs&(FPIN|FPOU))==FPOU){
++ 			alarm(1);
++ 			pause();	/* Horrendous Kludge! */
++ 		}
++ #endif JOBSXT
++ 
++ 		/* pipe in or out */
++ 		if (treeflgs&FPIN){
++ 			rename(pf1[INPIPE],0);
++ 			close(pf1[OTPIPE]);
++ 		}
++ 		if (treeflgs&FPOU){
++ 			rename(pf2[OTPIPE],1);
++ 			close(pf2[INPIPE]);
++ 		}
++ 
++ 		/* default std input for & */
++ #ifdef JOBSXT
++ 		if ((iflags&jobflg)==0)	   /* only if no job-control */
++ #endif JOBSXT
++ 		  if ((treeflgs&FINT) && ioset==0){
++ 			int devvy = chkopen(devnull);
++ 			rename(devvy,0);
++ 		  }
++ 
++ 		iflags &= ~jobflg;
++ 
++ 		/* io redirection */
++ 		initio(t->treio,0);
++ 		if (type!=TCOM){
++ 			execute(forkptr(t)->forktre,exec_link|01,errorflg);
++ 		} else if (com[0]!=ENDARGS){
++ 			eflag = 0;
++ 			setlist(comptr(t)->comset,N_EXPORT);
++ 			rmtemp(0);
++ 			execa(com,pos);
++ 		}
++ 		flags &= ~ttyflg; 	/* don't reset tty pgrp */
++ 		done();
++ 	}
++ }
++ 
++ #endif JOB

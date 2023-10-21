@@ -1,0 +1,90 @@
+
+; This FKEY is an adaption of the original mouse defroster as made by
+; Greg Dudek (dudek@utai.UUCP. Here the original description follows:
+
+; ------
+; From: dudek@utai.UUCP (Greg Dudek)
+; Subject: Mouse freeze: defroster
+; Date: 2 Mar 87 04:44:09 GMT
+; 
+;   Well, people have been complaining about how annoying it is to
+; have to re-boot when the mouse freezes.  I know I've found it a
+; pain.  The enclosed FKEY (function key) resource calls the ROM
+; to re-init the SCC and hence "defrost" the mouse.
+;   It calls a routine I found in the 128K ROM, so it almost certainly
+; will NOT work on the 64K ROM machines.  I found the routine using
+; Macsbug and didn't work too hard at figuring it out, so although
+; I've used it repeatedly without trouble, I'm not making any promises.
+;   WARNING: mouse freeze is characteristic of wild memory references by a
+; program.  The faulty program may have done other nasty things too,
+; so be prepared for sudden system crashes even if the mouse does
+; de-frost.
+; 
+; Greg Dudek
+;     Dept. of Computer Science (vision group)    University of Toronto
+;     Usenet:	{linus, ihnp4, allegra, decvax, floyd}!utcsri!dudek
+;     CSNET:	dudek@ai.toronto.edu
+;     ARPA:	dudek%ai.toronto.edu@csnet-relay
+;     DELPHI:     GDUDEK
+;     Paper mail: 10 King's College Circle, Toronto, Canada
+; 
+; ------
+
+; Changes:
+; check for the rom version
+; code provided both for the 64 k rom (128 and 512 k macs) and the 128 k rom
+; Beeps if used with unknown rom
+; easily expandable
+
+; As no copyright message appeared in the original FKEY, I think we can
+; declare it to be public domain. Please post new versions (new ROM, lisa)
+; as wide as possible
+
+; This version made by
+; 		Maarten Carels
+; 		Computer Science Department
+; 		University of Amsterdam
+; email:	maarten@uva
+; 		{philabs, decvax, seismo}!mcvax!uva!maarten
+; 
+
+
+RESOURCE 'FKEY' 6 "Defrost"
+
+.TRAP		_SysBeep	$A9C8
+
+XLRom	EQU	$70FF
+oldRom	EQU	105		; Version number of old ROM
+plusRom	EQU	117		; Version number of plus ROM
+
+oldOff	EQU	$5BA		; Offset of SCC Re-init routine in old ROM
+plusOff	EQU	$82C		; Offset of SCC Re-init routine in plus ROM
+
+RomBase	EQU	$2AE
+
+Defrost	MOVE.L	RomBase,A0	; ROM Start Address
+	MOVE	8(A0),D0	; ROM Version
+
+	CMP	#oldRom,D0
+	BEQ	old		; old, 64K ROM
+
+	CMP	#plusRom,D0
+	BEQ	plus		; Mac+ and 512E (128K) ROM
+
+	CMP	#XLRom,D0
+	BEQ	XL		; Mac XL (Lisa)
+
+	MOVE	#2,-(SP)	; unknown ROM
+	_SysBeep		; beep and don't spoil anything further
+	RTS
+
+old	JMP	oldOff(A0)	; Let the ROM routine defrost the old mac
+
+plus	JMP	plusOff(A0)	; Let the ROM routine defrost the plus
+
+XL	MOVE	#2,-(SP)	; Don't know how to defrost XL
+	_SysBeep
+	RTS
+	
+	END
+---

@@ -1,0 +1,420 @@
+                ==[ All the bugs that fit, we print ]==
+Version 1.1 Old Empire (Empire Classic!) - circa 1978, decompiled from 
+                        optimized 11/70 object 1982-3 (honest!).
+
+Bugs should be reported to ihnp4!druxn!tsf  -  Tom Fisher
+Credit for the game belongs to Peter Langston.  I take credit for
+any bugs remaining in this version.  If you are using a version
+that was modified (in addition to the parametric goodies in empglb.c)
+since distribution, try to locate the bug and fix it before reporting it.
+
+The only things considered bugs are those that appear to change the
+original intent of the code.  Core dumps, meaningless or inaccurate
+messages, and obvious cheating opportunities are considered UN-
+intentional, and therefore, bugs.  Enhancements, (such as adding a
+coastwatch command) are not listed here.
+
+Items containing "Fix:" are fixed in this release.  The others will be 
+fixed later.
+
+
+1) Production sometimes goes negative.  Results in negative civilians,
+    gold bars, etc.  Very elusive.  Suspect max127() or update().
+
+2) Signals  SIGHUP, SIGINT, SIGQUIT not handled at all.  This stuff was
+    more or less ignored during the decompilation process.  Sorry.
+
+3) Country report heading "time" should be BTU ?
+
+4) When country is joined and first two-sector allocation is diagonal,
+    the welcome message still claims you have 0,0 and 0,1.
+
+5) Mobility goes negative in sector where crash landing occurs.
+
+6) Nav'ing ships at 2,2 causes your ships at 34,2 to move also ?
+   This is in a 64,64 world.  This is caused by [xy]wrap() routines
+   mishandling the range check.  Needs new algorithm.
+
+        Fix: [xy]wrap() are OK. The range check is in nxtshp.c .  Fix
+             the range check so that ships half way around the world aren't
+             considered to be within range.
+
+7) World of size other than 64,64 never tested after decompilation.
+   At least one problem is that in a 128x128 world, empcre sets the
+   gold to 127 for almost every sector.
+   There are probably hardcoded 2**6 or 64 references somewhere.  Sorry.
+
+8) Telegrams get screwed up.  It appears to be placing data from initial-
+   data section in the telegram buffer.  Suspect this happens when more
+   than 511 characters are in the message or when there is concurrent
+   activity in the telegram file.
+
+9) You get a core dump if you enter numbers that are greater than +127
+   or -128 when doing a spy command.  E.g.  spy -156:-14,-25:-23 dumps
+   memory.  This is because sargs doesn't check for reasonable values
+   on return from atoip().  Suspect that a lot of other commands will
+   also behave this way.
+
+10) The radar command doesn't indicate the source of the radar when it
+    is a land-based radar.  It should print out something similar to the
+    ship-based radar:
+        radar at 3, 3
+        Efficiency 100%  ...etc....
+
+        Fix: In rada.c insert a printf right before the call to radmap 
+             for land-based radars.  The printf prints out the line:
+                radar at x, y
+
+11) The opening messages are unbuffered - too slow.
+
+        Fix: Remove setbuf from and insert fflush(stdout) in empire.c
+             Add fflush(stdout) calls to prmptrd.c, cleared.c, empdis.c,
+             and chec.c .
+             And also remove setbuf from empcre.c and EMPFIX/main.c .
+
+12) Firing torpedos from a sub used to set the mobility to -10 on the
+    first one, then decrement the mobility by 10 for each additional one.
+    When the limit of -120 was reached, it would stay there.  This appears
+    to have broken, because now the mobility stays at 0.
+
+        Fix: A previous 'fix' broke this one.  The check to limit the
+             mobility to -120 to keep it from going positive, used a
+             macro that used characters as arguments.  Now that the
+             mobility is a short, something has to change.  Replace one
+             statement in torp.c to decrement the mobility by ten until
+             -120 is reached.
+
+13) You can tend from ships other than a tender.
+
+        Fix: In tend.c add a check to make sure that the "tender" is
+             really a tender.  If it isn't, print
+                "You can't tend from a xxxx!"
+             where xxxx is the ship type of the "tender".  Also, get
+             rid of all the goto statements in this file, since it is
+             a simple routine and it has to be tested anyway.  Also
+             correct the spelling in the "Seas to rough ..." message.
+
+14) When a shell fired from a ship hits another ship, the percent
+    damage prinout in  the telegram gets messed up.  It prints something
+    like ...did 27 223460amage to ...
+
+        Fix: This got broken when all the pr(fmt()) and prfmt() calls
+             got changed to printf() calls in order to make this more
+             portable.
+             There was a printf(buf) call in rea.c (the read command).
+             If the telegram contained a %, then printf considered that
+             to be a formatting directive.  Change printf(buf) to
+             printf("%s", buf).
+             Also - in prmtprd.c, chkok.c, and map.c there were similar
+             constructs.   Add the %s in each of these cases too.
+
+15) I can't believe it!  You can use someone else's submarine to torpedo
+    another ship!  What a terrific cheating opportunity !
+
+        Fix: Add a check in torp.c, similar to the ones in other places
+             where getshno() is used, to make sure that the sub is owned
+             by the attacker.
+
+16) The ok_ret.c file is no longer needed in EMPSUBS.  This apparently
+    caused a problem at HP because the loader looked for the superet
+    function (referenced inside of ok_ret.c) which has been removed.
+
+        Fix: The ok_ret.c file should have been removed when the removal
+             of superet() was done.  So remove it.
+
+17) One recipient of Version 1.0 would like all the ^G characters
+    changed to \007 so that his printer prints out the listings without
+    going crazy.  Also, he would prefer all the printfs to fit within
+    80 columns so that the listings can be printed portrait mode.
+
+18) loo reports only 50% efficiency even if the sectors are yours.
+
+        Fix: In look.c change the printf argument for printing out the
+             the sector efficiency.  Change it from an unconditional call
+             to round() to only call round() when the sector is owned by
+             someone else.
+
+19) You have a sub in sector x,y.  You accidentally torpedo a ship in
+    that sector that was already sunk.  If there are sunken destroyers
+    in that sector with shells still aboard, your sub will get hit with
+    depth charges from the Deity.  Also, the news will report that you
+    torpedoed a Deity ship, and that the Deity fired on you in self defense.
+
+        Fix: In torp.c, add a check that insures that a victim ship
+             is NOT owned by the Deity.  Deity-owned ships numbers are
+             treated the same way as a non-existent ship number.
+
+20) You can use civilians more than once - (the "rolling civilians" bug).
+    If you place 1 military in a sector, then three days later force
+    a delivery of civilians into that sector, you will get three days
+    worth of production out of the civilians.  This is great for getting
+    as many civilians as you want in the beginning of the game.
+
+21) If you try to specify something that isn't a commodity,
+        e.g.   cen -5:5,0:6 ?xxxx<25
+    it prints a message saying that 'xxxx' isn't a commodity, then proceeds
+    with the command. It should return a syntax error.
+
+        Fix: In nxtsct.c (in the snxtsct() function), the return from the
+             encode function wasn't being checked.  Add a check so that if
+             the encode function returns -1, snxtsct will return -1.
+
+22) Your country accrues BTUs even if 0,0 isn't a capital, and even
+    if some other country owns the sector in the 0,0 position.
+
+        Fix: In empdis.c, make sure that BTUs accrue and tech and research
+             levels decay only if 0,0 is a capital AND your country owns 
+             the sector.
+             While we're at it, get rid of the goto statements in init_na(),
+             use nat.nat_stat instead of the uninitialized nstat, and
+             when a sect.sct_lstup == 0, add a putsect(0,0) after setting
+             sect.sct_lstup = curup (the putsect was missing).
+             The goto removal was verified with identical objects before
+             and after the removal.
+
+23) The "shell" command only accepts one command (line).  It returns to
+    empire after first command (line) is executed.
+
+        Fix: In empglb.c, change shllrg1 from "-t" to "-i".
+
+24) In empdis.c, dispatch() is called with one argument, but the
+    definition of that function does not include any arguments.
+
+        Fix: In empdis.c, remove the argument from the call.
+
+25) In empdis.c, there is an lseek call with a second argument that is
+    not a long.
+
+        Fix: In empdis.c, make the 0 (the second argument) a 0L.
+
+26) The weather command produces a map with only the top and right border.
+
+        Fix: In weat.c, add the left and bottom border.  Also fix the 
+             weather manual page.  Also, while we're at it, remove the
+             goto's from weat.c.  Goto removal verified with identical
+             objects.
+
+27) Trying to designate a sector that's not yours costs you a BTU, and
+    there is no error message.
+
+        No Change:  It works this way so that you can do:
+                     des #1 ?des=- g
+             which will usually contain many unowned sectors or sectors that 
+             can't be designated (., ^), without getting an error message for 
+             each undesignatable sector.  I guess it's assumed that a 
+             no-BTU-cost census is done before trying to designate something.
+
+28) Redirection and piping don't work.
+
+        Fix: Oops! This got broken in the conversion from pr(), prfmt(),
+             and pr(fmt()) to printf().
+             In empdis.c, when redirection (>, and >>) or piping is
+             indicated, switch file descriptors (1 and proto) so that
+             proto becomes the new file descriptor 1 and the old fd1 is
+             saved in the global variable, savfd1.  Flush stdout right before
+             switching back to the original fd1 (savfd1).  In empdef.h, add 
+             the extern declaration for savfd1, and in empglb.c, add the
+             definition of savfd1.
+             Also in empdis.c, change write(1,...) to printf call.
+             This now works, but it is a little different from the original
+             design.  The output goes to either your terminal OR the output
+             file instead of to both as in the original design.  If you
+             want it to go to both places, use:
+                map #1 | tee emp.out
+             (assuming you have a tee command).
+             Also, when redirecting output into a file, the file is
+             created with mode 622.  Also... if empire runs with the
+             setuid bit on, e.g. setuid to games, the uid, games, has to have
+             permission to access the complete path to the output file.
+             There can't be any intervening directories with mode 700,
+             for example.
+
+29) The "shell" command sometimes doesn't work.  It prints "Sorry, Empire
+    problems" after exiting the shell and then exits empire.  Sometimes
+    it prints:
+        : invalid identifier
+    and returns to empire without allowing any shell commands to be
+    entered.
+
+        Fix: The fixes are all in empdis.c .
+             The "Sorry ..." problem is because storing stuff into call:argv
+             overwrites call:cnumbuf.  This causes the main to be called
+             with a crazy country number.  In call(), declare the automatic
+             variable argv[4] (instead of argv[2]), set argv[0] back to
+             emprog[thisprog] (just for grins), and call main with argc=4
+             instead of argc=2.
+             The "invalid identifier" problem is a lot trickier.  This
+             happens when empire is called with a null second argument:
+                empire "cname" ""
+             Executing the shell command after entering empire thus produces
+             the error message from the shell (Bourne or Korn- ha, ha).
+             This is because the environ pointer is getting changed.  It
+             ends up pointing to somewhere near where it is supposed to, but
+             it's pointing to a null string.  When the shell is entered, it
+             tries to read the environment and chokes on the null string
+             thinking it's supposed to be some kind of identifier.
+             I don't know how to fix this, but you can get around it by
+             invoking empire as follows for countries with null rep names:
+                empire "cname" "" anything
+             This makes the last argument non-null, and everything seems to
+             work out hunkydory.
+
+30) In empdis.c, main(argc, argv) is called recursively after "shell",
+    "fixup", etc.  There's a better way to do this.  This way, the stack
+    grows on every shell command until a switch is made to a new module.
+
+31) In empglb.c, the value of a tech center is zero.  The value of a 
+    research lab is 10, airfield 10 etc.
+
+        Fix: In empglb.c (in the dchr structure), set the tech center 
+             value to the same as the research lab.
+
+32) 4.2 BSD doesn't have a fcntl.h (apparently).
+
+        Fix: Remove dependency from info.c, powe.c, rea.c, getele.c,
+             wu.c, empdis.c, empcre.c, empire.c, EMPFIX: {loans.c,
+             main.c, sectors.c, ships.c, treats.c}.  Put constants,
+             O_RDONLY, O_RDWR, and O_WRONLY in empdef.h.
+
+33) def # produces a core dump on some systems.
+
+        Fix: In defe.c, before checking to see if argp[2][0] == '%',
+             make sure that argp[2] points to something legal.
+             
+34) Checkpoints, and other things aren't cleared when confiscating a
+    sector to repay a loan.
+
+        Fix: In coll.c, after changing the ownership of the sector,
+             clear checkpoint and defense pointers, and also update
+             the timestamp of the sector (matches what happens when
+             defeating a sector with "attack" command).
+
+35) The makefiles aren't very good.  They don't work on 4.2 BSD.
+
+        Fix: Read the make(1) manual page and have another try at it.
+             Replace :mk and all the Makefiles with new versions. Now
+             to make the whole thing, type:    make
+             or:  make emp1
+                  make empfix
+                  make empire
+                  make empsub.a
+                  make empglb.o
+                etc.  to make individual parts of the system.
+           They still don't work very well on 4.2BSD, especially in EMPSUBS,
+           COMMANDS, and EMPFIX, where libraries are involved.
+
+36) When you do a census #0 ?des=u&civ=1270 
+    not only does it fail to show you the sectors desired, but it shows
+    you urban areas where civ==0.  A cen #0 ?des=w&shell=1270 works
+    the same way.
+
+        Fix: In nxtsct.c, in the encode and decode functions, a bit
+             mask of 0200 is used.  This is fine if numbers aren't
+             greater than 127!  Increase the mask to 04000 to allow
+             numbers up to 2047.  Also, in encode, return(atoi(cp)&03777)
+             to make sure that the 04000 bit is off.
+
+37) Yet another problem with buffered output.  There are times where
+    little delays are supposed to occur between bursts of output.
+    During the world creation, bursts of three periods ('.') are supposed
+    to indicate progress.  Likewise during a battle (attack, assault, board),
+    the melee is supposed to proceed in small bursts.  When getting
+    flakked, the POOF!'s are supposed to show up in little bursts, not
+    all in one shot.
+
+        Fix:  Insert a fflush(stdout) just before any sleep() call in
+              empcre.c, atta.c, assa.c, boar.c, torp.c, fly.c.
+
+38) 4.2BSD rand() function produces 32-bit results.  Code expects 16-bit
+    results.
+
+        Fix:  Make sure that everywhere rand is used, it's used something
+              like this:  if( chnce < rand() % n )
+              where n <= 32768.  This affects files in EMPSUBS, COMMANDS,
+              EMPCRE, and EMPIRE.  Also remove argument from rand calls in
+              diss.c, and empire.c.
+
+39) In 4.2BSD, time.h is in /usr/include/sys rather than /usr/include.
+
+        Fix: In empdis.c, insert ifdef to grab the header from the right
+             place.  Add #define BSD in empdef.h (commented out for SysV).
+
+40) 4.2BSD doesn't have a termio.h.  Sread.c won't compile.
+
+        Fix: Insert a new sread routine for 4.2 that uses sgtty.h.  So
+             there are really two sread routines in there, separated by the
+             #ifdef BSD.
+
+41) The spy info returned from an urban area doesn't get the number of
+    civilians right, and reports 10 times the number of shells present.
+
+        Fix: Actually, it didn't get warehouses right either.  In spy.c
+             correct the offsets into ichr to get the packaging factor
+             right.  Offsets should be; c=12, m=13, s=14, g=15, o=17, p=16.
+             Bug introduced when porting to Amdahl UTS.
+
+42) If you type in too many characters when sending a telegram, you
+    can get into a situation where the error message, "Try that last
+    line again..", gets typed out several times.
+
+        Fix: In getele.c, if too many characters are typed in,
+             make sure that the input is flushed up to a newline before
+             reading the retry-line.
+
+43) Using redirection creates a file owned by "games" if the empire
+    command is setuid to games (e.g. map #1 >xxx    xxx is owned by games).
+
+        Fix: In empdis.c, there should have been a resetui() before
+             creating the file.  Remove the statement that tries to create
+             the file assuming it doesn't exist, allowing execution to
+             fall through to a resetui(), unconditional unlink, and
+             re-creation.
+
+44) If your umask disallows write permission for other (the normal case),
+    redirected output files won't be writable by a setuid empire.
+
+        Fix: In empdis.c, insert a couple umask(0) calls before the creat
+             calls.  This allows setting mode 0622.
+
+45) Trying to append to a file that doesn't exist results in error messages
+    and no appending.
+
+        Fix: In empdis.c add check (access(cp, 0)) to see if output file
+             exists.  If it doesn't exist, create it.  Otherwise open it
+             and seek to the end.
+
+46) Contracting production units in a research center results in the
+    sector being owned by either the deity or country #2.  Sort of
+    like a surprise grant.
+
+        Fix: In cont.c, check to see if ip->i_del is zero.  If
+             so, there is no delivery item associated with the
+             production units (e.g. medical discoveries or technical
+             breakthroughs).  In this case, don't modify the delivery
+             field in the sector record (i.e. setting it to 0 or 2).
+
+47) On some 4.2BSD systems, having curup declared as an int and the
+    sector timestamp declared as a short causes strange updating
+    behavior.
+
+        Fix: In empdef.h and empglb.c declare curup as a short.
+
+48) If the world is created, countries added, and those countries
+    log in and occupy new sectors all within the first half hour,
+    the sector timestamps of several sectors could have a value of
+    zero.  This results in those sectors never being updated.
+
+        Fix: In empcre.c, on the line where up_offset is calculated for
+             the deity, subtract one.  This ensures that curup in empdis.c
+             will have a minimum value of 1.
+
+49) It appears that if you contract production units from a  d, i, t, r,
+    *, #, or h you don't really get paid for it.  You get the commodity
+    instead.
+
+        Fix: In update.c, in the switch statement where each type of
+             sector gets updated (right before the S_GMINE case), there
+             should be a check to see if the sector is contracted.  If
+             so, cashout should be adjusted and the production units
+             cleared. (copy the three lines preceding X6030 sans the
+             goto's).

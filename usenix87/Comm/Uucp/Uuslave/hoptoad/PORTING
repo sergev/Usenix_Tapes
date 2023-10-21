@@ -1,0 +1,188 @@
+	Porting hints for uuslave
+
+	John Gilmore
+	23 March 1987
+
+Read the uucp protocol documentation.  It's vital for understanding
+what this code is doing down in the guts.  The best part is Greg
+Chesson's paper explaining the packet protocol (packet.driver.ms),
+which you can format with "nroff -ms packet.driver.ms" or "troff -ms
+packet.driver.ms".  You can also just read it as-is, though you
+have to ignore a lot of formatting commands.
+
+Before doing much work with uuslave, I found it best to print it out
+and actually read it; it has formfeeds and block comments at strategic
+points to make it more readable.  It currently runs about 45 pages.
+Mark up your listing where you have questions or comments, and later,
+go through it and send them to me.  Or edit in more comments and
+questions about unclear places as you port it.  As I merge your diffs
+into the master source, I'll either leave the questions, or answer them
+with more comments there.
+
+Porting the code to a Unix system should be little effort.  Porting
+it to another operating system should be doable, but more work.
+Most of uuslave is invariant code, but you'll need to hack on the
+parts that do serial I/O to the modem, and the parts that talk
+to the file system (typically file names need to be munged to fit
+in the obscene limitations of the average non-Unix operating system.)
+
+If you want to port uuslave, download it to whatever system you are doing the
+port on, and get it to compile.  Don't even make it run.  Then upload
+the sources to a Unix system, if necessary, and mail me the diffs that
+make it compile OK.  That way I will get a bunch of these diffs and
+even if you get hung up in the next step and never send me anything
+else, other people trying to port it won't have to straighten out the
+include files and such.  Best way to make these diffs is to save a copy
+of the uuslave that came with this message (as e.g. uuslave.hop), and use 
+
+	diff -c uuslave.hop uuslave.c > diffs
+
+(or just "diff" if -c doesn't work on your Unix) to generate the diffs.  I
+can then use the "patch" program to merge them into my main sources.
+If you don't have a Unix diff program, just send me back the FULL
+SOURCE; it will be easier and less error prone than me trying to merge
+your stuff in by hand.
+
+Once you've sent me back your diffs (or a note saying it compiled
+without any changes), go ahead and debug it and hack it and slash it
+and make it write bad checks.  Try to resist the temptation to reformat
+the whole source into your favorite form -- it makes it very tough to
+figure out what it is you changed.  (Suggestions on how to change the
+global formatting are welcome, though.)  Also resist putting a fancy
+user interface on it (e.g. windows and stuff) -- first, make it run,
+then later, make it pretty.
+
+By the way, compiling the code with -DDEBUG or #define DEBUG produces
+voluminous, useful, output showing everything that goes over the serial
+line and what a lot of it means to uuslave.  I've been compiling with
+-DDEBUG, -DBSD (for BSD Unix), -DLOG (for code that logs calls like
+Unix uucp does, to the file LOGFILE), and -DSUBDIR (for a file name
+munging hack that makes it compatible with 4.2BSD and Sun Unix uuxqt,
+when both are running on the same machine).  You'll probably want to
+add #ifdef's for your machine dependent changes.  You'll see where I've
+put blocks of code that are different for each type of machine -- you
+can just add a block for your machine next to all of mine, remove my 
+-DBSD, and compile with -DFOOBAR if your machine or OS is called FOOBAR.
+
+Once you have it compiled on the target system, run it with a 1200 baud
+terminal hooked up to the serial port it is listening on.  Try typing
+the "uucp" login and such to see that that actually works.  (Look at
+the strings msgo0-5 and msgi0-4.)  You won't be able to test the packet
+protocol with a terminal, but you can test the serial I/O code and the
+timeouts, which will probably be the hardest part of this port.  (It
+should time out after 60 seconds of no-data-received and go back to
+waiting for someone to log in.)  Make sure you have this working before
+you do the next step.
+
+When you can "log in" to uuslave by typing on a terminal on uuslave's
+serial port, STOP THERE!  Upload that ol' source to Unix again (NOT via
+uuslave!) and send me more diffs.  RESIST the temptation to have Unix
+call it up.  If you get Unix to call, it will fail and then you'll want
+to debug it.  I've been through this, I know what it's like!  Send in
+your diffs first.
+
+Debugging it with Unix requires a lot more setup.  You'll need a
+terminal logged into Unix, so you can watch what Unix is doing, and a
+link between your micro and the Unix system (either a hardwired serial
+line, or a dialout modem on the Unix machine and a dialin modem on the
+micro).  Also, having access to the console of the micro so you can see
+the debug output, recompile, etc is essential.  Having all this stuff
+in front of you, rather than in different rooms, is very useful.
+
+Once you've set this up, you can get it to actually work with a Unix
+system.  Leave uuslave running on the micro, and get the Unix machine
+to call it up -- talk to the Unix system administrator about how to
+run uucp on your Unix machine.  The administrator will need to add a
+line to your L.sys or Systems file to tell uucp how to call your micro.
+Here is an L.sys line that works to talk to it:
+
+uuslave Any ACU 1200 5551212 in: uucp word: s8000
+
+Insert your micro's modem phone # in the place of 5551212.  If you are
+using a hardwired line, you'll have to fix this line, and also change
+L.devices or a similar file.
+
+On the Unix machine, you can then do
+
+	/usr/lib/uucp/uucico -r1 -suuslave -x9 &
+
+to cause it to call the micro and log what it sees at your terminal.
+(-r1 says uucico should be the master; -suuslave says which system to
+call; -x9 sets the debug level to 9, meaning "tell me everything".)
+Get it to where Unix can "log in" to the micro and they can
+send INITA, INITB, INITC, and then a few data packets negotiating
+about hanging up the phone (sending "H" and "HY" packets), then work
+on being able to move files.  See the "uucp(1)" man page of your Unix
+system, and talk to the system administrator about how uucp works.
+
+Once it can call in, talk, and hang up, you should queue up a file to
+be sent from your Unix system, and have it call your program again.
+See if the file gets there, etc.  Do checksums on the file before and
+after.  Transfer the file back to Unix (using kermit or xmodem or
+something) and compare the two.  Make sure that the file is exactly the
+same on both ends.  Then queue up a file to be received from your micro
+to your Unix system and call up uuslave to try that.  When both work,
+great!  SEND ME MORE DIFFS and buy champagne.  You have a uuslave that
+actually can move files in the presence of no errors on the phone
+line.
+
+When you've done that and sent the diffs, try plugging in another phone
+on the line it's using, while it moves a file, and pushing the
+touchtone buttons or drumming your fingers on the microphone, or
+otherwise making noise on the line so it will have to retry a few
+times.  Make sure it doesn't get stuck anywhere when you do this; it
+should pause a bit, then the Unix side should send another packet and
+they should get back into sync.  You can see this happening in the
+modem lights, or in the debug output of uuslave.  Do this a few times,
+then leave the poor programs alone and let them finish moving that
+file.  Then make sure that the file you moved over through all that
+noise came out just the same as it started.  I had a bunch of bugs in
+this area, you might find some more.  When you have that working (which
+might work on the first try, but be sure you injected a lot of noise at
+random points, and really saw it retry), then send in more diffs!  You
+have successfully ported it.
+
+Once you've sent us those diffs, hey, take a break.  If you feel like
+enhancing it, go ahead, but don't feel obliged.  You will have done the
+hard part and others can carry on from there if necessary.  Now would be
+the time to make a window interface -- but realize that this program
+will probably end up running without human intervention most of the
+time.  It's supposed to be quiet and do its job, leaving the interaction
+with the user to other programs.  Better to make it dial out, or run
+full duplex, or something.  Look in the file BUGS for suggested things
+to work on.
+
+You can search for the strings FIXME in the sources.  I've marked various
+places with it, which I noticed will need further work.  Feel free
+to work on these places and send me back the changes, or to add more
+FIXME comments about bad or fragile code that you notice.
+
+I have marked my sources as copyright by me, distribution via the GNU
+General Public License.  If you give sources out, with no conditions,
+you have satisfied the license.  If you never give out sources or
+binaries to anybody else, you have also satisfied the license.  If you
+do something else, get a copy of the license, by sending mail to
+
+	info-gnu-request@prep.ai.mit.edu
+or	hoptoad!prep.ai.mit.edu!info-gnu-request
+
+asking for one.  (It comes as file dist/COPYING in a GNU Emacs release,
+if you have one of those lying around).  If anyone has problems with
+this, let me know, or talk about it on the mailing list.  Up to now my
+stuff has been PD, but having the ownership of the Usenet netnews
+software snatched out of the public domain has made me more cautious
+(see news.software.b).  I expect to sign over my copyright to the Free
+Software Foundation if&when they start distributing uuslave (which by then
+will probably be called gnuucp or something).
+
+This code has been running production between hoptoad and lll-crg for
+several weeks, and has also been successfully run in test mode on MSDOS.
+It still needs a lot of work on portability and readability.  Do what
+you can in these areas as you read it and hack on it.
+
+Good luck...
+
+	John Gilmore
+
+Copyright 1987 John Gilmore; you can redistribute only if your recipients can.
+{sun,ptsfa,lll-crg,ihnp4,ucbvax}!hoptoad!gnu	       gnu@ingres.berkeley.edu

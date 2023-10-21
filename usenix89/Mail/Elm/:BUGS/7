@@ -1,0 +1,527 @@
+Path: plus5!wucs1!mcdchg!clyde!rutgers!mit-eddie!mirror!sources-request
+From: sources-request@mirror.TMC.COM
+Newsgroups: comp.sources.unix
+Subject: v09i064:  Fixed reply.c for ELM, Patch2
+Message-ID: <3582@mirror.TMC.COM>
+Date: 1 May 87 16:35:59 GMT
+Sender: rs@mirror.TMC.COM
+Lines: 517
+Approved: rs@mirror.TMC.COM
+
+Submitted by: rs (Rich Salz)
+Mod.sources: Volume 9, Issue 64
+Archive-name: elm2/Patch2
+
+[  Sorry about the delay on this one -- I had to dig it out of a
+   tape library...  --r$  ]
+
+#! /bin/sh
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+# If this archive is complete, you will see the message:
+#		"End of shell archive."
+# Contents:  reply.c
+# Wrapped by rs@mirror on Thu Apr 30 16:55:12 1987
+PATH=/bin:/usr/bin:/usr/ucb ; export PATH
+echo shar: Extracting \"reply.c\" \(13964 characters\)
+if test -f reply.c ; then 
+  echo shar: Will not over-write existing file \"reply.c\"
+else
+sed "s/^X//" >reply.c <<'END_OF_reply.c'
+X/**		reply.c		**/
+X
+X/*** routine allows replying to the sender of the current message 
+X
+X     (C) Copyright 1985, Dave Taylor
+X***/
+X
+X#include "headers.h"
+X#include <errno.h>
+X
+X#ifndef BSD
+X#  include <sys/types.h>
+X#  include <sys/utsname.h>
+X#endif
+X
+X/** Note that this routine generates automatic header information
+X    for the subject and (obviously) to lines, but that these can
+X    be altered while in the editor composing the reply message! 
+X**/
+X
+Xchar *strip_parens(), *get_token();
+X
+Xextern int errno;
+X
+Xchar *error_name(), *strcat(), *strcpy();
+X
+Xint
+Xreply()
+X{
+X	/** Reply to the current message.  Returns non-zero iff
+X	    the screen has to be rewritten. **/
+X
+X	char return_address[LONG_SLEN], subject[SLEN];
+X	int  return_value, form_letter;
+X
+X	form_letter = (header_table[current-1].status & FORM_LETTER);
+X
+X	get_return(return_address);
+X
+X	if (first_word(header_table[current-1].from, "To:")) {
+X	  strcpy(subject, header_table[current-1].subject);
+X	  if (form_letter)
+X	    return_value = mail_filled_in_form(return_address, subject);
+X	  else
+X	    return_value = send(return_address, subject, TRUE, NO);
+X	}
+X	else if (header_table[current-1].subject[0] != '\0') {
+X	  if ((strncmp("Re:", header_table[current-1].subject, 3) == 0) ||
+X	      (strncmp("RE:", header_table[current-1].subject, 3) == 0) ||
+X	      (strncmp("re:", header_table[current-1].subject, 3) == 0)) 
+X	    strcpy(subject, header_table[current-1].subject);
+X	  else {
+X	    strcpy(subject,"Re: ");
+X	    strcat(subject,header_table[current-1].subject); 
+X	  }
+X	  if (form_letter)
+X	    return_value = mail_filled_in_form(return_address, subject);
+X	  else
+X	    return_value = send(return_address, subject, TRUE, NO);
+X	}
+X	else
+X	  if (form_letter)
+X	    return_value = mail_filled_in_form(return_address, 
+X						"Filled in Form");
+X	  else
+X	    return_value = send(return_address, "Re: your mail", TRUE, NO);
+X
+X	return(return_value);
+X}
+X
+Xint
+Xreply_to_everyone()
+X{
+X	/** Reply to everyone who received the current message.  
+X	    This includes other people in the 'To:' line and people
+X	    in the 'Cc:' line too.  Returns non-zero iff the screen 
+X            has to be rewritten. **/
+X
+X	char return_address[LONG_SLEN], subject[SLEN];
+X	char full_address[VERY_LONG_STRING];
+X	int  return_value;
+X
+X	get_return(return_address);
+X
+X	strcpy(full_address, return_address);	/* sender gets copy */
+X	
+X	get_and_expand_everyone(return_address, full_address);
+X
+X	if (header_table[current-1].subject[0] != '\0') {
+X	  if ((strncmp("Re:", header_table[current-1].subject, 3) == 0) ||
+X	      (strncmp("RE:", header_table[current-1].subject, 3) == 0) ||
+X	      (strncmp("re:", header_table[current-1].subject, 3) == 0)) 
+X	    strcpy(subject, header_table[current-1].subject);
+X	  else {
+X	    strcpy(subject,"Re: ");
+X	    strcat(subject,header_table[current-1].subject); 
+X	  }
+X	  return_value = send(full_address, subject, TRUE, NO);
+X	}
+X	else
+X	  return_value = send(full_address, "Re: your mail", TRUE, NO);
+X
+X	return(return_value);
+X
+X}
+X
+Xint
+Xforward()
+X{
+X	/** Forward the current message.  What this actually does is
+X	    to set auto_copy to true, then call 'send' to get the 
+X	    address and route the mail. 
+X	**/
+X
+X	char subject[SLEN], address[VERY_LONG_STRING];
+X	int  original_cc, results, edit_msg = FALSE;
+X
+X	original_cc = auto_copy;
+X	address[0] = '\0';
+X
+X	if (header_table[current-1].status & FORM_LETTER)
+X	  PutLine0(LINES-3,COLUMNS-40,"<no editing allowed>");
+X	else {
+X	  edit_msg = (want_to("Edit outgoing message (y/n) ? ",'y',FALSE)!='n');
+X	  Write_to_screen("%s", 1, edit_msg? "Yes" : "No");
+X	}
+X
+X	auto_cc = TRUE;			/* we want a copy */
+X
+X	if (strlen(header_table[current-1].subject) > 0) {
+X	  strcpy(subject,header_table[current-1].subject); 
+X	  results = send(address, subject, edit_msg,
+X	    header_table[current-1].status & FORM_LETTER? 
+X	    PREFORMATTED : allow_forms);
+X	}
+X	else
+X	  results = send(address, "Forwarded Mail...", edit_msg, 
+X	    header_table[current-1].status & FORM_LETTER? 
+X	    PREFORMATTED : allow_forms);
+X	
+X	auto_copy = original_cc;
+X
+X	return(results);
+X}
+X
+Xget_and_expand_everyone(return_address, full_address)
+Xchar *return_address, *full_address;
+X{
+X	/** Read the current message, extracting addresses from the 'To:'
+X	    and 'Cc:' lines.   As each address is taken, ensure that it
+X	    isn't to the author of the message NOR to us.  If neither,
+X	    prepend with current return address and append to the 
+X	    'full_address' string.
+X	**/
+X
+X    char ret_address[LONG_SLEN], buf[LONG_SLEN], new_address[LONG_SLEN],
+X	 address[LONG_SLEN], comment[LONG_SLEN];
+X    int  in_message = 1, first_pass = 0, index;
+X
+X    /** First off, get to the first line of the message desired **/
+X
+X    if (fseek(mailfile, header_table[current-1].offset, 0) == -1) {
+X	dprint3(1,"Error: seek %ld resulted in errno %s (%s)\n", 
+X		 header_table[current-1].offset, error_name(errno), 
+X		 "get_and_expand_everyone");
+X	error2("ELM [seek] couldn't read %d bytes into file (%s)",
+X	       header_table[current-1].offset, error_name(errno));
+X	return;
+X    }
+X 
+X    /** okay!  Now we're there!  **/
+X
+X    /** let's fix the ret_address to reflect the return address of this
+X	message with '%s' instead of the persons login name... **/
+X
+X    translate_return(return_address, ret_address);
+X
+X    /** now let's parse the actual message! **/
+X
+X    while (in_message) {
+X      in_message = (int) (fgets(buf, LONG_SLEN, mailfile) != NULL);
+X      if (first_word(buf, "From ") && first_pass++ != 0) 
+X	in_message = FALSE;
+X      else if (first_word(buf, "To:") || first_word(buf, "Cc:") ||
+X	       first_word(buf, "CC:") || first_word(buf, "cc:")) {
+X	do {
+X	  no_ret(buf);
+X
+X	  /** we have a buffer with a list of addresses, each of either the
+X	      form "address (name)" or "name <address>".  Our mission, should
+X	      we decide not to be too lazy, is to break it into the two parts.
+X	  **/
+X	      
+X	  if (!whitespace(buf[0]))
+X	    index = chloc(buf, ':')+1;		/* skip header field */
+X	  else
+X	    index = 0;				/* skip whitespace   */
+X
+X	  while (break_down_tolist(buf, &index, address, comment)) {
+X
+X	    if (okay_address(address, return_address)) {
+X	      sprintf(new_address, ret_address, address);
+X	      optimize_and_add(new_address, full_address);
+X	    }
+X	  }
+X
+X          in_message = (int) (fgets(buf, LONG_SLEN, mailfile) != NULL);
+X
+X	  if (in_message) dprint1(1,"> %s", buf);
+X	
+X	} while (in_message && whitespace(buf[0]));
+X
+X      }
+X      else if (strlen(buf) < 2)	/* done with header */
+X	 in_message = FALSE;
+X    }
+X}
+X
+Xint
+Xokay_address(address, return_address)
+Xchar *address, *return_address;
+X{
+X	/** This routine checks to ensure that the address we just got
+X	    from the "To:" or "Cc:" line isn't us AND isn't the person	
+X	    who sent the message.  Returns true iff neither is the case **/
+X
+X	char our_address[SLEN];
+X	struct addr_rec  *alternatives;
+X
+X	if (in_string(address, return_address))
+X	  return(FALSE);
+X
+X	sprintf(our_address, "%s!%s", hostname, username);
+X
+X	if (in_string(address, our_address))
+X	  return(FALSE);
+X
+X	sprintf(our_address, "%s@%s", username, hostname);
+X	  
+X	if (in_string(address, our_address))
+X	  return(FALSE);
+X
+X	alternatives = alternative_addresses;
+X
+X	while (alternatives != NULL) {
+X	  if (in_string(address, alternatives->address))
+X	    return(FALSE);
+X	  alternatives = alternatives->next;
+X	}
+X
+X	return(TRUE);
+X}
+X	    
+Xoptimize_and_add(new_address, full_address)
+Xchar *new_address, *full_address;
+X{
+X	/** This routine will add the new address to the list of addresses
+X	    in the full address buffer IFF it doesn't already occur.  It
+X	    will also try to fix dumb hops if possible, specifically hops
+X	    of the form ...a!b...!a... and hops of the form a@b@b etc 
+X	**/
+X
+X	register int len, host_count = 0, i;
+X	char     hosts[MAX_HOPS][SLEN];	/* array of machine names */
+X	char     *host, *addrptr;
+X
+X	if (in_string(full_address, new_address))
+X	  return(1);	/* duplicate address */
+X
+X	/** optimize **/
+X	/*  break down into a list of machine names, checking as we go along */
+X	
+X	addrptr = (char *) new_address;
+X
+X	while ((host = get_token(addrptr, "!", 1)) != NULL) {
+X	  for (i = 0; i < host_count && ! equal(hosts[i], host); i++)
+X	      ;
+X
+X	  if (i == host_count) {
+X	    strcpy(hosts[host_count++], host);
+X	    if (host_count == MAX_HOPS) {
+X	       dprint1(2,
+X              "Error: hit max_hops limit trying to build return address (%s)\n",
+X		      "optimize_and_add");
+X	       error("Can't build return address - hit MAX_HOPS limit!");
+X	       return(1);
+X	    }
+X	  }
+X	  else 
+X	    host_count = i + 1;
+X	  addrptr = NULL;
+X	}
+X
+X	/** fix the ARPA addresses, if needed **/
+X	
+X	if (chloc(hosts[host_count-1], '@') > -1)
+X	  fix_arpa_address(hosts[host_count-1]);
+X	  
+X	/** rebuild the address.. **/
+X
+X	new_address[0] = '\0';
+X
+X	for (i = 0; i < host_count; i++)
+X	  sprintf(new_address, "%s%s%s", new_address, 
+X	          new_address[0] == '\0'? "" : "!",
+X	          hosts[i]);
+X
+X	if (full_address[0] == '\0')
+X	  strcpy(full_address, new_address);
+X	else {
+X	  len = strlen(full_address);
+X	  full_address[len  ] = ',';
+X	  full_address[len+1] = ' ';
+X	  full_address[len+2] = '\0';
+X	  strcat(full_address, new_address);
+X	}
+X
+X	return(0);
+X}
+X
+Xget_return_name(address, name, shift_lower)
+Xchar *address, *name;
+Xint   shift_lower;
+X{
+X	/** Given the address (either a single address or a combined list 
+X	    of addresses) extract the login name of the first person on
+X	    the list and return it as 'name'.  Modified to stop at
+X	    any non-alphanumeric character. **/
+X
+X	/** An important note to remember is that it isn't vital that this
+X	    always returns just the login name, but rather that it always
+X	    returns the SAME name.  If the persons' login happens to be,
+X	    for example, joe.richards, then it's arguable if the name 
+X	    should be joe, or the full login.  It's really immaterial, as
+X	    indicated before, so long as we ALWAYS return the same name! **/
+X
+X	/** Another note: modified to return the argument as all lowercase
+X	    always, unless shift_lower is FALSE... **/
+X
+X	char single_address[LONG_SLEN];
+X	register int i, loc, index = 0;
+X
+X	dprint2(6,"get_return_name called with (%s, <>, shift=%s)\n", 
+X		   address, onoff(shift_lower));
+X
+X	/* First step - copy address up to a comma, space, or EOLN */
+X
+X	for (i=0; address[i] != ',' && ! whitespace(address[i]) && 
+X	     address[i] != '\0'; i++)
+X	  single_address[i] = address[i];
+X	single_address[i] = '\0';
+X
+X	/* Now is it an ARPA address?? */
+X
+X	if ((loc = chloc(single_address, '@')) != -1) {	  /* Yes */
+X
+X	  /* At this point the algorithm is to keep shifting our copy 
+X	     window left until we hit a '!'.  The login name is then
+X             located between the '!' and the first metacharacter to 
+X	     it's right (ie '%', ':' or '@'). */
+X
+X	  for (i=loc; single_address[i] != '!' && i > -1; i--)
+X	      if (single_address[i] == '%' || 
+X	          single_address[i] == ':' ||
+X	          single_address[i] == '.' ||	/* no domains */
+X		  single_address[i] == '@') loc = i-1;
+X	
+X	  if (i < 0 || single_address[i] == '!') i++;
+X
+X	  for (index = 0; index < loc - i + 1; index++)
+X	    if (shift_lower)
+X	      name[index] = tolower(single_address[index+i]);
+X	    else
+X	      name[index] = single_address[index+i];
+X	  name[index] = '\0';
+X	}
+X	else {	/* easier - standard USENET address */
+X
+X	  /* This really is easier - we just cruise left from the end of
+X	     the string until we hit either a '!' or the beginning of the
+X             line.  No sweat. */
+X
+X	  loc = strlen(single_address)-1; 	/* last char */
+X
+X	  for (i = loc; single_address[i] != '!' && single_address[i] != '.' 
+X	       && i > -1; i--)
+X	     if (shift_lower)
+X	       name[index++] = tolower(single_address[i]);
+X	     else
+X	       name[index++] = single_address[i];
+X	  name[index] = '\0';
+X	  reverse(name);
+X	}
+X}
+X
+Xint
+Xbreak_down_tolist(buf, index, address, comment)
+Xchar *buf, *address, *comment;
+Xint  *index;
+X{
+X	/** This routine steps through "buf" and extracts a single address
+X	    entry.  This entry can be of any of the following forms;
+X
+X		address (name)
+X		name <address>
+X		address
+X	
+X	    Once it's extracted a single entry, it will then return it as
+X	    two tokens, with 'name' (e.g. comment) surrounded by parens.
+X	    Returns ZERO if done with the string...
+X	**/
+X
+X	char buffer[LONG_STRING];
+X	register int i, loc = 0;
+X
+X	if (*index > strlen(buf)) return(FALSE);
+X
+X	while (whitespace(buf[*index])) (*index)++;
+X
+X	if (*index > strlen(buf)) return(FALSE);
+X
+X	/** Now we're pointing at the first character of the token! **/
+X
+X	while (buf[*index] != ',' && buf[*index] != '\0')
+X	  buffer[loc++] = buf[(*index)++];
+X
+X	(*index)++;
+X
+X	while (whitespace(buffer[loc])) loc--;	/* remove trailing whitespace */
+X
+X	buffer[loc] = '\0';
+X
+X	if (strlen(buffer) == 0) return(FALSE);
+X
+X	dprint1(5, "\n* got \"%s\"\n", buffer);
+X
+X	if (buffer[loc-1] == ')') {	/*   address (name)  format */
+X	  for (loc = 0;buffer[loc] != '(' && loc < strlen(buffer); loc++)
+X		/* get to the opening comment character... */ ;
+X
+X	  loc--;	/* back up to just before the paren */
+X	  while (whitespace(buffer[loc])) loc--;	/* back up */
+X
+X	  /** get the address field... **/
+X
+X	  for (i=0; i <= loc; i++)
+X	    address[i] = buffer[i];
+X	  address[i] = '\0';
+X
+X	  /** now get the comment field, en toto! **/
+X
+X	  loc = 0;
+X
+X	  for (i = chloc(buffer, '('); i < strlen(buffer); i++)
+X	    comment[loc++] = buffer[i];
+X	  comment[loc] = '\0';
+X	}
+X	else if (buffer[loc-1] == '>') {	/*   name <address>  format */
+X	  dprint0(7, "\tcomment <address>\n");
+X	  for (loc = 0;buffer[loc] != '<' && loc < strlen(buffer); loc++)
+X		/* get to the opening comment character... */ ;
+X	  while (whitespace(buffer[loc])) loc--;	/* back up */
+X
+X	  /** get the comment field... **/
+X
+X	  comment[0] = '(';
+X	  for (i=1; i < loc; i++)
+X	    comment[i] = buffer[i-1];
+X	  comment[i++] = ')';
+X	  comment[i] = '\0';
+X
+X	  /** now get the address field, en toto! **/
+X
+X	  loc = 0;
+X
+X	  for (i = chloc(buffer,'<') + 1; i < strlen(buffer) - 1; i++)
+X	    address[loc++] = buffer[i];
+X	
+X	  address[loc] = '\0';
+X	}
+X	else {
+X	  strcpy(address, buffer);
+X	  comment[0] = '\0';
+X	}
+X
+X	dprint2(5,"-- returning '%s' '%s'\n", address, comment);
+X
+X	return(TRUE);
+X}
+END_OF_reply.c
+if test 13964 -ne `wc -c <reply.c`; then
+    echo shar: \"reply.c\" unpacked with wrong size!?
+fi
+# end of overwriting check
+fi
+echo shar: End of shell archive.
+exit 0

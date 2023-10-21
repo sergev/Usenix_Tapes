@@ -1,0 +1,4897 @@
+:
+#
+echo Extracting _croot.c:
+sed 's/^Z//' >_croot.c <<\STUNKYFLUFF
+Z/* Copyright (C) 1981,1982, 1983 by Manx Software Systems */
+Z#include <stdio.h>
+Z#include <errno.h>
+Z#include <fcntl.h>
+Z#ifndef NULL
+Z#define NULL ((void *)0)
+Z#endif
+Z
+Zchar *get_first(), *get_next(), *sbrk();
+Zchar *wilderr = "No wild cards in command names!!\r\n";
+Z
+Z/* noexpand can be set by routines before calling _Croot */
+Zint noexpand = 0;
+Z
+Z#define ARGMAX 256
+Zstatic char *Argv[ARGMAX];
+Zstatic int Argc;
+Zstatic char curr_path[128];
+Z
+Z_Croot(cp,cmd)
+Zregister char *cp;
+Zint (*cmd)();
+Z{
+Z	int returnval = 0;
+Z	char *startbuf,*endbuf;
+Z	register char *cp2;
+Z	char *wild_match;
+Z	char *index(),*rindex(), *save_str();
+Z	char *path,*copy; int j;
+Z	char *quote;
+Z	int k,omode; char *fname;
+Z	int in = -1, out = -1;
+Z	/* lets try not to free things not allocated by malloc */
+Z	startbuf = cp; endbuf = &cp[strlen(cp)];
+Z	if (!noexpand)
+Z	{
+Z		/* ls is a special case !!! */
+Z		if(0 == strncmp(cp,"ls",2) || 0 == strncmp(cp,"dir",3))
+Z			noexpand++;
+Z	}
+Z
+Z	/* loop through arguments */
+Z	for (Argc = 0;;) 
+Z	{
+Z		/* skip blanks */
+Z		while (*cp == ' ' || *cp == '\t')
+Z			++cp;
+Z
+Z		/* if you're at the end of command line, you're done */
+Z		if (*cp == 0)
+Z			break;
+Z		/* handle redirection . . . */
+Z		if (*cp == '>')
+Z		{
+Z			k = 1;
+Z			if (cp[1] == '>')
+Z			{
+Z				++cp;
+Z				omode = O_CREAT | O_WRONLY | O_APPEND; 
+Z			}
+Z			else
+Z				omode = O_CREAT | O_WRONLY | O_TRUNC;
+Z			goto redirect;
+Z		} else if (*cp == '<')
+Z		{
+Z			k = 0;
+Z	redirect:
+Z			while (*++cp == ' ' || *cp == '\t')
+Z				;
+Z			fname = cp;
+Z			while(*++cp)
+Z				if (*cp == ' ' || *cp == '\t')
+Z				{
+Z					*cp++ = 0;
+Z					break;
+Z				}
+Z			close(k);
+Z			if (k)
+Z				out = k = open(fname,omode);
+Z			else
+Z				in = k = open(fname,O_RDONLY);
+Z			if (k == -1)
+Z			{
+Z				perror("redirection");
+Z				return -1;
+Z			}
+Z			/* go back for next argument */
+Z			continue;
+Z		}
+Z		/* find beginning of next argument */
+Z		cp2 = cp;	/* save original pointer to the string */
+Z		while (*++cp2)
+Z		{
+Z			/* if you hit a space char - stick a null in to terminate last
+Z			   argument
+Z			 */
+Z			if (*cp2 == ' ' || *cp2 == '\t') 
+Z			{
+Z				*cp2++ = 0;
+Z				break;
+Z			}
+Z		}
+Z
+Z		/* if no wild card characters, do it the old fashioned way */
+Z		if (index(cp,'*') == NULL && index(cp,'?') == NULL)
+Z		{
+Znotranslate:
+Z			if (*cp == '\'')
+Z			/* pass through untranslated, with quotes stripped */
+Z			{
+Z				cp++;	/* point past quote */
+Z				if ( NULL == (quote = rindex(cp,'\'')))
+Z				{
+Z					write(2,"sh - no close quotes on command line\r\n",38);
+Z					goto free_args;
+Z				}
+Z				*quote = '\0';
+Z			}
+Z			/* update the next argv pointer */
+Z			Argv[Argc] = cp;
+Z			/* bump the argument count */
+Z			if (++Argc == ARGMAX)
+Z				abort();
+Z		}
+Z		else
+Z		{
+Z			if (*cp == '"' || *cp == '\'')
+Z				goto notranslate;
+Z			if (noexpand)
+Z				goto notranslate;
+Z			/* wild cards not permitted on first run thru */
+Z			if (Argc == 0)
+Z			{
+Z				write(2,wilderr,strlen(wilderr));
+Z				return -1;
+Z			}
+Z			/* if there is a path included, save it off */
+Z			if ((path = rindex(cp,'\\')) || (path = rindex(cp,'/')))
+Z			{
+Z				copy = cp;
+Z				/* copy to curr_path, mapping / to \ */
+Z				for (j = 0; j < sizeof(curr_path) && copy != path+1; copy++,j++)
+Z					curr_path[j] = (*copy == '/' ? '\\' : *copy);
+Z				/* terminate string */
+Z				curr_path[j] = '\0';
+Z			}
+Z			else if (cp[1] == ':')
+Z			{
+Z				copy = cp;
+Z				for (j = 0; j < 2; j++)
+Z					curr_path[j] = *copy++;
+Z				curr_path[j] = '\0';
+Z			} else
+Z			/* null path */
+Z				curr_path[0] = 0;
+Z			if (wild_match = get_first(cp))
+Z			{
+Z				/* update the next argv pointer */
+Z				Argv[Argc]= save_str(wild_match);
+Z				/* bump the argument count */
+Z				if (++Argc == ARGMAX)
+Z					abort();
+Z				/* get the rest of the matching file names */
+Z				while (wild_match = get_next())
+Z				{
+Z					
+Z					/* update the next argv pointer */
+Z					Argv[Argc] = save_str(wild_match);
+Z					/* bump the argument count */
+Z					if (++Argc == ARGMAX)
+Z						abort();
+Z				}
+Z			}
+Z		}
+Z		cp = cp2;	/* point to beginning of next argument */
+Z	}
+Z	Argv[Argc] = NULL;	
+Z	returnval=(*cmd)(Argc,Argv);
+Z	if (in != -1)
+Z		close(in);
+Z	if (out != -1)
+Z		close(out);
+Z	/* free anything not dynamically allocated */
+Zfree_args:
+Z	if (!noexpand)
+Z	{
+Z		for(j = 1;j < Argc; j++)
+Z			if (
+Z			!(Argv[j] >= startbuf && Argv[j] <= endbuf)	/* not in cmd line */
+Z			&& Argv[j]									/* Not NULL			*/
+Z		   		)
+Z			free(Argv[j]);
+Z	}
+Z	noexpand = 0;
+Z	return returnval;
+Z}
+Z
+Zchar *
+Zsave_str(s)
+Z	register char *s;
+Z{
+Z	register char *r,*malloc();
+Z	int pathlen;
+Z	/* squirrel away matched file name */
+Z	if (NULL == (r = malloc(strlen(s)+(pathlen = strlen(curr_path))+1)))
+Z		abort();
+Z	strcat(curr_path,s);
+Z	strcpy(r,curr_path);
+Z	curr_path[pathlen] = '\0';
+Z	return r;
+Z}
+Z
+Zabort()
+Z{
+Z	write(2, "Too many args.", 14);
+Z	_exit(200);
+Z}
+Z
+Z
+Ztypedef struct
+Z{
+Z	char dos_reserved[21];
+Z	char attribute;
+Z	unsigned file_time;
+Z	unsigned file_date;
+Z	long file_size;
+Z	char file_name[13];
+Z} fcb;
+Zfcb wildcard;
+Z
+Zchar *get_first(fname)
+Z	char *fname;
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&wildcard);
+Z	result = bdos(0x4E,fname,0);
+Z	/* make the find first call */
+Z	if(2 == result || 18 == result)
+Z		return NULL;
+Z	return &(wildcard.file_name[0]);
+Z}
+Z
+Zchar *get_next()
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&wildcard);
+Z	result = bdos(0x4f,0,0);
+Z	/* make the find next call */
+Z	if (18 == result)
+Z		return NULL;
+Z	return &(wildcard.file_name[0]);
+Z}
+STUNKYFLUFF
+set `sum _croot.c`
+if test 54651 != $1
+then
+echo _croot.c: Checksum error. Is: $1, should be: 54651.
+fi
+#
+#
+echo Extracting cat.c:
+sed 's/^Z//' >cat.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <signal.h>
+Z#include <setjmp.h>
+Z
+Zvoid (*signal())();
+Z
+ZFILE *fd1,*fd2;
+Z
+Zvoid (*oldsig)();
+Zchar *fgets();
+Zjmp_buf catenv;
+Zcatintr()
+Z{
+Z	signal(SIGINT,SIG_IGN);			/* ignore signals */
+Z	fclose(fd1);
+Z	fclose(fd2);
+Z	signal(SIGINT,oldsig);			/* restore shell interrupt */
+Z	longjmp(catenv,-1);
+Z}
+Z
+Zcat(argc,argv)
+Z	char *argv[];
+Z{
+Z	char *intmsg = "Interrupt received\n";
+Z
+Z	FILE *fdopen(), *fopen();
+Z	if (-1==setjmp(catenv))
+Z	{
+Z		write(2,intmsg,strlen(intmsg));
+Z		return -1;
+Z	}
+Z	oldsig = signal(SIGINT,catintr);	/* trap interrupts from keyboard */
+Z	/* get standard output opened for business */
+Z	if (NULL == (fd2 = fdopen(1,"w")))
+Z	{
+Z		perror("cat : Can't open stdout");
+Z	}
+Z
+Z	/* handle pipes */
+Z	if (argc == 1)
+Z	{
+Z		if (NULL == (fd1 = fdopen(0,"r")))
+Z		{
+Z			perror("cat : Can't open stdin");
+Z		}
+Z		_cat();
+Z		fclose(fd1);fclose(fd2);
+Z	}
+Z	/* handle specified files */
+Z	else
+Z	{
+Z		while(--argc)
+Z		{
+Z			if (NULL == (fd1 = fopen(*(++argv),"r")))
+Z			{
+Z				fprintf(stderr,"can't open %s\n",*argv);
+Z				continue;
+Z			}
+Z			_cat();
+Z			fclose(fd1);
+Z		}
+Z	}
+Z	fclose(fd2);
+Z	signal(SIGINT,oldsig);				/* restore old int catcher		*/
+Z}
+Z
+Z_cat()
+Z{
+Z	char buffer[512];
+Z	while (NULL != fgets(buffer,512,fd1))
+Z		fputs(buffer,fd2);
+Z}
+STUNKYFLUFF
+set `sum cat.c`
+if test 12297 != $1
+then
+echo cat.c: Checksum error. Is: $1, should be: 12297.
+fi
+#
+#
+echo Extracting cd.c:
+sed 's/^Z//' >cd.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Zcd(argc,argv)
+Zchar *argv[];
+Z{
+Z	static char *usage = "usage : cd newdir";
+Z	if (argc == 1)
+Z		write(2,usage,strlen(usage));
+Z	if (-1 == chdir(*(++argv)))
+Z	{
+Z		perror("cd");
+Z		return -1;
+Z	}
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum cd.c`
+if test 24433 != $1
+then
+echo cd.c: Checksum error. Is: $1, should be: 24433.
+fi
+#
+#
+echo Extracting chmod.c:
+sed 's/^Z//' >chmod.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <stat.h>
+Z#ifdef MAIN
+Zmain
+Z#else
+Zch_mod
+Z#endif
+Z(argc,argv)
+Z	char *argv[];
+Z{
+Z	int or_mask,and_mask,file_stat;
+Z	struct { int ax,bx,cx,dx,si,di,ds,es; } regs;
+Z	extern int _dsval;
+Z	char *current;
+Z	regs.ds = _dsval;
+Z	if (argc==1)
+Z	{
+Z		fprintf(stderr,"Usage : chmod +|-[ahw] file [file ...]\n");
+Z	}
+Z	/* set attributes to default */
+Z	or_mask = 0; and_mask = 0xFFFF;
+Z	while(--argc)
+Z	{
+Z		current = *(++argv);
+Z		switch (*current)
+Z		{
+Z		case '-':
+Z			while (*++current)
+Z			{
+Z				switch(*current)
+Z				{
+Z				case 'w':
+Z				case 'W':
+Z					or_mask |= ST_RDONLY;
+Z					break;
+Z				case 'h':
+Z				case 'H':
+Z					and_mask &= (ST_HIDDEN ^ 0xFFFF);
+Z					break;
+Z				case 'r':
+Z				case 'R':
+Z					or_mask |= ST_HIDDEN;
+Z					break;
+Z				case 'a':
+Z				case 'A':
+Z					and_mask &= (ST_ARCHIV ^ 0xFFFF);
+Z					break;
+Z				case 's':
+Z				case 'S':
+Z					and_mask &= (ST_SYSTEM ^ 0xFFFF);
+Z					break;
+Z				default:
+Z					write(2,"invalid attribute\r\n",19);
+Z				return -1;
+Z				}
+Z			}
+Z			break;
+Z		case '+':
+Z			while(*++current)
+Z			{
+Z				switch(*current)
+Z				{
+Z				case 'w':
+Z				case 'W':
+Z					and_mask &= (ST_RDONLY ^ 0xFFFF);
+Z					break;
+Z				case 'h':
+Z				case 'H':
+Z					or_mask |= ST_HIDDEN;
+Z					break;
+Z				case 's':
+Z				case 'S':
+Z					or_mask |= ST_SYSTEM;
+Z					break;
+Z				case 'r':
+Z				case 'R':
+Z					and_mask &= (ST_HIDDEN ^ 0xFFFF);
+Z					break;
+Z				case 'a':
+Z				case 'A':
+Z					or_mask |= ST_ARCHIV;
+Z					break;
+Z				default:
+Z					write(2,"invalid attribute\r\n",19);
+Z					return -1;
+Z
+Z				}
+Z			}
+Z			break;
+Z		default:
+Z			/* get current attribute */
+Z			regs.ax = 0x4300;
+Z			regs.dx = (int)current;
+Z			regs.ds = _dsval;
+Z			sysint(0x21,&regs,&regs);
+Z			file_stat = regs.cx;
+Z			fprintf(stderr,"current attribute for %s = %x\n",
+Z				current,file_stat);
+Z			/* set new attribute */
+Z			file_stat |= or_mask;
+Z			file_stat &= and_mask;
+Z			regs.ax = 0x4301;
+Z			regs.dx = (int)current;
+Z			regs.cx = file_stat;
+Z			regs.ds = _dsval;
+Z			sysint(0x21,&regs,&regs);
+Z			/* get attribute to see if it changed */
+Z			regs.ax = 0x4300;
+Z			regs.dx = (int)current;
+Z			regs.ds = _dsval;
+Z			sysint(0x21,&regs,&regs);
+Z			file_stat = regs.cx;
+Z			fprintf(stderr,"new attribute for %s = %x\n",
+Z				current,file_stat);
+Z			break;
+Z		}
+Z	}
+Z}
+Z
+STUNKYFLUFF
+set `sum chmod.c`
+if test 37605 != $1
+then
+echo chmod.c: Checksum error. Is: $1, should be: 37605.
+fi
+#
+#
+echo Extracting cmdlist.c:
+sed 's/^Z//' >cmdlist.c <<\STUNKYFLUFF
+Z
+Zextern int cmds(),ls(), cp(), rm(), do_prog(),pushd(),popd(),drive(), ver(),
+Z		more(),fgrep(),scr_clear(),set(),ch_mod(),cat(),echo(), 
+Z		y(),t(),dump(),
+Z		last(),invalid(),mv(),md(),touch(),cd(),pwd(),rd(),hist(),my_exit();
+Ztypedef struct
+Z{
+Z	char *cmdname;
+Z	int (*func)();
+Z} builtin;
+Zbuiltin commands[] =
+Z{
+Z	"a:",drive,
+Z	"b:",drive,
+Z	"c:",drive,
+Z	"cat",cat,
+Z	"cd",cd,
+Z	"chdir",cd,
+Z	"chmod",ch_mod,
+Z	"cls",scr_clear,
+Z	"commands",cmds,
+Z	"copy",cp,
+Z	"cp",cp,
+Z	"copy",cp,
+Z	"d:",drive,
+Z	"del",rm,
+Z	"dir",ls,
+Z	"dump",dump,
+Z	"e:",drive,
+Z	"echo",echo,
+Z	"era",rm,
+Z	"erase",rm,
+Z	"error",last,
+Z	"exit",my_exit,
+Z	"f:",drive,
+Z	"fgrep",fgrep,
+Z	"g:",drive,
+Z	"h:",drive,
+Z	"hd",dump,
+Z	"hist",hist,
+Z	"history",hist,
+Z	"i:",drive,
+Z	"j:",drive,
+Z	"ls",ls,
+Z	"md",md,
+Z	"mkdir",md,
+Z	"more",more,
+Z	"mv",mv,
+Z	"no history",invalid,
+Z	"popd",popd,
+Z	"pushd",pushd,
+Z	"pwd",pwd,
+Z	"rd",rd,
+Z	"rm",rm,
+Z	"rmdir",rd,
+Z	"set",set,
+Z	"tee",t,
+Z	"touch",touch,
+Z	"version",ver,
+Z	"y",y
+Z};
+Zint numcmds =  (sizeof(commands)/sizeof(builtin));
+STUNKYFLUFF
+set `sum cmdlist.c`
+if test 20023 != $1
+then
+echo cmdlist.c: Checksum error. Is: $1, should be: 20023.
+fi
+#
+#
+echo Extracting cmds:
+sed 's/^Z//' >cmds <<\STUNKYFLUFF
+Za:              b:              c:              cat             
+Zcd              chdir           chmod           cls             
+Zcommands        copy            cp              copy            
+Zd:              del             dir             dump            
+Ze:              echo            era             erase           
+Zerror           exit            f:              fgrep           
+Zg:              h:              hd              hist            
+Zhistory         i:              j:              ls              
+Zmd              mkdir           more            mv              
+Zno history      popd            pushd           pwd             
+Zrd              rm              rmdir           set             
+Ztee             touch           version         y               
+Z
+STUNKYFLUFF
+set `sum cmds`
+if test 18223 != $1
+then
+echo cmds: Checksum error. Is: $1, should be: 18223.
+fi
+#
+#
+echo Extracting cmds.c:
+sed 's/^Z//' >cmds.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <fcntl.h>
+Ztypedef struct
+Z{
+Z	char *cmdname;
+Z	int (*func)();
+Z} builtin;
+Z
+Zchar *str_lower();
+Z
+Zextern int result;
+Z
+Zextern int cmds(),ls(), cp(), rm(), do_prog(),pushd(),popd(),drive(), ver(),
+Z		more(),fgrep(),scr_clear(),set(),ch_mod(),cat(),echo(), 
+Z		y(),t(),dump(),
+Z		last(),invalid(),mv(),md(),touch(),cd(),pwd(),rd(),hist(),my_exit();
+Z
+Zmy_exit(argc,argv)
+Z	char *argv[];
+Z{
+Z	exit(result);
+Z}
+Z
+Zver()
+Z{
+Z	extern char *version;
+Z	write(2,version,strlen(version));
+Z	write(2,"\r\n",2);
+Z}
+Z
+Zextern builtin commands[];
+Zextern int numcmds;
+Zchar *histerr = "no history";
+Zint j,hiscount;
+Zchar *history[] = {NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,
+Z					 NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL};
+Z
+Zint histsize = (sizeof(history)/sizeof(char *));
+Z
+Zcmds()
+Z{
+Z	char *current;
+Z	register int i,j,col;
+Z	col = 1;
+Z	for (i = 0; i < numcmds; i++)
+Z	{
+Z		current = commands[i].cmdname;
+Z		write(1,current,j = strlen(current));
+Z		for (;j < 16;j++)
+Z			write(1," ",1);
+Z		if (col == 4)
+Z		{
+Z			col = 1;
+Z			crlf();
+Z		}
+Z		else
+Z			++col;
+Z	}
+Z	crlf();
+Z}
+Z
+Zfindcmd(cmdbuf)
+Z	char *cmdbuf;
+Z{
+Z	register int low,high,mid;
+Z	char localbuf[256];
+Z	int cond;
+Z	strcpy(localbuf,cmdbuf);
+Z	cmdbuf = str_lower(localbuf);
+Z	low = 0;
+Z	high = numcmds - 1;
+Z	while (low <= high)
+Z	{
+Z		mid = (low+high) / 2;
+Z		if	( ( cond =  strncmp( cmdbuf,
+Z								 commands[mid].cmdname,
+Z								 strlen(commands[mid].cmdname) ) ) < 0 )
+Z				high = mid - 1;
+Z		else if (cond > 0)
+Z				low = mid + 1;
+Z		else
+Z		{
+Z			/* kludge to allow for program invocations like d:command */
+Z			if (cmdbuf[1] == ':')
+Z				if (cmdbuf[2] == '\0')
+Z					return mid;
+Z				else
+Z					return -1;
+Z			return mid;
+Z		}
+Z	}
+Z	return -1;
+Z}
+Z
+Zhist()
+Z{
+Z	register int i;
+Z	char localbuf[256];
+Z	if (j < histsize)
+Z		i = 0;
+Z	else
+Z		i = j - histsize + 1;
+Z	for (;i <= j; i++)
+Z	{
+Z		sprintf(localbuf,"%d : %s\r\n",i,history[i % histsize]);
+Z		write(1,localbuf,strlen(localbuf));
+Z	}
+Z}
+Z
+Zlast()
+Z{
+Z	printf("return code of last command %d\n",result);
+Z	return result;
+Z}
+STUNKYFLUFF
+set `sum cmds.c`
+if test 01085 != $1
+then
+echo cmds.c: Checksum error. Is: $1, should be: 01085.
+fi
+#
+#
+echo Extracting cp.c:
+sed 's/^Z//' >cp.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Zchar *me;
+Z/* cp.c - implements a version of UNIX cp */
+Zchar target_name[128];
+Z#ifndef MAIN
+Zcp
+Z#else
+Zmain
+Z#endif
+Z(argc,argv)
+Zint argc;
+Zregister char *argv[];
+Z{
+Z	static char *usage = "cp : usage cp file1 [file2 . . fileN] target\r\n";
+Z    char target[128],*fname_part();
+Z    register int i;
+Z	me = argv[0];
+Z    if (argc < 3)
+Z    {
+Z	write(2,usage,strlen(usage));
+Z	return(-1);
+Z    }
+Z    strcpy(target, argv[argc-1]);
+Z    /* kill trailing backslashes */
+Z    if (target[i = strlen(target) - 1] == '\\')
+Z	target[i] = '\0';
+Z    if (argc == 3)
+Z    {
+Z	if (target[1] == ':' && !target[2])
+Z	    strcat(target,fname_part(argv[1]));
+Z	/* if the target doesn't exist and it's not a directory then rename */
+Z	if (access(target,0) && !dirp(target))
+Z	{
+Z	    fprintf(stderr,"copying %s to %s\n",argv[1],target);
+Z	    filecopy(target,argv[1]);
+Z	}
+Z	else
+Z	{
+Z	    /* if the target is a directory copy to same name that directory */
+Z	    if (dirp(target))
+Z	    {
+Z		int len;
+Z		strcpy(target_name,target);
+Z		if (target_name[(len = strlen(target_name))-1] != '\\')
+Z		{
+Z		    target_name[len = strlen(target_name)] = '\\';
+Z		    target_name[len+1] = '\0';
+Z		}
+Z		strcat(target_name,fname_part(argv[1]));
+Z		fprintf(stderr,"copying %s to %s\n",argv[1],target_name);
+Z		filecopy(target_name,argv[1]);
+Z	    }
+Z	    else
+Z	    {
+Z		fprintf(stderr,"copying %s to %s\n",argv[1],target);
+Z		filecopy(target,argv[1]);
+Z	    }
+Z	}
+Z	return(0);
+Z    }
+Z    /* handle special case of a drive designation */
+Z    if (target[(i = strlen(target))-1] != ':')
+Z	if (!dirp(target))
+Z	{
+Z	    fprintf(stderr,"cp : %s isn't a directory\n",target);
+Z	    return(-1);
+Z	}
+Z    for (i = 1; i < argc-1; i++)
+Z    {
+Z	int len;
+Z	strcpy(target_name,target);
+Z	if (target_name[(len = strlen(target_name))-1] != '\\')
+Z	{
+Z	    target_name[len = strlen(target_name)] = '\\';
+Z	    target_name[len+1] = '\0';
+Z	}
+Z	strcat(target_name,fname_part(argv[i]));
+Z	if (!filep(argv[i]))
+Z	{
+Z	    fprintf(stderr,"cp : %s isn't a file\n",argv[i]);
+Z	    continue;
+Z	}
+Z	fprintf(stderr,"copying %s to %s\n",argv[i],target_name);
+Z	filecopy(target_name,argv[i]);
+Z    }
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum cp.c`
+if test 27151 != $1
+then
+echo cp.c: Checksum error. Is: $1, should be: 27151.
+fi
+#
+#
+echo Extracting crlf.c:
+sed 's/^Z//' >crlf.c <<\STUNKYFLUFF
+Zcrlf()
+Z{
+Z	static char *cr = "\r\n";
+Z	write(1,cr,2);
+Z}
+STUNKYFLUFF
+set `sum crlf.c`
+if test 19813 != $1
+then
+echo crlf.c: Checksum error. Is: $1, should be: 19813.
+fi
+#
+#
+echo Extracting croot.c:
+sed 's/^Z//' >croot.c <<\STUNKYFLUFF
+Z/* Copyright (C) 1981,1982, 1983 by Manx Software Systems */
+Z#include <errno.h>
+Z#include <fcntl.h>
+Z#ifndef NULL
+Z#define NULL ((void *)0)
+Z#endif
+Z
+Zchar *get_first(), *get_next(), *sbrk();
+Z
+Z#define ARGMAX 256
+Zstatic char *Argv[ARGMAX];
+Zstatic int argvsize;
+Zstatic int Argc;
+Zstatic char curr_path[128];
+Z
+Znoper()
+Z{
+Z	return 0;
+Z}
+Z
+Zint (*cls_)() = noper;
+Zextern char _ioflg[];
+Z
+ZCroot(cp, first)
+Zregister char *cp;
+Z{
+Z	register char *cp2;
+Z	char *save;
+Z	char *wild_match;
+Z	char *index(),*rindex(), *save_str();
+Z	char *path,*copy; int j;
+Z
+Z	_ioflg[0] = isatty(0);	/* set flag for i/o routines */
+Z	_ioflg[1] = isatty(1);	/* set flag for i/o routines */
+Z	_ioflg[2] = isatty(2);	/* set flag for i/o routines */
+Z
+Z
+Z	/* Null out first argument */
+Z	Argv[0] = "";
+Z	Argc = first;
+Z
+Z	/* loop through arguments */
+Z	for (;;) 
+Z	{
+Z		/* skip blanks */
+Z		while (*cp == ' ' || *cp == '\t')
+Z			++cp;
+Z
+Z		/* if you're at the end of command line, you're done */
+Z		if (*cp == 0)
+Z			break;
+Z
+Z		/* find beginning of next argument */
+Z		cp2 = cp;	/* save original pointer to the string */
+Z		*cp2 = (*cp2 == '/' ? '\\' : *cp2);
+Z		while (*++cp2)
+Z		{
+Z			/* if you hit a space char - stick a null in to terminate last
+Z			   argument
+Z			 */
+Z			if (*cp2 == ' ' || *cp2 == '\t') 
+Z			{
+Z				*cp2++ = 0;
+Z				break;
+Z			}
+Z			*cp2 = (*cp2 == '/' ? '\\' : *cp2);
+Z		}
+Z
+Z		/* if no wild card characters, do it the old fashioned way */
+Z		if (index(cp,'*') == NULL && index(cp,'?') == NULL)
+Z		{
+Z			/* update the next argv pointer */
+Z			Argv[Argc] = cp;
+Z			/* bump the argument count */
+Z			if (++Argc == ARGMAX)
+Z				abort();
+Z		}
+Z		else
+Z		{
+Z			/* if there is a path included, save it off */
+Z			if ((path = rindex(cp,'\\')) || (path = rindex(cp,'/')))
+Z			{
+Z				copy = cp;
+Z				/* copy to curr_path, mapping / to \ */
+Z				for (j = 0; j < sizeof(curr_path) && copy != path+1; copy++,j++)
+Z					curr_path[j] = (*copy == '/' ? '\\' : *copy);
+Z				/* terminate string */
+Z				curr_path[j] = '\0';
+Z			}
+Z			else if (cp[1] == ':')
+Z			{
+Z				copy = cp;
+Z				for (j = 0; j < 2; j++)
+Z					curr_path[j] = *copy++;
+Z				curr_path[j] = '\0';
+Z			} else
+Z			/* null path */
+Z				curr_path[0] = 0;
+Z			if (wild_match = get_first(cp))
+Z			{
+Z				/* update the next argv pointer */
+Z				Argv[Argc]= save_str(wild_match);
+Z				/* bump the argument count */
+Z				if (++Argc == ARGMAX)
+Z					abort();
+Z				/* get the rest of the matching file names */
+Z				while (wild_match = get_next())
+Z				{
+Z					
+Z					/* update the next argv pointer */
+Z					Argv[Argc] = save_str(wild_match);
+Z					/* bump the argument count */
+Z					if (++Argc == ARGMAX)
+Z						abort();
+Z				}
+Z			}
+Z		}
+Z		cp = cp2;	/* point to beginning of next argument */
+Z	}
+Z	Argv[Argc] = NULL;	
+Z	main(Argc,Argv);
+Z	exit(0);
+Z}
+Z
+Zchar *save_str(s)
+Z	register char *s;
+Z{
+Z	register char *r;
+Z	int pathlen;
+Z	/* squirrel away matched file name */
+Z	if (NULL == (r = sbrk(strlen(s)+(pathlen = strlen(curr_path))+1)))
+Z		abort();
+Z	strcat(curr_path,s);
+Z	strcpy(r,curr_path);
+Z	curr_path[pathlen] = '\0';
+Z	return r;
+Z}
+Z
+Zabort()
+Z{
+Z	write(2, "Too many args.", 14);
+Z	_exit(200);
+Z}
+Z
+Zexit(code)
+Z{
+Z	(*cls_)();
+Z	_exit(code);
+Z}
+Z
+Ztypedef struct
+Z{
+Z	char dos_reserved[21];
+Z	char attribute;
+Z	unsigned file_time;
+Z	unsigned file_date;
+Z	long file_size;
+Z	char file_name[13];
+Z} fcb;
+Zfcb wildcard;
+Z
+Zchar *get_first(fname)
+Z	char *fname;
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&wildcard);
+Z	result = bdos(0x4E,fname,0);
+Z	/* make the find first call */
+Z	if(2 == result || 18 == result)
+Z		return NULL;
+Z	return &(wildcard.file_name[0]);
+Z}
+Z
+Zchar *get_next(fname)
+Z	char *fname;
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&wildcard);
+Z	result = bdos(0x4f,0,0);
+Z	/* make the find next call */
+Z	if (18 == result)
+Z		return NULL;
+Z	return &(wildcard.file_name[0]);
+Z}
+STUNKYFLUFF
+set `sum croot.c`
+if test 02895 != $1
+then
+echo croot.c: Checksum error. Is: $1, should be: 02895.
+fi
+#
+#
+echo Extracting ctlbrk.asm:
+sed 's/^Z//' >ctlbrk.asm <<\STUNKYFLUFF
+Z; Copyright (C) 1985 by Manx Software Systems, Inc.
+Z; :ts=8
+Z	include lmacros.h
+Z
+Zdataseg	segment	word public 'data'
+Z	extrn	_PSP_:word
+Z	_brkvec	dw ?
+Z		dw ?
+Z	localstk	dw	20	dup(?)
+Z	stktop	label	word
+Z	savess	dw ?
+Z	savesp	dw ?
+Zdataseg	ends
+Z
+Zourds	dw	0
+Z
+Z	assume	ds:dataseg
+Z;
+Z	procdef	ctl_brk_setup
+Z	mov	ourds,ds
+Z	push	ds
+Z	mov	ax,3523H	;get cntl-break (cntl-c) handler
+Z	int	21H
+Z	mov	_brkvec,bx
+Z	mov	_brkvec+2,es
+Z	mov	dx,offset brk_handler
+Z	mov	ax,cs
+Z	mov	ds,ax
+Z	mov	ax,2523H	;set new cntl-break handler
+Z	int	21H
+Z	pop	ds
+Z	pret
+Z	pend	ctl_brk_setup
+Z
+Z	procdef	ctl_brk_restore
+Z	push	ds
+Z	mov	dx,_brkvec
+Z	mov	bx,word ptr _brkvec+2
+Z	mov	ds,bx
+Z	mov	ax,2523H	;restore old cntl-break handler
+Z	int	21H
+Z	pop	ds
+Z	pret
+Z	pend	ctl_brk_restore
+Z
+Zbrk_handler proc far
+Z	;save ds and address our data segment
+Z	push	ds
+Z	mov	ds,ourds
+Z	;move to the local stack after saving dos stack
+Z	push	ax
+Z	mov	savess,ss
+Z	mov	savesp,sp
+Z	mov	ax,ds
+Z	mov	ss,ax
+Z	mov	sp,offset stktop
+Z	;save registers
+Z	push	bp
+Z	push	bx
+Z	push	cx
+Z	push	dx
+Z	push	si
+Z	push	di
+Z	push	es
+Z	mov	ah,051H	;find the current psp
+Z	int	21H
+Z	cmp	bx,_PSP_	;is it our program segment?
+Z	je	noabort
+Z	;set carry flag
+Z	mov	ax,0FFFFH	;set up to shift bit into carry
+Z	rcr	ax,1
+Z	jmp	short done
+Znoabort:
+Z	;clear carry flag
+Z	or	ax,ax		;should clear carry
+Zdone:
+Z	pop	es
+Z	pop	di
+Z	pop	si
+Z	pop	dx
+Z	pop	cx
+Z	pop	bx
+Z	pop	bp
+Z	mov	ax,savess
+Z	mov	ss,ax
+Z	mov	sp,savesp
+Z	pop	ax
+Z	pop	ds
+Z	jc	abortend
+Z	iret
+Zabortend:
+Z	ret
+Zbrk_handler endp
+Z	finish
+Z	end
+STUNKYFLUFF
+set `sum ctlbrk.asm`
+if test 52105 != $1
+then
+echo ctlbrk.asm: Checksum error. Is: $1, should be: 52105.
+fi
+#
+#
+echo Extracting doprog.c:
+sed 's/^Z//' >doprog.c <<\STUNKYFLUFF
+Zdo_prog(argc,argv)
+Zchar *argv[];
+Z{
+Z	int result;
+Z	if (666 == (result = fexecvp(argv[0],argv)))
+Z	{
+Z		invalid(argc,argv);
+Z		perror("");
+Z		return -1;
+Z	}
+Z	return result; 
+Z}
+STUNKYFLUFF
+set `sum doprog.c`
+if test 44858 != $1
+then
+echo doprog.c: Checksum error. Is: $1, should be: 44858.
+fi
+#
+#
+echo Extracting drive.c:
+sed 's/^Z//' >drive.c <<\STUNKYFLUFF
+Z#define NULL (void *)0
+Zdrive(argc,argv)
+Z	char *argv[];
+Z{
+Z	char *dir,*getcwd();
+Z
+Z	bdos(0xe,**argv - 'a');	/* select drive 0 */
+Z	if (NULL == (dir = getcwd(NULL,64)))
+Z		return -1;
+Z	free(dir);
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum drive.c`
+if test 37068 != $1
+then
+echo drive.c: Checksum error. Is: $1, should be: 37068.
+fi
+#
+#
+echo Extracting dump2.c:
+sed 's/^Z//' >dump2.c <<\STUNKYFLUFF
+Z
+Z/*  dump.c  (10/83)  Debug style dump of a file from any starting position.
+Z*/
+Z#include <stdio.h>
+Z#include <ctype.h>
+Z#include <signal.h>
+Z#include <setjmp.h>
+Z#define FAIL        1
+Z#define SUCCESS     0
+Z#define TRUE      	(1)
+Z#define FALSE       0
+Z#define FOREVER     for (;;)
+Z#define PAUSE       if (getch()=='\0') getch();
+Z#define STDIN       0
+Z#define STDOUT      1
+Z#define STDERR      2
+Zchar *dumpusage[] =
+Z{
+Z  "Usage: dump filespec [block [page]] | [segment:[offset]] [count]\r\n",
+Z  "Where a block is 64K bytes and a page is 256 bytes.\r\n",
+Z  "Segment:offset are standard 8086 notation in hexadecimal.\r\n",
+Z  "Count is the number of bytes to dump in decimal.\r\n",
+Z  NULL
+Z};
+Zchar *index();		/* suppress warning about conversion to int */
+Z#define BUFSIZE 512
+Ztypedef unsigned    ushort;
+Z
+Zstatic int _fmode = 0x8000;            /* Lattice 'c' - forces binary I/O */
+Zextern short errno;             /* DOS 2.0 error number */
+Zlong lseek();
+Z
+Zstatic char   buffer[BUFSIZE];         /* input buffer */
+Zstatic ushort block = 0;               /* block number ( 64k bytes/block ) */
+Zstatic ushort page = 0;                /* page number ( 256 bytes/page ) */
+Zstatic ushort segment = 0;
+Zstatic ushort offset = 0;
+Zstatic long   filpos = 0;              /* beginning file position */
+Zstatic long   count = 0x7FFFFFFFL;     /* number of bytes to dump */
+Z
+Zvoid ohw(),ohb(),onib(),abort();
+Z
+Zstatic jmp_buf env;
+Zvoid (*signal())();
+Zstatic void (*oldsig)();
+Zstatic onintr()
+Z{
+Z	signal(SIGINT,SIG_IGN);	/* disable interrupts from kbd */
+Z	longjmp(env,-1);
+Z}
+Z
+Z#ifdef MAIN
+Zmain
+Z#else
+Zdump
+Z#endif
+Z(argc,argv)                 /* DUMP ENTRY */
+Zint  argc;
+Zchar *argv[];
+Z{
+Z   char c;
+Z   ushort i, numin, tot, file, cfrom;
+Z   char *flag = 0;
+Z   char *index();
+Z   oldsig=signal(SIGINT,onintr);
+Z   if (-1 == setjmp(env))
+Z   {
+Z   		close(file);
+Z		write(2,"Interrupted\r\n",13);
+Z		signal(SIGINT,oldsig);
+Z		return -1;
+Z   }
+Z   if (argc < 2)
+Z   {
+Z   		char **u = (char **) dumpusage;
+Z		while(*u)
+Z		{
+Z			write (2,*u,strlen(*u));
+Z			++u;
+Z		}
+Z		return -1;
+Z   }
+Z   if ((file = open( argv[1], 0 )) == -1)
+Z      abort( "cannot open", argv[1], errno );
+Z
+Z   if (argc > 2) {
+Z      if ((flag = index( argv[2], ':' )) != NULL) {
+Z         i = stch_i( argv[2], &segment );
+Z         stch_i( argv[2]+i+1, &offset );
+Z      }
+Z      if (sscanf( argv[2], "%d", &block ) != 1)
+Z         abort( "invalid block", argv[2], 0 );
+Z   }
+Z   if (argc > 3)
+Z      if (sscanf( argv[3], "%d", &page ) != 1)
+Z         abort( "invalid page", argv[3], 0 );
+Z
+Z   if ( flag ) {
+Z      filpos = (long)segment*16L + (long)offset;
+Z      tot = offset;
+Z   }
+Z   else {
+Z      filpos = (block * 65536L) + (page * 256);
+Z      tot = page * 256;
+Z      segment = block * 4096;
+Z   }
+Z
+Z   if (lseek( file, filpos, 0 ) == -1L)
+Z      abort( "positioning to", argv[2], errno );
+Z
+Z   if (argc > 4)
+Z      if (sscanf( argv[4], "%ld", &count ) != 1)
+Z         abort( "invalid count", argv[4], 0 );
+Z
+Z
+Z   do {                                    /* read & dump BUFSIZE bytes */
+Z      numin = read( file, buffer, BUFSIZE );
+Z      if (numin == -1)
+Z         abort( "cannot read", argv[1], errno );
+Z      cfrom=0;
+Z      while (cfrom < numin) {
+Z
+Z         ohw(segment);                     /* print offset in hex */
+Z         putchar(':');
+Z         ohw(cfrom+tot);
+Z         putchar(' ');
+Z
+Z         for (i=0; i < 16; i++) {          /* print 16 bytes in hex */
+Z            putchar(' ');
+Z            ohb(buffer[cfrom++]);
+Z         }
+Z
+Z         putchar(' '); putchar(' '); putchar(' ');
+Z
+Z         cfrom -= 16;
+Z         for (i=0; i < 16; i++) {          /* print 16 bytes in ASCII */
+Z            c = buffer[cfrom] & 0x7f;
+Z            if ( isprint(c) )              /* if printable character */
+Z               putchar(c);
+Z            else
+Z               putchar('.');               /* else print period */
+Z            cfrom++;
+Z         }
+Z
+Z         putchar('\r'); putchar('\n');     /* print CR/LF */
+Z
+Z         if ((count -= 16) <= 0)             /* is count exhausted? */
+Z            exit(0);
+Z      }                                    /* end of while */
+Z      tot += numin;
+Z      if ( tot == 0 )
+Z         segment += 4096;
+Z   }                                       /* end of do */
+Z   while (numin == BUFSIZE);
+Z	signal(SIGINT,oldsig);					/* restore signal */
+Z	return 0;
+Z}                                          /* end of main */
+Z
+Zstatic void ohw(wrd)                        /*      print a word in hex     */
+Zushort wrd;
+Z{
+Z   ohb( wrd>>8 );
+Z   ohb( wrd );
+Z}
+Z
+Zstatic void ohb(byt)                        /*      print a byte in hex     */
+Zchar byt;
+Z{
+Z   onib( byt>>4 );
+Z   onib( byt );
+Z}
+Z
+Zstatic void onib(nib)            /*      print a nibble as a hex character   */
+Zchar nib;
+Z{
+Z   nib &= 15;
+Z   putchar((nib >= 10) ? nib-10+'A': nib+'0');
+Z}
+Z
+Zstatic void abort( msg1 ,msg2 ,errno)     /*  print error msg1, msg2, and nbr */
+Zchar *msg1,*msg2;                  /*   Does not close files.  */
+Zshort errno;
+Z{
+Z   char stemp[10];
+Z
+Z   write( STDERR, "ERR: ", 5 );
+Z   if (msg1)
+Z      write( STDERR, msg1, strlen(msg1) );
+Z   if (msg2)
+Z      write( STDERR, " ", 1 );
+Z      write( STDERR, msg2, strlen(msg2) );
+Z   if (errno)   {
+Z      sprintf( stemp," #%d", errno );
+Z      write( STDERR, stemp, strlen(stemp) );
+Z   }
+Z   write( STDERR, "\r\n", 2 );
+Z   longjmp(env,-1);
+Z}
+Z/** END DUMP **/
+Z
+Z#define BDOS_IN   7     /* input function for "getch" */
+Z#define BDOS_OUT  6     /* output function for "putch" */
+Z#define BDOS_CKS  11    /* check keyboard status for "kbhit" */
+Z#define BDOS_BKI  10    /* buffered keyboardd input for "cgets" */
+Z#define BDOS_PRT  9     /* print string for "cputs" */
+Z
+Zstatic char pushback;   /* character save for "ungetch" */
+Z
+Zstatic getch()
+Z{
+Zint c;
+Z
+Zif (pushback != '\0')
+Z   {                    /* character was pushed back */
+Z   c = pushback;
+Z   pushback = '\0';
+Z   return(c);
+Z   }
+Zreturn(bdos(BDOS_IN, 0xFF) & 127);
+Z}
+Zstatic putch(c)
+Zchar c;
+Z{
+Zbdos(BDOS_OUT, c&127);
+Zreturn(c);
+Z}
+Zstatic ungetch(c)
+Zchar c;
+Z{
+Z
+Zif (pushback != '\0') return(-1);
+Zpushback = c;
+Zreturn(c);
+Z}
+Zstatic char *cgets(s)
+Zchar *s;
+Z{
+Zchar *p;
+Z
+Zif (*s == 0) *s = 250;          /* do not allow zero byte count */
+Zbdos(BDOS_BKI, s);
+Zp = s+2;
+Zp[s[1]] = '\0';                 /* set terminating byte */
+Zreturn(p);
+Z}
+Zstatic cputs(s)
+Zchar *s;
+Z{
+Zchar *p;
+Z
+Zfor (p = s; *p != '\0'; p++) ;          /* find string terminator */
+Z*p = '$';
+Zbdos(BDOS_PRT, s);
+Z*p = '\0';
+Zreturn;
+Z}
+Z
+Z
+Zstatic int stch_i(p,r)
+Z	char *p;
+Z	int	*r;
+Z{
+Z	int count;
+Z	int acc;
+Z	int hdtoi();
+Z	count = 0;
+Z	*r = 0;
+Z	while (-1 != (acc = hdtoi(*p++)))
+Z	{
+Z		++count;
+Z		*r = (*r << 4) | acc;
+Z	}
+Z	return count;
+Z}
+Z
+Zstatic hdtoi(c)
+Z	char c;
+Z{
+Z	c = toupper(c);
+Z	if (!isxdigit(c)) 
+Z		return -1;
+Z	if (isdigit(c))
+Z		return (c - '0');
+Z	return (c - 'A' + 10);
+Z}
+STUNKYFLUFF
+set `sum dump2.c`
+if test 53530 != $1
+then
+echo dump2.c: Checksum error. Is: $1, should be: 53530.
+fi
+#
+#
+echo Extracting echo.c:
+sed 's/^Z//' >echo.c <<\STUNKYFLUFF
+Z
+Zecho(argc,argv)
+Z	char *argv[];
+Z{
+Z	register int i;
+Z	for (i = 1; i < argc;i++)
+Z	{
+Z		write(2,argv[i],strlen(argv[i]));
+Z		if (i < argc-1)
+Z			write(2," ",1);
+Z	}
+Z	crlf();
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum echo.c`
+if test 29675 != $1
+then
+echo echo.c: Checksum error. Is: $1, should be: 29675.
+fi
+#
+#
+echo Extracting env.c:
+sed 's/^Z//' >env.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z
+Z#define ENVSIZE 4000
+Zextern int _PSP;
+Zvoid *calloc();
+Zchar *environment=NULL, *str_upper();
+Zint env_paragraph;
+Zchar *next_env;
+Z#define envlimit(a) &a[ENVSIZE-1]
+Z
+Z#ifdef MAIN
+Zmain
+Z#else
+Zset
+Z#endif
+Z(argc,argv)
+Z	char *argv[];
+Z{
+Z	if (!environment)
+Z		init_env();
+Z	if (argc == 1)
+Z	{
+Z		show_env();
+Z		return 0;
+Z	}
+Z	while(--argc)
+Z	{
+Z		add_env(str_upper(*(++argv)));
+Z	}
+Z	return 0;
+Z}
+Z
+Zchar *
+Zstr_upper(c)
+Z	register char *c;
+Z{
+Z	register char *save = c;
+Z	while(*c)
+Z	{
+Z		*c = toupper(*c);
+Z		c++;
+Z	}
+Z	return save;
+Z}
+Z
+Zchar *
+Zstr_lower(c)
+Z	register char *c;
+Z{
+Z	register char *save = c;
+Z	while(*c)
+Z	{
+Z		*c = tolower(*c);
+Z		c++;
+Z	}
+Z	return save;
+Z}
+Zinit_env()
+Z{
+Z	extern unsigned _dsval;	/* current data segment register value */
+Z	long fudgefactor;
+Z	register int c;
+Z	unsigned envseg;
+Z	unsigned offset = 0;
+Z	envseg = peekw(0x2c,_PSP);
+Z	environment = calloc(1,ENVSIZE+16);
+Z	fudgefactor = (long)_dsval << 4;	/* convert to absolute paragraph */
+Z	fudgefactor += (unsigned)environment + 16;
+Z	fudgefactor &= 0xFFFF0L;
+Z	env_paragraph = (int)((fudgefactor >>4) & 0xFFFF);
+Z	environment = (char *) (fudgefactor - (long)(_dsval << 4));
+Z	next_env = environment;
+Z	while (c = peekb(offset,envseg))
+Z	{
+Z		while (c = peekb(offset++,envseg))
+Z		{
+Z			*next_env++ = c;
+Z		}
+Z		*next_env++ = '\0';
+Z	}
+Z}
+Z
+Zshow_env()
+Z{
+Z	register char *env;
+Z	char c;
+Z	for (env = environment;*env;)
+Z	{
+Z		while (c = *env++)
+Z			write(1,&c,1);
+Z		crlf();
+Z	}
+Z}
+Z
+Zstatic char *enverr = "No more environment space\r\n";
+Zstatic char *enverr2 = "Improper environment string format!!\r\n";
+Z
+Zadd_env(string)
+Z	char *string;
+Z
+Z{
+Z	char *env_copy, *new, *index();
+Z	char *old = environment;
+Z	char *name_end,*new_name_end;
+Z	int added = 0;
+Z	int namelen;
+Z
+Z	if (NULL == (env_copy = new = calloc(1,ENVSIZE)))
+Z	{
+Z		write(2,enverr,strlen(enverr));
+Z		return -1;
+Z	}
+Z
+Z	while (*old)
+Z	{
+Z		if ( NULL == (name_end = index(old,'=')) || 
+Z			NULL == (new_name_end = index(string,'=')) 
+Z		)
+Z		{
+Z			write(2,enverr2,strlen(enverr2));
+Z			free(env_copy);
+Z			return -1;
+Z		}
+Z		namelen = (int)(name_end - old);
+Z		if (!strncmp(old,string,namelen))
+Z		{
+Z			if (new_name_end[1])
+Z			{
+Z				/* if we don't have a string of the form name= */
+Z				/* copy new string instead of old string */
+Z				strcpy(new,string);
+Z			}
+Z			else
+Z			/* if we have a set name= with no string then we want
+Z			   to remove the string from the environment
+Z			 */
+Z				;
+Z			added++;
+Z		}
+Z		else
+Z		{
+Z			strcpy(new,old);
+Z		}
+Z		new = &new[strlen(new)+1];
+Z		old = &old[strlen(old)+1];
+Z		if (new >= envlimit(new))
+Z		{
+Z			write(2,enverr,strlen(enverr));
+Z			free(env_copy);
+Z			return -1;
+Z		}
+Z	}
+Z	if (!added)
+Z	{
+Z		strcpy(new,string);
+Z	}
+Z	new = &new[strlen(new)+1];
+Z	/* copy the copy back to the environment */
+Z	movmem(env_copy,environment,(int)(new-env_copy)+2);
+Z	free(env_copy);
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum env.c`
+if test 56918 != $1
+then
+echo env.c: Checksum error. Is: $1, should be: 56918.
+fi
+#
+#
+echo Extracting fexec.asm:
+sed 's/^Z//' >fexec.asm <<\STUNKYFLUFF
+Z; Copyright (C) 1984 by Manx Software Systems
+Z; :ts=8
+Z	include lmacros.h
+Zdataseg segment para public 'data'
+Zparam	equ	this word
+Zenv	dw	?
+Zcline	dw	?,?
+Zfcb1	dw	?,?
+Zfcb2	dw	?,?
+Z	extrn	errno_:word
+Zdataseg	ends
+Z	assume	ds:dataseg
+Zsave_ss	dw	0
+Zsave_sp	dw	0
+Z	procdef	fexec,<<filname,ptr>,<enva,word>,<clinea,ptr>,<fcb1a,ptr>,<fcb2a,ptr>>
+Z;			char *fexec(name,env,cline,fcb1,fcb2)
+Z;
+Z	push	si
+Z	push	di
+Z	pushf
+Z	push	[030H]
+Z	push	[02EH]
+Z	push	ds
+Z	push	es
+Z	mov	cs:save_ss,ss
+Z	mov	cs:save_sp,sp
+Z;
+Z;	set up parameter block for exec call
+Z;
+Z	mov	ax,enva
+Z	mov	env,ax
+Zifndef LONGPTR
+Z	mov	ax,ds
+Z	mov	es,ax
+Zendif
+Z	ldptr	ax,clinea,es
+Z	mov	cline,ax
+Z	mov	cline+2,es
+Z	ldptr	ax,fcb1a,es
+Z	mov	fcb1,ax
+Z	mov	fcb1+2,es
+Z	ldptr	ax,fcb2a,es
+Z	mov	fcb2,ax
+Z	mov	fcb2+2,es
+Z;
+Z	mov	ax,ds
+Z	mov	es,ax
+Z	mov	bx,offset param
+Z	ldptr	dx,filname,ds		;name of file to exec
+Z	mov	ax,04b00H
+Z	int	21h
+Z	mov	ss,cs:save_ss
+Z	mov	sp,cs:save_sp
+Z	pop	es
+Z	pop	ds
+Z	jnc	noerror
+Z	mov	errno_,ax
+Z	mov	ax,666
+Z	jmp	short done
+Znoerror:
+Z	sub	ax,ax
+Zdone:
+Z	pop	[02EH]
+Z	pop	[030H]
+Z	popf
+Z	pop	di
+Z	pop	si
+Z	pret
+Z	pend	fexec
+Z	finish
+Z	end
+STUNKYFLUFF
+set `sum fexec.asm`
+if test 35466 != $1
+then
+echo fexec.asm: Checksum error. Is: $1, should be: 35466.
+fi
+#
+#
+echo Extracting fexecv.c:
+sed 's/^Z//' >fexecv.c <<\STUNKYFLUFF
+Z#ifdef DEBUG
+Z#ifndef FILE
+Z#include <stdio.h>
+Z#endif
+Z#include <ctype.h>
+Z#include <debug.h>
+Z#endif
+Z
+Z
+Z/* Copyright (C) 1983, 1984 by Manx Software Systems */
+Z/* modified by kent williams to employ environment managed in env.c */
+Zextern int env_paragraph;
+Z
+Zfexecv(path, argv)
+Zchar *path, **argv;
+Z{
+Z	register char *cp, *xp;
+Z	int i;
+Z	char buffer[258];
+Z	char fcb1[16], fcb2[16];
+Z
+Z	cp = buffer+1;
+Z	i = 1;
+Z	if (*argv) {
+Z		++argv;			/* skip arg0, used for unix (tm) compatibility */
+Z		while (xp = *argv++) {
+Z			if (i == 1)
+Z				fcbinit(xp, fcb1);
+Z			else if (i == 2)
+Z				fcbinit(xp, fcb2);
+Z			while (*xp) {
+Z				if (cp >= buffer+256)
+Z					goto done;
+Z				*cp++ = *xp++;
+Z			}
+Z			*cp++ = ' ';
+Z			++i;
+Z		}
+Z	}
+Zdone:
+Z	buffer[0] = cp - (buffer+2);
+Z	/* terminate string */
+Z	buffer[buffer[0]+1] = 0;
+Z#ifdef DEBUG
+Z		fprintf(stderr,"\nbuffer[0] = %d\n",buffer[0]);
+Z		for (i = 1; buffer[i] ; i++)
+Z		{
+Z			if (isprint(buffer[i]))
+Z				putchar(buffer[i]);
+Z			else
+Z				fprintf("buffer[%d] = %d\n",i,buffer[i]);
+Z		}
+Z		crlf();
+Z#endif
+Z	return fexec(path, env_paragraph, buffer, fcb1, fcb2);
+Z}
+Z
+STUNKYFLUFF
+set `sum fexecv.c`
+if test 22589 != $1
+then
+echo fexecv.c: Checksum error. Is: $1, should be: 22589.
+fi
+#
+#
+echo Extracting fexecvp.c:
+sed 's/^Z//' >fexecvp.c <<\STUNKYFLUFF
+Zfexecvp(name, argv)
+Zchar *name, **argv;
+Z{
+Z	register char *cp, *xp;
+Z	int result;
+Z	char *getenv(), path[64];
+Z
+Z	if (666 != (result = tryexec("", name, argv)))
+Z		return result;
+Z	if ((cp = getenv("PATH")) != 0) {
+Z		while (*cp) {
+Z			xp = path;
+Z			while (*cp) {
+Z				if (*cp == ';') {
+Z					++cp;
+Z					break;
+Z				}
+Z				*xp++ = *cp++;
+Z			}
+Z			*xp = 0;
+Z			if (path[0] != 0)
+Z				if (666 != (result = tryexec(path, name, argv)))
+Z					return result;
+Z		}
+Z	}
+Z	return 666;
+Z}
+Z
+Zstatic
+Ztryexec(dir, name, argv)
+Zchar *dir, *name, **argv;
+Z{
+Z	char newname[64];
+Z	register char *cp;
+Z	char *rindex(),*index();
+Z
+Z	strcpy(newname, dir);
+Z	if (((cp = index(newname, '/')) || (cp = index(newname, '\\')))
+Z				&& *(cp+1) != '\0')
+Z		strcat(newname, "/");
+Z	strcat(newname, name);
+Z	if (index(name, '.') == 0) {
+Z		strcat(newname, ".com");
+Z		if (666 != fexecv(newname, argv))
+Z			return wait();
+Z		strcpy(rindex(newname,'.'), ".exe");
+Z	}
+Z	if (666 != fexecv(newname, argv))
+Z			return wait();
+Z	return 666;
+Z}
+STUNKYFLUFF
+set `sum fexecvp.c`
+if test 44134 != $1
+then
+echo fexecvp.c: Checksum error. Is: $1, should be: 44134.
+fi
+#
+#
+echo Extracting fgrep.c:
+sed 's/^Z//' >fgrep.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <fcntl.h>
+Z
+Z#include <signal.h>
+Z#include <setjmp.h>
+Z
+Zvoid (*signal())();
+Zvoid (*fgrepsig)();
+Zjmp_buf fgrep_env;
+Z
+Zvoid fgrep_intr()
+Z{
+Z	/* restore old signal */
+Z	signal(SIGINT,fgrepsig);
+Z	/* jump to exit */
+Z	longjmp(fgrep_env,-1);
+Z}
+Z
+ZFILE *fopen(),*fdopen();
+Z
+Zchar *fgets();
+Z
+Zfgrep( argc, argv )
+Zint	argc;
+Zchar * argv[];
+Z	{
+Z	FILE *  fd;
+Z	int	rc;
+Z	char * pattern;
+Z	/* handle interrupts */
+Z	if (-1 == setjmp(fgrep_env))
+Z	{
+Z		static char *intmsg = "Interrupted\r\n";
+Z		write(2,intmsg,strlen(intmsg));
+Z		fclose(fd);
+Z		return -1;
+Z	}
+Z	/* set signal catcher */
+Z	fgrepsig= signal(SIGINT,fgrep_intr);
+Z	while( --argc )
+Z		{
+Z		if( (*++argv)[0] == '-' )
+Z			switch( (*argv)[1] )
+Z				{
+Z				default:
+Z					fprintf( stderr, "invalid argument %s\n", *argv );
+Z					return(1);
+Z				}
+Z		else
+Z			break;
+Z		}
+Z
+Z	if( argc == 0 )
+Z		{
+Z		fprintf( stderr, "usage: fgrep pattern [file ...]\n" );
+Z		return(1);
+Z		}
+Z
+Z	pattern = *argv++;
+Z	argc--;
+Z
+Z	rc = 0;
+Z	if( argc == 0 )
+Z		{
+Z		fd = fdopen(0,"r");
+Z		rc = _fgrep( NULL, pattern, fd);
+Z		fclose(fd);
+Z		return( 0 );
+Z		}
+Z	else
+Z	while( argc-- )
+Z		{
+Z
+Z		if( (fd = fopen( *argv, "r" )) == NULL )
+Z			fprintf( stderr, "couldn't open %s\n", *argv );
+Z		else
+Z			{
+Z			rc |= _fgrep( *argv, pattern, fd );
+Z			fclose( fd );
+Z			}
+Z		argv++;
+Z
+Z		}
+Z
+Z	return( !rc );
+Z	signal(SIGINT,fgrepsig);
+Z	}
+Z
+Z
+Z_fgrep( file, pattern, fd )
+Zchar	* file;
+Zchar	* pattern;
+ZFILE *	fd;
+Z	{
+Z	char	line[BUFSIZ];
+Z	int		rc;
+Z	int		linenumber = 1;
+Z	rc = 0;
+Z	while( fgets( line, sizeof(line), fd ) != NULL )
+Z	{
+Z		if( rc = match( pattern, line ) )
+Z			printf( "%s %d: %s", (file) ? file : "stdin", linenumber, line );
+Z		linenumber++;
+Z	}
+Z	return( rc );
+Z
+Z	}
+Z
+Zmatch( pattern, line )
+Zregister char	* pattern;
+Zchar	* line;
+Z	{
+Z	/*  not a great algorithm  */
+Z	register char * ptr;
+Z	char	* end;
+Z	int	plen = strlen(pattern);
+Z	int llen = strlen(line);
+Z
+Z	if( plen > llen )
+Z		return( 0 );
+Z
+Z	end = line+(llen-plen);
+Z
+Z	for( ptr=line; ptr < end; ptr++ )
+Z		{
+Z		if( strncmp( pattern, ptr, plen ) == 0 )
+Z			return( 1 );
+Z		}
+Z
+Z	return( 0 );
+Z	}
+STUNKYFLUFF
+set `sum fgrep.c`
+if test 15656 != $1
+then
+echo fgrep.c: Checksum error. Is: $1, should be: 15656.
+fi
+#
+#
+echo Extracting getcmd.c:
+sed 's/^Z//' >getcmd.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <fcntl.h>
+Z
+Zchar *gets();
+Zchar rest[256];
+Zchar *rptr = NULL;
+Zchar pipeactive = 0;
+Zcurrname = 0;
+Zchar *pipename[2] = {
+Z	"shtmp1",
+Z	"shtmp2"};
+Zchar *
+Zgetnextcmd(buf)
+Z	char *buf;
+Z{
+Z	char *fgets(),*index(),*pipe,*semi;
+Z	if (!rptr)
+Z	{
+Z		register char *c;
+Z		if (0 == read(0,rest,sizeof(rest)))
+Z			return NULL;
+Z		c = rptr = rest;
+Z		while (*c)
+Z		{
+Z			if (*c == '\r' || *c == '\n')
+Z			{
+Z				*c = '\0';
+Z				break;
+Z			}
+Z			++c;
+Z		}
+Z
+Z	}
+Z	pipe = index(rptr,'|');
+Z	semi = index(rptr,';');
+Z	if (pipe == NULL && semi == NULL)
+Z	{
+Z		strcpy(buf,rptr);
+Z		if (pipeactive)
+Z		{
+Z			pipeactive = 0;
+Z			strcat(buf," < ");
+Z			strcat(buf,pipename[currname]);
+Z		}
+Z		rptr=NULL;
+Z	}
+Z	/* one or the other, or both are not NULL, so comparison is in order */
+Z	else if (pipe && (!semi || (pipe < semi)))
+Z	{
+Z		*pipe = '\0';	/* terminate string */
+Z		strcpy(buf,rptr); /* copy to buf */
+Z		rptr = pipe+1;	/* set up rest */
+Z		if (pipeactive++)
+Z		{
+Z			pipeactive = 1;
+Z			strcat(buf," < ");
+Z			strcat(buf,pipename[currname]);
+Z		}
+Z		strcat(buf," > ");
+Z		currname ^= 1;	/* flip flop pipe names */
+Z		strcat(buf,pipename[currname]);
+Z	}
+Z	else if (semi && (!pipe || (semi < pipe)))
+Z	/* we have a semicolon to deal with */
+Z	{
+Z		*semi = '\0';
+Z		strcpy(buf,rptr);
+Z		rptr = semi+1;
+Z		if (pipeactive)
+Z		{
+Z			pipeactive = 0;
+Z			strcat(buf," < ");
+Z			strcat(buf,pipename[currname]);
+Z		}
+Z	}
+Z	return buf;
+Z}
+STUNKYFLUFF
+set `sum getcmd.c`
+if test 06449 != $1
+then
+echo getcmd.c: Checksum error. Is: $1, should be: 06449.
+fi
+#
+#
+echo Extracting invalid.c:
+sed 's/^Z//' >invalid.c <<\STUNKYFLUFF
+Z
+Zinvalid(argc,argv)
+Z	char *argv[];
+Z{
+Z	register int i;
+Z	static char *invmsg = "sh : bad command : ";
+Z	write(2,invmsg,strlen(invmsg));
+Z	for (i = 0; i < argc;i++)
+Z	{
+Z		write(2,argv[i],strlen(argv[i]));
+Z		write(2," ",1);
+Z	}
+Z	return -1;
+Z}
+STUNKYFLUFF
+set `sum invalid.c`
+if test 00995 != $1
+then
+echo invalid.c: Checksum error. Is: $1, should be: 00995.
+fi
+#
+#
+echo Extracting ls.c:
+sed 's/^Z//' >ls.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z
+Ztypedef struct
+Z{
+Z	char attribute;
+Z	unsigned file_time;
+Z	unsigned file_date;
+Z	long file_size;
+Z	char file_name[13];
+Z} file_desc;
+Z
+Ztypedef struct
+Z{
+Z	char dos_reserved[21];
+Z	file_desc file;
+Z} fcb;
+Z
+Z#define maxfiles 128 
+Z
+Zchar printbuf[256];
+Zfile_desc *getfirst(),*getnext();
+Zchar *index(), *rindex();
+Zint mode = 0x10;
+Zint verbose=0,column=4,recurse=0;
+Zint quiet = 0;
+Zint drivenum = 0;
+Zlong time();
+Zshort year;
+Z
+Zdo_return(result)
+Z{
+Z	verbose = quiet = recurse = 0;
+Z	column = 4;
+Z	return result;
+Z}
+Z#ifndef MAIN
+Zls
+Z#else
+Zmain
+Z#endif
+Z(argc,argv)
+Zchar *argv[];
+Z{
+Z	int noargs;
+Z	char *current;
+Z	char namebuf[128];
+Z	/* 
+Z	 * initialize statics
+Z	 */
+Z	mode = 0x10;
+Z	verbose=0;column=4;recurse=0;
+Z	quiet = 0;
+Z	drivenum = 0;
+Z	/*
+Z	 * get current time
+Z	 */
+Z	year = (int)((time(NULL) >> 25) & 0x7F) + 80;
+Z	/*
+Z	 * set up a default search name
+Z	 */
+Z	if (noargs = (argc == 1))
+Z		argc++;
+Z	while(--argc)
+Z	{
+Z		if (noargs)
+Z			current = "*.*";
+Z		else
+Z			current = *(++argv);	/* get current file name */
+Z		if (*current == '-')
+Z		{
+Z			++current;	/* point past - */
+Z			while (*current)
+Z			{
+Z				switch (*current++)
+Z				{
+Z				case 'l':
+Z				case 'L':
+Z					verbose = 1;
+Z					if (column != 1)
+Z						column = 2;
+Z					if (quiet)
+Z					{
+Z						fprintf(stderr,"ls : verbose and quiet conflict\n");
+Z						do_return(-1);
+Z					}
+Z					break;
+Z				case 'q':
+Z				case 'Q':
+Z					quiet = 1;
+Z					if (verbose)
+Z					{
+Z						fprintf(stderr,"ls : quiet and verbose conflict\n");
+Z						do_return(-1);
+Z					}
+Z					break;
+Z				case 'c':
+Z				case 'C':
+Z					column = 1;
+Z					break;
+Z				case 'a':
+Z				case 'A':
+Z					mode = 0x2 + 0x4 + 0x10;
+Z					break;
+Z				case 'r':
+Z				case 'R':
+Z					recurse = 1;
+Z					mode = 0x2 + 0x4 + 0x10;
+Z					break;
+Z				default:
+Z					break;
+Z				}
+Z			}
+Z			/* if we're down to one argument after looking at all the
+Z			   switches, we need to set noargs to true */
+Z			if (noargs = (argc == 1))
+Z				argc++;
+Z			continue;
+Z		}
+Z		/* if a drive is specified, figure out what drive it is */
+Z		if (current[1] == ':')
+Z		{
+Z			drivenum = toupper(current[0]) - 'A' + 1;
+Z		}
+Z		else
+Z			drivenum = 0;
+Z		/* if no wild cards, look for directory and drive names */
+Z		if ( NULL == index(current,'?') && NULL == index(current,'*'))
+Z		{
+Z			if (getfirst(current)->attribute & 0x10)
+Z			{
+Z				strcpy(namebuf,current);
+Z				strcat(namebuf,"\\*.*");
+Z				current = namebuf;
+Z			} 
+Z			/* look for drive names */
+Z			else if (current[strlen(current)-1] == ':' && 
+Z						!current[strlen(current)])
+Z			{
+Z				strcpy(namebuf,current);
+Z				strcat(namebuf,"\\*.*");
+Z				current = namebuf;
+Z			}
+Z		}
+Z		do_dir(current);
+Z	}
+Z	do_return( 0);
+Z}
+Z
+Zdo_dir(current)
+Z	char *current;
+Z{
+Z	typedef file_desc fblock[maxfiles];	/* as many as we'll likely need */
+Z	file_desc *files;
+Z	file_desc *curr_file,*getnext();
+Z	void *malloc();
+Z	unsigned int ftime,date;
+Z	int i,j,col;
+Z	int files_cmp();
+Z	long total = 0;
+Z	char atts[4]; /* drw */
+Z	/* allocate file block */
+Z	if (NULL == (files = malloc(sizeof(fblock))))
+Z	{
+Z		fprintf(stderr,"Not enough memory to do directory\n");
+Z		return -1;
+Z	}
+Z	/* look for match */
+Z	i = 0;
+Z	if (!(curr_file = getfirst(current)))
+Z	{
+Z		printf(stderr,"ls : no files matching %s\n",current);
+Z		free(files);
+Z		return;	
+Z	}
+Z	files[i++] = *curr_file;
+Z	/* get all matching */
+Z	while ((curr_file = getnext()) && i < maxfiles)
+Z		files[i++] = *curr_file;	
+Z	if (i > 1)
+Z		qsort(files,i,sizeof(file_desc),files_cmp);
+Z	if (!quiet)
+Z	{
+Z		write(1,"\r\n",2);
+Z		write(1,current,strlen(current));
+Z		write(1,"\r\n",2);
+Z	}
+Z	col = 1;
+Z	for (j = 0; j < i; j++)
+Z	{
+Z		register char *c = files[j].file_name;
+Z		if (*c == '.')
+Z			continue;	/* filter out . and .. */
+Z		while (*c)
+Z		{
+Z			*c = tolower(*c);
+Z			c++;
+Z		}
+Z		if (verbose)
+Z		{
+Z			register char att = files[j].attribute;
+Z			register int fyear;
+Z			fyear = ((files[j].file_date >> 9) & 0x7F)+80; 
+Z			atts[3] = 0;	/* terminate string */
+Z			atts[0] = att & 0x10 ? 'd' : '-';
+Z			atts[1] = att & 2 ? '-' : 'r';
+Z			atts[2] = att & 1 ? '-' : 'w';
+Z			if (atts[0] == 'd')
+Z			{
+Z				register int k;
+Z				sprintf(printbuf,"%s %s\\",atts,files[j].file_name);
+Z				write(1,printbuf,strlen(printbuf));
+Z				k = 12 - strlen(files[j].file_name)+7;
+Z				while(k--)
+Z					write(1," ",1);
+Z
+Z			}
+Z			else
+Z			{
+Z				total += files[j].file_size;
+Z				sprintf(printbuf,"%s %-12s %-6ld ",atts,files[j].file_name,
+Z						files[j].file_size);
+Z				write(1,printbuf,strlen(printbuf));
+Z			}
+Z			ftime = files[j].file_time;
+Z			date = files[j].file_date;
+Z			if (year == fyear)
+Z			{
+Z				sprintf(printbuf,"%02d/%02d %02d:%02d ",
+Z					((date >> 5) & 0x0F),	/* month */
+Z					date & 0x1F,		/* day	*/
+Z					(ftime >> 11) & 0x1F,		/* hours */
+Z					(ftime >> 5) & 0x3F);		/* minutes */
+Z				write(1,printbuf,strlen(printbuf));
+Z			}
+Z			else
+Z			{
+Z				sprintf(printbuf,"%02d/%02d       ",
+Z					((date >> 5) & 0x0F),	/* month */
+Z					fyear,					/* file year */
+Z					(ftime >> 11) & 0x1F,		/* hours */
+Z					(ftime >> 5) & 0x3F);		/* minutes */
+Z				write(1,printbuf,strlen(printbuf));
+Z			}
+Z		}
+Z		else
+Z		{
+Z			if (files[j].attribute & 0x10)
+Z			{
+Z				register int k;
+Z				sprintf(printbuf,"%s\\",files[j].file_name);
+Z				write(1,printbuf,strlen(printbuf));
+Z				k = 16 - strlen(files[j].file_name);
+Z				while(--k)
+Z					write(1," ",1);
+Z
+Z			}
+Z			else
+Z			{
+Z				sprintf(printbuf,"%-13s   ",files[j].file_name);
+Z				write(1,printbuf,strlen(printbuf));
+Z			}
+Z		}
+Z		if (col == column)
+Z		{
+Z			col = 1;
+Z			write(1,"\r\n",2);
+Z		}
+Z		else
+Z			col++;
+Z	}
+Z	write(1,"\r\n",2);
+Z	if (verbose)
+Z	{
+Z		sprintf(printbuf,"%ld bytes in %d files ",total,i);
+Z		write(1,printbuf,strlen(printbuf));
+Z		pr_freespace();
+Z	}
+Z	if (recurse)
+Z		for (j = 0; j < i; j++)
+Z		{
+Z			/* we've got a subdirectory */
+Z			if (files[j].attribute & 0x10 && files[j].file_name[0] != '.')
+Z			{
+Z				char *path;
+Z				char dirname[48];
+Z				if (!strcmp(current,"*.*"))
+Z					dirname[0] = '\0';
+Z				else
+Z					strcpy(dirname,current);
+Z				if (path = rindex(dirname,'\\'))
+Z					*(++path) = '\0';
+Z				strcat(dirname,files[j].file_name);	/* get name */
+Z				strcat(dirname,"\\*.*");
+Z				do_dir(dirname);
+Z			}
+Z		}
+Z	free(files);
+Z}
+Z
+Zfiles_cmp(a,b)
+Z	file_desc *a,*b;
+Z{
+Z	return strcmp(a->file_name,b->file_name);
+Z}
+Z
+Zfcb tmp;
+Z
+Zfile_desc *getfirst(fname)
+Z	char *fname;
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&tmp);
+Z	result = bdos(0x4E,fname,mode);
+Z	/* make the find first call */
+Z	if(2 == result || 18 == result)
+Z		return NULL;
+Z	return &(tmp.file);
+Z}
+Z
+Zfile_desc *getnext()
+Z{
+Z	register int result;
+Z	/* set the disk transfer address */
+Z	bdos(0x1A,&tmp);
+Z	result = bdos(0x4f,0,0);
+Z	/* make the find next call */
+Z	if (18 == result)
+Z		return NULL;
+Z	return &(tmp.file);
+Z}
+Z
+Z/*	determine available space on default drive
+Z*/
+Z
+Zpr_freespace()
+Z{
+Z	/* register arguments for INT */
+Z    struct   {int ax,bx,cx,dx,si,di,ds,es;}sysr;
+Z    unsigned int    retstat;		    /* flags returned from INT */
+Z
+Z#define 	    cls_avail  sysr.bx	    /* number of available clusters */
+Z#define 	    cls_total  sysr.dx	    /* total number of clusters on volume */
+Z#define 	    byt_sectr  sysr.cx	    /* bytes per sector */
+Z#define 	    sec_clstr  sysr.ax	    /* sectors per cluster */
+Z
+Z    unsigned long   byt_clstr,		    /* bytes per cluster */
+Z		    vol_total,		    /* total size of volume, bytes */
+Z		    fre_total;		    /* size of free space, bytes */
+Z
+Z    sysr.ax = 0x3600;		    /* get disk free space function code */
+Z    sysr.dx = drivenum;			    /* (DL) = drive id, 0=current, 1=A, */
+Z    retstat = sysint(0x21,&sysr,&sysr);		    /* invoke DOS */
+Z    if( sec_clstr!=0xffff ) 
+Z	{
+Z		byt_clstr = byt_sectr * sec_clstr;
+Z		vol_total = cls_total * byt_clstr;
+Z		fre_total = cls_avail * byt_clstr;
+Z		fprintf(stdout,
+Z		"%lu out of %lu bytes available on %c:\n", 
+Z		fre_total,vol_total, 
+Z		drivenum ? drivenum + 'A' - 1 : bdos(0x19,0,0)+'A');
+Z	}
+Z}
+STUNKYFLUFF
+set `sum ls.c`
+if test 06358 != $1
+then
+echo ls.c: Checksum error. Is: $1, should be: 06358.
+fi
+#
+#
+echo Extracting main.c:
+sed 's/^Z//' >main.c <<\STUNKYFLUFF
+Z#line 1 "main.s"
+Z#include <stdio.h>
+Z#include <ctype.h>
+Z#include <signal.h>
+Z#include <fcntl.h>
+Z#include <setjmp.h>
+Ztypedef struct		/* used to find builtin commands */
+Z{
+Z	char *cmdname;
+Z	int (*func)();
+Z} builtin;
+Z
+Zextern builtin commands[];
+Zextern char histerr[];
+Zextern int j,hiscount;
+Zextern char *history[];
+Zextern int histsize;
+Zextern int numcmds;
+Zstatic int quiet = 0;
+Z
+Zchar *version = "SHELL VERSION 1.2 Kent Williams";
+Z
+Zjmp_buf env;
+Z
+Zchar *pipename[] =
+Z{
+Z	"\\shtmp1",
+Z	"\\shtmp2"
+Z};
+Z
+Zchar cmdbuf[512];
+Zint  currname = 0;
+Zint result = 0;
+Z
+Zmain(argc,argv)
+Z	char *argv[];
+Z{
+Z	signal(SIGINT,SIG_IGN);	/* ignore breaks */
+Z
+Z	quiet = !isatty(0);		/* quiet = batch shell */
+Z
+Z	/* initialize local environment */
+Z	init_env();
+Z	cli();
+Z	exit(0);
+Z}
+Z
+Z#ifndef SNODEBUG
+Z#define SNODEBUG
+Z#endif
+Z#line 46 "main.s"
+Z
+Z/*
+Z * statemachine cli
+Z */
+Zcli () 
+Z
+Z#line 48 "main.s"
+Z{
+Z#line 49 "main.s"
+Z/* global variables */
+Z	int i;
+Z	int repeat, state, inpipe = 0;
+Z	static char localbuf[256];
+Z	static char histbuf[256];
+Z	static char tail[256];
+Z	int histindex,argindex,takeline;
+Z	char *local = localbuf;
+Z	char *current,*curr_save;
+Z	char *ntharg(), *argptr;
+Z	char *savestr();
+Z
+Z
+Z/*
+Z * end of declarations for cli
+Z */
+Z/* $ */ goto getline;
+Z#line 62 "main.s"
+Z
+Zgetline:
+Z{
+Z#line 62 "main.s"
+Z		/* kill tmp files */
+Z		unlink(pipename[0]); unlink(pipename[1]);
+Z
+Z		hiscount = j % histsize; /* hiscount is current position in history */
+Z		if(!quiet)
+Z			fprintf(stderr,"%d%% ",j);
+Z
+Z/*
+Z * The following code simply reads a line from standard input.
+Z * It is so complicated because when you save the standard stream
+Z * files and execute another program/command, standard input is
+Z * left in an uncertain state - the FILE stdin seems to be at EOF,
+Z * even when standard input is associated with the console, and
+Z * cr/lf combinations show up as line terminators, whereas usually
+Z * only linefeeds get placed in the input stream.
+Z * WHY? beats me.  Something could be wrong with
+Z *  1. AZTEC C runtime
+Z *  2. PCDOS
+Z *  3. Me
+Z *  4. All three, or permutations of 1-3 reducto ad absurdum.
+Z * All I know is this works
+Z */
+Z		/* clear command buffer so string read is null terminated */
+Z		setmem(cmdbuf,sizeof(cmdbuf),0);
+Z		for (current = cmdbuf;;current++)
+Z		{
+Z			int readresult;
+Z			if ((readresult = read(0,current,1)) == 0 ||
+Z				readresult == -1)
+Z			{
+Z/* $ */ goto terminal;
+Z			}
+Z			if (*current == '\r')
+Z			{
+Z				if ((readresult = read(0,current,1)) == 0 ||
+Z					readresult == -1)
+Z				{
+Z/* $ */ goto terminal;
+Z				}
+Z				*current = '\0';
+Z				break;
+Z			}
+Z			else if (*current == '\n')
+Z			{
+Z				*current = '\0';	/* terminate string */
+Z				break;
+Z			}
+Z		}
+Z		current = cmdbuf;	/* point current at start of buffer */
+Z/*
+Z * end of input weirdness
+Z */
+Z		/* if we're recycling history strings, free previous one */
+Z		if (history[hiscount])
+Z			free(history[hiscount]);
+Z
+Z		/* save current in history array */
+Z		history[hiscount] = savestr(current);
+Z		/* parse command for compound statements and pipes */
+Z		local = localbuf;	/* set pointer to state of buffer */
+Z		setmem(localbuf,sizeof(localbuf),0);	/* clear buffer */
+Z/* $ */ goto eatwhitespace;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate getline
+Z */
+Z};
+Z#line 125 "main.s"
+Z
+Z
+Zcharstate:
+Z{
+Z#line 127 "main.s"
+Z	switch(*current)
+Z	{
+Z	case '\0':
+Z		*local = '\0';
+Z		current++;
+Z/* $ */ goto emit;
+Z	case '"' :
+Z		*local++ = *current++;
+Z/* $ */ goto doublequotes;
+Z	case '/' :
+Z		*local++ = '\\';
+Z		current++;
+Z/* $ */ goto charstate;;
+Z	case '\'':
+Z		*local++ = *current++;
+Z/* $ */ goto singlequotes;
+Z	case '\\':
+Z		*local++ = *++current;
+Z		current++;
+Z/* $ */ goto charstate;
+Z	case ';':
+Z		*local = '\0';
+Z		current++;
+Z/* $ */ goto compound;
+Z	case '|':
+Z		*local = '\0';
+Z		current++;
+Z/* $ */ goto pipe;
+Z	case '!':
+Z		current++;
+Z/* $ */ goto histstate;
+Z	default:
+Z		*local++ = *current++;
+Z/* $ */ goto charstate;
+Z	}
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate charstate
+Z */
+Z};
+Z#line 163 "main.s"
+Z
+Z
+Zemit:
+Z{
+Z#line 165 "main.s"
+Z	if (inpipe)
+Z	{
+Z		inpipe = 0;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	command(localbuf);
+Z/* $ */ goto done;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate emit
+Z */
+Z};
+Z#line 174 "main.s"
+Z
+Z
+Zcompound:
+Z{
+Z#line 176 "main.s"
+Z	if (inpipe)
+Z	{
+Z		inpipe = 0;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	command(localbuf);
+Z	local = localbuf;
+Z	setmem(localbuf,sizeof(localbuf),0);	/* clear buffer */
+Z/* $ */ goto eatwhitespace;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate compound
+Z */
+Z};
+Z#line 187 "main.s"
+Z
+Z
+Zsinglequotes:
+Z{
+Z#line 189 "main.s"
+Z	switch (*current)
+Z	{
+Z	case '\0':
+Z		write(2,"No closing quotes!!\r\n",21);
+Z/* $ */ goto parserr;
+Z	case '\'':
+Z		*local++ = *current++;
+Z/* $ */ goto charstate;
+Z	default:
+Z		*local++ = *current++;
+Z/* $ */ goto singlequotes;
+Z	}
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate singlequotes
+Z */
+Z};
+Z#line 202 "main.s"
+Z
+Z
+Zdoublequotes:
+Z{
+Z#line 204 "main.s"
+Z	switch(*current)
+Z	{
+Z	case '\0':
+Z		write(2,"No closing quotes!!\r\n",21);
+Z/* $ */ goto done;
+Z	case '"':
+Z		*local++ = *current++;
+Z/* $ */ goto charstate;
+Z	default:
+Z		*local++ = *current++;
+Z/* $ */ goto doublequotes;
+Z	}
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate doublequotes
+Z */
+Z};
+Z#line 217 "main.s"
+Z
+Z
+Zhiststate:
+Z{
+Z#line 219 "main.s"
+Z	/* handle history substitutions */
+Z	setmem(histbuf,sizeof(histbuf),0);	/* clear buffer */
+Z
+Z	/* save current pointer into command buffer */
+Z	curr_save = current;
+Z
+Z	/* copy command head */
+Z	strncpy(histbuf,cmdbuf,(int)(current-cmdbuf)-1);
+Z
+Z	/* takeline means take all arguments past current one */
+Z	takeline = 0;
+Z
+Z	/* parse history expression */
+Z	switch (*current)
+Z	{
+Z	case '!':	/* last command line */
+Z		if (j)	/* special case first time through */
+Z		{
+Z			histindex = hiscount ? hiscount - 1 : histsize - 1;
+Z		}
+Z		else
+Z		{
+Z			/* force error condition */
+Z			write(2,histerr,strlen(histerr));
+Z/* $ */ goto parserr;
+Z		}
+Z		current++;	/* point to next */
+Z		break;
+Z	case '-':		/* negative (relative #) */
+Z	/* a particular numbered command */
+Z	case '0':
+Z	case '1':
+Z	case '2':
+Z	case '3':
+Z	case '4':
+Z	case '5':
+Z	case '6':
+Z	case '7':
+Z	case '8':
+Z	case '9':
+Z		/* repeat numbered command */
+Z		repeat = atoi(current);
+Z		if (repeat < 0)	/* handle relative addressing */
+Z			repeat += j;
+Z
+Z		/* if command is within range */
+Z		if ((j - repeat) <= histsize && repeat < j)
+Z		{
+Z			histindex = repeat % histsize;
+Z		}
+Z		else
+Z		{
+Z/* $ */ goto parserr;
+Z		}
+Z
+Z		/* skip past numeric expression */
+Z		while(isdigit(*current)||*current=='-')
+Z			++current;
+Z		break;
+Z	default:
+Z		write(2,"Bad history expression\r\n",24);
+Z/* $ */ goto parserr;
+Z	}
+Z	/* look for particular argument substitutions */
+Z	switch (*current)
+Z	{
+Z	/* we want the whole enchilada */
+Z	case '\0':
+Z	case '\t':
+Z	case '\r':
+Z	case '\n':
+Z	case ' ':
+Z		strcat(histbuf,history[histindex]);
+Z		break;
+Z	case ':':
+Z		++current;	/* point past colon */
+Z		switch (*current)
+Z		{
+Z		case '^':
+Z			argindex = 1;
+Z			++current;
+Z			break;
+Z		case '0':
+Z		case '1':
+Z		case '2':
+Z		case '3':
+Z		case '4':
+Z		case '5':
+Z		case '6':
+Z		case '7':
+Z		case '8':
+Z		case '9':
+Z			/* index of argument */ 
+Z			argindex = atoi(current);
+Z			while(isdigit(*current))
+Z				++current;
+Z			if (*current == '*')
+Z			{
+Z				takeline = 1;
+Z				current++;
+Z			}
+Z			break;
+Z		case '$':
+Z			argindex = lastarg(history[histindex]);
+Z			current++;
+Z			break;
+Z		case '*':
+Z			takeline = 1;	/* take arg 1 through arg n */
+Z			argindex = 1;
+Z			current++;
+Z			break;
+Z		default:
+Z/* $ */ goto parserr;
+Z		}
+Z		/* pick up pointer to argument in history we need */
+Z		if (takeline == 0)
+Z		{
+Z			if (NULL == 
+Z				(argptr = ntharg(history[histindex],argindex)))
+Z			{
+Z/* $ */ goto parserr;
+Z			}
+Z			strcat(histbuf,argptr);
+Z		}
+Z		else
+Z		{
+Z			while (NULL !=
+Z				(argptr = ntharg(history[histindex],argindex++)))
+Z			{
+Z				strcat(histbuf,argptr);
+Z				strcat(histbuf," ");
+Z			}
+Z		}
+Z	}
+Z	/* history substitutions */
+Z	/* copy command buffer tail to tail buffer */
+Z	strcpy(tail,current);
+Z	/* copy histbuf back to cmdbuf */
+Z	strcpy(cmdbuf,histbuf);
+Z	/* point current at history substitution to continue parsing */
+Z	current = --curr_save; /* -1 to backup over first ! */
+Z	/* copy tail in */
+Z	strcat(cmdbuf,tail);
+Z	free(history[hiscount]);
+Z	history[hiscount] = savestr(cmdbuf);
+Z/* $ */ goto charstate;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate histstate
+Z */
+Z};
+Z#line 366 "main.s"
+Z
+Z
+Zpipe:
+Z{
+Z#line 368 "main.s"
+Z	if (inpipe++)
+Z	{
+Z		inpipe = 1;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	strcat(localbuf," > ");
+Z	currname ^= 1;
+Z	strcat(localbuf,pipename[currname]);
+Z	command(localbuf);
+Z	local = localbuf;
+Z	setmem(localbuf,sizeof(localbuf),0);
+Z/* $ */ goto eatwhitespace;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate pipe
+Z */
+Z};
+Z#line 382 "main.s"
+Z
+Z
+Zeatwhitespace:
+Z{
+Z#line 384 "main.s"
+Z/* strip out leading white space */
+Zwhile(isspace(*current))
+Z		current++;
+Z	if (!*current)
+Z/* $ */ goto parserr;
+Z	else
+Z/* $ */ goto charstate;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate eatwhitespace
+Z */
+Z};
+Z#line 392 "main.s"
+Z
+Z
+Zparserr:
+Z{
+Z#line 394 "main.s"
+Z/* $ */ goto getline;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate parserr
+Z */
+Z};
+Z#line 396 "main.s"
+Z
+Z
+Zdone:
+Z{
+Z#line 398 "main.s"
+Z	j++;	/* next command # */
+Z/* $ */ goto getline;
+Z
+Z#ifndef SNODEBUG
+Zgoto badstate;
+Z#endif
+Z/* 
+Z * $endstate done
+Z */
+Z};
+Z#line 401 "main.s"
+Z
+Z
+Z/*
+Z * BAD STATE LABEL
+Z */
+Zbadstate:
+Z
+Z	fprintf(stderr,"Fallen off end of a state!!!\n");
+Z
+Z	return -1;
+Z
+Z/*
+Z * TERMINAL STATE LABEL
+Z */
+Zterminal:
+Z
+Z	return 0;
+Z
+Z/*
+Z * end of state machine cli
+Z */
+Z}
+Z
+Zonintr()
+Z{
+Z	longjmp(env,-1);
+Z}
+Z
+Zcommand(current)
+Z	register char *current;
+Z{
+Z	extern do_prog();
+Z	register int i;
+Z	std_save();
+Z	if (-1 == (i = findcmd(current)))
+Z	{
+Z		ctl_brk_setup();
+Z		result = _Croot(current,do_prog);
+Z		ctl_brk_restore();
+Z	}
+Z	else
+Z	{
+Z		if (-1 != setjmp(env))
+Z		{
+Z			signal(SIGINT,onintr);
+Z			result = _Croot(current,commands[i].func);
+Z		}
+Z		signal(SIGINT,SIG_IGN);
+Z	}
+Z	std_restore();
+Z}
+Z
+Zchar *
+Zntharg(line,index)
+Zregister char *line;
+Z{
+Z	register int i;
+Z	static char buf[64];
+Z	char *bptr;
+Z	for (i = 0; *line;i++)
+Z	{
+Z		/* find start of arg[i] */
+Z		while(*line && isspace(*line))
+Z		{
+Z			++line;
+Z		}
+Z		/* if this is start of requested arg, return pointer to it */
+Z		if (i == index)
+Z		{
+Z			bptr = buf;
+Z			while(*line && !isspace(*line))
+Z				*bptr++ = *line++;
+Z			*bptr = '\0';
+Z			return buf;
+Z		}
+Z		/* find end of arg[i] */
+Z		while(*line && !isspace(*line))
+Z			++line;
+Z	}
+Z	return NULL;
+Z}
+Z
+Zlastarg(line)
+Zregister char *line;
+Z{
+Z	register int i;
+Z
+Z	for (i = 0; *line;i++)
+Z	{
+Z		/* find start of arg[i] */
+Z		while(*line && isspace(*line))
+Z			++line;
+Z		/* find end of arg[i] */
+Z		while(*line && !isspace(*line))
+Z			++line;
+Z	}
+Z	return i-1;
+Z}
+STUNKYFLUFF
+set `sum main.c`
+if test 41066 != $1
+then
+echo main.c: Checksum error. Is: $1, should be: 41066.
+fi
+#
+#
+echo Extracting main.s:
+sed 's/^Z//' >main.s <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <ctype.h>
+Z#include <signal.h>
+Z#include <fcntl.h>
+Z#include <setjmp.h>
+Ztypedef struct		/* used to find builtin commands */
+Z{
+Z	char *cmdname;
+Z	int (*func)();
+Z} builtin;
+Z
+Zextern builtin commands[];
+Zextern char histerr[];
+Zextern int j,hiscount;
+Zextern char *history[];
+Zextern int histsize;
+Zextern int numcmds;
+Zstatic int quiet = 0;
+Z
+Zchar *version = "SHELL VERSION 1.1 Kent Williams";
+Z
+Zjmp_buf env;
+Z
+Zchar *pipename[] =
+Z{
+Z	"\\shtmp1",
+Z	"\\shtmp2"
+Z};
+Z
+Zchar cmdbuf[512];
+Zint  currname = 0;
+Zint result = 0;
+Z
+Zmain(argc,argv)
+Z	char *argv[];
+Z{
+Z	signal(SIGINT,SIG_IGN);	/* ignore breaks */
+Z
+Z	quiet = !isatty(0);		/* quiet = batch shell */
+Z
+Z	/* initialize local environment */
+Z	init_env();
+Z	cli();
+Z	exit(0);
+Z}
+Z$nodebug		/* turn off state machine debugging */
+Z$machine cli getline () 
+Z$endargs
+Z/* global variables */
+Z	int i;
+Z	int repeat, state, inpipe = 0;
+Z	static char localbuf[256];
+Z	static char histbuf[256];
+Z	static char tail[256];
+Z	int histindex,argindex,takeline;
+Z	char *local = localbuf;
+Z	char *current,*curr_save;
+Z	char *ntharg(), *argptr;
+Z	char *savestr();
+Z
+Z$state getline
+Z		/* kill tmp files */
+Z		unlink(pipename[0]); unlink(pipename[1]);
+Z
+Z		hiscount = j % histsize; /* hiscount is current position in history */
+Z		if(!quiet)
+Z			fprintf(stderr,"%d%% ",j);
+Z
+Z/*
+Z * The following code simply reads a line from standard input.
+Z * It is so complicated because when you save the standard stream
+Z * files and execute another program/command, standard input is
+Z * left in an uncertain state - the FILE stdin seems to be at EOF,
+Z * even when standard input is associated with the console, and
+Z * cr/lf combinations show up as line terminators, whereas usually
+Z * only linefeeds get placed in the input stream.
+Z * WHY? beats me.  Something could be wrong with
+Z *  1. AZTEC C runtime
+Z *  2. PCDOS
+Z *  3. Me
+Z *  4. All three, or permutations of 1-3 reducto ad absurdum.
+Z * All I know is this works
+Z */
+Z		/* clear command buffer so string read is null terminated */
+Z		setmem(cmdbuf,sizeof(cmdbuf),0);
+Z		for (current = cmdbuf;;current++)
+Z		{
+Z			int readresult;
+Z			if ((readresult = read(0,current,1)) == 0 ||
+Z				readresult == -1)
+Z			{
+Z				$nextstate terminal
+Z			}
+Z			if (*current == '\r')
+Z			{
+Z				if ((readresult = read(0,current,1)) == 0 ||
+Z					readresult == -1)
+Z				{
+Z					$nextstate terminal
+Z				}
+Z				*current = '\0';
+Z				break;
+Z			}
+Z			else if (*current == '\n')
+Z			{
+Z				*current = '\0';	/* terminate string */
+Z				break;
+Z			}
+Z		}
+Z		current = cmdbuf;	/* point current at start of buffer */
+Z/*
+Z * end of input weirdness
+Z */
+Z		/* if we're recycling history strings, free previous one */
+Z		if (history[hiscount])
+Z			free(history[hiscount]);
+Z
+Z		/* save current in history array */
+Z		history[hiscount] = savestr(current);
+Z		/* parse command for compound statements and pipes */
+Z		local = localbuf;	/* set pointer to state of buffer */
+Z		setmem(localbuf,sizeof(localbuf),0);	/* clear buffer */
+Z		$nextstate eatwhitespace 
+Z$endstate getline
+Z
+Z$state charstate
+Z	switch(*current)
+Z	{
+Z	case '\0':
+Z		*local = '\0';
+Z		current++;
+Z		$nextstate emit
+Z	case '"' :
+Z		*local++ = *current++;
+Z		$nextstate doublequotes
+Z	case '/' :
+Z		*local++ = '\\';
+Z		current++;
+Z		$nextstate charstate;
+Z	case '\'':
+Z		*local++ = *current++;
+Z		$nextstate singlequotes
+Z	case '\\':
+Z		*local++ = *++current;
+Z		current++;
+Z		$nextstate charstate
+Z	case ';':
+Z		*local = '\0';
+Z		current++;
+Z		$nextstate compound
+Z	case '|':
+Z		*local = '\0';
+Z		current++;
+Z		$nextstate pipe
+Z	case '!':
+Z		current++;
+Z		$nextstate histstate
+Z	default:
+Z		*local++ = *current++;
+Z		$nextstate charstate
+Z	}
+Z$endstate charstate
+Z
+Z$state emit
+Z	if (inpipe)
+Z	{
+Z		inpipe = 0;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	command(localbuf);
+Z	$nextstate done
+Z$endstate emit
+Z
+Z$state compound
+Z	if (inpipe)
+Z	{
+Z		inpipe = 0;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	command(localbuf);
+Z	local = localbuf;
+Z	setmem(localbuf,sizeof(localbuf),0);	/* clear buffer */
+Z	$nextstate eatwhitespace
+Z$endstate compound
+Z
+Z$state singlequotes
+Z	switch (*current)
+Z	{
+Z	case '\0':
+Z		write(2,"No closing quotes!!\r\n",21);
+Z		$nextstate parserr
+Z	case '\'':
+Z		*local++ = *current++;
+Z		$nextstate charstate
+Z	default:
+Z		*local++ = *current++;
+Z		$nextstate singlequotes
+Z	}
+Z$endstate singlequotes
+Z
+Z$state doublequotes
+Z	switch(*current)
+Z	{
+Z	case '\0':
+Z		write(2,"No closing quotes!!\r\n",21);
+Z		$nextstate done
+Z	case '"':
+Z		*local++ = *current++;
+Z		$nextstate charstate
+Z	default:
+Z		*local++ = *current++;
+Z		$nextstate doublequotes
+Z	}
+Z$endstate doublequotes
+Z
+Z$state histstate
+Z	/* handle history substitutions */
+Z	setmem(histbuf,sizeof(histbuf),0);	/* clear buffer */
+Z
+Z	/* save current pointer into command buffer */
+Z	curr_save = current;
+Z
+Z	/* copy command head */
+Z	strncpy(histbuf,cmdbuf,(int)(current-cmdbuf)-1);
+Z
+Z	/* takeline means take all arguments past current one */
+Z	takeline = 0;
+Z
+Z	/* parse history expression */
+Z	switch (*current)
+Z	{
+Z	case '!':	/* last command line */
+Z		if (j)	/* special case first time through */
+Z		{
+Z			histindex = hiscount ? hiscount - 1 : histsize - 1;
+Z		}
+Z		else
+Z		{
+Z			/* force error condition */
+Z			write(2,histerr,strlen(histerr));
+Z			$nextstate parserr
+Z		}
+Z		current++;	/* point to next */
+Z		break;
+Z	case '-':		/* negative (relative #) */
+Z	/* a particular numbered command */
+Z	case '0':
+Z	case '1':
+Z	case '2':
+Z	case '3':
+Z	case '4':
+Z	case '5':
+Z	case '6':
+Z	case '7':
+Z	case '8':
+Z	case '9':
+Z		/* repeat numbered command */
+Z		repeat = atoi(current);
+Z		if (repeat < 0)	/* handle relative addressing */
+Z			repeat += j;
+Z
+Z		/* if command is within range */
+Z		if ((j - repeat) <= histsize && repeat < j)
+Z		{
+Z			histindex = repeat % histsize;
+Z		}
+Z		else
+Z		{
+Z			$nextstate parserr
+Z		}
+Z
+Z		/* skip past numeric expression */
+Z		while(isdigit(*current)||*current=='-')
+Z			++current;
+Z		break;
+Z	default:
+Z		write(2,"Bad history expression\r\n",24);
+Z		$nextstate parserr
+Z	}
+Z	/* look for particular argument substitutions */
+Z	switch (*current)
+Z	{
+Z	/* we want the whole enchilada */
+Z	case '\0':
+Z	case '\t':
+Z	case '\r':
+Z	case '\n':
+Z	case ' ':
+Z		strcat(histbuf,history[histindex]);
+Z		break;
+Z	case ':':
+Z		++current;	/* point past colon */
+Z		switch (*current)
+Z		{
+Z		case '^':
+Z			argindex = 1;
+Z			++current;
+Z			break;
+Z		case '0':
+Z		case '1':
+Z		case '2':
+Z		case '3':
+Z		case '4':
+Z		case '5':
+Z		case '6':
+Z		case '7':
+Z		case '8':
+Z		case '9':
+Z			/* index of argument */ 
+Z			argindex = atoi(current);
+Z			while(isdigit(*current))
+Z				++current;
+Z			if (*current == '*')
+Z			{
+Z				takeline = 1;
+Z				current++;
+Z			}
+Z			break;
+Z		case '$':
+Z			argindex = lastarg(history[histindex]);
+Z			current++;
+Z			break;
+Z		case '*':
+Z			takeline = 1;	/* take arg 1 through arg n */
+Z			argindex = 1;
+Z			current++;
+Z			break;
+Z		default:
+Z			$nextstate parserr
+Z		}
+Z		/* pick up pointer to argument in history we need */
+Z		if (takeline == 0)
+Z		{
+Z			if (NULL == 
+Z				(argptr = ntharg(history[histindex],argindex)))
+Z			{
+Z				$nextstate parserr
+Z			}
+Z			strcat(histbuf,argptr);
+Z		}
+Z		else
+Z		{
+Z			while (NULL !=
+Z				(argptr = ntharg(history[histindex],argindex++)))
+Z			{
+Z				strcat(histbuf,argptr);
+Z				strcat(histbuf," ");
+Z			}
+Z		}
+Z	}
+Z	/* history substitutions */
+Z	/* copy command buffer tail to tail buffer */
+Z	strcpy(tail,current);
+Z	/* copy histbuf back to cmdbuf */
+Z	strcpy(cmdbuf,histbuf);
+Z	/* point current at history substitution to continue parsing */
+Z	current = --curr_save; /* -1 to backup over first ! */
+Z	/* copy tail in */
+Z	strcat(cmdbuf,tail);
+Z	free(history[hiscount]);
+Z	history[hiscount] = savestr(cmdbuf);
+Z	$nextstate charstate
+Z$endstate histstate
+Z
+Z$state pipe
+Z	if (inpipe++)
+Z	{
+Z		inpipe = 1;
+Z		strcat(localbuf," < ");
+Z		strcat(localbuf,pipename[currname]);
+Z	}
+Z	strcat(localbuf," > ");
+Z	currname ^= 1;
+Z	strcat(localbuf,pipename[currname]);
+Z	command(localbuf);
+Z	local = localbuf;
+Z	setmem(localbuf,sizeof(localbuf),0);
+Z	$nextstate eatwhitespace
+Z$endstate pipe
+Z
+Z$state eatwhitespace
+Z/* strip out leading white space */
+Zwhile(isspace(*current))
+Z		current++;
+Z	if (!*current)
+Z		$nextstate parserr
+Z	else
+Z		$nextstate charstate
+Z$endstate eatwhitespace
+Z
+Z$state parserr
+Z	$nextstate getline
+Z$endstate parserr
+Z
+Z$state done
+Z	j++;	/* next command # */
+Z	$nextstate getline
+Z$endstate done
+Z
+Z$endmachine cli
+Z
+Zonintr()
+Z{
+Z	longjmp(env,-1);
+Z}
+Z
+Zcommand(current)
+Z	register char *current;
+Z{
+Z	extern do_prog();
+Z	register int i;
+Z	std_save();
+Z	if (-1 == (i = findcmd(current)))
+Z	{
+Z		ctl_brk_setup();
+Z		result = _Croot(current,do_prog);
+Z		ctl_brk_restore();
+Z	}
+Z	else
+Z	{
+Z		if (-1 != setjmp(env))
+Z		{
+Z			signal(SIGINT,onintr);
+Z			result = _Croot(current,commands[i].func);
+Z		}
+Z		signal(SIGINT,SIG_IGN);
+Z	}
+Z	std_restore();
+Z}
+Z
+Zchar *
+Zntharg(line,index)
+Zregister char *line;
+Z{
+Z	register int i;
+Z	static char buf[64];
+Z	char *bptr;
+Z	for (i = 0; *line;i++)
+Z	{
+Z		/* find start of arg[i] */
+Z		while(*line && isspace(*line))
+Z		{
+Z			++line;
+Z		}
+Z		/* if this is start of requested arg, return pointer to it */
+Z		if (i == index)
+Z		{
+Z			bptr = buf;
+Z			while(*line && !isspace(*line))
+Z				*bptr++ = *line++;
+Z			*bptr = '\0';
+Z			return buf;
+Z		}
+Z		/* find end of arg[i] */
+Z		while(*line && !isspace(*line))
+Z			++line;
+Z	}
+Z	return NULL;
+Z}
+Z
+Zlastarg(line)
+Zregister char *line;
+Z{
+Z	register int i;
+Z
+Z	for (i = 0; *line;i++)
+Z	{
+Z		/* find start of arg[i] */
+Z		while(*line && isspace(*line))
+Z			++line;
+Z		/* find end of arg[i] */
+Z		while(*line && !isspace(*line))
+Z			++line;
+Z	}
+Z	return i-1;
+Z}
+STUNKYFLUFF
+set `sum main.s`
+if test 47403 != $1
+then
+echo main.s: Checksum error. Is: $1, should be: 47403.
+fi
+#
+#
+echo Extracting makefile:
+sed 's/^Z//' >makefile <<\STUNKYFLUFF
+Z# home for all commands
+ZBINDIR=\\bin\\
+Z# small model library path
+ZCLIB=-l/clibs/c
+Z
+Z# source files for shell
+Zshsrc=main.c cd.c cp.c doprog.c fexecvp.c more.c cmds.c chmod.c y.c fexec.asm \
+Zinvalid.c ls.c pushd.c fgrep.c md.c mv.c pwd.c rm.c crlf.c drive.c dump2.c \
+Zrmdir.c savestr.c stdsave.c touch.c _croot.c env.c fexecv.c cat.c echo.c \
+Zcmdlist.c ctlbrk.asm mvcp.c
+Z
+Z# object files for shell
+Zshobj=main.o cd.o cp.o doprog.o fexecvp.o more.o cmds.o chmod.o y.o fexec.o \
+Zinvalid.o ls.o pushd.o fgrep.o md.o mv.o pwd.o rm.o crlf.o drive.o dump2.o \
+Zrmdir.o savestr.o stdsave.o touch.o _croot.o env.o fexecv.o cat.o echo.o \
+Zcmdlist.o ctlbrk.o mvcp.o
+Z
+Zmain.c : main.s
+Z	statecom main
+Z
+Z#
+Z# make shell - check currency of all percursors, link and then move to
+Z# bin directory
+Z#
+Zshell.exe : $(shobj) 
+Z	ln -t -o $@ -f shell.lnk
+Z	\\atron\\aztoat <shell.sym >shell.map
+Z	chmod +w $(BINDIR)$@
+Z	mv $@ $(BINDIR)$@
+Z	chmod -w $(BINDIR)$@
+Z
+Z#
+Z# make entries to produce stand-alone versions of shell builtins
+Z#
+Zchmod.com : 
+Z	cc -dMAIN $*
+Z	ln -o $@ $*.o -l/clibs/c
+Z	rm $*.o
+Z	chmod +w $(BINDIR)chmod.com
+Z	mv chmod.com $(BINDIR)chmod.com
+Z	chmod -w $(BINDIR)chmod.com
+Z
+Zmore.com : 
+Z	cc -dMAIN $*
+Z	ln -o $@ $*.o -l/clibs/s -l/clibs/c
+Z	rm $*.o
+Z	chmod +w $(BINDIR)$@
+Z	mv $@ $(BINDIR)$@
+Z	chmod -w $(BINDIR)$@
+Z
+Zmv.com : croot.o savestr.o mvcp.o
+Z	cc -dMAIN $*
+Z	ln -o $@ $*.o savestr.o croot.o mvcp.o  -l/clibs/c
+Z	rm $*.o
+Z	chmod +w $(BINDIR)$@
+Z	mv $@ $(BINDIR)$@
+Z	chmod -w $(BINDIR)$@
+Z
+Zcp.com : croot.o savestr.o mvcp.o
+Z	cc -dMAIN $*
+Z	ln -o $@ $*.o savestr.o croot.o  mvcp.o -l/clibs/c
+Z	rm $*.o
+Z	chmod +w $(BINDIR)$@
+Z	mv $@ $(BINDIR)$@
+Z	chmod -w $(BINDIR)$@
+Z
+Zls.com : 
+Z	cc -dMAIN $*
+Z	ln -o $@ $*.o -l/clibs/c
+Z	rm $*.o
+Z	chmod +w $(BINDIR)$@
+Z	mv $@ $(BINDIR)$@
+Z	chmod -w $(BINDIR)$@
+Zeditall :
+Z	z $(shsrc)
+Zclean :
+Z	rm *.o *.bak *.sym
+STUNKYFLUFF
+set `sum makefile`
+if test 36319 != $1
+then
+echo makefile: Checksum error. Is: $1, should be: 36319.
+fi
+#
+#
+echo Extracting md.c:
+sed 's/^Z//' >md.c <<\STUNKYFLUFF
+Zmd(argc,argv)
+Z	char *argv[];
+Z{
+Z	if (-1 == mkdir(*(++argv)))
+Z	{
+Z		perror("mkdir");
+Z		return -1;
+Z	}
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum md.c`
+if test 21756 != $1
+then
+echo md.c: Checksum error. Is: $1, should be: 21756.
+fi
+#
+#
+echo Extracting more.c:
+sed 's/^Z//' >more.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <sgtty.h>
+Z#include <debug.h>
+Z#include <ctype.h>
+Z#include <setjmp.h>
+Z#include <signal.h>
+Zvoid (*signal())();
+Zvoid (*moresig)();
+ZFILE *fdopen();
+Z
+Zlong int size, position;
+Zchar filename[30];
+Zchar isaconsole = '\0';
+Zchar isapipe = '\0';
+Zint tabsize = 8;
+Z#define STDIN 0
+Z#define STDOUT 1
+Z#define STDERR 2
+Z#define ESC '\033'
+Z#define IBMPC			/* display code dependent on PC hardware/bios */
+Z#ifdef IBMPC
+Zextern void scr_putc();
+Z#endif
+Zvoid std_out(c)
+Z{
+Z	write(1,&c,1);
+Z}
+Zvoid (*output)();
+Z#ifdef MAIN
+Zcrlf()
+Z{
+Z	write(2,"\r\n",2);
+Z}
+Z#endif
+Zjmp_buf moreenv;
+Zmoreintr()
+Z{
+Z	signal(SIGINT,SIG_IGN);	/* ignore signals until we finish putting stuff
+Z	                           back in order */
+Z	longjmp(moreenv,-1);
+Z}
+Z#ifdef MAIN
+Zmain
+Z#else
+Zmore
+Z#endif
+Z(argc,argv)
+Z	int argc;
+Z	char *argv[];
+Z{
+Z	FILE *fp, *fopen();
+Z	long ftell();
+Z	long int i;
+Z	long int fsize();
+Z
+Z	if (-1 == setjmp(moreenv))
+Z	{
+Z		write(2,"Interrupted\r\n",13);
+Z		fclose(fp);
+Z		signal(SIGINT,moresig);
+Z		return -1;
+Z	}
+Z
+Z	moresig = signal(SIGINT,moreintr);
+Z	isaconsole = isatty(STDOUT);
+Z	isapipe = !isatty(STDIN);
+Z#ifdef IBMPC
+Z	if (isaconsole)
+Z	{
+Z		output = scr_putc;
+Z		scr_echo(0);
+Z	}
+Z	else
+Z#endif
+Z		output = std_out;
+Z	if ( (*(++argv))[0] == '-' && isdigit((*argv)[1]) )
+Z	{
+Z		tabsize = atoi( (*argv+1) );
+Z		--argc;
+Z	} else
+Z	{
+Z		--argv;
+Z	}
+Z	if (argc == 1)
+Z	{
+Z		if (NULL == (fp = fdopen(0,"r")))
+Z		{
+Z			return -1;
+Z		}
+Z		display(fp);
+Z		crlf();
+Z		return 0;
+Z	}
+Z	while(--argc) 
+Z	{
+Z		if (NULL == (fp = fopen(*(++argv),"r")) )
+Z		{
+Z			fprintf(stderr,"more - can't open %s\n",*argv);
+Z			continue;
+Z		}
+Z		strncpy(filename,*argv,30);
+Z		if (filename[29])
+Z			filename[29] = '\0';
+Z		if (!isapipe)
+Z			size = fsize(fp);
+Z		position = 0;
+Z		if (-2 == display(fp))
+Z			argc = 0;		/* force completion of command */
+Z		fclose(fp);
+Z	}
+Zbugout:
+Z#ifdef IBMPC
+Z	if (isaconsole)
+Z		scr_echo(0);
+Z#endif
+Z	crlf();
+Z	tabsize = 8;
+Z	isaconsole = isapipe = '\0';
+Z	signal(SIGINT,moresig);
+Z	return 0;
+Z}
+Z
+Zlong fsize(fp) 
+Z	FILE *fp;
+Z{
+Z	long ftell();
+Z	long position, last;
+Z	position = ftell(fp);
+Z	if (-1 == fseek(fp,0L,2))
+Z	{
+Z		fprintf(stderr,"more - error on fseek\n");
+Z	}
+Z	last = (ftell(fp));
+Z	fseek(fp,position,0);
+Z	return last;
+Z}
+Z#define LBUFSIZE 160
+Zchar linebuffer[LBUFSIZE];
+Zint lines;
+Z
+Zdisplay(fp)
+Z	FILE *fp;
+Z{
+Z	FILE *fgets();
+Z	long ftell();
+Z	char c;
+Z	lines = 1;
+Z	while ( NULL != fgets(linebuffer,LBUFSIZE,fp))
+Z	{
+Z		if (isaconsole)
+Z		{
+Z			if (lines == 1)		/* top of display */
+Z			{
+Z#ifdef IBMPC
+Z				scr_clear();
+Z#else
+Z/* ansi terminal screen clear */
+Z				printf("%c[2J",ESC);	/* clear display */
+Z#endif
+Z			}
+Z		}
+Z		lines += localputs(linebuffer);
+Z		if (isaconsole)
+Z		{
+Z			if (lines >=  24)		/* bottome of display */
+Z			{
+Z				char tst;
+Z				position = ftell(fp);
+Z#ifdef IBMPC
+Z				scr_curs(24,0);
+Z#else
+Z/* ansi terminal positioning */
+Z				printf("%c[25;1H%c[7m",ESC,ESC);
+Z#endif
+Z				if (!isapipe)
+Z#ifdef IBMPC
+Z					scr_printf(
+Z#else
+Z					fprintf(stderr,
+Z#endif
+Z				"%s - %ld bytes - %d%% displayed - <ESC> = skip to next file",
+Z					filename,size,percent(position,size) );
+Z				else
+Z#ifdef IBMPC
+Z					scr_printf(
+Z#else
+Z					fprintf(stderr,
+Z#endif
+Z									"-more-");
+Z				switch (bdos(7,0,0))	/* get a character no echo */
+Z				{
+Z				case ESC :
+Z					return 0;
+Z				case 3 :
+Z					return -2;
+Z				default:
+Z					break;
+Z				}
+Z
+Z				lines = 1;
+Z			}
+Z		}
+Z	}
+Z	if (isaconsole)
+Z	{
+Z		if (lines != 1)		/* bottome of display */
+Z		{
+Z#ifdef IBMPC
+Z			scr_curs(24,0);
+Z#else
+Z/* ansi terminal positioning */
+Z				printf("%c[25;1H%c[7m",ESC,ESC);
+Z#endif
+Z			if (!isapipe)
+Z			{
+Z				position = ftell(fp);
+Z#ifdef IBMPC
+Z				scr_printf(
+Z#else
+Z				fprintf(stderr,
+Z#endif
+Z						"%s - %ld characters - %d%% displayed",
+Z					filename,size,percent(position,size) );
+Z			}
+Z			else
+Z#ifdef IBMPC
+Z				scr_printf(
+Z#else
+Z				fprintf(stderr,
+Z#endif
+Z								"-done-");
+Z			bdos(7,0,0); /* console input no echo */
+Z			lines = 1;
+Z		}
+Z	}
+Z}
+Z
+Zpercent(x,y)
+Z	long int x,y;
+Z{	/* returns integer percentage of x into y */
+Z#ifdef FLOAT
+Z	float xf,yf;
+Z	xf = x; yf = y;
+Z	x = ((xf/yf)*100);
+Z#endif
+Z	x *= 100;
+Z	if (y)
+Z		x /= y;
+Z	else
+Z		x = 100;
+Z	return (x);
+Z}
+Z
+Zlocalputs(lb)
+Z	register char *lb;
+Z{
+Z	int lines, pos, tabstop;
+Z	lines = 1;
+Z	pos = 0;
+Z	while (*lb)
+Z	{
+Z		switch (*lb)
+Z		{
+Z		case '\t':
+Z			tabstop = pos + (tabsize - (pos % tabsize));	
+Z			for (;pos <= tabstop; pos++)
+Z				(*output)(' ');
+Z			break;
+Z		case '\n':
+Z			(*output)('\r');
+Z		default:
+Z			(*output)(*lb);
+Z			pos++;
+Z		}
+Z		if (pos == 79)
+Z		{
+Z			pos = 1;
+Z			(*output)('\r');
+Z			(*output)('\n');
+Z			++lines;
+Z		} else if (pos > 79)
+Z		{
+Z			pos -= 80;
+Z			++lines;
+Z		}
+Z		++lb;
+Z	}
+Z	return lines;
+Z}
+Z
+Z#ifdef IBMPC
+Zscr_printf(fmt,args)
+Zchar *fmt; unsigned args;
+Z{
+Z	format(scr_putc,fmt,&args);
+Z}
+Z#endif
+STUNKYFLUFF
+set `sum more.c`
+if test 34929 != $1
+then
+echo more.c: Checksum error. Is: $1, should be: 34929.
+fi
+#
+#
+echo Extracting mv.c:
+sed 's/^Z//' >mv.c <<\STUNKYFLUFF
+Z/* :ts=2 */
+Z#include <stdio.h>
+Zchar *savestr();
+Z#ifndef MAIN
+Zextern char *fname_part(),*savestr();
+Zextern char *me;
+Z#else
+Zchar *me;
+Z#endif
+Z/* mv.c - implements a version of UNIX mv */
+Z#ifdef MAIN
+Zmain
+Z#else
+Zmv
+Z#endif
+Z(argc,argv)
+Z	int argc;
+Z	register char *argv[];
+Z{
+Z	static char *usage = "mv : usage mv file1 [file2 . . fileN] target\r\n";
+Z	static char target_name[128];
+Z	char target[128],*fname_part();
+Z	register int i;
+Z	int len;
+Z#ifndef MAIN
+Z	me = argv[0];	/* referenced in routines common with cp.c */
+Z#endif
+Z	if (argc < 3)
+Z	{
+Z		write(2,usage,strlen(usage));
+Z		return(-1);
+Z	}
+Z	strcpy(target, argv[argc-1]);
+Z	/* kill trailing backslashes */
+Z	if (target[i = strlen(target) - 1] == '\\')
+Z		target[i] = '\0';
+Z	if (argc == 3)
+Z	{
+Z		/* if the target doesn't exist and it's not a directory then rename */
+Z		if (!filep(target))
+Z		{
+Z			if (!dirp(target))
+Z			{
+Z				fprintf(stderr,"rename : moving %s to %s\n"
+Z				,argv[1],argv[2]);
+Z				rename(argv[1],argv[2]);
+Z			}
+Z			else
+Z			{
+Z			/* if the target is a directory copy to same name that directory */
+Z				strcpy(target_name,target);
+Z				if (target_name[(len = strlen(target_name))-1] != '\\')
+Z				{
+Z					target_name[len = strlen(target_name)] = '\\';
+Z					target_name[len+1] = '\0';
+Z				}
+Z				strcat(target_name,fname_part(argv[1]));
+Z#ifdef DEBUG
+Z				fprintf(stderr,"interdirectory copy same name : moving %s to %s\n"
+Z#else
+Z				fprintf(stderr,"moving %s to %s\n"
+Z#endif
+Z				,argv[1],target_name);
+Z				if (-1 != maybecopy(target_name,argv[1]))
+Z					unlink(argv[1]);
+Z			}
+Z		}
+Z		else
+Z		{
+Z		/* target exists , and isn't a directory */
+Z			char *tpath,*spath;
+Z			char tpathsaved = 0,spathsaved = 0;
+Z			char *path_part();
+Z			/* find path parts of source and target */
+Z			if (tpath = path_part(target))
+Z			{
+Z				tpath = savestr(tpath);
+Z				tpathsaved++;
+Z			}
+Z			else
+Z				tpath = ".";	/* current directory */
+Z			if (spath = path_part(argv[1]))
+Z			{
+Z				spath = savestr(spath);
+Z				spathsaved++;
+Z			}
+Z			else
+Z				spath = ".";	/* current directory */
+Z			if (0 == strcmp(tpath,spath))
+Z			{
+Z			/* if source and target are in the same directory */
+Z#ifdef DEBUG
+Z				fprintf(stderr,"intradirectory delete then rename : moving %s to %s\n"
+Z#else
+Z				fprintf(stderr,"moving %s to %s\n"
+Z#endif
+Z				,argv[1],target);
+Z				unlink(target);
+Z				rename(argv[1],target);
+Z			}
+Z			else
+Z			{
+Z#ifdef DEBUG
+Z				fprintf(stderr,"interdirectory file to file: moving %s to %s\n"
+Z#else
+Z				fprintf(stderr,"moving %s to %s\n"
+Z#endif
+Z				,argv[1],target);
+Z				if (-1 != maybecopy(target,argv[1]))
+Z					unlink(argv[1]);
+Z			}
+Z			if (tpathsaved)
+Z				free(tpath);
+Z			if (spathsaved)
+Z				free(spath);
+Z		}
+Z		return(0);
+Z	}
+Z	/* handle special case of a drive designation */
+Z	if (target[(i = strlen(target))-1] != ':')
+Z		if (!dirp(target))
+Z		{
+Z			fprintf(stderr,"mv : %s isn't a directory\n",target);
+Z			return(-1);
+Z		}
+Z	for (i = 1; i < argc-1; i++)
+Z	{
+Z		strcpy(target_name,target);
+Z		if (target_name[(len = strlen(target_name))-1] != '\\')
+Z		{
+Z			target_name[len = strlen(target_name)] = '\\';
+Z			target_name[len+1] = '\0';
+Z		}
+Z		strcat(target_name,fname_part(argv[i]));
+Z		if (!filep(argv[i]))
+Z		{
+Z			fprintf(stderr,"mv : %s isn't a file\n",argv[i]);
+Z			continue;
+Z		}
+Z		fprintf(stderr,"moving %s to %s\n",argv[i],target_name);
+Z		if (-1 != maybecopy(target_name,argv[i]))
+Z			unlink(argv[i]);
+Z	}
+Z	return 0;
+Z}
+Z
+Zmaybecopy(target,source)
+Z	char *target,*source;
+Z{
+Z	char *drive_part();
+Z	static char targetdrive[3], sourcedrive[3];
+Z	strcpy(targetdrive,drive_part(target));
+Z	strcpy(sourcedrive,drive_part(source));
+Z	if (0 == strcmp(targetdrive,sourcedrive))
+Z	{
+Z		unlink(target);
+Z		rename(source,target);
+Z		return 0;
+Z	}
+Z	return (filecopy(target,source));
+Z}
+STUNKYFLUFF
+set `sum mv.c`
+if test 37323 != $1
+then
+echo mv.c: Checksum error. Is: $1, should be: 37323.
+fi
+#
+#
+echo Extracting mvcp.c:
+sed 's/^Z//' >mvcp.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z/*
+Z * mvcp.c - routines common to mv and cp
+Z */
+Z#include <fcntl.h>
+Zchar buffer[BUFSIZ*16];
+Zextern char *me;
+Zfilecopy(target,source)
+Zchar *target,*source;
+Z{
+Z    int t,s,r;
+Z    if (-1 == (s = open(source,O_RDONLY)))
+Z    {
+Z		fprintf(stderr,"%s : can't open %s\n",me,source);
+Z		return(-1);
+Z    }
+Z    if (-1 == (t = open(target,O_TRUNC)))
+Z    {
+Z		fprintf(stderr,"%s : can't open %s\n",me,target);
+Z		return(-1);
+Z    }
+Z    while(0 != (r = read(s,buffer,BUFSIZ*16)) && r != -1)
+Z    {
+Z		if(-1 == write(t,buffer,r))
+Z		{
+Z		    fprintf(stderr,"%s : error writing %s\n",me,target);
+Z		    return(-1);
+Z		}
+Z    }
+Z    close(t); 
+Z    close(s);
+Z	return (0);
+Z}
+Z
+Z#include <errno.h>
+Ztypedef struct
+Z{
+Z    char dos_reserved[21];
+Z    char attribute;
+Z    unsigned file_time;
+Z    unsigned file_date;
+Z    long file_size;
+Z    char file_name[13];
+Z} 
+Zfcb;
+Zfcb dir;
+Z
+Zdirp(s)
+Zchar *s;
+Z{
+Z	register int junk1,junk2;
+Z	/* handle all of the stupid special cases */
+Z	if ((s[1] == ':' && s[2] == '\0')	/* root directory on a drive */
+Z		|| (s[1] == '\0')				/* root directory default drive */
+Z	)
+Z	{
+Z		return 1;
+Z	}
+Z	if (0 == strcmp(s,".."))			/* parent of this directory */
+Z	{
+Z		int returnval;
+Z		char *current,*parent;
+Z		current = getcwd(NULL,64);
+Z		if (-1 == chdir(s)) /* go to parent */
+Z			returnval = 0;
+Z		else
+Z			returnval = 1;
+Z		parent = getcwd(NULL,64);
+Z		chdir(current);
+Z		free(current); free(parent);
+Z		return returnval;
+Z	}
+Z    /* set the disk transfer address */
+Z    bdos(0x1A,&dir);
+Z    /* do a search first for the directory path */
+Z    return (bdos(0x4E,s,0x10) == 0 && bdos(0x4E,s,0) != 0);
+Z}
+Z
+Zfilep(s)
+Zchar *s;
+Z{
+Z    /* set the disk transfer address */
+Z    bdos(0x1A,&dir);
+Z    /* do a search first for the directory path */
+Z    return bdos(0x4E,s,0) == 0;
+Z}
+Zchar *fname_part(s)
+Zregister char *s;
+Z{
+Z    register char *r; 
+Z    char *rindex();
+Z    if (r = rindex(s,'\\'))
+Z	{
+Z		return r+1;
+Z	}
+Z    if (r = rindex(s,':'))
+Z	{
+Z		return r+1;
+Z	}
+Z    return s;
+Z}
+Zchar *path_part(s)
+Zregister char *s;
+Z{
+Z	static char buffer[64];
+Z    register char *r; 
+Z    char *rindex();
+Z	strcpy(buffer,s);	/* copy string */
+Z	if (r = rindex(buffer,'\\'))
+Z	{
+Z		*++r = '\0';
+Z		return buffer;
+Z	}
+Z	if (r = rindex(buffer,':'))
+Z	{
+Z		*++r = '\0';
+Z		return buffer;
+Z	}
+Z	return NULL;
+Z}
+Zchar *drive_part(s)
+Zregister char *s;
+Z{
+Z	static char buffer[64];
+Z    register char *r; 
+Z    char *rindex();
+Z	strcpy(buffer,s);	/* copy string */
+Z	if (buffer[1] == ':')
+Z	{
+Z		buffer[2] = '\0';
+Z		return buffer;
+Z	}
+Z	return NULL;
+Z}
+STUNKYFLUFF
+set `sum mvcp.c`
+if test 16416 != $1
+then
+echo mvcp.c: Checksum error. Is: $1, should be: 16416.
+fi
+#
+#
+echo Extracting pushd.c:
+sed 's/^Z//' >pushd.c <<\STUNKYFLUFF
+Z#define NULL (void *)0
+Z
+Zstatic char *dirstack[10];
+Zstatic int dsp = -1;
+Z
+Zpushd(argc,argv)
+Zchar *argv[];
+Z{
+Z	char *getcwd(), *savestr();
+Z	static char *usage = "usage : pushd newdir";
+Z	static char *pusherr = "pushd : dir stack overflow";
+Z	char dirbuf[64];
+Z	if (argc == 1)
+Z	{
+Z		write(2,usage,strlen(usage));
+Z		crlf();
+Z		return -1;
+Z	}
+Z	if (NULL ==  getcwd(&dirbuf[1],64))
+Z	{
+Z		perror("pushd");
+Z		return -1;
+Z	}
+Z	if (++dsp == 10)
+Z	{
+Z		write(2,pusherr,strlen(pusherr));
+Z		crlf();
+Z		return -1;
+Z	}
+Z	dirbuf[0] = '\\';
+Z	if (-1 == chdir(*(++argv)))
+Z	{
+Z		--dsp;
+Z		perror("pushd");
+Z		return -1;
+Z	}
+Z	dirstack[dsp] = savestr(dirbuf);
+Z	return 0;
+Z}
+Z
+Zpopd()
+Z{
+Z	register int returnval = 0;
+Z	static char *poperr = "popd : dir stack underflow";
+Z	if (dsp == -1)
+Z	{
+Z		write(2,poperr,strlen(poperr));
+Z		crlf();
+Z		return -1;
+Z	}
+Z	if (-1 == chdir(dirstack[dsp]))
+Z	{
+Z		perror("popd");
+Z		write(2,dirstack[dsp],strlen(dirstack[dsp]));
+Z		crlf();
+Z		returnval = -1;
+Z	}
+Z	free(dirstack[dsp--]);
+Z	return returnval;
+Z}
+STUNKYFLUFF
+set `sum pushd.c`
+if test 22547 != $1
+then
+echo pushd.c: Checksum error. Is: $1, should be: 22547.
+fi
+#
+#
+echo Extracting pwd.c:
+sed 's/^Z//' >pwd.c <<\STUNKYFLUFF
+Z#define NULL (void *)0
+Zpwd(argc,argv)
+Zchar *argv[];
+Z{
+Z	char *getcwd();
+Z	register char *dir;
+Z	if (!(dir = getcwd(NULL,256)))
+Z	{
+Z		perror("pwd");
+Z		return -1;
+Z	}
+Z	write(1,"\\",1);
+Z	write(1,dir,strlen(dir));
+Z	crlf();
+Z	if (dir)
+Z		free(dir);
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum pwd.c`
+if test 11133 != $1
+then
+echo pwd.c: Checksum error. Is: $1, should be: 11133.
+fi
+#
+#
+echo Extracting rm.c:
+sed 's/^Z//' >rm.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Zrm(argc,argv)
+Z	int argc;
+Z	char *argv[];
+Z{
+Z	extern int _echo;
+Z	int oldecho = _echo;
+Z	char ask = 0;
+Z
+Z	if (argv[1][0] == '-' && toupper(argv[1][1]) == 'Q')
+Z	{
+Z		ask++;
+Z		_echo = 1;
+Z		++argv; --argc;
+Z	}
+Z	while(--argc) 
+Z	{
+Z		++argv;
+Z		if (ask)
+Z		{
+Z			fprintf(stderr,"delete %s? (y or n) : ",*argv);
+Z			if (toupper(scr_getc()) != 'Y')
+Z			{
+Z				write(2,"\r\n",2);
+Z				continue;
+Z			}
+Z			write(2,"\r\n",2);
+Z		}
+Z		if (-1 == unlink(*(argv)))
+Z		{
+Z			perror("rm");
+Z		}
+Z	}
+Z	_echo = oldecho;
+Z}
+Z
+Z
+STUNKYFLUFF
+set `sum rm.c`
+if test 00071 != $1
+then
+echo rm.c: Checksum error. Is: $1, should be: 00071.
+fi
+#
+#
+echo Extracting rmdir.c:
+sed 's/^Z//' >rmdir.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Zrd(argc,argv)
+Zchar *argv[];
+Z{
+Z	static char *usage = "usage : rmdir directory";
+Z	if (argc == 1)
+Z		write(2,usage,strlen(usage));
+Z	if (-1 == rmdir(*(++argv)))
+Z	{
+Z		perror("rmdir");
+Z		return -1;
+Z	}
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum rmdir.c`
+if test 22459 != $1
+then
+echo rmdir.c: Checksum error. Is: $1, should be: 22459.
+fi
+#
+#
+echo Extracting savestr.c:
+sed 's/^Z//' >savestr.c <<\STUNKYFLUFF
+Z#define NULL (void *)0
+Zchar *
+Zsavestr(s)
+Z	register char *s;
+Z{
+Z	register char *r,*malloc();
+Z	/* squirrel away matched file name */
+Z	if (NULL == (r = malloc(strlen(s)+1)))
+Z		abort();
+Z	strcpy(r,s);
+Z	r[strlen(s)] = '\0';
+Z	return r;
+Z}
+STUNKYFLUFF
+set `sum savestr.c`
+if test 32164 != $1
+then
+echo savestr.c: Checksum error. Is: $1, should be: 32164.
+fi
+#
+#
+echo Extracting shell.lnk:
+sed 's/^Z//' >shell.lnk <<\STUNKYFLUFF
+Zmain.o cd.o cp.o doprog.o fexecvp.o more.o
+Zinvalid.o ls.o pushd.o fgrep.o env.o cmds.o chmod.o
+Zmd.o mv.o pwd.o rm.o crlf.o drive.o fexecv.o
+Zrmdir.o savestr.o stdsave.o touch.o dump2.o mvcp.o
+Z_croot.o cat.o echo.o y.o fexec.o cmdlist.o ctlbrk.o
+Z/clibs/c.lib /clibs/s.lib
+STUNKYFLUFF
+set `sum shell.lnk`
+if test 41375 != $1
+then
+echo shell.lnk: Checksum error. Is: $1, should be: 41375.
+fi
+#
+#
+echo Extracting ssbrk.asm:
+sed 's/^Z//' >ssbrk.asm <<\STUNKYFLUFF
+Z; :ts=8
+Z;Copyright (C) 1983 by Manx Software Systems
+Z	include lmacros.h
+Zdataseg	segment	word public 'data'
+Z	extrn	$MEMRY:word
+Z	extrn	_mbot_:word, _sbot_:word
+Z	extrn	_mtop_:word
+Z	extrn	errno_:word
+Z	extrn	_STKLOW_:word
+Z	extrn	_PSP_:word
+Zdataseg	ends
+Z	assume	ds:dataseg
+Z;
+Z; sbrk(size): return address of current top & bump by size bytes
+Z;
+Z	procdef	sbrk,<<siz,word>>
+Z	push	di
+Z	mov	ax,siz
+Z	mov	di,$MEMRY
+Z	add	ax,di
+Z	push	ax
+Z	call	brk_
+Z	pop	cx
+Z	test	ax,ax
+Z	jnz	brk_error
+Z	mov	ax,di		;return original value of the break
+Zbrk_error:
+Z	pop	di
+Z	test	ax,ax		;set flags for C
+Z	pret
+Z	pend	sbrk
+Z;
+Z; brk(addr):	set current top address to addr
+Z;		returns 0 if ok, -1 if error
+Z;
+Z	procdef brk,<<addr,word>>
+Z	mov	ax,addr
+Z	inc	ax
+Z	and	al,-2
+Z	cmp	ax,_mbot_
+Z	jb	brk_ov
+Z	mov	bx,_STKLOW_
+Z	cmp	bx,0
+Z	jnz	abovestk
+Z	cmp	ax,_sbot_
+Z	jae	brk_ov
+Z	mov	bx,sp
+Z	cmp	ax,bx
+Z	jae	brk_ov
+Zbrk_ok2:
+Z	mov	$MEMRY,ax	;new value is good so save it away
+Z	sub	ax,ax
+Z	pret
+Z;heap is above stack
+Zabovestk:
+Z	cmp	ax,_mtop_
+Z	ja	getstore
+Z	cmp	ax,$MEMRY
+Z	ja	brk_ok2
+Z;			going to do a SETBLOCK call
+Zgetstore:
+Z	push	ax
+Z	mov	bx,ax
+Z	mov 	cx,4
+Z	shr	bx,cl
+Z	and	bx,0fffh
+Z	add	bx,65		;bump to nearest 1k increment
+Z	and	bx,0ffc0h	;and round
+Z	push	bx
+Z	push	es
+Z	mov	cx,ds
+Z	add	bx,cx		;get actual paragraph address
+Z	mov	es,_PSP_
+Z	sub	bx,_PSP_
+Z	mov	ah,04ah
+Z	int	21h		;SETBLOCK
+Z	pop	es
+Z	pop	bx
+Z	pop	ax
+Z	jc	brk_ov		; couldn't do it, so punt
+Z	mov	$MEMRY,ax
+Z	test	bx,0e000h
+Z	jnz	brk_ov
+Z	mov	cx,4
+Z	shl	bx,cl
+Z	mov	_mtop_,bx
+Z	sub	ax,ax
+Z	pret
+Z; invalid request
+Zbrk_ov:
+Z	mov	errno_,-4
+Z	mov	ax,-1
+Z	test	ax,ax
+Z	pret
+Z	pend	brk
+Z;
+Z; rsvstk(size):		set safety margin for stack
+Z;			this will make sure that at least size
+Z;			bytes of stack below the current level remain.
+Z;
+Z	procdef	rsvstk,<<stksize,word>>
+Z	mov	ax,sp
+Z	sub	ax,stksize
+Z	mov	_sbot_,ax
+Z	pret
+Z	pend	rsvstk
+Z	finish
+Z	end
+STUNKYFLUFF
+set `sum ssbrk.asm`
+if test 58681 != $1
+then
+echo ssbrk.asm: Checksum error. Is: $1, should be: 58681.
+fi
+#
+#
+echo Extracting stdsave.c:
+sed 's/^Z//' >stdsave.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <fcntl.h>
+Z
+Zint console;
+Zint in,out;	/* old standard input and standard output */
+Zstd_save()
+Z{
+Z	if (-1 == (console = open("con",O_RDWR)))
+Z	{
+Z		perror("sh : can't open console");
+Z		return -1;
+Z	}
+Z	in = dup(0);
+Z	out = dup(1);
+Z	fdup(console,0);
+Z	fdup(console,1);
+Z	fdup(console,2);
+Z	return 0;
+Z}
+Zvoid 
+Zstd_restore()
+Z{
+Z	fdup(in,0);
+Z	fdup(out,1);
+Z	close(console);
+Z	close(in);
+Z	close(out);
+Z}
+STUNKYFLUFF
+set `sum stdsave.c`
+if test 61619 != $1
+then
+echo stdsave.c: Checksum error. Is: $1, should be: 61619.
+fi
+#
+#
+echo Extracting stksiz.c:
+sed 's/^Z//' >stksiz.c <<\STUNKYFLUFF
+Zint _STKSIZ = 8192/16;  /* (in paragraphs) */
+Zint _HEAPSIZ = 32768/16; /* (in paragraphs) */
+Zint _STKLOW = 1;		/* default is stack above heap (small only) */
+STUNKYFLUFF
+set `sum stksiz.c`
+if test 11181 != $1
+then
+echo stksiz.c: Checksum error. Is: $1, should be: 11181.
+fi
+#
+#
+echo Extracting touch.c:
+sed 's/^Z//' >touch.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z
+Ztouch(argc,argv)
+Z	char *argv[];
+Z{
+Z	while(--argc)
+Z		utime(*(++argv),NULL);
+Z}
+STUNKYFLUFF
+set `sum touch.c`
+if test 31978 != $1
+then
+echo touch.c: Checksum error. Is: $1, should be: 31978.
+fi
+#
+#
+echo Extracting y.c:
+sed 's/^Z//' >y.c <<\STUNKYFLUFF
+Z#include <stdio.h>
+Z#include <signal.h>
+Z#include <setjmp.h>
+Z
+Z/* y and t
+Z * y reads the standard input to standard output, then invokes cat
+Z * to put one or more files to standard output
+Z * tee copies standard input to output and puts a copy
+Z * into a file specified on the command line
+Z */
+Z
+Zvoid (*signal())();
+Zvoid (*teesig)();
+Zjmp_buf y_env;
+Zstatic FILE *in,*out;
+Z
+ZFILE *fopen(),*fdopen();
+Z
+Zvoid y_intr()
+Z{
+Z	signal(SIGINT,SIG_IGN);
+Z	longjmp(y_env,-1);
+Z}
+Z
+Zy(argc,argv)
+Z	int argc;
+Z	char *argv[];
+Z{
+Z	register int c;
+Z
+Z	/* handle interrupts */
+Z	if (-1 == setjmp(y_env))
+Z	{
+Z		static char *intmsg = "Interrupted\r\n";
+Z		write(2,intmsg,strlen(intmsg));
+Z		fclose(in);
+Z		fclose(out);
+Z		signal(SIGINT,teesig);
+Z		return -1;
+Z	}
+Z
+Z	/* set signal catcher */
+Z	teesig = signal(SIGINT,y_intr);
+Z
+Z	if (NULL == (in = fdopen(0,"r")))
+Z	{
+Z		fprintf(stderr,"can't open stdin\n");
+Z	};
+Z	if (NULL == (out = fdopen(1,"w")))
+Z	{
+Z		fprintf(stderr,"can't open stdout\n");
+Z	};
+Z
+Z	while(EOF != (c = agetc(in)))
+Z		aputc(c,out);
+Z	if (argc > 1)
+Z		cat(argc,argv);
+Z	fclose(in);
+Z	fclose(out);
+Z	signal(SIGINT,teesig);
+Z	return 0;
+Z}
+Z
+Zjmp_buf t_env;
+Z
+Zvoid t_intr()
+Z{
+Z	signal(SIGINT,SIG_IGN);
+Z	longjmp(t_env,-1);
+Z}
+Z
+Zt(argc,argv)
+Z	int argc;
+Z	char *argv[];
+Z{
+Z	register int c;
+Z	register FILE *tfile;
+Z	FILE *fopen();
+Z
+Z	/* handle interrupts */
+Z	if (-1 == setjmp(t_env))
+Z	{
+Z		static char *intmsg = "Interrupted\r\n";
+Z		write(2,intmsg,strlen(intmsg));
+Z		fclose (tfile);
+Z		fclose(in);
+Z		fclose(out);
+Z		signal(SIGINT,teesig);
+Z		return -1;
+Z	}
+Z
+Z	/* set signal catcher */
+Z	teesig = signal(SIGINT,t_intr);
+Z
+Z	if (NULL == (tfile = fopen(*(++argv),"w")))
+Z	{
+Z		fprintf(stderr,"can't open %s\n",*argv);
+Z	};
+Z	if (NULL == (in = fdopen(0,"r")))
+Z	{
+Z		fprintf(stderr,"can't open stdin\n");
+Z	};
+Z	if (NULL == (out = fdopen(1,"w")))
+Z	{
+Z		fprintf(stderr,"can't open stdout\n");
+Z	};
+Z
+Z	while(EOF != (c = agetc(in)))
+Z	{
+Z		aputc(c,out);
+Z		if (tfile)
+Z			aputc(c,tfile);
+Z	}
+Z	fclose(in);
+Z	fclose(out);
+Z	fclose(tfile);
+Z	signal(SIGINT,teesig);
+Z	return 0;
+Z}
+STUNKYFLUFF
+set `sum y.c`
+if test 44898 != $1
+then
+echo y.c: Checksum error. Is: $1, should be: 44898.
+fi
+echo ALL DONE BUNKY!
+exit 0
+
+-- 
+                                                                          --
+                .^.                        michael regoli 
+                /|\        ...ihnp4!inuxc!iuvax!isrnix!mr 
+               '|!|`                     <mr@isrnix.UUCP> 

@@ -1,0 +1,165 @@
+The files in this package build the sendmail.cf files for machines at
+Georgia Tech.  They are derived from the standard BSD 4.2 sendmail
+files, and form a set of sendmail files we received along with PMDF
+from the folks at CSNet.  The CSNet set of files were put together by
+Ray Essick (essick@a.cs.uiuc.edu) and were a great help in putting this
+package together.  Many of the individual rules were derived from
+various sources posted to the Usenet net.mail and net.sources
+newsgroups.  Credit is also due Rick Adams at seismo.css.gov for his
+continued comments and help in debugging some of headers, and to
+Stuart Stirling at emory.CSNET for help with some of the initial
+debugging.
+
+Contained in this package are the following:
+1) MANIFEST which lists each file in the package, along with a
+   one line description of what it does;
+2) KEY which describes macros used in the sendmail files;
+3) source and Makefiles for building our various sendmail.cf files;
+4) overview.ms, a paper describing how mail gets routed when
+   mailed to or through gatech (nroff -ms overview.ms | more);
+5) uumail.c, the source to our rerouting mailer ("pathalias", which
+   is used to build the mailer database, has been posted multiple times
+   to the net and is not included).  See the comments at the beginning
+   of the program before your try to install it;
+6) PATCHES, PATCHES2 & PATCH3, which are a set of changes to the
+   sendmail code, needed to be implemented to make some of these
+   sendmail rules work optimally.  Make sure to read about the corresponding
+   change to "rmail" described in the comments.
+7) Files, which is a brief list of the data files which are present to
+   drive the sendmail on "gatech".
+
+The remainder of this file is an overview of the environment in which
+these files were developed and are used.
+
+The machines using "sendmail" at Georgia Tech fall into 3 basic
+categories: gateway ("gatech"), department machines on a common
+ethernet ("stratus", "nimbus", et.al.), and campus machines not on the
+same Ethernet as "gatech" (only "gt-cmmsr" so far).  We have at least
+one Ethernet loop on campus which is separate from the ICS loop
+("gtss", "gtqo", et. al.).
+
+"gatech" is intended to be the campus gateway machine.  It is on the
+ICS common ethernet, has over 50 major uucp contacts known to the
+outside world, has a CSNet connection, a number of direct asynchronous
+links, and a set of rotored phone lines.  Sometime in the
+not-too-distant future, it is possible that "gatech" will also be on
+the Arpanet and/or Bitnet. It is also the "traditional" mail address
+known to most outsiders.  Thus, the machine is on 3 distinct networks,
+and has to be configured with the possibility of connecting to at least
+1 other major international network in the near future.
+
+The department machines currently are comprised of the Clouds research
+machines "gt-stratus", "gt-cirrus", and "gt-nimbus", and the ICS/OCS
+Pyramid "gitpyr".  They are connected via a common ethernet link, and
+they all can speak TCP at each other.  Other machines are expected to
+be added to this group before long.  Almost all of these machines have
+a single phone line and/or direct links for uucp to machines that can't
+speak TCP.  (We are trying to keep a consistant naming scheme in use,
+and thus all campus machines will henceforth be named with the prefix
+"gt-" in the name.  There are a few machines around which had
+established UUCP networks connections with different names before the
+decision to use this standard came into being, and their names will
+probably not change (e.g., "gitpyr") but we have "gt-" aliases for those
+machines (e.g., "gt-pyr").)
+
+
+The third class of machine on campus runs sendmail but has no TCP
+connection to the others because our Net/One bridge won't pass TCP
+packets across the backbone.  These sites use a phone line or Net/One
+virtual circuit to connect to "gatech" and some of the other systems.
+Some of these machines may talk to each other via Ethernet, but
+there is no common connection amongst all of them.
+
+The basic idea in our configuration is for users to be able to use
+addresses of the forms:
+		site!user, site!site2!user, user@site.UUCP
+		user@site.CSNET, user@site.ARPA, user@site.MAILNET,
+		user@site.BITNET, user@site.DEC, site.DOMAIN!user
+and the local case:     user@site.GTNET, site:user, user%site
+We'd also like to be able to use just "user@site" and let the mailer
+figure it out.  Here's how my sendmail files accomplish that:
+
+All of the internal machines are simple: they merely canonicalize the
+address according to standard rule, look to see if it is a GTNET host
+that they know and send the letter straight to that host. Local letters
+are handled appropriately. Any other address which looks like a network
+address is sent to the relay site, "gatech", except that each machine
+can have a small number of direct UUCP connections to outside
+machines.  Ruleset zero for these systems check for these UUCP
+connections.  Note that we use a file (/usr/lib/mail/uucp.local) to
+hold the UUCP connection list so that we don't have to play around with
+the actual sendmail configuration if we change contacts.  The only
+thing one has to do to update the list of UUCP connections available on
+that host is update the file. If you run with a frozen sendmail.cf, you
+also have to type "/usr/lib/sendmail -bz".
+
+The "gatech" machine is the complex one.  Any address that the internal
+machines are unable to handle gets bounced to this machine. The
+"gatech" machine speaks to a plethora of people. "gatech" should be
+able to recognize and route any (valid) address.  The "gatech" machine
+compares UUCP addresses against a file similar to the way the other
+machines handle them.  Mail to the CSNET domain is sent to the PMDF
+mailer, which queues the letter for phone transmission to the
+CSnet-relay host.  Mail to the ARPA domain, since we have no direct
+ARPA connection (yet), is handed to the PMDF mailer for transmission to the
+CSnet-relay, which is an ARPA host.  Mail to the BITNET (IBM
+derivative) and MAILNET (through MIT-multics) machines are routed to
+the host defined by the $B and $M macros.  Mail to the DEC E-net is
+routed to the site listed in the $E macro, currently "decwrl.dec.com".
+Mail to the OZ network (Australia) is routed to munnari.uucp ($Z).
+Since we do not have connections to any of those networks, we instead
+append the address of a known gateway to the address forming something
+like: user@host.mailnet@mit-multics.arpa and then re-iterate through
+ruleset 0 to get from our machine to the gateway.
+
+Any address without a domain gets converted into an address of the form
+"user@site", and it makes an attempt to intuit the domain. This is done
+by checking (in order) the list of local sites, local uucp contacts (1
+hop), CSNET, ARPA, BITNET, UUCP, and DEC E-net sites. In the event of a
+match, the proper domain name is appended to the address and we
+re-iterate through ruleset zero.  This catches a fair number of missing
+domain problems and hasn't caused too much confusion about names in use
+in several domains.
+
+Finally, the "gatech" machine takes any left-over non-local names and
+returns them to the sender with a message about the fact that there is
+an unknown host/domain name in his letter.
+
+The UUCP mailer on "gatech" is a re-routing mailer.  Any path or
+address handed to "uumail" gets an "optimal" path supplied to it.  That
+is, the program steps through the address from ultimate destination to
+beginning, and if it knows a path to that site it will substitute that
+path for the remainder of the user-supplied path.  For example, if the
+address "a!b!c!d!e!f" is provided to the mailer, and it knows how to
+get to site "d" via "z!y" (but no idea how to get to "e"), it will
+rewrite the path to be "z!y!d!e!f".  The path database is built using
+"pathalias" on the uucp map data obtained from the Usenix machine
+("gatech" is a regional repository of UUCP map information and gets
+near-synchronous copies of map updates).
+
+The ruleset along with "uumail" rewrites the "To:" field to look like
+"f@e.UUCP" since the user-supplied address-path is probably not the
+path that the mailer is going to use. Note that this means that
+"uumail.m4" and "uucpm.m4" are NOT identical in function -- beware if
+you decide to use one of them as a base in building your own files.
+"uucpm.m4" does not muck about with the "To:" field, nor does it
+reroute mail.
+
+This uucp mechanism allows any of our users to simply address mail to
+"foo@site.UUCP" and not worry about a path.  It also optimizes message
+paths provided when answering news articles, and it allows our
+neighbors without mail routing software to address mail to
+"gatech!somesite!person" and expect the mail to get through, if
+possible.  So far, no one has complained about not being able to force
+a particular path through our mailer.  In the 8+ months this mechanism
+has been working, I've only discovered about 10 sites not registered
+with the map project and thus ccausing mail to them to fail.
+
+That's about it.  If you find these useful in some way, great.  If you
+should find bugs or possible enhancements to these files, I would
+greatly appreciate hearing about it.
+----
+Gene Spafford
+The Clouds Project, School of ICS, Georgia Tech, Atlanta GA 30332
+CSNet:	Spaf @ GATech		ARPA:	Spaf%GATech.CSNet @ CSNet-Relay.ARPA
+uucp:	...!{akgua,allegra,hplabs,ihnp4,linus,seismo,ulysses}!gatech!spaf

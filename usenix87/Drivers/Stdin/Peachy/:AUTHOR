@@ -1,0 +1,86 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site sask.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!alberta!sask!peachey
+From: peachey@sask.UUCP (Darwyn Peachey)
+Newsgroups: net.sources,net.unix-wizards
+Subject: 4.2 driver for /dev/stdin
+Message-ID: <245@sask.UUCP>
+Date: 18 Jun 85 19:25:35 GMT
+Date-Received: 20 Jun 85 06:12:03 GMT
+Distribution: net
+Organization: University of Saskatchewan, CANADA
+Lines: 144
+Xref: plus5 net.sources:1761 net.unix-wizards:5733
+
+----------
+
+Last week at the Usenix Conference in Portland, Oregon, Rob Pike of Bell Labs
+mentioned the pseudo-device "/dev/stdin" implemented in UNIX 8th Edition
+(research version 8).  An open of /dev/stdin returns a file descriptor which
+is a duplicate of file descriptor 0.  This is valuable, because programs
+which normally read from a user-specified file can be made to read standard
+input without special options or checking for a file name "-" as has been
+done by many utilities in the past.  The user may simply specify "/dev/stdin"
+as the input file.  Note that this is different from "/dev/tty", since
+standard input may come from a pipe, or be redirected using the "<" shell
+operator.
+
+The notion of "/dev/stdin" appealed to me so much that I wrote the following
+4.2 BSD device driver to implement it.  The "devfd" driver duplicates a file
+descriptor corresponding to the minor device number of the devfd device.  Our
+system has "/dev/stdin", "/dev/stdout", and "/dev/stderr" with minor device
+numbers 0, 1, and 2 respectively.  We also have "/dev/fdXX", for XX ranging
+from 0 to NOFILE-1 (/dev/fd0, /dev/fd1, and /dev/fd2 are links to /dev/stdin,
+/dev/stdout, and /dev/stderr).  All of these devices are owned by root with
+protection mode 0666 (crw-rw-rw-).
+
+The driver requires no changes to 4.2 BSD kernel code, except for the
+configuration information in machine/conf.c and conf/files. Clearer and cleaner
+implementations are probably possible if you don't mind modifying other
+source files (copen in sys_syscalls.c and openi in ufs_inode.c).
+
+If you install the driver in your system, I'd like to hear about your
+experiences, good and bad.
+
+					Darwyn Peachey
+					Computer Science Research Lab
+					University of Saskatchewan
+					Saskatoon, Canada S7N 0W0
+					(306) 966-4909
+				{ihnp4,alberta,utcsri}!sask!kimnovax!peachey
+
+
+------------------------- installation instructions ---------------------
+Installation of the driver consists of the following steps:
+1. place the devfd.c file in /sys/sys/devfd.c
+2. add the following line (indented for clarity) to /sys/conf/files
+	sys/devfd.c		optional devfd
+3. edit /sys/machine/conf.c to look like the following:
+	...
+	#include "devfd.h"
+	#if NDEVFD > 0
+	int devfdopen();
+	#else
+	#define devfdopen nodev
+	#endif
+	...
+	struct cdevsw cdevsw[] =
+	{
+	...
+		/* "devfd" pseudo-device driver */
+		devfdopen,	nodev,	nodev,	nodev,	/* 34 */
+		nodev,		nodev,	nodev,	0,
+		seltrue,	nodev,
+	...
+	};
+
+Note that although "devfd" is entry number 34 in our cdevsw, you may need
+to use a different cdevsw entry in your system.
+4. add the following line to your machine config file, e.g. /sys/conf/KIMNOVAX
+	pseudo-device		devfd
+5. run /etc/config MACHINE in /sys/conf (e.g. /etc/config KIMNOVAX).
+6. chdir to /sys/MACHINE (e.g. /sys/KIMNOVAX) and run "make depend", then
+"make vmunix".  Move vmunix to /newvmunix and reboot to try it out.
+7. After booting the new kernel, create device inodes in /dev, e.g.
+	/etc/mknod /dev/stdin c 34 0
+	chmod 0666 /dev/stdin

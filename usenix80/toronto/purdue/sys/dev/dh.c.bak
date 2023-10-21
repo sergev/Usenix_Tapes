@@ -1,0 +1,599 @@
+#
+/*
+ */
+
+/*
+ *	DH-11 driver
+ *	This driver calls on the DHDM driver.
+ *	If the DH has no DM11-BB, then the latter will
+ *	be fake. To insure loading of the correct DM code,
+ *	lib2 should have dhdm.o, dh.o and dhfdm.o in that order.
+ */
+
+#include "../param.h"
+#include "../conf.h"
+#include "../user.h"
+#include "../tty.h"
+#include "../proc.h"
+#include "../systm.h"
+# ifdef XSTTY
+#include "../buf.h"
+#include "../errlog.h"
+# endif
+
+#define	NDH11	5	/* number of DH11's (16 lines ea) */
+#define	DHNCH	16	/* max number of DMA chars */
+
+struct	tty dh11[NDH11*16];
+#ifdef EP
+#endif
+
+/*
+ *  addresses of DH11 CSR's, see also /usr/sys/conf/low.s
+ */
+int	dhtab[] {0160020, 0160040, 0160060, 0160100, 0160120, 0};
+/*
+ * Place from which to do DMA on output
+ */
+char	dh_clist[NDH11*16][DHNCH];
+
+/*
+ * Used to communicate the number of lines to the DM
+ */
+int	ndh11	NDH11*16;
+
+/*
+ * Hardware control bits
+ */
+#define	BITS6	01
+#define	BITS7	02
+#define	BITS8	03
+#define	TWOSB	04
+#define	PENABLE	020
+/* DEC manuals incorrectly say this bit causes generation of even parity. */
+#define	OPAR	040
+#define	HDUPLX	040000
+
+#define	IENABLE	030100
+#define	PERROR	010000
+#define	FRERROR	020000
+#define OVERRUN	040000
+#define	XINT	0100000
+#define	SSPEED	9	/* standard speed: 1200 baud */
+
+/*
+ * Software copy of last dhbar
+ */
+int	dhsar[NDH11];
+int	dhint	0;	/* nz if dh rcv interrupt routine active */
+int	dhprs	0;	/* nz if dh once-only code already done */
+int	dhstop;
+int	dhover;		/* number of receive overruns */
+
+struct dhregs {
+	int dhcsr;
+	int dhnxch;
+	int dhlpr;
+	int dhcar;
+	int dhbcr;
+	int dhbar;
+	int dhbreak;
+	int dhsilo;
+};
+
+/*
+ * Open a DH11 line.
+ */
+dhopen(dev, flag)
+{
+	register struct tty *tp;
+	extern dhstart();
+	extern dhsilock();
+# ifdef POWERFAIL;
+	register int *ip;
+	register i;
+# endif
+
+# ifdef POWERFAIL
+	if (dev == NODEV) {
+		for(tp = &dh11; tp < &dh11[NDH11*16]; tp++) {
+			dhparam(tp);	/* at spl6 already */
+# ifdef XSTTY
+			if (tp->t_bp)
+				tp->t_bp->b_flags =| B_ERROR;
+# endif
+		}
+		for(ip = &dhtab; *ip; ip++) {
+			(*ip)->dhcsr = IENABLE;
+			for(i=0; i<16; i++) {
+				(*ip)->dhcar = "\r\nPOWER FAIL.\r\n";
+				(*ip)->dhbcr = -18;
+				((*ip)->dhcsr)++;
+			}
+			(*ip)->dhbar = -1;	/* start all lines */
+		}
+	return;
+	}
+# endif
+	if(dhprs == 0) {
+		dhprs++;	/* once only code to start dhsilock */
+		timeout(&dhsilock,0,4);
+	}
+
+	if (dev.d_minor >= NDH11*16) {
+		u.u_error = ENXIO;
+		return;
+	}
+	tp = &dh11[dev.d_minor];
+#ifdef XSTTY
+	if ((tp->t_speeds & BLITZ) || (tp->t_state & DRSVD)) {
+		u.u_error = ENXIO;
+		return;
+	}
+#endif
+	tp->t_addr = dhstart;
+	tp->t_dev = dev;
+	dhtab[(dev>>4)&017]->dhcsr =| IENABLE;
+	tp->t_state =| WOPEN|SSTART;
+	if ((tp->t_state&ISOPEN) == 0) {
+		tp->t_erase = CERASE;
+		tp->t_kill = CKILL;
+#ifndef XSTTY
+		tp->t_speeds = SSPEED | (SSPEED<<8);
+#endif
+#ifdef XSTTY
+		tp->t_speeds = SSPEED | (tp->t_speeds & SPY);
+#endif
+		tp->t_flags = ODDP|EVENP|ECHO|XTABS|LCASE|CRMOD;
+		spl5();
+		dhparam(tp);
+		spl0();
+	}
+	dmopen(dev);
+	tp->t_state =& ~WOPEN;
+	tp->t_state =| ISOPEN;
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	if (u.u_procp->p_ttyp == 0)
+		u.u_procp->p_ttyp = tp;
+}
+
+/*
+ * Allows DH11 to use silo buffering (32 chars) to reduce
+ * the interrupt overhead during computer-computer xmissions
+ * but still provide adequate keyboard service.
+ * -ghg 11/18/76
+ */
+dhsilock()
+{
+	register int *dhp, *dhaddr;
+
+	if(!dhint) {
+		dhp = dhtab;
+		while(dhaddr = *dhp++)
+			if(dhaddr->dhsilo.hibyte&077)
+				dhaddr->dhsilo = 0; /* cause interrupt */
+	}
+	timeout(&dhsilock,0,4); /* recall self after 67 millisec */
+}
+
+/*
+ * Close a DH11 line.
+ */
+dhclose(dev)
+{
+	register struct tty *tp;
+
+	tp = &dh11[dev.d_minor];
+#ifdef PUMP.
+	tp->t_speeds =& ~TOEOB;
+#endif
+	dmclose(dev);
+	wflushtty(tp);
+#ifdef XSTTY
+	tp->t_speeds =& ~BLITZ;
+	if (tp->t_bp)
+		brelse(tp->t_bp);
+	tp->t_bp = 0;
+#endif
+	tp->t_state =& (CARR_ON|SSTART);
+	wakeup(&tp->t_speeds); /* for other devices trying to reserve this one */
+}
+
+/*
+ * Read from a DH11 line.
+ */
+dhread(dev)
+{
+	ttread(&dh11[dev.d_minor]);
+}
+
+/*
+ * write on a DH11 line
+ */
+dhwrite(dev)
+{
+	ttwrite(&dh11[dev.d_minor]);
+}
+
+/*
+ * DH11 receiver interrupt.
+ */
+dhrint(dev)
+{
+	register struct tty *tp;
+	register int c;
+	register int *dhaddr;
+	int idev;
+# ifdef XBUF
+	int savka5;
+# endif
+
+	dhint++;	/* set rcv interrupt active */
+	dev =& 017;
+	idev = dev;
+	do {
+		dhaddr = dhtab[dev];
+		while ((c = dhaddr->dhnxch) < 0) {	/* char. present */
+			tp = &dh11[((c>>8)&017 | (dev<<4))];
+			if (tp >= &dh11[NDH11*16])
+				continue;
+			if (c & OVERRUN) {
+				dhover++;
+				errlg++;
+				printf("DH11 overrun on dev %d/%d\n",
+				 tp->t_dev.d_major, tp->t_dev.d_minor & 0377);
+				errlg = 0;
+			}
+
+#ifdef XSTTY /* hook for pump and other high speed stuff */
+			if(tp->t_xxpar) {
+				if (sufet(c, tp->t_xxpar, tp->t_xxoff) || (c&FRERROR))
+					if((tp->t_speeds&PUMP) == 0) /* buff overrun */
+						psignal(tp->t_xxpid, SIGHUP);
+				c =& 0377;
+				if((c == (tp->t_erase&0377)) && (tp->t_speeds&PUMP)) {
+# ifdef XBUF
+					savka5 = *ka5;
+					*ka5 = praddr;
+# endif
+					if(tp->t_xxpid->p_pri > 0)
+						tp->t_xxpid->p_pri = 1;
+# ifdef XBUF
+					*ka5 = savka5;
+# endif
+					psignal(tp->t_xxpid, tp->t_kill);
+				}
+				continue;
+			}
+#endif
+			if((tp->t_state&ISOPEN)==0 || (c&PERROR)) {
+				wakeup(tp);
+				continue;
+			}
+			if (c&FRERROR)		/* break */
+				if (tp->t_flags&RAW)
+					c = 0;		/* null (for getty) */
+				else
+					c = 0177;	/* DEL (intr) */
+			ttyinput(c, tp);
+		}
+		dhaddr->dhsilo = 16;
+		if (dev++ >= NDH11-1)
+			dev = 0;
+	} while(idev != dev);
+	dhint = 0;
+}
+
+/*
+ * stty/gtty for DH11
+ */
+dhsgtty(dev, av)
+int *av;
+{
+	register struct tty *tp;
+	register r;
+
+	tp = &dh11[dev.d_minor];
+	if (ttystty(tp, av))
+		return;
+	spl5();
+	dhparam(tp);
+	spl0();
+}
+
+#ifndef XSTTY
+/*
+ * Set parameters from open or stty into the DH hardware
+ * registers.
+ */
+dhparam(atp)
+struct tty *atp;
+{
+	register struct tty *tp;
+	register int lpr;
+	int *dhaddr;
+
+	tp = atp;
+	dhaddr = dhtab[(tp->t_dev>>4)&017];
+	dhaddr->dhcsr.lobyte = tp->t_dev.d_minor&017 | IENABLE;
+	/*
+	 * Hang up line?
+	 */
+	if (tp->t_speeds.lobyte==0) {
+		tp->t_flags =| HUPCL;
+		dmclose(tp->t_dev);
+		return;
+	}
+	lpr = (tp->t_speeds.hibyte<<10) | (tp->t_speeds.lobyte<<6);
+/*	if (tp->t_speeds.lobyte == 4) */		/* 134.5 baud */
+/* for jgm and tgi 	lpr =| BITS6|PENABLE|HDUPLX; else
+*/
+		if (tp->t_flags&EVENP)
+			if (tp->t_flags&ODDP)
+				lpr =| BITS8; else
+				lpr =| BITS7|PENABLE; else
+			lpr =| BITS7|OPAR|PENABLE;
+/* tmp klg for 6800 loading if (tp->t_speeds.lobyte == 3)	 110 baud */
+		lpr =| TWOSB;
+	dhaddr->dhlpr = lpr;
+}
+
+#endif
+#ifdef XSTTY
+/*
+ * Set parameters from open or stty into the DH hardware
+ * registers.
+ */
+dhparam(atp)
+struct tty *atp;
+{
+	register struct tty *tp;
+	register int lpr;
+	int *dhaddr;
+
+	tp = atp;
+	dhaddr = dhtab[(tp->t_dev>>4)&017];
+	dhaddr->dhcsr.lobyte = tp->t_dev.d_minor&017 | IENABLE;
+	/*
+	 * Hang up line?
+	 */
+	if ((tp->t_speeds&SPEED) == 0) {
+		tp->t_flags =| HUPCL;
+		dmclose(tp->t_dev);
+		return;
+	}
+	lpr = ((tp->t_speeds&SPEED)<<6);
+	lpr =| lpr << 4;
+/*	if ((tp->t_speeds&SPEED) == 4) */		/* 134.5 baud */
+/* for jgm and tgi 	lpr =| BITS6|PENABLE|HDUPLX; else
+*/
+		if (tp->t_flags&EVENP)
+			if (tp->t_flags&ODDP)
+				lpr =| BITS8; else
+				lpr =| BITS7|PENABLE; else
+			lpr =| BITS7|OPAR|PENABLE;
+/* tmp klg for 6800 loading if ((tp->t_speeds&SPEED) == 3)	 110 baud */
+		lpr =| TWOSB;
+	dhaddr->dhlpr = lpr;
+}
+
+#endif
+/*
+ * DH11 transmitter interrupt.
+ * Restart each line which used to be active but has
+ * terminated transmission since the last interrupt.
+ */
+dhxint(dev)
+{
+	register struct tty *tp;
+	register ttybit, bar;
+	int *dhaddr;
+# ifdef XSTTY
+	char *tmp;
+	struct buf *bp;
+# endif
+
+	dev =& 017;
+	dhaddr = dhtab[dev];
+	bar = dhsar[dev] & ~dhaddr->dhbar;
+	dhaddr->dhcsr =& ~XINT;
+	ttybit = 1;
+	tp = dh11;
+	for (tp =+ (dev<<4); bar; tp++) {
+		if(bar&ttybit) {
+			dhsar[dev] =& ~ttybit;
+			bar =& ~ttybit;
+			tp->t_state =& ~BUSY;
+# ifdef XSTTY
+			if ((bp=tp->t_bp) && bp->b_wcount) {
+				dhaddr->dhcsr.lobyte = (tp->t_dev&017) | IENABLE;
+if(dhstop) {
+errlg++;
+printf("DH Stop: wc:0%o resid:0%o car:0%o\n",bp->b_wcount,bp->b_resid,
+dhaddr->dhcar);
+errlg = 0;
+}
+				if (bp->b_wcount == (tmp=dhaddr->dhcar -
+				   bp->b_resid) || (bp->b_flags&B_ERROR)) {
+abt:
+					tp->t_bp->b_wcount = 0;
+					tp->t_bp->b_flags =& ~B_BUSY;
+					wakeup(tp->t_bp);
+				}
+				else  {
+					if(tmp < 0 || tmp > 512) {
+errlg++;
+printf("DH ABT: %o %o %o %o %o\n",dhaddr->dhcsr,dhaddr->dhcar,bp->b_wcount,
+bp->b_resid,tmp);
+					goto abt;
+					}
+errlg = 0;
+					bp->b_wcount =- tmp;
+					bp->b_resid =+ tmp;
+				}
+			}
+# endif
+#ifndef EP
+			dhstart(tp);
+#endif
+#ifdef EP	/* if running with Electrostatic printer driver */
+			if(tp->t_state&EPRNTR)
+				epstart(tp);
+			else
+				dhstart(tp);
+#endif
+		}
+		ttybit =<< 1;
+	}
+}
+
+/*
+ * Start (restart) transmission on the given DH11 line.
+ */
+dhstart(atp)
+struct tty *atp;
+{
+	extern ttrstrt();
+	register c, nch;
+	register struct tty *tp;
+	int sps;
+	int dhunit;
+	int *dhaddr;
+	char *cp;
+
+	sps = PS->integ;
+	spl5();
+	tp = atp;
+	/*
+	 * If it's currently active, or delaying,
+	 * no need to do anything.
+	 */
+	if (tp->t_state&(TIMEOUT|BUSY)) {
+# ifdef XSTTY
+		if ((tp->t_state & HOLD) && tp->t_bp && tp->t_bp->b_wcount) {
+
+		/*
+		 * If dhstart() is called when output is suspended 
+		 * and a large disk buffer is being used, the
+		 * transmission will be aborted by clearing the
+		 * byte count for this line.  dhxint() will figure 
+		 * out number of bytes not sent and set up b_resid
+		 * so this buffer can be restarted from the middle.
+		 */
+
+			dhunit = (tp->t_dev>>4)&017;
+			dhaddr = dhtab[dhunit];
+			dhaddr->dhcsr.lobyte = tp->t_dev.d_minor&017 | IENABLE;
+			if(dhaddr->dhbcr < -16)
+				dhaddr->dhbcr = -1; /* abort DMA xfer  */
+		}
+# endif
+		goto out;
+	}
+# ifdef XSTTY
+	if (tp->t_bp)
+		if (tp->t_bp->b_wcount) {
+			dhstrt(tp);
+			goto out;
+		}
+# endif
+	/*
+	 * t_char is a delay indicator which may have been
+	 * left over from the last start.
+	 * Arrange for the delay.
+	 */
+	if (c = tp->t_char) {
+		tp->t_char = 0;
+		if((c&0377) == 0376)	/* suspend output, NL3 */
+			tp->t_state =| (TIMEOUT|HOLD);
+		else {
+			timeout(ttrstrt, tp, (c&0177)+6);
+			tp->t_state =| TIMEOUT;
+		}
+			goto out;
+	}
+	cp = dh_clist[tp->t_dev.d_minor];
+	nch = 0;
+	/*
+	 * Copy DHNCH characters, or up to a delay indicator,
+	 * to the DMA area.
+	 */
+	while (nch > -DHNCH && (c = getc(&tp->t_outq))>=0) {
+		if(((tp->t_flags&RAW) ==0) && (c >= 0200)) {
+			tp->t_char = c;
+			break;
+		}
+		if((tp->t_flags&RAW) == 0)
+			c =| 0200; /* 6500 needs parity bit on */
+		*cp++ = c;
+		nch--;
+	}
+	/*
+	 * If the writer was sleeping on output overflow,
+	 * wake him when low tide is reached.
+	 */
+	if (tp->t_outq.c_cc<=TTLOWAT && tp->t_state&ASLEEP) {
+		tp->t_state =& ~ASLEEP;
+		wakeup(&tp->t_outq);
+	}
+	/*
+	 * If any characters were set up, start transmission;
+	 * otherwise, check for possible delay.
+	 */
+	if (nch) {
+		dhunit = (tp->t_dev>>4)&017;
+		dhaddr = dhtab[dhunit];
+		dhaddr->dhcsr.lobyte = tp->t_dev.d_minor&017 | IENABLE;
+		dhaddr->dhcar = cp+nch;
+		dhaddr->dhbcr = nch;
+		c = 1<<(tp->t_dev.d_minor&017);
+		dhaddr->dhbar =| c;
+		dhsar[dhunit] =| c;
+		tp->t_state =| BUSY;
+	} else if (c = tp->t_char) {
+		tp->t_char = 0;
+		if((c&0377) == 0376)	/* nl3, suspend output */
+			tp->t_state =| (TIMEOUT|HOLD);
+		else {
+			timeout(ttrstrt, tp, (c&0177)+6);
+			tp->t_state =| TIMEOUT;
+		}
+	}
+    out:
+	PS->integ = sps;
+}
+
+# ifdef XSTTY
+/*
+ * Same as dhstart() but starts up a block buffer for output.
+ * Must be called at spl5.
+ */
+dhstrt(atp)
+struct tty *atp;
+{
+	register int *dhaddr;
+	register struct tty *tp;
+	register struct buf *bp;
+	int dhunit, c;
+	int xmem;
+
+	tp = atp;
+	bp = tp->t_bp;
+	if (bp->b_flags&B_ERROR)
+		bp->b_wcount = 1;	/* interrupt, dump buffer */
+	dhunit = (tp->t_dev>>4) & 017;
+	dhaddr = dhtab[dhunit];
+	xmem = bp->b_xmem&03;
+	if (bp->b_resid < bp->b_addr)
+		xmem++;
+	dhaddr->dhcsr.lobyte = (tp->t_dev&017) | IENABLE | xmem<<4;
+	dhaddr->dhcar = bp->b_resid;
+	dhaddr->dhbcr = -bp->b_wcount;
+	c = 1<<(tp->t_dev.d_minor&017);
+	dhaddr->dhbar =| c;
+	dhsar[dhunit] =| c;
+	tp->t_state =| BUSY;
+}
+# endif

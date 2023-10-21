@@ -1,0 +1,70 @@
+:
+#! /bin/sh
+#	remind [time] [-m|-c] [message] ...		840214
+#	Echo a message at a later time.
+#	With the -m flag, `mail' is used if you have logged off.
+#	With the -c flag, the message is executed as a command.
+#	Calls the shell script `hi' to get you wherever you are!
+#	SEE ALSO : at(1), leave(1).
+#	Author : Oscar Nierstrasz @ utcsrgv!oscar
+C=/usr/local/bin
+case $# in
+0 )	w='{ split($4, from, ":") ; print from[1] ":" from[2] }'
+	echo "It's" `date | awk "$w"`
+	echo -n "When shall I call you? : "
+	read t ;;
+* )	t=$1
+	shift ;;
+esac
+case $t in
+[0-9] )		t=$t:00 ;;
+[0-1][0-9] )	t=$t:00 ;;
+2[0-4] )	t=$t:00 ;;
+[0-9]:[0-5][0-9] )	;;
+[0-1][0-9]:[0-5][0-9] )	;;
+2[0-9]:[0-5][0-9] )	;;
+* )	echo "Enter time as hh or hh:mm"
+	exit ;;
+esac
+case $# in
+0 )	echo -n "Message? : "
+	read m ;;
+* )	case $1 in
+	-c )	shift
+		c=$* ;;
+	-m )	hi=-m
+		shift
+		m=$* ;;
+	* )	m=$* ;;
+	esac ;;
+esac
+case $c in
+"" )	case $m in
+	"" )	m="Hi! -- It's $t" ;;
+	* )	m="It's $t -- $m" ;;
+	esac ;;
+esac
+#	Awk script:
+w='NR == 1 { split($4, from, ":") }
+NR == 2 { split($1, to, ":") }
+END {
+	hrs = to[1] - from[1]
+	mins = to[2] - from[2]
+	time = 60 * hrs + mins
+	if (time < 0) {
+		time += 60 * 12
+		if ((to[1] > 12) || (time < 0))
+			time += 60 * 12
+		}
+	print 60 * time
+	}'
+s=`(date ; echo $t ) | awk "$w"`
+case $s in
+60 )	;;
+* )	x="s" ;;
+esac
+echo "See you in" `expr $s / 60` "minute$x ..."
+case $c in
+"" )	(sleep $s ; $C/hi $USER $hi "$m") & ;;
+* )	(sleep $s ; echo "$c" | /bin/sh) & ;;
+esac

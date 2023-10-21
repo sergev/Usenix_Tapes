@@ -1,0 +1,174 @@
+/* Copyright 1983 - University of Maryland */
+
+%{
+
+#include "globals.h"
+#include "pars.h"
+
+%}
+
+%start pgm
+
+%token MONTH NUM DAY STAR OCURL CCURL SLASH DASH
+
+%%
+
+pgm	: MONTH numsecd
+				{ ADDMONTH($1); type1= 1; YYACCEPT;}
+	| NUM mosecd
+				{ if (monthmax) ADDDAY($1);
+				  else ADDMONTH($1); type1= 1; YYACCEPT;}
+	| scurly lstsec
+				{ type2 = -1; YYACCEPT;}
+	| DAY secday
+				{ type1= 0; ADDDAY($1); YYACCEPT; }
+	| STAR either
+				{ type1 = -1; star = $1; YYACCEPT;}
+	;
+
+numsecd	: NUM	secdate
+				{ ADDDAY($1); }
+	| scurly numlst CCURL STAR
+				{ copydays(0); type2 = -1; star = $4; }
+	;
+
+mosecd	: MONTH secdate
+				{ ADDMONTH($1); }
+	| scurly monlst CCURL STAR
+				{ type2 = -1; star = $4; }
+	| sldash NUM secdate
+				{ ADDDAY($2); }
+	| sldash scurly numlst CCURL STAR
+				{ copydays(0); type2 = -1; star = $5; }
+	;
+
+lstsec	: monlst CCURL nums STAR
+				{ type1 = 1; copydays(0); star = $4; }
+	| numlst CCURL sldash nums STAR
+				{ type1 = 1; copymonths(0);
+				  copydays(1); star = $5; }
+	| numlst CCURL months STAR
+				{ type1 = 1; copydays(0); star = $4; }
+	| daylst CCURL STAR
+				{ type1 = 0; star = $3; }
+	| datl CCURL STAR
+				{ type1 = 2; star = $3; }
+	;
+
+secday	: STAR
+				{ type2 = -1; star = $1; }
+	| DAY
+				{ type2 = 0; day2 = $1; }
+	;
+
+either	: MONTH nums
+				{ ADDMONTH($1); copydays(0); type2 = 1; }
+	| NUM sldash nums
+				{ ADDMONTH($1); copydays(0); type2 = 1; }
+	| NUM months
+				{ ADDDAY($1); type2 = 1; }
+	| DAY
+				{ ADDDAY($1); type2 = 0; }
+	| scurly restlst
+	;
+
+secdate	: MONTH NUM
+				{ month2 = $1; day2 = $2; type2 = 1; }
+	| NUM sldash NUM
+				{ month2 = $1; day2 = $3; type2 = 1; }
+	| NUM MONTH
+				{ month2 = $2; day2 = $1; type2 = 1; }
+	| STAR
+				{ type2 = -1; star = $1; }
+	;
+
+months	: MONTH
+				{ ADDMONTH($1); }
+	| scurly monlst CCURL
+	;
+
+nums	: NUM
+				{ allocnum(); ADDNUM($1); }
+	| scurly numlst CCURL
+	;
+
+restlst	: restdat
+				{ type2 = 1;}
+	| daylst CCURL
+				{ type2 = 0;}
+	| datl CCURL
+				{ type2 = 2;}
+	;
+
+restdat	: monlst CCURL nums
+				{ copydays(0); }
+	| numlst CCURL sldash nums
+				{ copymonths(0); copydays(1); }
+	| numlst CCURL months
+				{ copydays(0); }
+	;
+
+datl	: nnl
+	| mnl
+	| nml
+	;
+
+nnl	: NUM SLASH NUM
+				{ ADDMONTH($1); ADDDAY($3); }
+	| nnl NUM SLASH NUM
+				{ ADDMONTH($2); ADDDAY($4); }
+	;
+
+mnl	: MONTH NUM
+				{ ADDMONTH($1); ADDDAY($2); }
+	| mnl MONTH NUM
+				{ ADDMONTH($2); ADDDAY($3); }
+	;
+
+nml	: NUM MONTH
+				{ ADDMONTH($2); ADDDAY($1); }
+	| nml NUM MONTH
+				{ ADDMONTH($3); ADDDAY($2); }
+	;
+
+numlst	: NUM
+				{ ADDNUM($1); }
+	| numlst NUM
+				{ ADDNUM($2); }
+	| NUM DASH NUM
+				{ addnumseq($1,$3); }
+	;
+
+monlst	: MONTH 
+				{ ADDMONTH($1); }
+	| monlst MONTH
+				{ ADDMONTH($2); }
+	| MONTH DASH MONTH
+				{ addmonseq($1,$3); }
+	;
+
+daylst	: DAY
+				{ ADDDAY($1); }
+	| daylst DAY
+				{ ADDDAY($2); }
+	| DAY DASH DAY
+				{ adddayseq($1,$3); }
+	;
+
+sldash	: SLASH
+	| DASH
+	;
+
+scurly	: OCURL
+				{ allocnum(); }
+	;
+
+%%
+
+#include "lex.yy.c"
+
+yyerror(s)
+char *s;
+{
+	fprintf(stderr,"%s:(%s)\n",s,line);
+}

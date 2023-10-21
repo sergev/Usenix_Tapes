@@ -1,0 +1,87 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84 SMI; site sun.uucp
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!decwrl!sun!guy
+From: guy@sun.uucp (Guy Harris)
+Newsgroups: net.sources.games
+Subject: Re: Robots for XENIX Rel 3.0
+Message-ID: <2317@sun.UUCP>
+Date: 17 Jun 85 04:23:03 GMT
+Date-Received: 20 Jun 85 01:51:49 GMT
+References: <612@intelca.UUCP>
+Distribution: net
+Organization: Sun Microsystems, Inc.
+Lines: 73
+
+A lot of the changes "ifdef"fed with XENIX reflect the way the code should
+have been in the first place:
+
+1) Contrary to popular belief, "int"s are not guaranteed to be 32 bits long.
+All of the variables that are declared with LONG in the XENIX version should
+be declared as long in *all* versions (yes, even under 4.xBSD).  All
+"printf" and "scanf" formats that print or read into these variables should
+use "%ld" format, not "%d".  The second argument to "lseek" should always be
+a "long", so you should say
+
+	lseek(fd,0L,0);
+
+not
+
+	lseek(fd,0,0);
+
+even on 4.xBSD systems.
+
+2) Contrary to popular belief, not all UNIX systems have "_doprnt".  System
+III doesn't have it; PDP-11 V7 and System Vs Releases 1 and 2 have it, but
+don't document it; 4.2BSD has it and made the mistake of documenting it.
+Zilog's ZEUS doesn't have it because the Zilog calling sequence makes
+routines that take a variable number of arguments a pain to implement.
+
+If you take Chuck McManus' corrected version and:
+
+	Change all the "ifdef"fed sections involving "int" vs. "long int"
+	stuff or the "msg" routine to *only* contain the code compiled if
+	XENIX is defined,
+
+	Change the section that reads
+
+		# ifdef XENIX
+		# include <sys/types.h>
+		# endif
+		# include <sys/file.h>
+
+	to read
+
+		# ifdef BSD4_2
+		# include <sys/file.h>
+		# endif
+
+	because the inclusion of "sys/file.h" seems to be solely for
+	the benefit of the "flock" system call which only exists on
+	4.2BSD,
+
+	Change all other occurrences of # ifdef XENIX to # ifndef BSD4_2,
+	because all the other # ifdef XENIXes are there to conditionally
+	compile in code using 4.2BSD features (if you feel *really*
+	ambitious, you can throw in #ifdefs for the file-locking stuff to
+	use the various flavors of "lockf" derived from the original John
+	Bass version for those versions of UNIX that support it),
+
+	And run the whole thing through "lint" to catch trash like
+
+	       seed = time(0)+pass->pw_uid;
+
+	and replace it with the *correct* version which is
+
+	       seed = time((time_t *)0)+pass->pw_uid;
+
+	(I'd classify this as a venial sin, except that I've fixed
+	that kind of stuff enough times on CCI's 16-bit-"int"/32-bit-pointer
+	machines that I think it deserves to be a mortal sin).
+
+Could people take a little more care *NOT* to make assumptions about the
+version of UNIX or machine they're writing for when writing code?  If so,
+there'll be a lot fewer "has anybody gotten 'Hump The Hostess' running under
+{V7,4.1BSD,4.2BSD,System III,System V,Xenix,Zeus,Penix}" questions, and a
+lot fewer repeated postings of programs until a portable version emerges.
+
+	Guy Harris

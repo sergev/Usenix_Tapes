@@ -1,0 +1,533 @@
+.TH XMAIL 1 PISCATAWAY(2.6)
+.SH NAME
+xmail, rmail \- send mail to users or read mail
+.SH SYNOPSIS
+.B xmail
+[
+.B \-rpql
+] [
+.B \-f
+file
+]
+.PP
+.B xmail
+[
+.B \-g
+group ] persons
+.PP
+.B rmail
+persons
+.SH DESCRIPTION
+.I Xmail\^
+without arguments
+prints
+a user's mail,
+message-by-message,
+in last-in, first-out order.
+For large messages (> 11 lines)
+a paging routine is used.
+The user will be prompted with a colon (\fB:\fP);
+hitting the \fIRETURN\fP key will continue the printing
+of the mail, one CRT page at a time.
+A
+.B q
+will terminate the paging.
+The user is then prompted
+and a line is read from the standard input
+to determine the disposition of the message:
+The text of the prompt is composed of the following:
+.TP 8
+.I "new mail arrived"
+if present, indicates that new mail has arrived
+while the user has been interacting with
+\fIxmail\fP.
+.TP
+.I "EOF"
+if present, indicates that an action on the last letter
+has been taken.
+.TP
+.I "unpositioned"
+if present, indicates that the user is not currently positioned on a letter.
+.TP
+.I "last"
+if present,
+indicates that the current letter is the last one in the \fImailfile\fP.
+.TP
+.I nnn
+indicates the number \fInnn\fP of the current letter if
+the \fB-l\fP flag is on.
+.TP
+.B "?"
+end of prompt string.
+.PP
+Any one of the following commands can be entered
+to indicate the disposition of the current letter:
+.TP 8
+.I nnn
+Go on to message number \fInnn\fP.
+.TP
+.I RETURN
+Go on to next message.
+.TP
+.B +
+Same as \fIRETURN\fP.
+.TP
+.B d
+Delete message and go on to next message.
+.TP
+.B dq
+Delete message, put undeleted mail back in \fImailfile\fP, and stop.
+.TP
+.B u
+Undelete message and remain positioned on the message.
+.TP
+.B p
+Print current message.
+.TP
+.BI "p|" "command"
+Like the \fBp\fP command,
+but the message is printed by passing it as standard input
+to the specified shell \fIcommand\fP.
+If the "|" is doubled, as in \fBp||\fP,
+the previous shell command is substituted.
+.TP
+.B \-
+Go back to previous message.
+.TP
+.B "<"
+Go back to previous undeleted message.
+.TP
+.B ">"
+Advance to next undeleted message.
+.TP
+\fBs\fP [ \fIfiles\^\fP ]
+Save message in the named
+.I files\^
+.RB ( $HOME\/mbox " is default)."
+Standard shell syntax is allowed in file names (e.g., \fB$PLACE\/filename\fP).
+If the file is not writable or if the expanded file name
+is ambiguous, then the
+user will be prompted for another file name.
+An escape to the shell is possible if the response to the prompt
+begins with \fB!\fP.
+This will continue until a successful file name
+is entered, the save command is canceled by hitting the \fIRETURN\fP key,
+or \fIxmail\fP is terminated by hitting the DEL or BREAK key.
+.TP
+.B a
+Answer a message and delete the current letter.
+(If the user terminates the answer with no text,
+the letter is not deleted.)
+The party to whom the answer is sent is parsed
+from the "From " lines in the current letter.
+If the letter has been forwarded, then the
+answer is sent to the last person to forward
+the letter. This mechanism works for multiple
+machine letters.
+.TP
+\fBas\fP [ \fIfiles\^\fP ]
+Answer a message, delete the current letter, and
+save the letter and answer in
+.I files\^
+.RB ( $HOME\/mbox " default)."
+The answer part of the saved message is indented
+four spaces.
+.TP
+\fBw\fP [ \fIfiles\^\fP ]
+Save message, without a header, in the named
+.I files\^
+.RB ( $HOME\/mbox " is default)."
+.TP
+\fBm\fP [ \fB\-g\fP \fIgroup\fPs ] [ \fIpersons\^\fP ]
+Mail the message to the named
+.IR persons\^ .
+A  "forwarded  by ..." message is
+inserted after the header.
+If no persons or groups are named,
+.I xmail
+goes on to the next letter, leaving that letter
+unchanged.
+.TP
+\fBM\fP [ \fB\-g\fP \fIgroup\fPs ] [ \fIpersons\^\fP ]
+Send a mail message to the named
+.IR persons\^ .
+The standard input is read through end-of-file for
+text or commands to interactively construct the letter
+(see \fBa\fP command above).
+For example, the \fB:r\fP command can be used to read in the current
+letter to which text is appended in order to add comments
+to a letter before forwarding it to other users.
+A  "forwarded  by ..." annotation is
+inserted after the header.
+If no persons or groups are named,
+.I xmail
+goes on to the next letter, leaving that letter
+unchanged.
+.TP
+.B l
+List a table of contents of letters in the \fImailfile\fP.
+Each letter is printed with its number,
+the date on which the letter was received (parsed from header),
+the identity of the sender (parsed from header),
+and the subject of the letter, parsed from the first line in the
+text of the message that begins with optional white space followed by
+one of the following strings:
+\fBSubject:\fP, \fBSUBJECT:\fP, \fBRe:\fP, \fBRE:\fP or \fBre:\fP.
+If no subject is identified in the letter, a heuristic is invoked
+to select the most appropriate line from the letter.
+This heuristic selects the first line in the letter that is
+more than 12 characters, that does not begin with \fBTo:\fP,
+and that does not begin with white space.
+This algorithm will allow the original subject of a conversation,
+as given by, e.g., \fBSubject:\fP, to be automatically perpetuated
+when the \fB:a\fP command is being used.
+If no subject was ever explicitly stated, the heuristic will bypass
+text from the original letter included in an answer,
+since these lines are indented four spaces.
+If the heuristic fails, the first line that is non-empty and nonblank
+is used as the subject of the letter.
+The table of contents is ordered from newest to oldest,
+unless the \fB-r\fP option was specified, in which case the sort
+is reversed.
+A one-character disposition code is suffixed
+to the letter number if it has been deleted,
+forwarded, saved or answered.
+If the \fImailfile\fP contains more than 10 letters,
+the table of contents is paginated with the same human interface
+as pagination of long letters.
+The user is not positioned on any letter after the table of contents
+is printed.
+Position on the first letter can be established by hitting the RETURN key.
+Position on any letter can be established by typing its number.
+.TP
+.B q
+Put undeleted mail back in the \fImailfile\fP and stop.
+.TP
+\s-1EOT\s0 (control-d)
+Same as
+.BR q .
+.TP
+.B f
+Put undeleted mail back in the \fImailfile\fP and reopen the resulting
+\fImailfile\fP.  If the \fB-l\fP flag is on or if the \fBl\fP
+command was entered, the new table of contents will be listed.
+This command is a handy response to the \fInew mail arrived\fP prompt.
+It avoids having to exit and reexecute \fIxmail\fP.
+.TP
+.B x
+Put all mail back in the \fImailfile\fP unchanged and stop.
+.TP
+.BI ! command\^
+Escape to the shell to do
+.IR command .
+.TP
+.BI cd "\ directory\^"
+Change current working directory to \fIdirectory\fP.
+Standard shell syntax is allowed in directory names (e.g., $HOME/mail),
+but the environment variable CDPATH is not honored.
+If no directory is specified, $HOME is assumed by default.
+The directory remains the current working directory only for the
+duration of \fIxmail\fP.  Upon exit from \fIxmail\fP,
+the working directory that was current upon entry to \fIxmail\fP is restored.
+If the \fB-f\fP option was used to specify an alternate \fImailfile\fP
+that does not begin with \fB/\fP, the command is disallowed
+(because the wrong \fImailfile\fP may be updated at exit).
+.TP
+.BI cd! "\ directory\^"
+Same as \fBcd\fP, but the constraint on alternate \fImailfile\fPs
+is lifted. (User beware!)
+.TP
+.B ?
+Print a command summary.
+.PP
+The optional arguments alter the printing of the mail.
+.TP 8
+.B \-r
+causes messages to be printed in first-in, first-out order.
+.TP
+.B \-p
+causes all mail to be printed without prompting for disposition.
+.TP
+.B \-q
+causes
+.I xmail\^
+to terminate after interrupts.  Normally an interrupt only causes the
+termination of the message being printed.
+.TP
+.B \-l
+list a table of contents of the \fImailfile\fP and await a command
+before printing any letter.
+After each letter is printed, the current letter number will be printed
+as part of the prompt for a command.
+This flag can be turned on by typing the \fBl\fP command in response
+to a command prompt.
+.TP
+.BI \-f "\ file\^"
+causes
+.I xmail\^
+to use
+.I file\^
+(e.g.,
+.BR mbox )
+instead of the default
+.IR mailfile .
+.TP
+.BI \-g "\ group"
+causes mail to be sent to
+members of
+.I group
+that are designated in the file
+.BR /etc/group .
+.PP
+When
+.I persons\^
+or
+.IR group\^ s
+are named,
+.I xmail\^
+takes the standard input up to an end-of-file
+(or up to a line consisting of just a `\fB.\fP')
+and adds it to each
+.IR person 's
+or member's of the named
+.I group
+.IR mailfile .
+.PP
+There are some input commands for interacting with a
+letter being entered:
+.TP 8
+.B :e
+causes the text editor \fIed\fP(1) to be invoked on the letter.
+.TP
+.B :v
+causes the visual editor \fIvi\fP(1) to be invoked.
+.TP
+.B :p
+causes the letter to be printed from the beginning to the current location.
+.TP
+.B :r
+reads the current letter into the answer or forward buffer.
+This is only meaningful when answering a letter
+or forwarding a letter using the \fBM\fP command.
+.TP
+.BI :s "\ title"
+specifies a subject for the letter.
+The typed line will be replaced by "Subject: \fItitle\fP".
+The subject of the letter can also be specified by
+a line that begins with
+\fBSubject:\fP, \fBSUBJECT:\fP, \fBRe:\fP, \fBRE:\fP or \fBre:\fP.
+.TP
+.BI :t " [ \fB\-g\fP \fIgroup\fPs ] [ \fIpersons\^\fP ]"
+Change the route list to the logins named by \fIgroup\fP and \fIpersons\fP.
+If a \fB%\fP appears anywhere in the argument string,
+it is replaced by the previous list of addressees,
+as determined by the most recent specification.
+This specification may be made on the shell command line,
+an \fIxmail\fP command (e.g., \fBM\fP, \fBa\fP),
+or a previous \fB:t\fP command.
+After substitution of any \fB%\fPs, substitution for
+shell expressions, e.g., \fB$HOME\fP, is done.
+Finally, substitution for group or alias definitions is done.
+If no arguments are given, the current route list is printed.
+.TP
+.B :x
+exits from the letter without changing anything.
+The letter is discarded and not sent.
+.TP
+.B :!command
+causes the shell command line
+.IR command
+to be executed.
+.TP
+.B :\?
+Print a command summary.
+.PP
+In the above commands, the colon (\fB:\fP)
+may be replaced by a semi-colon (\fB;\fP).
+This eliminates the need to use the shift key on typewriter-style
+keyboards.
+.PP
+The message is preceded by the sender's name and a postmark.
+Lines that look like postmarks
+in the message,
+(i.e., ``From\ .\|.\|.'')
+are prepended with `\fB>\fP'.
+A
+.I person\^
+is usually a user name recognized by
+.IR login (1).
+However,
+.I xmail\^
+will look first in the current user's
+.B $HOME/.alias
+file and finally in
+.B /etc/aliaslist
+for the named person.
+If the person is found, in either file, the translation found
+in the second column of the alias file will be used as the
+actual address. The alias file consists of two column entries
+separated by a tab.
+The first is the tag and the second is a comma separated list
+of translations. There is no rescan of the alias file for
+further (recursive) translations.
+If there is a comma separated list of translations,
+mail is sent to each of the members of the list.
+If a
+.I person\^
+being sent mail is not recognized, or if
+.I xmail\^
+is interrupted during input, the
+.I dead.letter\^
+will be saved
+to allow editing and resending.
+If a
+.I person\^
+is answering a letter, an interrupt saves the
+contents in a
+.I dead.answer\^
+file.
+.PP
+To denote a recipient on a remote system, prefix
+.I person\^
+by the system name and exclamation mark (see
+.IR uucp (1C)).
+Everything after the first exclamation mark in
+.I persons\^
+is interpreted by the remote system.
+In particular, if
+.I persons\^
+contains additional exclamation marks, it can denote a sequence of machines
+through which the message is to be sent on the way to its ultimate
+destination.
+For example, specifying
+.B sys1!sys2!login
+as a recipient's name causes the message to be sent to user
+.B sys2!login
+on system
+.BR sys1 .
+System
+.B sys1
+will interpret that destination as a request to send the message to
+user
+.B login
+on system
+.BR sys2 .
+This might be useful, for instance, if the sending system
+can access system
+.B sys1
+but not system
+.BR sys2 ,
+and system
+.B sys1
+has access to system
+.BR sys2 .
+.PP
+If the variable \fBMAILLOG\fP is defined in the environment and
+has a non-null value, it is assumed to be the name of a log file
+into which copies of all letters being sent by \fIxmail\fP are kept.
+This includes letters being answered (\fBa\fP command) and
+forwarded (\fBm\fP and \fBM\fP commands).
+.PP
+The
+.I other\^
+permissions of the \fImailfile\fP file may be read-write, read-only, or neither
+read nor write to allow different levels of privacy.
+A \fImailfile\fP that has default permissions
+will normally be unlinked when it becomes empty.
+However, if it resides in the mail directory (\fB/usr/mail\fP)
+it is never unlinked in order to perpetuate file permissions.
+(See \fBLOCAL\fP section below.)
+.PP
+The file may also contain the first line:
+.RS
+Forward to
+.I person\^
+.RE
+.PP
+which will cause all mail sent to the owner of the
+.I mailfile
+to be forwarded to
+.IR person .
+This is especially useful to forward all of a person's mail to one
+machine in a multiple machine environment.
+.PP
+.I Rmail\^
+only permits the sending of mail.
+.IR Uucp (1C)
+uses
+.I rmail\^
+as a security precaution.
+.PP
+Users are informed of the presence of mail, if any, when they log in.
+.SH FILES
+.PD 0
+.TP 14
+/etc/passwd
+to identify sender and locate persons
+.TP
+/etc/group
+to identify members of groups
+.TP
+/usr/mail/\(**
+incoming mail for user \(**
+.TP
+$HOME/.alias
+to identify a user's list of alias'
+.TP
+/etc/aliaslist
+to identify a site's list of alias'
+.TP
+.SM
+$HOME\*S/mbox
+saved mail
+.TP
+.SM
+$MAIL\*S
+.I mailfile
+.TP
+.SM
+$MAILLOG\*S
+.I "mail log file"
+.TP
+/tmp/ma\(**
+temp file
+.TP
+/usr/mail/\(**\fB.\fPlock
+lock for mail directory
+.TP
+dead\fB.\fPletter
+unmailable text
+.TP
+dead\fB.\fPanswer
+unmailable answer
+.PD
+.SH "LOCAL"
+If the preprocessor variable MFMODE is set on the compile command line,
+it is used as the file permissions whenever a mail file is created.
+If it is not specified, the default is 660.
+.PP
+If the preprocessor variable MFUNLINK is set on the compile command line,
+a mail file will be deleted
+if it becomes empty and has default file permissions.
+If it is not set, then the file will be deleted only if it satisfies
+the additional condition that the file is not in the /usr/mail directory.
+.SH SEE ALSO
+login(1),
+uucp(1C),
+write(1),
+.SH BUGS
+Race conditions sometimes result
+in a failure to remove a lock file.
+.br
+After an interrupt, the next message may not be printed.
+Printing may be forced
+by responding
+.BR p .
+.br
+Xmail does not handle mail items greater than 65535 characters long.
+The
+.I mailfile
+has a tendency to go berserk.
+The maximum number of messages that may be contained in a \fImailfile\fP
+is 300 (a compile-time constant).
+.\"	@(#)xmail.1	2.6 - (consistent with xmail.c 2.10)

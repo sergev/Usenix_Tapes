@@ -1,0 +1,162 @@
+10.3 Optimizations
+.PA
+The assembler can make certain optimizations to improve program
+performance. Some of these happen automatically and cannot be disabled.
+These are:
+.sp
+.ll -10
+.in 7
+.ti -5
+  (a)~~Assignment of shortest feasible format for each instruction.
+.ti -5
+  (b)~~Use of the alternate context for calling sequences, where possible.
+.ti -5
+  (c)~~Ignoring machine instructions after RET or a branch until a PRO or local label.
+
+.ll +10
+.in -7
+.PA
+However, there is another group that must be explicitly enabled. These
+consist of sequences of instructions that are read in. The assembler looks
+for sequences of length 1, 2, 3, or 4 instructions and replaces them with
+other sequences of length 1, 2, or 3 instructions. 
+In a few special cases longer sequences are also accepted.
+Recognition of a sequence
+is based on mnemonic and address. A few examples of the optimizations 
+possible are shown below. The first 4 columns give the pattern to be 
+matched. The 5th column is the replacement text. Replacement texts larger
+than 1 instruction are possible, but are not used here.
+
+.li 3
+ (1) LOL wd	LOC 1		ADD		STL wd		INL wd
+ (2) LOC 0	CMI		TEQ		ZEQ L		ZNE L
+ (3) LOL wd	LOC 0		MUL		STL wd		ZRL wd
+
+.sp 3
+10.4 Table format
+.PA
+Before assembly begins, OPA reads a file named tables and extracts
+certain information from it. First is the list of machine mnemonics and
+pseudoinstructions in the format:
+.sp
+	mnemonic  flags nminis minibase nshort shortbase otherbase
+
+where
+mnemonic is exactly 3 characters, e.g. ADD, LOL, CON.
+.sp
+flags are as follows:
+     a - A mark instruction that uses alternate context 
+     e - A parameterless opcode is escaped (requires z)
+     s - One byte offsets use f3b, not f2a
+     l - Two byte offsets use f4a, not f3a
+     o - Offsets for format f1a begin at one, not zero
+     b - This is a branch instruction
+     m - Mark instruction (MRK, MRS)
+     c - Call instruction (CAL, CAS)
+     p - Pseudoinstruction
+     x - Offset is in bytes in assembler, words in binary
+     y - Offset must be 1 or even
+     z - Zero address instruction (no operand)
+
+nmini is the number of opcodes allocated to format f1a
+
+minibase is the lowest opcode allocated to format f1a
+
+nshort is the number of opcodes allocated to f2a/f3b
+     The first is for offsets 0-255
+     The second is for offsets 256-511
+     The third is for offsets 512-767 
+     etc.
+
+shortbase is the first opcode for the f2a/f3b formats
+
+otherbase is the opcode used for f1b/f2b/f3a/f4a
+
+Consider these examples:
+
+     LOL  x    16  20  1   36  37
+     LOE  x    12  38  1   50  51
+
+Part 2 of the table file contains the optimizations one per line, with
+7 entries per line. The end of file is indicated by a line starting with
+zero. The entries are separated by spaces. The first 4 of the 7 describe
+the pattern to be matched.  The remaining 3 describe
+the replacement. Each entry specifies an instruction and one address.
+Instructions are designated by their line number in part 1, the initial
+line being 1 (not 0). Addresses are encoded as follows
+
+	(empty)  ignore the address if any
+	-16 to 16  the constants -16 to 16 (1 is -16, 2 is -15 etc.)
+	A0-8 to A0+8  match address0 + offset (34=A0-8 ... 50=A0+8)
+	A1-8 to A1+8  match address1 + offset (51=A1-8 ... 67=A1+8)
+	A2-8 to A2+8  match address2 + offset
+	A3-8 to A3+8  match address3 + offset
+	A0+A0 to A0+A3  sum of two address   (102=A0+A0, 103=A0+A1,...)
+	A0-A0 to A0-A3  etc   		     (106=A0-A0, 107=A0-A1,...)
+	A0*A0 to A0*A3  etc
+.sp
+Unused fields are marked by commas.
+
+The optimization
+        LOL x            becomes         INL x
+        LOC 1
+        ADD
+        STL x
+
+
+might be encoded as:
+	
+	LOL	LOC 1	ADD	STL A0	INL A0 , ,
+
+as another example one might have
+
+	LOL	LOL A0+2  , ,	LDL A0  , ,
+
+.PA
+The optimization table is scanned in the order it appears.  However, all
+optimizations beginning with a given mnemonic must appear consecutively.
+The assembler makes multiple optimization passes, so that the result of one
+optimization may be used as the input to another.
+.PA
+Some optimizations require special handling.  These are indicated by a number
+following the 7th field (or comma).  
+A rough guide to some of them
+are briefly described below.
+
+  1  
+  2
+  3 LOC AAR/LAR/SAR  Used to handle constant subscripts
+  4 LOC NEG  Load the Negative of the constant
+  5 LOC LOC CMI  Compute and load the constant
+  6 LOC TLT  if constant<0 then LOC 1 else LOC 0
+  7 LOC TLE  if constant<=0 then LOC 1 else LOC 0
+  8 LOC TEQ  if constant=0 then LOC 1 else LOC 0
+  9 LOC TNE  if constant<>0 then LOC 1 else LOC 0
+ 10 LOC TGE  if constant>=0 then LOC 1 else LOC 0
+ 11 LOC TGT  if constant>0 then LOC 1 else LOC 0
+ 12 LOC ZLT  either branches unconditionally or is eliminated.
+ 13 LOC ZLE  either branches unconditionally or is eliminated.
+ 14 LOC ZEQ  either branches unconditionally or is eliminated.
+ 15 LOC ZNE  either branches unconditionally or is eliminated.
+ 16 LOC ZGE  either branches unconditionally or is eliminated.
+ 17 LOC ZGE  either branches unconditionally or is eliminated.
+ 18 LOC LOC BLT  either branches unconditionally or is eliminated.
+ 19 LOC LOC BLE  either branches unconditionally or is eliminated.
+ 20 LOC LOC BEQ  either branches unconditionally or is eliminated.
+ 21 LOC LOC BNE  either branches unconditionally or is eliminated.
+ 22 LOC LOC BGE  either branches unconditionally or is eliminated.
+ 23 LOC LOC BGT  either branches unconditionally or is eliminated.
+ 24 Coalesce contiguous BLM's (???)
+ 25 Handle branches to other branches
+ 26 LOC COM 2  Compute and load the constant
+ 27 LOC LOC AND 2  Compute and load the constant
+ 28 LOC LOC IOR 2  Compute and load the constant
+ 29 LOC LOC MOD    Compute and load the constant
+ 30 LOC LOC ROL    Compute and load the constant
+ 31 LOC LOC ROR    Compute and load the constant
+ 32 LOC LOC SHL    Compute and load the constant
+ 33 LOC LOC SHR    Compute and load the constant
+ 34 LOC LOC XOR 2  Compute and load the constant
+ 35
+ 36
+ 

@@ -1,0 +1,118 @@
+.\" @(#)pathprune.1	matt.costello@sandiego.ncr.com 87/03/06
+.TH PATHPRUNE 1 
+.SH NAME
+pathprune \- prune unnecessary entries in pathalias database
+.SH SYNOPSIS
+.B pathprune
+[
+.B \-vutj
+] [
+.BI \-d \0domain
+] [
+.BI \-h \0domain
+] [
+.BI \-r \0domain
+] [
+.I infile
+[
+.I outfile
+] ]
+.ad b
+.SH DESCRIPTION
+.I Pathprune
+prunes unnecessary entries from a sorted \fIpathalias\fR(1) database.
+It does this by reading a sorted database and then writing out a
+smaller one.  It preserves the original sorted order.
+.PP
+Any subdomain gateway whose path is the same as the parent domain
+gateway is unnecessary.  The subdomain gateway is also unnecessary if
+its path passes through the parent domain gateway.  This is subject
+to one very important rule; if the path is \fB%s\fR then the domain gateway
+is always necessary.  This rule allows the local mailer to detect invalid
+hosts in the domains for which it is a gateway.
+.PP
+A host entry is unnecessary if its path arrives at or passes through
+the corresponding domain gateway entry.  For simple host names this is the
+pseudo-domain ".uucp".
+.PP
+This can more easily explained by example.  Assume the input of:
+.tr ~.
+.RS
+.nf
+~com			ncr-sd!scubed!seismo!%s
+~ncr.com		ncr-sd!%s
+~sandiego.ncr.com	ncr-sd!%s
+~other			ncr-sd!%s
+~uucp			ncr-sd!%s
+falstaf.sandiego.ncr.com	ncr-sd!falstaf!%s
+ncr-sd.sandiego.ncr.com	ncr-sd!%s
+se-sd.sandiego.ncr.com	%s
+tower5.sandiego.ncr.com	tower5!%s
+.fi
+.RE
+After processing, the output will be:
+.RS
+.nf
+~com			ncr-sd!scubed!seismo!%s
+~ncr.com		ncr-sd!%s
+~other			ncr-sd!%s
+~uucp			ncr-sd!%s
+se-sd.sandiego.ncr.com	%s
+tower5.sandiego.ncr.com	tower5!%s
+.fi
+.RE
+The domain gateway .sandiego.ncr.com was removed because .ncr.com will get
+us to the same place.  If the \fB\-t\fR option had been specified the .com
+and .ncr.com gateways would also have been removed.  All hosts that lie
+beyond the .ncr.com (or .other for \fB\-t\fR) gateway were also removed
+as being unnecessary.
+.PP
+The
+.I pathprune
+options are:
+.TP 6
+.B \-v
+Report some statistics on the standard error output.
+.TP
+.B \-u
+Delete simple hosts (host.uucp) if they pass through the domain gateway for
+".uucp".
+.TP
+.B \-t
+Possibly delete the gateways for top-level domain names.  The pseudo-domain
+gateway for ".other" must be present; this domain gateway is used as a
+smarter machine for domain names.
+.TP
+.B \-j
+Junk all hosts that do not belong to a valid top-level domain.
+.TP
+.BI \-d \0domain
+Preserve the domain gateway for \fIdomain\fR and any subdomain gateways of
+\fIdomain\fR.  Normally subdomain gateways will be removed if they pass
+through the domain gateway.  This option will preserve these gateways in
+the database in case the database is used for domain qualification.
+Specifying \fB\-d other\fR will preserve all domain gateways in the database.
+.TP
+.BI \-h \0domain
+Preserve all host names in the \fIdomain\fR, or subdomains of \fIdomain\fR.
+.TP
+.BI \-r \0domain
+Remove all host names in the \fIdomain\fR, or subdomains of \fIdomain\fR.
+This is useful for domains like berkeley.edu which list several
+hundred hosts in the domain, but have no domain gateway.  Of course, you
+could always confuse ucbvax by listing it as the domain gateway.
+.IP
+Specifying \fB\-r uucp\fR will remove all simple host names.
+.PP
+The \fB\-d\fR, \fB\-h\fR and \fB\-r\fR options may be specified as
+many times as wanted.
+.SH BUGS
+.I Pathprune
+assumes bang-routed paths and will not match gateway paths containing '@'s.
+.br
+.B .other
+is specific to NCR's version of smail.
+.SH "SEE ALSO"
+pathalias(1)
+.SH AUTHOR
+Matt Costello	<matt.costello@sandiego.ncr.com>

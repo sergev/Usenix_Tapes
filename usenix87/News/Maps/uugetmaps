@@ -1,0 +1,71 @@
+#!/bin/sh
+#	@(#)uugetmaps.sh	1.2
+
+#	Reads the netnews for the UUCP maps, exctract them and
+#	moves them to the storage area
+
+DEST=/usr/spool/uucppublic/uumap
+ADM=gc
+NEWSGROUP=mod.map
+KEYWORDS="UUCP map"
+TMP=/tmp/uugetmaps.$$
+DIR=/usr/tmp/uugetmaps
+
+
+trap	"rm -f $TMP ; exit 1"	2 3 15
+
+#	Go to an empty directory
+if [ -d $DIR ]
+	then	rm -fr $DIR/*
+	else	mkdir $DIR
+fi
+cd $DIR || exit 1
+
+#	Throw away the headers of the new articles and undo the
+#	maps - assume that they are shar(1L) archives
+readnews -n $NEWSGROUP -t "${KEYWORDS}" -p |
+	awk '
+		/^----/			{next;}
+		/^Newsgroup/		{next;}
+		/^Article/		{next;}
+		/^Subject/		{next;}
+		/^From/			{next;}
+		/^Path/			{next;}
+		/^Date/			{next;}
+		/^Sender/		{next;}
+		/^Message/		{next;}
+		/^Expires/		{next;}
+		/^Reply/		{next;}
+		/^Relay/		{next;}
+		/^Posting/		{next;}
+		/^Follow/		{next;}
+		/^Organization/		{next;}
+		/^Newsgroups/		{next;}
+		/^References/		{next;}
+		/^Control/		{next;}
+					{print;}' |
+	sh
+
+#	Move maps to the storage area - assume that they are named u.*
+echo "~s UUCP maps" > $TMP
+echo "The following maps received:" >> $TMP
+
+k=0
+for i in u.*
+do
+	if [ -f $DEST/$i ]
+		then	mv $DEST/$i $DEST/O$i
+	fi
+	mv $i $DEST
+	echo $DEST/$i >> $TMP
+	k=`expr $k + 1`
+done
+
+if [ k -gt 0 ]
+	then	mail $ADM < $TMP
+fi
+rm -f $TMP
+exit 0
+#	"@{#}@{#}pathalias.sl	1.9               "
+#	@(#)Makefile	1.6
+#	@(#)uupath.1	1.2

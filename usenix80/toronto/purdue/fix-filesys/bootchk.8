@@ -1,0 +1,75 @@
+.th BOOTCHK VIII Feb/77
+.sh NAME
+bootchk \*- check, repair, and mount file systems
+.sh SYNOPSIS
+bootchk [-q] [-r] [-s] filesystem [mountsystem mountdirectory]
+.sh DESCRIPTION
+Bootchk calls icheck and dcheck to check and repair filesystem.
+It is intended to be called during the bootstrap from /etc/rc.
+.s3
+"-q" specifies that nothing is to be printed if nothing is wrong.
+.s3
+"-r" specifies that automatic repairs are to be attempted.
+.s3
+"-s" forces a freelist rebuild and may be used with "-r"
+.s3
+If mountsystem and mountdirectory are given, and the filesystem
+checked out ok (or was repaired) then the mountsystem is mounted on
+mountdirectory.
+If major problems are discovered, no mount takes place, and a
+message is printed.
+The "-s" flag may be used along with "-r" flag on non root filesystems.
+This saves time on large filesystems by eliminating calling up icheck
+twice.  The free list will also be sorted for faster accesses.
+(Note:
+filesystem and mountsystem should be the same, except that
+filesystem may refer to the raw version for speed in checking.)
+.s3
+If mountsystem is not specified, and the filesystem has
+serious errors or was repaired, then an appropriate message is printed and
+the program infinite loops.
+(The assumption is that the filesystem is the root
+file system, and one should reboot.)
+.sh "SEE ALSO"
+dcheck(VIII), icheck(VIII), fs(V)
+.sh "U of T INFO"
+Written at the University of Toronto by
+Mike Tilson
+.sh "Purdue INFO"
+Incorporated Purdue's changes to icheck and dcheck, for sorting
+freelist and printing statistics.  Also more stringent checks
+added for trashed up inodes (inodes with IALLOC off, but other
+garbage in mode word and unexpected garbage in special device inodes)
+If unexpected garbage is found, or multiply allocated blocks are
+found in pass1, update ("-s" flag) is aborted and filesystem is
+left for manual recovery.  Dcheck places orphaned inodes
+(no links in a dir, i_nlink >= 1) in "/lost"
+directory (in the root of filesystem being repaired) if it exists
+instead of just clri'ing them.  If "/lost" does not exist or is
+full, a diagnostic is issued, and the orphaned inodes are left alone
+since they pose no threat to system operation.  Reason for this change
+is incase a directory is lost, all the files can possibly be saved.
+.sh "BUGS (Purdue)"
+The "/lost" directory must be "preallocated" and must be an integral
+number of blocks.  It would require dcheck to alter the freelist
+(which is not a good idea on a corrupted filesystem) in order to
+extend "/lost".  The easiest way to do this is to "mkdir lost" in the
+root directory of each filesystem, and create 62 junk files in it, and
+remove the 62 junk files.  This will leave a 2 block "/lost" directory.
+Mkfs should probably be changed to do this.
+.s3
+If a crash occurs when a directory is being extended, the directory size
+may not be updated to match the actual number entries. Dcheck just reads
+all the blocks associated with a directory inode and may produce "ghost"
+dcheck errors since it doesn't look at the size field in the directory inode.
+If one tries to ls the directory to remove these dangling entries, they
+cannot be found.  However, if one creates new files in that directory,
+the old ones are safely overwritten (removed).  If dcheck -r is used to
+fix the filesystem, orphaned empty inodes will be created the next time
+the directory with the incorrect size is extended.
+.s3
+Dcheck's method of fixing dangling directory entries pointing to thin
+air creates a mode 0 file owned by root where a dangling entry used to be.
+If a nieve user tries to creat, or rm this file he may get very confused.
+Dcheck should probably make a third pass and clear the offending directory
+entries, rather than making up a fake inode for them to point to.

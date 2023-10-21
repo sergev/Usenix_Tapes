@@ -1,0 +1,721 @@
+	.title	atcref	v007a	07-aug-72
+
+	.ident	/10may4/
+
+	.nlist	bex
+
+	.mcall	$exit, $seek, $read, $write, $indir, $close, $open, $unlink, $exec
+
+	.mcall	(at)always,ch.mne,xmit
+	always
+	ch.mne
+	.mcall	(at)search,next,append,zap
+
+	.globl	symbol,	value
+
+	.globl	chrpnt,	symbeg,	xmit0
+
+	.globl	savreg,	movbyt
+	.globl	getnb,	setnb,	getchr,	setchr
+	.globl	getr50,	setr50,	tstr50, getsym
+	.globl	dnc,	r50unp
+
+	.globl	symovf
+	.globl	srchi,	rolndx,	rolupd
+	.globl	search,	next,	append,	zap,	insert
+	.globl	rolbas,	roltop,	rolsiz,	mactop
+	.globl	symlp,	symhp
+
+	entsec	txtbyt
+hello:	.asciz	<cr><lf> /cref v007  /	;intro message
+	xitsec
+	.even
+	.sbttl	sector initialization
+
+	entsec	impure		;impure storage area
+	entsec	imppas		;cleared each pass
+
+	entsec	xctprg		;program initialization code
+xctprg:
+	mov	#<^pl impure>,r0
+1$:	clr	(r0)+		;clear impure area
+	cmp	#<^ph imppas>,r0
+	bhi	1$
+
+	entsec	xctpas		;pass initialization code
+xctpas:
+	mov	#<^pl imppas>,r0
+1$:	clr	(r0)+		;clear impure part
+	cmp	#<^ph imppas>,r0
+	bhi	1$
+
+	entsec	xctlix
+	rts	pc
+
+	entsec	mixed		;mixed mode sector
+
+	xitsec			;unnamed is standard
+	.macro	serror	number
+	jsr	r5,serror
+	.word	2000!number
+	.endm
+
+	.macro	error	arg
+	serror	<''arg>
+	.endm
+
+	.macro	setnz	addr	;set addr to non-zero for t/f flags
+	mov	sp,addr
+	.endm
+cr.ver=	001
+cr.pag=	002
+cr.lin=	003
+cr.sym=	020
+cr.max=	027
+
+
+linlen=	132.
+obfsiz=	512.
+bpmb=	8.*2		;bytes per macro block
+
+odttrp	=	3
+	.sbttl	roll definitions
+
+	.macro	genrol	name,	base,	top,	size
+	entsec	rolbas
+	.globl	name'rol
+name'rol=	.-rolbas
+	.word	base
+	entsec	roltop
+	.word	top
+	entsec	rolsiz
+	.word	size*2
+	xitsec
+	.endm
+
+	entsec	rolbas		;roll base
+rolbas:
+	entsec	roltop		;roll top
+roltop:
+	entsec	rolsiz		;entry size
+rolsiz:
+	xitsec
+
+				;start of table to be filled in
+
+	genrol	t00,     0,     0,4	;symbol table
+	genrol	t01,     0,     0,4
+	genrol	t02,     0,     0,4
+	genrol	t03,     0,     0,4
+	genrol	t04,     0,     0,4
+	genrol	t05,     0,     0,4
+	genrol	t06,     0,     0,4
+	genrol	t07,     0,     0,4
+	genrol	t99,     0,     0,4
+	genrol	pag,     0,     0,1	;page roll
+
+	genrol	dum,     0,     0,0	;dummy (separates variable from fixed)
+
+	xitsec
+	entsec	impure
+
+	lofree	=	.
+.blkw	6000.
+	hifree	=	.
+
+symbol:	.blkw	2		;symbol accumulator
+	.blkw
+value:	.blkw
+
+	xitsec			;return to normal
+	.sbttl	program initialization
+
+start:
+	mov	sp,r0
+	cmp	(r0)+,(r0)+
+	movb	@(r0)+,lstchn
+	mov	(r0),$unlnm
+	mov	(r0),$splnm
+	mov	(r0)+,$opnnm
+	movb	@(r0)+,lprflg	;get lpr flag
+	call	swpext		;swap extensions so we read the ".xrf" file,
+				;but still retain ".lst" or ".map" ext.
+	clr	$opnmd
+	$indir
+	$opnsy
+	bcs	fin
+	movb	r0,tmpchn
+	mov	#lofree,symlp
+	mov	#hifree,symhp
+	call	xctprg
+	call	srchi
+
+1$:	call	prop1		;process pass 1
+	call	prop2		;  and pass 2
+	mov	minsym,r0	;did we get it all?
+	inc 	r0
+	bne	1$		;  no, loop
+	call	putbuf	;dump the listing????
+	$indir
+	$unlsy
+	bcs	fin
+	clr	r0
+	tst	lprflg		; should we spool the listing?
+	beq	fin		;no
+	call	swpext		;yes, swap the extensions back again
+	$exec
+	lprrun
+	lpargs
+
+fin:
+	$exit
+
+swpext:	mov	$splnm,r0	;point to pathname
+1$:	tstb	(r0)+		;find end
+	bne	1$
+2$:	cmpb	-(r0),#'.	;now back up to ext.
+	bne	2$
+	mov	#.lstex,r1	;point to new ext.
+3$:	movb	(r1),r2		;swap old and new extensions
+	movb	(r0),(r1)+
+	movb	r2,(r0)+
+	bne	3$
+	return
+
+serror:				;"s" error
+	clr	-(sp)
+	mov	(r5),-(sp)	;  and number
+;	.word	odttrp
+	br	fin
+
+symovf:	serror	217
+
+	.sbttl	cref proper
+
+prop1:
+	call	xctpas		;init for pass
+	clr	macnxt
+	call	srchi
+	zap	pagrol
+	mov	tmpchn,r0
+	$seek
+	0
+	0
+	clr	linpnt
+
+1$:	mov	#lstbuf,r4		;for imbedded text
+	call	getlin
+	 bgt	2$
+	return
+
+2$:	call	tstcor
+	tst	r5
+	beq	3$
+	call	pritem		;process item
+	br	2$
+
+3$:	cmp	r4,#lstbuf	;any imbedded text?
+	beq	1$		;  no
+	clrb	(r4)
+	mov	#2,r0
+	mov	#lstbuf,r1
+	call	putlin
+	br	1$
+pritem:				;process item
+	cmp	#cr.ver,r5
+	beq	5$
+	cmp	#cr.pag,r5
+	beq	6$
+	cmp	#cr.lin,r5
+	beq	7$
+	cmp	#vt,r5
+	beq	8$
+	cmp	#cr.sym,r5
+	bhi	3$
+	cmp	#cr.max,r5
+	bhis	prosym
+3$:	tst	pascnt
+	bne	8$
+	movb	r5,(r4)+
+	br	8$
+
+5$:	call	getchr
+	br	8$
+
+6$:	mov	lincnt,symbol
+	append	pagrol
+	inc	maxpag
+	clr	lincnt+2
+	br	8$
+
+7$:	inc	lincnt
+	inc	lincnt+2
+	cmp	lincnt+2,maxlin
+	blos	8$
+	mov	lincnt+2,maxlin
+8$:	call	getchr
+	return
+prosym:				;process symbol
+10$:	mov	r5,-(sp)
+	call	getchr
+	call	getsym
+	call	setchr
+	mov	(sp)+,r0
+	sub	#cr.sym,r0
+	asl	r0
+	add	#t00rol,r0
+	mov	lincnt,r3
+	ror	r5
+	rol	r3
+	ror	r5
+	rol	r3
+	call	search
+	bne	11$
+	cmp	rolndx,minsym
+	blo	8$
+	bhi	16$
+	cmp	symbol,minsym+2
+	blo	8$
+	bhi	16$
+	cmp	symbol+2,minsym+4
+	blo	8$
+16$:	cmp	rolndx,maxsym
+	bhi	8$
+	blo	17$
+	cmp	symbol,maxsym+2
+	bhi	8$
+	blo	17$
+	cmp	symbol+2,maxsym+4
+	bhis	8$
+17$:
+	call	getblk
+	mov	r0,value
+	call	insert
+	mov	r2,r1
+	clr	(r2)+
+	br	13$
+
+11$:	mov	value,r1
+	tst	(r1)+
+	mov	(r1),r2
+	mov	-2(r2),r5
+	bis	#3,r5
+	sub	r3,r5
+	asr	r5
+	asr	r5
+	beq	14$
+13$:	clr	r5
+	call	wwimt
+	mov	r2,(r1)
+14$:	bis	r3,-(r2)
+8$:	call	getchr
+9$:	rts	pc
+prop2:	mov	#177777,symbol
+	append	pagrol
+	mov	maxpag,r1
+	call	digcnt
+	mov	r0,maxpag
+	mov	maxlin,r1
+	call	digcnt
+	mov	r0,maxlin
+	add	maxpag,r0
+	inc	r0
+	mov	r0,maxdig
+	mov	#t00rol,currol
+10$:	clr	-(sp)
+1$:	mov	(sp)+,rolupd
+	movb	currol,r0
+	call	next
+	beq	5$
+11$:	mov	rolupd,-(sp)
+	mov	value,r0
+	tst	(r0)+
+	mov	(r0)+,-(sp)
+	mov	r0,-(sp)
+	call	setob
+	call	r50unp
+	add	#2,r2
+2$:	mov	(sp)+,r3
+	cmp	r3,(sp)
+	beq	4$
+	bit	#bpmb-1,r3
+	bne	3$
+	mov	-bpmb(r3),r3
+	tst	(r3)+
+3$:	mov	(r3)+,r1
+	mov	r3,-(sp)
+	clr	-(sp)
+	ror	r1
+	ror	(sp)
+	ror	r1
+	ror	(sp)
+	call	putnum
+	rol	(sp)
+	bcc	7$
+	movb	#ch.hsh,(r1)+
+7$:	tst	(sp)+
+	bpl	2$
+	movb	#ch.ind,(r1)+
+	br	2$
+
+4$:	tst	(sp)+
+	call	putob
+	br	1$
+
+5$:	movb	currol,r0
+	add	#2,r0
+	mov	r0,currol
+	cmp	r0,#t07rol
+	blos	10$
+	inc	pascnt
+	mov	#maxsym,r1
+	mov	#minsym,r2
+	xmit	3
+	return
+	entsec	impure
+currol:	.blkw
+pascnt:	.blkw
+	xitsec
+putnum:
+	mov	r2,-(sp)
+	add	maxdig,(sp)
+	cmp	(sp)+,#lstbuf+72.-2
+	blos	1$
+	call	putob
+	add	#10,r2
+1$:	mov	r2,-(sp)
+	mov	r1,-(sp)
+	mov	rolbas+pagrol,r0
+2$:	cmp	r1,(r0)+
+	bhi	2$
+	tst	-(r0)
+	sub	-(r0),(sp)
+	sub	rolbas+pagrol,r0
+	mov	r0,r1
+	asr	r1
+	inc	r1
+	call	digcnt
+	add	maxpag,r2
+	sub	r0,r2
+	call	dnc
+	movb	#ch.sub,(r2)+
+	mov	(sp)+,r1
+	call	digcnt
+	mov	(sp)+,r2
+	add	maxdig,r2
+	sub	r0,r2
+	call	dnc
+	mov	r2,r1
+	inc	r2
+	inc	r2
+	inc	r2
+	return
+
+	entsec	impure
+maxpag:	.blkw
+maxlin:	.blkw
+maxdig:	.blkw
+symtyp:	.blkw
+
+	entsec	xctprg
+	dec	symtyp
+	xitsec
+
+
+digcnt:
+	mov	#10$,r0
+1$:	cmp	r1,(r0)+
+	bhi	1$
+	sub	#10$,r0
+	asr	r0
+	return
+
+10$:	.word	9.,	99.,	999.,	9999.,	177777
+putob:	clrb	(r2)
+	mov	r1,-(sp)
+	mov	#2,r0
+	mov	#lstbuf,r1
+	call	tsthdr
+	mov	(sp)+,r1
+
+setob:	mov	#lstbuf,r0
+	mov	r0,r2
+1$:	mov	#space*400+space,(r0)+
+	cmp	#lstbuf+80.,r0
+	bne	1$
+	return
+
+	entsec	impure
+lstbuf:	.blkb	80.
+
+	entsec	imppas
+lincnt:	.blkw	2
+
+	xitsec
+tsthdr:	cmp	currol,symtyp
+	beq	1$
+	mov	r0,-(sp)
+	mov	currol,r0
+	mov	r0,symtyp
+	movb	hdrtyp(r0),hdrbu1
+	clr	lppcnt
+	clr	pagnum
+	mov	(sp)+,r0
+1$:	dec	lppcnt
+	bpl	9$
+	call	savreg
+	mov	r0,-(sp)
+	mov	r1,-(sp)
+	inc	pagnum
+	mov	pagnum,r1
+	mov	#hdrbu2,r2
+	call	dnc
+	movb	#cr,(r2)+
+	movb	#lf,(r2)+
+	movb	#cr,(r2)+
+	movb	#lf,(r2)+
+	clrb	(r2)
+	mov	#2,r0
+	mov	#hdrbuf,r1
+	call	putlin
+	mov	#lpp,lppcnt
+	mov	(sp)+,r1
+	mov	(sp)+,r0
+9$:	jmp	putlin
+
+
+lpp=	57.
+
+	entsec	mixed
+hdrbuf:	.ascii	<ff>/cross reference table   /
+hdrbu1:	.ascii	/s-/
+hdrbu2:	.blkb	20
+	.even
+
+hdrtyp:
+	.irpc	x,<smpce   >
+	.asciz	/x/
+	.endm
+
+	entsec	impure
+pagnum:	.blkw
+lppcnt:	.blkw
+	xitsec
+getlin:				;fill up linbuf
+	call	savreg
+	mov	#linbuf,r1	;point to beginning
+	mov	r1,chrpnt	;set chrpnt here
+	mov	linpnt,r2	;get adr. of residue
+	beq	2$		;move on if none (zero initially)
+1$:	movb	(r2)+,(r1)+	;copy byte
+	bne	1$		;till null
+	tstb	-(r1)		;back up over null
+2$:	call	getxrf		;get an input char.
+	movb	r0,(r1)+	;place into linbuf
+	beq	3$		;if null, eof
+	cmp	r1,#linbuf+linlen-2	;any room left?
+	blo	2$		;yes, continue
+3$:	clrb	(r1)		;no, guarantee null at end
+4$:	cmpb	-(r1),#vt	;back up till vt or null
+	beq	5$
+	tstb	(r1)
+	bne	4$
+5$:	clrb	(r1)+		;replace with null
+	mov	r1,linpnt	;point to residue
+	call	setchr
+	tst	r5
+	return
+
+getbuf:	mov	tmpchn,r0
+	$read
+	xrfbuf
+	512.
+	mov	r0,xrfcnt
+	beq	gtxrf1		;eof!!
+	mov	#xrfbuf-1,xrfpnt
+
+getxrf:	dec	xrfcnt
+	blt	getbuf
+	inc	xrfpnt
+	movb	@xrfpnt,r0
+	beq	getxrf		;ignore nulls
+gtxrf1:	return
+
+entsec	impure
+
+xrfcnt:	.blkw
+xrfpnt:	.blkw
+xrfbuf:	.blkw	512./2
+
+xitsec
+	.sbttl	listing output
+
+putlin:				;output a line
+	call	savreg
+1$:	movb	(r1)+,r2
+	beq	2$		;output till null
+	mov	r2,r3		;make copy
+	call	putoc
+	br	1$
+2$:	cmpb	r3,#lf
+	beq	3$
+	mov	#lf,r2		;end all lines with eol
+	call	putoc
+3$:	return
+
+putoc:	movb	r2,@outpnt	;store char. in buffer
+	inc	outpnt		;bump pointer
+	cmp	outpnt,#outbuf+obfsiz	;did we just fill buffer
+	blo	putbf1		;no
+putbuf:	mov	outpnt,$wrcnt	;yes, set up char. count
+	sub	#outbuf,$wrcnt
+	mov	lstchn,r0	;and file handle
+	$indir
+	$wrsys
+	mov	#outbuf,outpnt	;init pointer
+putbf1:	return
+
+	entsec	impure
+
+outbuf:	.blkw	obfsiz/2+1
+
+linbuf:	.blkw	linlen/2+1
+
+linpnt:	.blkw
+
+	entsec	mixed
+
+tmpchn:	.blkw
+lstchn:	.blkw
+symlp:	.blkw
+symhp:	.blkw
+
+$opnsy:	$open
+$opnnm:	.blkw
+$opnmd:	.blkw
+
+outpnt:	.word	outbuf
+
+$wrsys:	$write
+$wrbfp:	outbuf
+$wrcnt:	.blkw
+
+$rdsys:	$read
+$rdbfp:	.blkw
+$rdcnt:	.blkw
+
+$unlsy:	$unlink
+$unlnm:	.blkw
+
+lpargs:	lprrun
+$splnm:	0
+	0
+lprflg:	.blkw
+
+.lstex:	.asciz	/.xrf/
+lprrun:	.asciz	%/bin/print%
+	.even
+
+	xitsec
+wwimt:				;write wordin macro tree
+	bit	#bpmb-1,r2	;room in this block?
+	bne	3$		;  yes
+	sub	#bpmb,r2	;no, point to link
+	mov	r2,-(sp)
+	call	getblk
+	mov	r0,@(sp)+	;set new link
+3$:	mov	r5,(r2)+	;write, leaving flags set
+	return
+
+getblk:				;get a macro block
+	mov	macnxt,r0	;test for block in garbage
+	bne	1$		;  yes, use it
+	mov	#mactop,r2	;no, point to top of storage
+	mov	(r2),r0
+	add	#bpmb,(r2)	;compute new top
+	cmp	rolbas+0,(r2)	;room?
+	bhi	2$		;  yes
+	serror	217		;no
+
+1$:	mov	(r0),macnxt	;set new chain
+2$:	mov	r0,r2
+	clr	(r2)+		;clear link cell, point past it
+	return
+
+
+
+remmac:	mov	r0,-(sp)	;save pointer
+1$:	tst	(r0)		;end of chain?
+	beq	2$		;  yes
+	mov	(r0),r0		;no, link
+	br	1$
+
+2$:	mov	macnxt,(r0)
+	mov	(sp)+,macnxt
+	return
+	.if ndf	sdelta
+sdelta=	10
+	.endc
+
+tstcor:	mov	mactop,r0
+	add	#bpmb*2,r0
+	cmp	r0,rolbas+0
+	blo	9$
+	mov	rolbas+0,r0
+	add	#sdelta*8.,r0
+	cmp	r0,rolbas+t99rol
+	bhi	9$
+	call	savreg
+	mov	#sdelta,r3
+	mov	rolbas+t99rol,r4
+1$:	mov	-(r4),r0
+	beq	2$
+	call	remmac
+2$:	mov	#t99rol,r2
+3$:	sub	#2,r2
+	cmp	rolbas(r2),roltop(r2)
+	bhis	3$
+	mov	r2,maxsym
+4$:	add	#sdelta,rolbas(r2)
+	sub	#2,r2
+	blt	5$
+	add	#sdelta,roltop(r2)
+	br	4$
+
+5$:	tst	-(r4)
+	mov	-(r4),maxsym+4
+	mov	-(r4),maxsym+2
+	dec	r3
+	bgt	1$
+6$:	mov	-(r4),sdelta*8.(r4)
+	cmp	r4,mactop
+	bgt	6$
+9$:	return
+
+
+	entsec	impure
+minsym:	.blkw	3		;0, 0, 0
+
+	entsec	imppas
+maxsym:	.blkw	3		;-1, -1, -1
+
+	entsec	xctpas
+	com	maxsym
+	com	maxsym+2
+	com	maxsym+4
+	mov	#t07rol,r1
+1$:	mov	roltop+t99rol,roltop(r1)
+	mov	rolbas+t99rol,rolbas(r1)
+	clrb	rolsiz+1(r1)
+	dec	r1
+	dec	r1
+	bpl	1$
+
+	xitsec
+
+
+	entsec	impure
+macnxt:	.blkw
+	xitsec
+
+	.end	start

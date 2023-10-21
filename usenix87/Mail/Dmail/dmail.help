@@ -1,0 +1,542 @@
+
+'help TOPIC' for more information on a command.  Many commands take 
+message numbers or message lists:
+	[msg]	is an optionaly specified message number (usually the 
+		operation is on the current message if no number is
+		specified)
+	<list>	is an optionaly specified message list.  Message lists
+		consists of number ranges of the form N -N N- or N-N, and
+		keywords (help keywords)
+
+
+OTHER HELP AVAILABLE:	pager sendmail tilde header newmail keywords
+
+DMAIL written by Matthew Dillon, U.C. Berkeley -UCF (C) 1985 by Matthew Dillon
+
+
+.pager
+set page [rows/command]
+
+	'page' is a SET variable which determines the type of paging list and
+display commands will use.  If not defined, no filter is used.  If a numerical
+value (i.e. 24) is specified, the page length will be set to that value and
+a rather stupid, simple internal paging routine will be used.  If the 
+variable is set to an alpha-numeric string, output will be piped through
+that filter.  For instance:
+
+	unset page		-no paging
+	set page more		-use more filter
+	set page page		-use 'page' filter
+	set page > x		-redirect to a file (be careful)
+	set page 24		-use internal paging, page length 24 rows.
+
+	For internal paging, use <return> to continue, or your INTR 
+	character to break out
+
+.sendmail
+set sendmail sendmail-path
+
+	Inform DMAIL as to where the sendmail program is.  The default
+(variable unset) is /usr/lib/sendmail.  This variable is useful only for
+those of us who like to hack-up our own sendmail.
+
+.tilde
+~ ~user directory expansion
+
+	In all expressions except those within double quotes, the tilde
+`~` will be expanded to either your home directory, or the directory of
+a specified user, depending.  Note that '*' and '?' are not expanded by
+DMAIL, though they will be by any shell commands you execute.
+
+	It is probably a good idea to use ~ in any aliases, etc... in case
+you change directories using the 'cd' command.
+
+	alias resource ~/.dmailrc		-example using ~
+
+.header
+set header filepath
+
+	Set the location of your header file, which will appended to the
+scratch mail file before you are placed in the editor (usually vi).
+
+	set header ~/.header			-set header file to ~/.header
+	unset header				-no header file
+
+.newmail
+
+	Whenever newmail arrives, it will be automatically incorporated into
+a running DMAIL.  However, to see it, you must 'select all' (or select on
+anything that would include it).
+
+.keywords
+.range
+.message
+
+	Many commands in DMAIL require a range of messages be given.  A Range
+consists of message numbers (3 4 5), message ranges (1-45 -9 9-), and 
+keywords.  Keywords select certain messages from the entire SELECTED list:
+
+	all		-All messages
+	tag		-All TAGGED messages 
+	mark		-All MARKED (read) messages
+	deleted		-All DELETED messages
+	written		-All WRITTEN messages 
+	untag		-All messages NOT TAGGED 
+	unmark		-All messages NOT MARKED (i.e. read)
+	undeleted	-All messages NOT DELETED
+	unwritten	-All messages NOT WRITTEN
+
+	Only the first three letters need be specified.  For instance, the
+'all' keyword selects all the messages currently selected.  You could select
+on some subject, say, and the 'delete all'. 
+
+	The message number 0 refers to the last message. the 'undeleted'
+keyword exists only for completeness; you will probably never use it.
+
+
+.delete
+DELETE <message list>
+
+	Mark the specified messages for deletion.  They will no longer show up
+on LISTings, (gaps will appear in message numbering).  However, you can
+still TYPE them, if you remember the message number, and you can always
+UNDELETE them.  Remember that the particular message # you've deleted  
+may be different if you change the SELECT parameters.  For example,    
+message #3 selecting 'To' & 'foo' may actually be message #45 when you 
+are selecting ALL (see SELECT).  Upon a QUIT, messages marked for
+deletion are actually deleted from the mail file.
+
+.undelete
+UNDELETE   <message list>
+
+	UNDELETES messages.  Without arguments, UNDELETE will 
+restore the last message you deleted.  Specifying 'all' (undelete all), will
+undelete any deleted messages in the currently selected message list.
+
+.header
+HEADER [message]
+
+	Display the entire header of a message.  This does not cause the
+message to be marked 'read'.  TYPE, on the other hand, only displays
+header information specified by SETLIST.
+
+.type
+TYPE [message]
+
+	Type the text of a message.  Only header fields defined by SETLIST
+are displayed.  Otherwise, only the text is displayed.  This marks 
+the particular message as 'read', and also makes that message the 
+current message.
+
+.echo
+ECHO [string]
+
+	Echo the given string onto the screen.
+
+.go
+GO #
+	go to a message, don't type it out or anything.  Remember that you
+can go to the last message by using the message # 0.  By placing a keyword
+(help range), you can go to the first TAGGED message, etc...
+
+.reply
+.Reply
+REPLY
+
+	Reply to the current letter.  There are two forms of 'reply'.  The
+first does not include the senders original letter, the second does.
+In both cases, Dmail will place you in VI, with the To:, Cc:, and
+subject lines filled out.  The second form is 'Reply', with an 
+upper case 'R'.  This form includes the sender's message shifted to
+the right with '>'s on the left hand side.  See FORWARD for another
+method of replying to mail.
+
+	In any case, you may get the sender's letter by reading the file '#'
+from VI.  That sequence would be ':r\\#' 
+
+	See MAIL for more information on VI
+
+.forward
+FORWARD [user user user....]
+
+	Forward the current message to a list of users.  The sender's
+entire message is placed in the text portion.  The To: field will
+contain the user's named above, and the Subject: field will contain
+a 'Fo:' (you append your own subject)
+
+	See MAIL for more information on VI
+
+.mail
+MAIL [user user user user]
+
+ 	Mail to [users].  You are given a VI to work from, and may modify
+any of the header fields.  the From: field is inserted automatically
+by SENDMAIL, but you can overide it if you wish.  
+
+	Quitting out of VI without writing the output file will cause an
+abort, and no mail will be sent.   Additionaly, you may use the 'vibreak'
+variable to enable your INTR character (usually CTL-C) to break you out of
+VI.
+
+	When modifying the users list in To and Cc fields, remember that 
+they should be all comma delimited, or none comma delimited.
+
+.select
+SELECT ALL
+SELECT Field  match match match match...
+SELECT Field  !match
+SELECT Field  match match match , Field match , .....
+
+	Select what you want to look at.  Select will take the field header
+you supply and attempt to match arguments with that field in the mail
+file.  You can then work on the selected material as if the rest of
+your mail didn't exist.  For instance, 'select To dillon', will select
+all messages addressed to you.  Note that case is checked for the
+FIELD-HEADER, but not for arguments, so the latter will also find 
+anything addressed to Dillon or DILLON.  You only have to give a
+partial match, so 'select To di' would work just as well. 
+
+	Select then, allows you to quickly find what you want even though
+you may have 12000 messages (though it may take a while with that many)
+You may also specify what you DON'T want to select on:
+
+ select To !foo
+
+will select all letters not addressed to 'foo'.  You may select on any
+field you wish.  At any time, you may say 'select ALL' to select the
+entire message list.  Use RESELECT to select on the current message
+list.  SELECT always selects from the entire message-list
+
+ select Cc hack , To hack
+
+will select any mail with Cc or To fields containing hack.  You may
+have as many comma operators as you wish.  The comma must be a field
+of its own (spaces on either side)
+
+.reselect
+RESELECT ALL
+RESELECT Field  match match match match...
+RESELECT Field  !match
+
+	SEE SELECT.  Reselect allows you to CONTINUE to narrow down a topic
+or whatever.  It will select on the current message list (which you have
+already narrowed down with SELECT or RESELECT).
+
+.defer
+DEFER
+
+	Deselects any marked messages .. messages marked as 'read'.  This is
+as if you did a RESELECT on all unread messages in the current select field.
+Thus, the messages will be renumbered.  To see these messages again, you must
+use SELECT.
+
+.list
+LIST <message list>
+LIST			-Lists all selected messages
+
+	Display header information on a message as specified by SETLIST,
+in a one line per message format.  The default lists ALL messages.
+
+Leftword flags:    r	-indicates message has been read.  Message will be
+                    	 moved to the destination file on QUIT
+                   >	-indicates message is the current message
+                   w	-indicates message has been written to a file.
+                         Message will be deleted from source file on QUIT
+		   T    -indicates message has been taged by the user
+
+.next
+NEXT
+
+	Execute TYPE or HEADER for the next message, depending on which of
+TYPE or HEADER was last executed by you
+
+._next
+_NEXT
+
+	Go to next message, do not print it out.
+
+.back
+BACK
+
+	Execute TYPE or HEADER for the previous message, depending on which
+of TYPE or HEADER was last executed by you
+
+._back
+_BACK
+
+	Go to previous message, do not print it out.
+
+.dt
+DT
+	Delete current message, type (or header) next message.  This command
+will warn you when you reach the end of the message list.
+
+	References: DELETE and NEXT
+
+.set
+SET [variable [string]]
+
+	With no arguments, SET prints out all currently active variables.
+Note that this variable list is a different list than the ALIAS list.  With
+one argument, the specified variable is displayed if it exists, or created
+if it doesn't.  With more than one argument, the specified variable is set
+to the specified string.  Variables may be references on the command line by
+$variable .  The variable's contents will replace the reference.  Unlike
+aliases, however, variable substitutions may take place anywhere on the 
+command line rather than substitute just the command name.  Note also that
+if you use a $ substitution for an argument of a command, the entire 
+variable's contents is ONE argument (i.e. if a = "b c d", and you say
+something like: 'unset $a', it would attempt to unset a single variable
+whos name is "b c d".
+
+	There are several reserved SET variables, which define options in 
+DMAIL.  Changing these will modify the option:
+
+	page		set paging on or to a specific command (i.e. more)
+	sendmail	set the path to the sendmail program
+	vibreak		enable your INTR character even when in VI.
+	verbose		reflects verbose option to sendmail
+	header		header file to append to any messages you send.
+
+	page
+
+	 This variable determines what kind of paging is used for LIST,
+	 TYPE, and HEADER commands.  If the variable does not exist, paging
+	 is turned off.  If set to null (no string), an internal paging
+	 routine is used.  If set to a value, an internal paging routine is
+	 used using the value as the page length.  the 'page' variable can
+	 also be set to a command, such as 'more' or 'page', in which case,
+	 the output is piped through those commands:
+
+	 set page		Turn paging on (internal page routine)
+	 set page 25		Internal page routine... 25 rows/screen
+	 set page more		Use 'more' command to pipe output through
+	 set page page		Use 'page' command to pipe output through
+
+	 you could also conceviably say:  'set page cat > x', or 
+	 'set page cat | lpr', but be very careful.
+
+	sendmail
+
+	 This variable will redirect DMAIL as to where the mailer program
+	 is.  The mailer program must be compatible with /usr/lib/sendmail
+	 which is the default used if the 'sendmail' variable isn't set
+	 to anything:
+
+	 set sendmail bin/mysendmail
+
+	vibreak
+
+	 This variable, when set, allows the INTR character to abort a 
+	 reply, mail, or forward command.  Otherwise, if this variable is
+	 not present, INTR will not abort the above commands.
+
+	verbose
+
+	 This variable, when set, causes the -v flag to be sent to 
+	 sendmail.  In addition, DMAIL will wait for sendmail to complete
+	 before returning your prompt.
+
+	header
+
+	 The file specified by this variable will be appended onto the temp
+	 vi files in reply and mail.  The file is appended before you go into
+	 vi, so when you do, what you see is still what you get.
+
+.alias
+ALIAS [variable [string]]
+
+	Create an alias for a command.  With no arguments, ALIAS will display
+all active aliases.  With one argument, a particular alias is displayed (if
+it exists), or defined (if it did not previously exist).  With more than one
+argument, the particular alias is set to the string list specified.
+
+alias
+alias hack "select From hacker , To hacker , Cc hacker"
+alias bye quit
+alias stuff "setlist 60 To ; list"
+
+	Usually, any arguments following the alias are appended to the
+expansion.  However, you can place such arguments inside the alias somewhere
+by using the following construction:
+
+alias myecho "%var echo $var ; list"
+
+myecho hello there  ---> echo hello there ; list
+
+	to unalias an alias, use the UNALIAS command.
+
+.unset
+.unalias
+UNSET var var var...
+UNALIAS var var var...
+
+	Eradicate variables or aliases from memory.
+
+.setlist
+SETLIST [-s] [columns] Field [columns] Field ...
+
+	-s prevents display of the list.
+Set the list format used for LIST and TYPE.  The optional [columns]
+indicates how many columns to allocate for the Field specified.  The 
+Field can be a partial match. However, case is observed:
+
+setlist 18 Fro  38 Sub  10 To  0 Dat
+
+18 columns for the From: field, etc... when TYPEing messages, the
+[columns] is ignored, and each field is printed in its entirety.
+Note that 0 columns have been allocated for the Date: field.  
+Therefore, the Date: field will not show up on the LIST command,
+but will show up in the TYPE command.
+
+.cd
+CD PATH
+
+	cd, as in csh.  Changes your base directory.  You can use
+ the shell escape '! pwd' to get your current working directory.
+
+.source
+SOURCE file
+
+	Source a file.  The file is read in an executed in sequence.
+
+.preserve
+PRE	<message list>
+
+	PRESERVE messages.  A message is MARKED if it has been read (has an 'r'
+flag from the LIST command).  Marked messages are moved from your readfile
+into your outfile upon a QUIT.  If you are reading and writing to the same
+file (i.e. from your mbox to your mbox), the 'r' flag has no effect. 
+
+	However, if you are reading from your spool file, and want to keep
+read messages in your spool (that is, not move them to your mbox), you want
+to PRESERVE them.  This command simply unmarks them, so they appear not to
+have been read.
+
+.mark
+MARK <message list>
+
+	Mark messages specified as being already 'read'.  Remember that if 
+you executed DMAIL without a -f option, any message 'read' at the time
+you quit will be moved to MBOX (or file specified by -o)
+
+.tag
+.untag
+TAG <list>
+UNTAG <list>
+
+	The TAG command allow you to flag any message.  You can tag a set of
+messages, then reference them all at once.  For instance, if you tag 
+interesting messages as you glance at them, you may then write them all
+to a file by 'write filename tag',  or list them with 'list tag'.  
+Alternately, you could delete all your taged messages with a single delete
+command 'delete tag'.  The 'tag' operand works in the same way as the 'all'
+operand, except it works only on taged messages.
+
+	UNTAG will untag a particular message in your message list.  For
+instance, to untag any taged messages in the entire message list, you would:
+
+ select all
+ untag all 	OR	 untag tag
+
+	Note that 'untag all' and 'untag tag' have the same effect.
+
+.write
+WRITE file <message list>
+
+	Write the given messages or the current message to a file.  The file
+file is appended to.  Remember that you may specify 'all' to write
+all messages in the current select field to the file.  Messages will be
+marked as having been writen, and will be deleted from the mail file
+when you 'quit'.  However, you may cause them to be kept in the mail
+file by UNdeleting the messages (i.e.  undelete all)
+
+	You can also TAG the messages you want to write, and say
+'write file tag' to write to the file all taged messages.
+
+.!
+! [shell command]
+
+	Give yourself a shell or execute a shell command.  The shell forked
+is that specified by your SHELL enviroment variable, or /bin/sh if there is
+no SHELL enviroment variable.
+
+.x
+X (EXIT)
+
+	EXIT out of DMAIL without changing any files.  Usually, one exits
+with QUIT, which would cause deleted messages to disappear, and TYPEd
+messages to go to MBOX (if you did not use the -f option with DMAIL).
+
+	If your outfile is the same as your infile, reading a message does
+not effect anything.
+
+.quit
+QUIT
+
+	Quit out of DMAIL. Delete any messages that were marked for deletion
+and if you executed DMAIL on /usr/spool/mail/ (default), any mail
+marked 'read' will be placed in MBOX in your home directory
+
+.xswitch
+.qswitch
+XSWITCH fromfile [tofile]
+QSWITCH fromfile [tofile]
+
+	Switch to a different set of files.  XSWITCH doesn't modify your
+old from and to files before switching, QSWITCH works as if you had QUIT
+stuff before switching to another set of files.
+
+	If no [tofile] is specified, the new tofile will be the same as the
+fromfile you specify.
+
+.help
+.?
+HELP [topic]
+
+	Give me help on a topic
+
+.dmail
+COMMAND LINE OPTIONS FOR DMAIL
+
+	dmail -O [-l rcfile] -f [file] -o [file] -F field -F field -F field ...
+
+	Default conditions:
+		Home directory gotten from password entry
+		User gotten from password entry
+		Visual editor set to /usr/ucb/vi
+
+		VI BREAKOUT enabled
+		READ file is /usr/spool/mail/$USER
+		WRITE file is $HOME/mbox
+		From:,  To:, and Subject: fields will be loaded into memory.
+
+	HOME	enviroment variable becomes home directory
+	USER	enviroment variable becomes user name
+	VISUAL	enviroment variable becomes editor used
+
+	-O			Go into interactive mode, even if there is no
+				mail to read.
+
+	-f [from file]		Specify spool file to get mail from. If no file
+				Argument is given, $HOME/MBOX is used.
+
+	-o [to file]		Specify file to write to, If no Argument
+				is given, $HOME/.MBOX is used.  Note that
+				the default without -o is $HOME/MBOX
+
+	-f -o			With no file arguments causes both READ and 
+				WRITE files to be $HOME/.MBOX
+
+	-F field		Append this field to those which will be
+				used on initial load.  If, During usage of the
+				program you specify a field which is not in 
+				memory, DMAIL will be forced to re-load the
+				entire spool file, which can take a long time
+				if you have more than 64K in the file
+
+	-l rcfile		Use this as the rc file rather than .dmailrc
+
+	-L			Do not source the rc file on boot
+
+

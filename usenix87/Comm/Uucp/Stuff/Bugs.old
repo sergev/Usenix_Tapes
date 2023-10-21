@@ -1,0 +1,1103 @@
+From root Thu Feb  7 21:58 CST 1985
+Status: RO
+
+r short 2 want 3
+rcount = 0
+xcount = 0
+
+
+*************************************************
+Cron: The previous message is the standard output
+      and standard error of one of your cron commands.
+
+From gang!wuphys!busch!we53!mgnetp!burl!ulysses!mhuxl!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!ittvax!dcdwest!sdcsvax!bmcg!cepu!trwrba!trwrb!scgvaxd!wlbr!jm Wed Dec 31 18:00:00 1969
+Relay-Version: version B 2.10.1 6/24/83; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site wlbr.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!burl!ulysses!mhuxl!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!ittvax!dcdwest!sdcsvax!bmcg!cepu!trwrba!trwrb!scgvaxd!wlbr!jm
+From: jm@wlbr.UUCP
+Newsgroups: net.unix-wizards,net.bugs.uucp
+Subject: Re: Curious UUCP (reposting...)
+Message-ID: <176@wlbr.UUCP>
+Date: Wed, 6-Jun-84 13:33:11 CDT
+Date-Received: Sat, 9-Jun-84 20:08:41 CDT
+References: <546@dual.UUCP>
+Organization: Eaton ES, Westlake Village, CA
+Lines: 61
+
+[]
+
+Evidently, this didn't make it everywhere, so here it goes again...
+(Sorry to everyone who has seen it before)
+
+Erik Fair complains about V7 uucp timing out at shutdown when
+communicating with a System V uucp.  The problem also occurs with
+4.x systems.  Having studied  this problem, I offer the following
+detailed (and rather long winded) explanation, with some general
+suggestions (but no details) on how to fix it.
+
+	This problem occurs because of the pk user mode emulation.
+	cntrl() exhanges HUPY messages, then calls pkclose(), which
+	tries to exchange M_CLOSE messages with the remote system.
+	The problem is that, in the user mode pk routines, pkclose()
+	does not wait for the reply from the other side.  It merely
+	tries twice (sending two control packets), then "gives up",
+	and proceeds with the close.
+
+	As a result, two packets are left in the input queue of the
+	both hosts (this is true for all uucps that I know of).  Now
+	then, cntrl() returns to main(), which tries to exchange
+	OO messages using imsg() and omsg().
+
+	imsg() uses the same message sync character as the pk routines.
+	Soooooo.... imsg() sees the M_CLOSE message that pkclose() left
+	on the line, and starts looking for a terminator (a NULL or
+	newline, I believe), and finds it after the two M_CLOSE messages
+	and the desired OO message, so he returns a bunch of garbage as
+	data.  No biggee, main() discards the rubbish, sends another
+	OO message, and things go on correctly.  That is why two V7 sites
+	work OK.
+
+	Now then, System V uucp has a new, improved imsg().  If he finds
+	an imbedded sync character while receiving a message, he will
+	reset some pointers, and start over again, throwing away the
+	garbage.  So, a System V uucp will see the FIRST OO message,
+	and terminate without further hassle.  This is fine on dialup
+	lines, because the line will be hung up before long, and this
+	will also terminate the V7 uucp.  However, if the two are
+	connected with a hardwire line, the V7 uucp will wait around for
+	another OO message that will never come (until it times out).
+
+There are several ways to "fix" the problem:
+
+	1) Fix the user mode pkclose(), so that he WAITS for a response.
+	   This would really be the preferred fix, but.....
+
+	2) Fix the V7 (and 4.x) imsg() to conform to System V.
+	   (Let's see now, how many thousands of sites was that????)
+
+	3) Break the System V imsg() to conform to V7 (Yeuchhh!!!)
+
+	4) Shorten the time that main() waits for imsg() to come back
+	   with the OO message.  (Blahhhhhh!!!!!!)
+
+Not having a whole lot of time to come up with a solution, I chose (2)
+at our site, so our hardwired systems work right.
+
+		Jim Macropol
+		{ihnp4,trwrb,vortex,scgvaxd}!wlbr!jm
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!mcvax!piet Fri Jun 15 09:05:11 1984
+Relay-Version: version B 2.10.1 6/24/83; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83 (MC840302); site mcvax.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!mcvax!piet
+From: piet@mcvax.UUCP (Piet Beertema)
+Newsgroups: net.unix-wizards,net.bugs.uucp
+Subject: Re: Curious UUCP (reposting...)
+Message-ID: <5855@mcvax.UUCP>
+Date: Fri, 15-Jun-84 09:05:11 CDT
+Date-Received: Tue, 19-Jun-84 11:14:52 CDT
+References: <546@dual.UUCP> <176@wlbr.UUCP>
+Organization: CWI, Amsterdam
+Lines: 10
+
+<...>
+The uucico shutdown has always presented problems. Long time ago we
+already added a "resync" in imsg.c, but there are more improvements:
+- (cico.c) take out the first  omsg('O', "OOOOO", Ofn)  statement before
+  the loop;
+- (cntrl.c) on HUP the slave shouldn't send another HY, so prepend the
+  WMESG(HUP, YES)  statement by:  if (role == MASTER)
+-- 
+	Piet Beertema, CWI, Amsterdam
+	...{decvax,philabs}!mcvax!piet
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!decwrl!sun!shannon Wed Jun 20 03:01:04 1984
+Relay-Version: version B 2.10.1 6/24/83; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83 SMI; site sun.uucp
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!decwrl!sun!shannon
+From: shannon@sun.uucp (Bill Shannon)
+Newsgroups: net.bugs.uucp
+Subject: fix for "4.2 dialup bug" and "LOST LINE (LOGIN)"
+Message-ID: <1280@sun.uucp>
+Date: Wed, 20-Jun-84 03:01:04 CDT
+Date-Received: Thu, 21-Jun-84 09:50:17 CDT
+References: <1201@qubix.UUCP> <422@turtlevax.UUCP>
+Organization: Sun Microsystems, Inc.
+Lines: 72
+
+I believe I have the fixes to two recently described problems,
+the first from Mark Callow and the second from Ken Turkowski
+(see references).
+
+The general problem is that uucico is able to poll a site just
+fine if you run it by hand but sometimes (only sometimes) fails
+when it is run by cron.  The key to the problem is process groups
+and the kernel's idea of a "control terminal" for a process.  The
+problem occurs when uucico (called from cron) opens the tty line to
+dial the modem, the dial fails, it closes and reopens the line and
+tries again.  The problem only occurs on systems with 4.1bsd-derivative
+tty drivers.  Now, the details of the problem.
+
+Each process has a "controlling terminal", whose identity is saved
+u.u_ttyp.  It is a pointer to the tty struct for the FIRST tty ever
+opened by the process (clue).  A process also has a process group,
+set to be the same as the process group of its parent, by default.
+Init has process group 0 so the process group of all process' is 0
+until one changes its process group or opens a tty. So, the uucico
+started by cron has process group 0.  When a tty is first opened,
+(see ttyopen() in tty.c) if the process group of the opening process
+is 0, the process group of the process (u.u_procp->p_pgrp) and the
+tty (tp->t_pgrp) are set to the pid of the process.  When the tty is
+closed, its process group is reset to 0.
+
+Now, consider the following code extract from tty.c:
+
+	/*
+	 * Hang process if it's in the background.
+	 */
+#define bit(a) (1<<(a-1))
+	while (tp == u.u_ttyp && u.u_procp->p_pgrp != tp->t_pgrp) {
+		if ((u.u_procp->p_sigignore & bit(SIGTTIN)) ||
+		   (u.u_procp->p_sigmask & bit(SIGTTIN)) ||
+/*
+		    (u.u_procp->p_flag&SDETACH) ||
+*/
+		    u.u_procp->p_flag&SVFORK) {
+			return (EIO);
+		}
+
+The first time the tty is opened by uucico (which is started by
+cron), the second part of the while condition will be false (the
+process groups will be equal).  The second time the same tty is
+opened (after having been closed) its process group will have been
+reset to 0 so the second part of the while condition will be true
+and it will return EIO.  (In both cases the first part is true.
+In the case where uucico is started by hand, the first part is false.
+In both cases SIGTTIN is ignored so the if is always taken.)
+
+And now, the fix.  In conn.c, in dialup(), after
+
+		if ((Dnf = open(dnname, 2)) < 0) {
+			delock(dev.D_line);
+			continue;
+		}
+
+or some similar place where it opens the tty line, add
+
+#ifdef TIOCSPGRP
+		{
+		int pgrp = getpgrp(0);
+		ioctl(Dnf, TIOCSPGRP, &pgrp);
+		}
+#endif
+
+This resets the process group of the terminal to the process'
+process group after each open of the tty.  Perhaps not the best
+fix, but it does work.
+
+				Bill Shannon
+				Sun Microsystems, Inc.
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!larry Wed Jun 20 08:42:11 1984
+Relay-Version: version B 2.10.1 6/24/83; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site decvax.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!larry
+From: larry@decvax.UUCP (Larry Cohen)
+Newsgroups: net.bugs.uucp
+Subject: Re: 4.2 uucp dialer problem
+Message-ID: <15@decvax.UUCP>
+Date: Wed, 20-Jun-84 08:42:11 CDT
+Date-Received: Thu, 21-Jun-84 09:50:32 CDT
+References: <1181@qubix.UUCP>
+Organization: DEC UNIX Engineering Group
+Lines: 33
+
+I have also had problems with the Hayes smartmodem code also.
+(It has been quite a while now since I looked at the problem but ...)
+The modem did not reset itself after the previous call (maybe only
+failed attempts).  In any event I tried various incantations with
+the following sequence yielding good results (in hsyopn() ):
+
+if (dh >= 0) {
+	fixline(dh, dev->D_speed);
+	write(dh, "+++", 3)   /* force Hayes into command state */
+	sleep(1);	      
+	write(dh, "ATH\r", 4)  /* Hang up */
+	sleep(1);
+	write(dh, "ATZ\r", 4)   /* reset modem */
+#ifdef HAYSTONE 
+	continue as before
+
+
+In hsycls() I used the following sequence to ensure a reset:
+
+
+	write(fd, "+++", 3);
+	sleep(1);
+	write(fd, "ATZ\r", 4);
+
+
+Also the phone number should be translated into something
+the hayes understands (eg. '-' to ','   and '=' to ','  )
+The ventel code does this already.
+
+
+				Good Luck,
+					Larry Cohen
+					decvax!larry
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!mcnc!ncsu!uvacs!edison!jso Tue Jun 19 15:09:12 1984
+Relay-Version: version B 2.10.1 6/24/83; site plus5.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!floyd!whuxle!mit-eddie!genrad!decvax!mcnc!ncsu!uvacs!edison!jso
+From: jso@edison.UUCP
+Newsgroups: net.bugs.4bsd
+Subject: lock hangs on 4.2
+Message-ID: <270@edison.UUCP>
+Date: Tue, 19-Jun-84 15:09:12 CDT
+Date-Received: Mon, 25-Jun-84 13:59:31 CDT
+Lines: 28
+
+Index: 	ucb/lock.c 4.2BSD
+
+Description:
+	lock hangs on EOF read with 4.2
+Repeat-By:
+	lock, and type your eof character
+Fix:
+*** src/lock.c	Tue Jun 19 16:00:29 1984
+--- /usr/src/ucb/lock.c	Sat Jul  2 03:51:54 1983
+***************
+*** 42,49
+  	}
+  	s[0] = 0;
+  	for (;;) {
+! 		if(fgets(s, sizeof s, stdin) == NULL)
+! 			clearerr(stdin);
+  		if (strcmp(s1, s) == 0)
+  			break;
+  		if (strcmp(s, masterp) == 0)
+
+--- 42,48 -----
+  	}
+  	s[0] = 0;
+  	for (;;) {
+! 		fgets(s, sizeof s, stdin);
+  		if (strcmp(s1, s) == 0)
+  			break;
+  		if (strcmp(s, masterp) == 0)
+
+
+From gang!wuphys!busch!we53!mgnetp!burl!clyde!watmath!utzoo!linus!decvax!harpo!seismo!harvard!wjh12!pixel!pixutl!chris Mon Jul  2 10:55:28 1984
+Relay-Version: version B 2.10.2 7/1/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site pixutl.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!burl!clyde!watmath!utzoo!linus!decvax!harpo!seismo!harvard!wjh12!pixel!pixutl!chris
+From: chris@pixutl.UUCP (chris)
+Newsgroups: net.bugs.uucp
+Subject: missing fclose in uuxqt.c
+Message-ID: <41@pixutl.UUCP>
+Date: 2 Jul 84 15:55:28 GMT
+Date-Received: 4 Jul 84 18:06:29 GMT
+Organization: Pixel Computer Inc., Wilmington, Mass.
+Lines: 41
+
+
+	Yet another missing fclose() (this one in uuxqt.c):
+
+	If you are having problems with uuxqt giving up every once in a while
+when handling a large number of 'X' files ( ~= NOFILE (param.h)), the reason
+is that there is no 'fclose(xfile)' at the end of main in uuxqt.c.
+
+
+	----------
+	.....
+
+	rmfiles:
+		xfp = fopen(xfile, "r");
+		ASSERT(xfp != NULL, "CAN'T OPEN %s", xfile);
+		while (fgets(buf, BUFSIZ, xfp) != NULL) {
+			if (buf[0] != X_RQDFILE)
+				continue;
+			sscanf(&buf[1], "%s", file);
+			unlink(file);
+		}
+		unlink(xfile);
+		/* where is fclose()???? */
+	}
+
+	if (stcico)
+		xuucico("");
+	cleanup(0);
+}
+
+Chris
+
+-- 
+
+
+ Chris Bertin            :         (617) 657-8720 x2318
+ Pixel Computer Inc.     :
+ 260 Fordham Rd.         :  {allegra|ihnp4|cbosgd|ima|genrad|amd|harvard}\
+ Wilmington, Ma 01887    :     !wjh12!pixel!pixutl!chris
+
+
+From gang!wuphys!wucs!kurt Wed Jul 11 01:11:39 1984
+Relay-Version: version B 2.10.2 7/1/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 7/1/84; site wucs.UUCP
+Path: plus5!gang!wuphys!wucs!kurt
+From: kurt@wucs.UUCP
+Newsgroups: net.bugs.4bsd,net.bugs.uucp
+Subject: uucico aborts when it must create directories with long names
+Message-ID: <282@wucs.UUCP>
+Date: 11 Jul 84 06:11:39 GMT
+Date-Received: 11 Jul 84 09:31:26 GMT
+Distribution: net
+Organization: Washington U. in St. Louis, CS Dept.
+Lines: 57
+
+Subject: uucico dies when trying to make a directory with long pathname
+Index:	usr.bin/uucp/expfile.c 4.2BSD
+
+Description:
+	When sending a file by uucp with the -d option (create
+	directory) set and a long directory name (~ >40 characters)
+	the uucico that is creating the directory aborts (the abort
+	doesn't work either--see a subsequent report).
+	This situation arises frequently when sending directory
+	hierarchies with uuto (from System V).  It is made even more
+	insidious by the fact that with repeated tries it goes away
+	(see fix for explanation).
+Repeat-By:
+	uucp -d file /usr/spool/uucppublic/receive/sys/dir1/dir2/dir3/file
+		with dir3 nonexistent
+Fix:
+	The problem is due to the combination of two commands:
+		mkdir <dir>; chmod 0777 <dir>
+	sprintf'd into the array cmd[] for submission to a shell.
+	This is in the function mkdirs().  Cmd[] is declared to be
+	100 bytes, so you see if <dir> is over about 40 characters
+	it is overrun.  In most cases the mkdir can succeed, but
+	the chmod fails and so the call to the shell fails causing
+	an abort.   The side not aborting will then merely TIMEOUT
+	and the conversation fails.  Note that, since the mkdir succeeded,
+	even though the chmod did not, the next time around the 
+	directory exists, so it need not be created again, and the
+	bug-ridden code is not re-executed.
+
+	After the above, long-winded explanation follows a diff with the
+	simple fix:
+
+	*** /tmp/,RCSt1000481	Wed Jul 11 00:47:28 1984
+	--- expfile.c	Wed Jul 11 00:47:20 1984
+	***************
+	*** 89,95
+	  char *name;
+	  {
+		int ret, mask;
+	! 	char cmd[100], dir[100];
+		register char *p;
+	  
+		for (p = dir + 1;; p++) {
+
+	--- 89,95 -----
+	  char *name;
+	  {
+		int ret, mask;
+	! 	char cmd[250], dir[100];
+		register char *p;
+	  
+		for (p = dir + 1;; p++) {
+-- 
+
+Kurt Haserodt				..!ihnp4!wucs!kurt
+Box 1045 Washington University		(314)-889-6160
+St. Louis, MO 63130   USA
+
+
+From gang!wuphys!wucs!kurt Wed Jul 11 01:12:55 1984
+Relay-Version: version B 2.10.2 7/1/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 7/1/84; site wucs.UUCP
+Path: plus5!gang!wuphys!wucs!kurt
+From: kurt@wucs.UUCP
+Newsgroups: net.bugs.4bsd,net.bugs.uucp
+Subject: uucico may loop infinitely after an abort
+Message-ID: <283@wucs.UUCP>
+Date: 11 Jul 84 06:12:55 GMT
+Date-Received: 11 Jul 84 09:31:34 GMT
+Distribution: stl
+Organization: Washington U. in St. Louis, CS Dept.
+Lines: 49
+
+Subject: abort causes infinite loop in uucico
+Index:	usr.bin/uucp/cico.c 4.2BSD
+
+Description:
+	When uucico aborts on purpose, because of an unexpected
+	status it loops infinitely.  This may also be caused
+	by a corrupted stack (which is where the problem was
+	first discovered).
+Repeat-By:
+	uucp -d file /usr/spool/uucppublic/receive/sys/dir1/dir2/dir3/file
+		with dir3 nonexistent and fix to long directory name
+		bug not installed--uucico which must create the directory
+		will loop
+Fix:
+	Do not trap illegal instruction signal which is caused by
+	abort.  This may be causing the abort to be called again.
+	Here is the diff:
+
+	*** /tmp/,RCSt1000589	Wed Jul 11 00:54:51 1984
+	--- cico.c	Fri Jul  6 14:44:01 1984
+	***************
+	*** 76,82
+		setgid(getegid());
+		setuid(geteuid());
+	  
+	! 	signal(SIGILL, intrEXIT);
+		signal(SIGTRAP, intrEXIT);
+		signal(SIGIOT, intrEXIT);
+		signal(SIGEMT, intrEXIT);
+
+	--- 76,82 -----
+		setgid(getegid());
+		setuid(geteuid());
+	  
+	! /*	signal(SIGILL, intrEXIT); */
+		signal(SIGTRAP, intrEXIT);
+		signal(SIGIOT, intrEXIT);
+		signal(SIGEMT, intrEXIT);
+
+	IntrEXIT resets the caught signal to the default which should
+	cause the abort to occur, but it does not.  This may be an
+	added effect of the bug which caused the abort to be called
+	in the first place.
+
+-- 
+
+Kurt Haserodt				..!ihnp4!wucs!kurt
+Box 1045 Washington University		(314)-889-6160
+St. Louis, MO 63130   USA
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!ukc!west44!lee Wed Aug  8 15:19:17 1984
+Relay-Version: version B 2.10.2 7/17/84; site plus5.UUCP
+Posting-Version: version B 2.10 5/3/83; site west44.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!ukc!west44!lee
+From: lee@west44.UUCP (Lee McLoughlin)
+Newsgroups: net.bugs.uucp
+Subject: Minor startup bug in uucico
+Message-ID: <287@west44.UUCP>
+Date: 8 Aug 84 20:19:17 GMT
+Date-Received: 5 Aug 84 22:48:08 GMT
+Organization: CS Dept., Westfield College, London
+Lines: 23
+
+If uucico, before finding the protocol to use, has reason to call Turnoff, for
+example if a RMESG, RAMESG or WMESG fails while selecting the protocol, then
+the result will be a messy error since Turnoff is not initialised till a 
+protocol is known.  The simple fix is to make Turnoff refer to a null routine.
+
+About the top of cntrl.c:-
+-----------------------------------------------------------------------
+extern int imsg(), omsg();
+Nooff(){};	/* LMCL: For Turnoff before a protocol is defined */
+
+struct Proto Ptbl[]={
+-----------------------------------------------------------------------
+
+A little further down:-
+-----------------------------------------------------------------------
+int (*Rdmsg)()=imsg, (*Rddata)();
+int (*Wrmsg)()=omsg, (*Wrdata)();
+int (*Turnon)(), (*Turnoff)() = Nooff;	/* LMCL: Default Turnoff routine */
+-----------------------------------------------------------------------
+-- 
+--------------
+Lee McLoughlin	<UK>!ukc!lmcl, west44!lee
+	UKUUCP support.
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!dual!amd!decwrl!decvax!ittvax!dcdwest!sdcsvax!phil Fri Aug  3 08:58:59 1984
+Relay-Version: version B 2.10.2 7/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site sdcsvax.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!dual!amd!decwrl!decvax!ittvax!dcdwest!sdcsvax!phil
+From: phil@sdcsvax.UUCP
+Newsgroups: net.bugs.uucp
+Subject: uucp dies after 20 files
+Message-ID: <1077@sdcsvax.UUCP>
+Date: 3 Aug 84 13:58:59 GMT
+Date-Received: 6 Aug 84 00:17:00 GMT
+Organization: EECS Dept. U.C. San Diego
+Lines: 17
+
+
+Well.... the results are in.
+At least 20 of you suggested that uucp was bombing due 
+to a missing fclose call.   I had guessed the same thing, but
+that was not it.
+
+The actual bug was in anlwrk.c and the fix is illustrated below.
+We are running 4.1 bsd...
+
+
+67c67
+< 	if (listp == NULL || *listp == NULL || listp > (list + LLEN)
+---
+> 	if (listp == NULL || listp >= (list + LLEN) || *listp == NULL
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!dual!amd!decwrl!decvax!mcvax!piet Wed Aug 15 09:58:32 1984
+Relay-Version: version B 2.10.2 8/7/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83 (MC840302); site mcvax.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!dual!amd!decwrl!decvax!mcvax!piet
+From: piet@mcvax.UUCP (Piet Beertema)
+Newsgroups: net.bugs.uucp
+Subject: Re: UUCP times out when sending large files
+Message-ID: <5934@mcvax.UUCP>
+Date: 15 Aug 84 14:58:32 GMT
+Date-Received: 17 Aug 84 20:35:08 GMT
+References: <4589@yale.UUCP>
+Organization: CWI, Amsterdam
+Lines: 15
+
+<...>
+
+Did you mean timing out WHILE transferring a large file or AFTER
+transferring a large file? I can't say anything if the former is
+the case, but if it's the latter:
+If you send a file to a remote site, that file has to be moved to
+some destination directory; if that's on a different filesystem the
+file has to be copied, which for a long file may very well take some
+time. Meanwhile the remote site's uucico HAS TO wait for this copy
+to complete to be able to notify the sender whether the copy succeeded
+or not; and your uucico times out waiting for a reply....
+The easiest way to get around it is to increase the MAXMSGTIME value.
+-- 
+	Piet Beertema, CWI, Amsterdam
+	...{decvax,philabs}!mcvax!piet
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!hplabs!hao!seismo!rick Fri Aug 17 17:27:11 1984
+Relay-Version: version B 2.10.2 8/7/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 8/7/84; site seismo.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!hplabs!hao!seismo!rick
+From: rick@seismo.UUCP (Rick Adams)
+Newsgroups: net.bugs.uucp,net.unix-wizards
+Subject: Losing less mail down the black hole of uucp
+Message-ID: <3166@seismo.UUCP>
+Date: 17 Aug 84 22:27:11 GMT
+Date-Received: 19 Aug 84 19:20:42 GMT
+Distribution: net
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 234
+
+As you probably are aware, much of the uucp mail that fails to
+reach its destination is never seen again. Most of this
+goes to whoever started the uucico on the machine previous to the
+one one which it failed.
+
+For example, if someone at "cvl sent mail to "ut-sally", they would
+use the path "umcp-cs!seismo!ut-sally!whoever". In most cases,
+if whoever did not exist on ut-sally, an error message would
+be returned to "seismo!uucp", which is not exactly what you would
+want to happen.
+
+sendmail partly solves this problem, by returning the failed message
+to the originator of the message instead of who handed it to sendmail.
+
+Honey DanBer attacks this problem at the uux/uuxqt level where it is
+screwing up in the first place. The method is fairly simple. It just
+specifies a return address to be used for error messages.
+
+By a few simple modifications to uux.c, uuxqt.c and whatever program
+your rmail command hands mail to, you can help these poor orphaned
+error messages return to their rightful masters.
+
+
+Basically, when you exec "uux" to run the rmail you give it the
+return address for errors in addition to the destination.
+
+If you were running sendmail, you would change the uux invocation
+in /usr/lib/sendmail.cf from:
+	Muucp, P=/usr/bin/uux, F=sDFMhuU, S=13, R=23, M=100000,
+		A=uux - -r $h!rmail ($u)
+to
+	Muucp, P=/usr/bin/uux, F=sDFMhuU, S=13, R=23, M=100000,
+		A=uux - -r -a$f $h!rmail ($u)
+
+The -a flag to uux says to use this as the return address for errors.
+It causes uux to put an extra line in the X. file that uuxqt
+interprets as a return address. The "$f" is sendmail's idea
+of who originated the mail.
+
+The changes for whatever other mail delivery system would be similar.
+
+This has drastically reduced the amount of mail that seismo!uucp gets
+since we put it in.
+
+So, if you're not running Honey DanBer, you'd do the uucp world a
+big favor by installing the folowing modifications. (Even if
+you don't generate the return address for your outoging traffic,
+at least make the mods to uuxqt so that it uses the
+return address that someone else provided.).
+
+To the file uucp.h, add the following line:
+
+#define X_RETURNTO	'R'
+
+Following is a diff -c of uux.c:
+
+*** uux.c.old	Fri Aug 17 14:36:05 1984
+--- uux.c	Fri Aug 17 14:36:07 1984
+***************
+*** 61,66
+  	char redir = '\0';
+  	int nonoti = 0;
+  	int nonzero = 0;
+  	extern int LocalOnly;
+  
+  	strcpy(Progname, "uux");
+
+--- 61,67 -----
+  	char redir = '\0';
+  	int nonoti = 0;
+  	int nonzero = 0;
++ 	char *ReturnTo = NULL;
+  	extern int LocalOnly;
+  
+  	strcpy(Progname, "uux");
+***************
+*** 99,104
+  		case 'L':
+  			LocalOnly++;
+  			break;
+  		default:
+  			fprintf(stderr, "unknown flag %s\n", argv[1]);
+  				break;
+
+--- 100,108 -----
+  		case 'L':
+  			LocalOnly++;
+  			break;
++ 		case 'a':
++ 			ReturnTo = &argv[1][2];
++ 			break;
+  		default:
+  			fprintf(stderr, "unknown flag %s\n", argv[1]);
+  				break;
+***************
+*** 139,144
+  		fprintf(fprx, "%c\n", X_NONOTI);
+  	if (nonzero)
+  		fprintf(fprx, "%c\n", X_NONZERO);
+  
+  	/* find remote system name */
+  	ap = inargs;
+
+--- 143,151 -----
+  		fprintf(fprx, "%c\n", X_NONOTI);
+  	if (nonzero)
+  		fprintf(fprx, "%c\n", X_NONZERO);
++ 	if (ReturnTo == NULL || *ReturnTo == '\0')
++ 		ReturnTo = User;
++ 	fprintf(fprx, "%c %s\n", X_RETURNTO, ReturnTo);
+  
+  	/* find remote system name */
+  	ap = inargs;
+
+Following is a diff -c of uuxqt.c. The changes aren't really
+as big as they look. Most of then are just changing "notify(user,"
+to "notify(ReturnTo,".
+
+*** uuxqt.c.old	Fri Aug 17 14:33:43 1984
+--- uuxqt.c.	Fri Aug 17 14:33:46 1984
+***************
+*** 35,40
+  int nonzero = 0;
+  
+  char PATH[MAXFULLNAME] = "PATH=/bin:/usr/bin";
+  /*  to remove restrictions from uuxqt
+   *  define ALLOK 1
+   *
+
+--- 35,41 -----
+  int nonzero = 0;
+  
+  char PATH[MAXFULLNAME] = "PATH=/bin:/usr/bin";
++ char ReturnTo[MAXFULLNAME];
+  /*  to remove restrictions from uuxqt
+   *  define ALLOK 1
+   *
+***************
+*** 156,162
+  		while (fgets(buf, BUFSIZ, xfp) != NULL) {
+  			switch (buf[0]) {
+  			case X_USER:
+! 				sscanf(&buf[1], "%s%s", user, Rmtname);
+  				break;
+  			case X_STDIN:
+  				sscanf(&buf[1], "%s", fin);
+
+--- 157,165 -----
+  		while (fgets(buf, BUFSIZ, xfp) != NULL) {
+  			switch (buf[0]) {
+  			case X_USER:
+! 				sscanf(&buf[1], "%s %s", user, Rmtname);
+! 				if (ReturnTo[0] == '\0')
+! 					strcpy(ReturnTo, user);
+  				break;
+  			case X_RETURNTO:
+  				sscanf(&buf[1], "%s", ReturnTo);
+***************
+*** 158,163
+  			case X_USER:
+  				sscanf(&buf[1], "%s%s", user, Rmtname);
+  				break;
+  			case X_STDIN:
+  				sscanf(&buf[1], "%s", fin);
+  				i = expfile(fin);
+
+--- 161,169 -----
+  				if (ReturnTo[0] == '\0')
+  					strcpy(ReturnTo, user);
+  				break;
++ 			case X_RETURNTO:
++ 				sscanf(&buf[1], "%s", ReturnTo);
++ 				break;
+  			case X_STDIN:
+  				sscanf(&buf[1], "%s", fin);
+  				i = expfile(fin);
+***************
+*** 238,244
+  			sprintf(lbuf, "%s XQT DENIED", user);
+  			logent(cmd, lbuf);
+  			DEBUG(4, "bad command %s\n", prm);
+! 			notify(user, Rmtname, cmd, "DENIED");
+  			goto rmfiles;
+  		}
+  		sprintf(lbuf, "%s XQT", user);
+
+--- 244,250 -----
+  			sprintf(lbuf, "%s XQT DENIED", user);
+  			logent(cmd, lbuf);
+  			DEBUG(4, "bad command %s\n", prm);
+! 			notify(ReturnTo, Rmtname, cmd, "DENIED");
+  			goto rmfiles;
+  		}
+  		sprintf(lbuf, "%s XQT", user);
+***************
+*** 259,265
+  		notiflg = chknotify(xcmd);
+  		if (notiok && notiflg != NT_NO &&
+  		   (ret != 0 || (!nonzero && notiflg == NT_YES)))
+! 			notify(user, Rmtname, cmd, retstat);
+  		else if (ret != 0 && strcmp(xcmd, "rmail") == SAME) {
+  			/* mail failed - return letter to sender  */
+  			if (!nonzero)
+
+--- 265,271 -----
+  		notiflg = chknotify(xcmd);
+  		if (notiok && notiflg != NT_NO &&
+  		   (ret != 0 || (!nonzero && notiflg == NT_YES)))
+! 			notify(ReturnTo, Rmtname, cmd, retstat);
+  		else if (ret != 0 && strcmp(xcmd, "rmail") == SAME) {
+  			/* mail failed - return letter to sender  */
+  			if (!nonzero)
+***************
+*** 263,270
+  		else if (ret != 0 && strcmp(xcmd, "rmail") == SAME) {
+  			/* mail failed - return letter to sender  */
+  			if (!nonzero)
+! 				retosndr(user, Rmtname, fin);
+! 			sprintf(buf, "ret (%o) from %s!%s", ret, Rmtname, user);
+  			logent("MAIL FAIL", buf);
+  		}
+  		DEBUG(4, "exit cmd - %d\n", ret);
+
+--- 269,276 -----
+  		else if (ret != 0 && strcmp(xcmd, "rmail") == SAME) {
+  			/* mail failed - return letter to sender  */
+  			if (!nonzero)
+! 				retosndr(ReturnTo, Rmtname, fin);
+! 			sprintf(buf, "ret (%o) from %s!%s", ret, Rmtname, ReturnTo);
+  			logent("MAIL FAIL", buf);
+  		}
+  		DEBUG(4, "exit cmd - %d\n", ret);
+
+---rick
+
+
+From gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!ukc!west44!lee Mon Aug 20 19:10:07 1984
+Relay-Version: version B 2.10.2 8/7/84; site plus5.UUCP
+Posting-Version: version B 2.10 5/3/83; site west44.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!houxm!houxz!vax135!ukc!west44!lee
+From: lee@west44.UUCP (Lee McLoughlin)
+Newsgroups: uk.general,net.bugs.uucp,net.unix-wizards
+Subject: Packet driver bug.
+Message-ID: <302@west44.UUCP>
+Date: 21 Aug 84 00:10:07 GMT
+Date-Received: 21 Aug 84 07:00:54 GMT
+Organization: CS Dept., Westfield College, London
+Lines: 24
+
+The following bug appears to be in all the non-USG versions of the packet driver
+used by uucp (I've used it for other things, am I alone in this?).
+
+I believe the following will prevent those unsightly core dumps from
+occasionally being generated by uucico:
+
+pk1.c:222   Move the line containing "*bp" *AFTER* the test to see if its null.
+--------------------------
+	if (k && pksizes[k] == pk->p_rsize) {
+		pk->p_rpr = h->cntl & MOD8;
+		pksack(pk);
+		Connodata = 0;
+		bp = pk->p_ipool;
+		if (bp == NULL) {
+			PKDEBUG(7, "bp NULL %s\n", "");
+			return;
+		}
+		pk->p_ipool = (char **) *bp; /* LMCL: Now after the null test */
+	}
+-------------------------
+-- 
+--------------
+Lee McLoughlin	<UK>!ukc!lmcl, west44!lee
+	UKUUCP support.
+
+
+From ado@elsie.UUCP (Arthur David Olson) Fri Sep 14 18:04:49 1984
+Relay-Version: version B 2.10.2 9/5/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site elsie.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!hplabs!hao!seismo!umcp-cs!cvl!elsie!ado
+From: ado@elsie.UUCP (Arthur David Olson)
+Newsgroups: net.bugs.uucp
+Subject: uucico misses OO messages (with fix)
+Message-ID: <1216@elsie.UUCP>
+Date: 14 Sep 84 23:04:49 GMT
+Date-Received: 16 Sep 84 11:29:37 GMT
+Organization: NIH-LEC, Bethesda, MD
+Lines: 87
+
+Apologies if this is the fifth time around the net for this.
+And if anyone has wiser words on the subject, let me and others know!
+
+Subject--	imsg.c
+
+Problem--	uucico can miss "OO" messages.
+		Since uucico eventually times out, the only bad thing about this
+		is that a phone line gets tied up until the timeout occurs.
+
+Repeat by--	Pick another system.  Ensure that there's no work in your
+		uucp directory for the other system, and that there's no
+		work in the other system's uucp directory for your system.
+		Use the comand
+			/usr/lib/uucp/uucico -r1 -x9 -sothersys >& /tmp/# &
+		Then look at the file "/tmp/#"
+		If you see something like
+			--*!----*"---"*----"*---OOOOOO-imsg >-
+			exit code 0
+		at the end of the file, it means you've got the problem--
+		there was an "imsg" (Input MeSsaGe) call at the end of the
+		uucico session that never completed.
+		If, on the other hand, the end of the file looks something like
+			OOOOOO-
+			exit code 0
+		you're okay.
+
+		N.B.:  I've seen this problem on our 4.1bsd system when calling
+		4.2bsd systems; it may only occur on this system combination.
+
+Discussion--	The papers "A Dial-Up Network of UNIX (tm) Systems" and
+		"Uucp Implementation Description" both state that:
+			When a HY message is received by the MASTER it is
+			echoed back to the SLAVE and the protocols are turned
+			off.  Each program sends a final "OO" message to the
+			other.
+
+		Alas, after
+			the MASTER sends a H message and
+			the SLAVE sends a HY message and
+			the MASTER receives the HY message and
+			the master echoes back the HY message,
+		the SLAVE does not immediately turn off the protocol but rather
+		first sends out a second HY message.  It's this second HY
+		message that (at least in part) accounts for the characters
+		preceding "OOOOOO" in the line that looks like
+			--*!----*"---"*----"*---OOOOOO-imsg >-
+		in the "uucico" diagnostic output file.  The presence of these
+		characters causes "imsg" to miss the "OO" message.
+
+Fix--		Here are the relevant lines from "imsg.c"--the idea is to
+		always be on the lookout for uucp's "message synchronization"
+		character, "rewinding" the message buffer
+		if it is seen.
+
+		...
+
+		#ifdef OLDVERSION
+		imsg(msg, fn)
+		char *msg;
+		int fn;
+		{
+		#else
+		imsg(amsg, fn)
+		char *	amsg;
+		int	fn;
+		{
+			register char *	msg = amsg;
+		#endif
+		
+		...
+
+		#ifndef OLDVERSION
+				if (*msg == Msync[0]) {
+					msg = amsg;
+					continue;
+				}
+		#endif
+				if (*msg == '\n')
+					break;
+
+		...
+
+--
+UNIX is an AT&T Bell Laboratories trademark.
+--
+	...decvax!seismo!umcp-cs!elsie!ado	(301) 496-5688
+	(DEC, VAX and Elsie are Digital Equipment Corp. and Borden's trademarks)
+
+
+From honey@down.FUN 1 Apr 85 16:26:42 GMT
+Article 269 of net.bugs.uucp:
+Relay-Version: version B 2.10.2 9/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site down.FUN
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!princeton!down!honey
+>From: honey@down.FUN (code 101)
+Newsgroups: net.bugs.uucp
+Subject: Re: Re: uucico hangs in SLAVE mode
+Message-ID: <479@down.FUN>
+Date: 1 Apr 85 16:26:42 GMT
+Date-Received: 2 Apr 85 14:53:17 GMT
+References: <504@ptsfa.UUCP> <104@ccup.UUCP> <163@sesame.UUCP> <194@phri.UUCP>
+Organization: Princeton University, EECS
+Lines: 12
+
+hangup protocol failure is almost always caused by the parity bit.
+replace this
+
+	if (msg[0] == 'O')
+		break;
+
+by this
+
+	if ((msg[0] & 0177) == 'O')
+		break;
+
+-- peter
+
+
+From honey@down.FUN 1 Apr 85 16:37:18 GMT
+Article 270 of net.bugs.uucp:
+Relay-Version: version B 2.10.2 9/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site down.FUN
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!princeton!down!honey
+>From: honey@down.FUN (code 101)
+Newsgroups: net.bugs.uucp
+Subject: Re: Re: uucico hangs in SLAVE mode
+Message-ID: <480@down.FUN>
+Date: 1 Apr 85 16:37:18 GMT
+Date-Received: 2 Apr 85 14:54:03 GMT
+References: <504@ptsfa.UUCP> <104@ccup.UUCP> <163@sesame.UUCP> <194@phri.UUCP> <479@down.FUN>
+Organization: Princeton University, EECS
+Lines: 9
+
+OH GOD OH GOD I MADE A MISTAKE I'M SO HUMILIATED WHAT AN ASSHOLE I AM I
+SAID HACK CICO.C INSTEAD OF IMSG.C I'M SUCH A JERK I'M NOW BEATING (OW!)
+MYSELF WITH A HAMMER YOOW OW ACK AIEE ARGH ARGH ARGH CHOKE CHOKE DIE
+
+	mr. (dead again) (still not human, alive, or a person) rankmeat.
+
+um, put the mask in the read in imsg().
+
+	peter
+
+
+From uucp Wed Apr  3 01:45 EST 1985
+>From cbosgd!ihnp4!mhuxi!princeton!down!honey  Wed Apr  3 01:45:45 1985 remote from ihnp4
+Received: from wucs.UUCP by plus5.uucp with UUCP;
+	id AA03257; 3 Apr 85 01:45:45 EST (Wed)
+Received: by wucs.wu.uucp (4.12/9-Jan-84)
+	id AA00358; Tue, 2 Apr 85 23:22:57 cst
+Message-Id: <8504030522.AA00358@wucs.wu.uucp>
+Received: by ihnp4.ATT.UUCP id AA16469; 2 Apr 85 21:54:32 CST (Tue)
+From: ihnp4!mhuxi!princeton!down!honey
+Received: by ihnp4.ATT.UUCP id AA15398; 2 Apr 85 20:58:45 CST (Tue)
+Date: 2 Apr 1985 21:02-EST
+To: princeton!seismo!wucs!plus5!hokey
+Subject: Re: Re: uucico hangs in SLAVE mode
+Status: R
+
+it should be done on the one byte reads in imsg() wherein command codes
+are read.  and i guess it wouldn't hurt on the SYN byte as well.
+it would be easiest for me to send you code.  but i would never do that!
+
+	peter
+
+#define MSYNC	'\020'
+/* maximum likely message - make sure you don't get run away input */
+#define MAXIMSG	256
+
+/*
+ * read message routine used before a
+ * protocol is agreed upon.
+ *	msg	-> address of input buffer
+ *	fn	-> input file descriptor 
+ * returns:
+ *	EOF	-> no more messages
+ *	0	-> message returned
+ */
+imsg(msg, fn)
+register char *msg;
+register int fn;
+{
+	register char c;
+	short fndsync;
+	char *bmsg;
+
+	fndsync = 0;
+	bmsg = msg;
+	CDEBUG(7, "imsg %s>", "");
+	while (read(fn, msg, sizeof(char)) == sizeof(char)) {
+		*msg &= 0177;
+		c = *msg;
+		CDEBUG(7, "%s", c < 040 ? "^" : "");
+		CDEBUG(7, "%c", c < 040 ? c | 0100 : c);
+		if (c == MSYNC) { /* look for sync character */
+			msg = bmsg;
+			fndsync = 1;
+			continue;
+		}
+		if (!fndsync)
+			continue;
+
+		if (c == '\0' || c == '\n') {
+			*msg = '\0';
+			return(0);
+		}
+		else
+			msg++;
+
+		if (msg - bmsg > MAXIMSG)	/* unlikely */
+			return(FAIL);
+	}
+	/* have not found sync or end of message */
+	*msg = '\0';
+	return(EOF);
+}
+
+
+

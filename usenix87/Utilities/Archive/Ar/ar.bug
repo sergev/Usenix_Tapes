@@ -1,0 +1,356 @@
+From wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!ittatc!dcdwest!sdcsvax!celerity!barto Sat Nov 30 14:32:02 CST 1985
+Article 1028 of net.bugs.4bsd:
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site celerity.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!ittatc!dcdwest!sdcsvax!celerity!barto
+>From: barto@celerity.UUCP (David Barto)
+Newsgroups: net.bugs.4bsd
+Subject: ar fails on long filenames
+Message-ID: <383@celerity.UUCP>
+Date: 26 Nov 85 23:05:45 GMT
+Date-Received: 30 Nov 85 03:13:33 GMT
+Distribution: net
+Organization: Celerity Computing, San Diego, Ca.
+Lines: 339
+
+Subject: ar fails on long filenames
+Index:	bin/ar.c 4.2bsd
+
+Description:
+	When using ar in replace mode, and giving it long
+	filenames, it fails to update the filename, and will
+	merly append the new object to the end of the archive.
+
+	This is useless for libraries.
+
+	This exists in 4.2, 4.3, v7, sysIII, sysV, and
+	any other version of unix.
+
+Repeat-By:
+	ar rv XXX verylongfilenamewithsuffix.o normal.o
+	warning about truncation
+	a - verylongfilenam
+	a - normal.o
+	ar rv XXX verylongfilenamewithsuffix.o normal.o
+	r - normal.o
+	warning about truncation
+	a - verylongfilenam
+Fix:
+	RUN THIS THROUGH PATCH
+
+*** ar.dist.c	Tue Nov 26 14:54:41 1985
+--- ar.c	Tue Nov 26 14:36:57 1985
+***************
+*** 76,82
+  int	qf;
+  int	bastate;
+  char	buf[BUFSIZ];
+- int	ar_truncate;			/* ok to truncate argument filenames */
+  
+  char	*trim();
+  char	*mktemp();
+
+--- 76,81 -----
+  int	qf;
+  int	bastate;
+  char	buf[BUFSIZ];
+  
+  char	*trim();
+  char	*mktemp();
+***************
+*** 149,155
+  		flg['b'-'a']++;
+  	if(flg['a'-'a'] || flg['b'-'a']) {
+  		bastate = 1;
+! 		ponam = trim(argv[2]);
+  		argv++;
+  		argc--;
+  		if(argc < 3)
+
+--- 148,154 -----
+  		flg['b'-'a']++;
+  	if(flg['a'-'a'] || flg['b'-'a']) {
+  		bastate = 1;
+! 		ponam = trim(argv[2], 1);
+  		argv++;
+  		argc--;
+  		if(argc < 3)
+***************
+*** 315,321
+  		if(namc == 0 || match()) {
+  			if(flg['v'-'a'])
+  				longt();
+! 			printf("%s\n", trim(file));
+  		}
+  		copyfil(af, -1, IODD+SKIP);
+  	}
+
+--- 314,320 -----
+  		if(namc == 0 || match()) {
+  			if(flg['v'-'a'])
+  				longt();
+! 			printf("%s\n", trim(file, 0));
+  		}
+  		copyfil(af, -1, IODD+SKIP);
+  	}
+***************
+*** 329,335
+  		fprintf(stderr, "ar: abi not allowed with q\n");
+  		done(1);
+  	}
+- 	ar_truncate++;
+  	getqf();
+  	for(i=0; signum[i]; i++)
+  		signal(signum[i], SIG_IGN);
+
+--- 328,333 -----
+  		fprintf(stderr, "ar: abi not allowed with q\n");
+  		done(1);
+  	}
+  	getqf();
+  	for(i=0; signum[i]; i++)
+  		signal(signum[i], SIG_IGN);
+***************
+*** 457,463
+  {
+  	register i, f;
+  
+- 	ar_truncate++;
+  	for(i=0; i<namc; i++) {
+  		file = namv[i];
+  		if(file == 0)
+
+--- 455,460 -----
+  {
+  	register i, f;
+  
+  	for(i=0; i<namc; i++) {
+  		file = namv[i];
+  		if(file == 0)
+***************
+*** 518,524
+  	char buf[sizeof(arbuf)+1];
+  
+  	sprintf(buf, "%-16s%-12ld%-6u%-6u%-8o%-10ld%-2s",
+! 	   trim(file),
+  	   stbuf.st_mtime,
+  	   stbuf.st_uid,
+  	   stbuf.st_gid,
+
+--- 515,521 -----
+  	char buf[sizeof(arbuf)+1];
+  
+  	sprintf(buf, "%-16s%-12ld%-6u%-6u%-8o%-10ld%-2s",
+! 	   trim(file, 1),
+  	   stbuf.st_mtime,
+  	   (u_short)stbuf.st_uid,
+  	   (u_short)stbuf.st_gid,
+***************
+*** 520,527
+  	sprintf(buf, "%-16s%-12ld%-6u%-6u%-8o%-10ld%-2s",
+  	   trim(file),
+  	   stbuf.st_mtime,
+! 	   stbuf.st_uid,
+! 	   stbuf.st_gid,
+  	   stbuf.st_mode,
+  	   stbuf.st_size,
+  	   ARFMAG);
+
+--- 517,524 -----
+  	sprintf(buf, "%-16s%-12ld%-6u%-6u%-8o%-10ld%-2s",
+  	   trim(file, 1),
+  	   stbuf.st_mtime,
+! 	   (u_short)stbuf.st_uid,
+! 	   (u_short)stbuf.st_gid,
+  	   stbuf.st_mode,
+  	   stbuf.st_size,
+  	   ARFMAG);
+***************
+*** 630,636
+  	for(i=0; i<namc; i++) {
+  		if(namv[i] == 0)
+  			continue;
+! 		if(strcmp(trim(namv[i]), file) == 0) {
+  			file = namv[i];
+  			namv[i] = 0;
+  			return(1);
+
+--- 627,633 -----
+  	for(i=0; i<namc; i++) {
+  		if(namv[i] == 0)
+  			continue;
+! 		if(strcmp(trim(namv[i], 0), file) == 0) {
+  			file = namv[i];
+  			namv[i] = 0;
+  			return(1);
+***************
+*** 680,685
+  			printf("%c - %s\n", c, file);
+  }
+  
+  char *
+  trim(s)
+  char *s;
+
+--- 677,684 -----
+  			printf("%c - %s\n", c, file);
+  }
+  
++ static char p2[BUFSIZ];
++ 
+  char *
+  trim(s, warn)
+  char *s;
+***************
+*** 681,687
+  }
+  
+  char *
+! trim(s)
+  char *s;
+  {
+  	register char *p1, *p2;
+
+--- 680,686 -----
+  static char p2[BUFSIZ];
+  
+  char *
+! trim(s, warn)
+  char *s;
+  {
+  	register char *p1;
+***************
+*** 684,690
+  trim(s)
+  char *s;
+  {
+! 	register char *p1, *p2;
+  
+  	/* Strip trailing slashes */
+  	for(p1 = s; *p1; p1++)
+
+--- 683,689 -----
+  trim(s, warn)
+  char *s;
+  {
+! 	register char *p1;
+  
+  	/* Strip trailing slashes */
+  	for(p1 = s; *p1; p1++)
+***************
+*** 696,702
+  	}
+  
+  	/* Find last component of path; do not zap the path */
+! 	p2 = s;
+  	for(p1 = s; *p1; p1++)
+  		if(*p1 == '/')
+  			p2 = p1+1;
+
+--- 695,701 -----
+  	}
+  
+  	/* Find last component of path; do not zap the path */
+! 	strcpy(p2, s);
+  	for(p1 = s; *p1; p1++)
+  		if(*p1 == '/')
+  			strcpy(p2, p1+1);
+***************
+*** 699,705
+  	p2 = s;
+  	for(p1 = s; *p1; p1++)
+  		if(*p1 == '/')
+! 			p2 = p1+1;
+  
+  	/*
+  	 * Truncate name if too long, only if we are doing an 'add'
+
+--- 698,704 -----
+  	strcpy(p2, s);
+  	for(p1 = s; *p1; p1++)
+  		if(*p1 == '/')
+! 			strcpy(p2, p1+1);
+  
+  	/*
+  	 * Truncate name if too long, only if we are doing an 'add'
+***************
+*** 708,714
+  	 * names.  Need an exit status convention...
+  	 * Need yet another new archive format...
+  	 */
+! 	if (ar_truncate && strlen(p2) > sizeof(arbuf.ar_name) - 1) {
+  		fprintf(stderr, "ar: filename %s truncated to ", p2);
+  		*(p2 + sizeof(arbuf.ar_name) - 1) = '\0';
+  		fprintf(stderr, "%s\n", p2);
+
+--- 707,714 -----
+  	 * names.  Need an exit status convention...
+  	 * Need yet another new archive format...
+  	 */
+! 	if (strlen(p2) > sizeof(arbuf.ar_name) - 1) {
+! 		if (warn)
+  			fprintf(stderr, "ar: filename %s truncated to ", p2);
+  		*(p2 + sizeof(arbuf.ar_name) - 1) = '\0';
+  		if (warn)
+***************
+*** 711,716
+  	if (ar_truncate && strlen(p2) > sizeof(arbuf.ar_name) - 1) {
+  		fprintf(stderr, "ar: filename %s truncated to ", p2);
+  		*(p2 + sizeof(arbuf.ar_name) - 1) = '\0';
+  		fprintf(stderr, "%s\n", p2);
+  	}
+  	return(p2);
+
+--- 711,717 -----
+  		if (warn)
+  			fprintf(stderr, "ar: filename %s truncated to ", p2);
+  		*(p2 + sizeof(arbuf.ar_name) - 1) = '\0';
++ 		if (warn)
+  			fprintf(stderr, "%s\n", p2);
+  	}
+  	return(p2);
+***************
+*** 760,766
+  	register int **mp;
+  
+  	for (mp = &m[0]; mp < &m[9];)
+! 		ar_select(*mp++);
+  }
+  
+  ar_select(pairp)
+
+--- 761,767 -----
+  	register int **mp;
+  
+  	for (mp = &m[0]; mp < &m[9];)
+! 		select(*mp++);
+  }
+  
+  select(pairp)
+***************
+*** 763,769
+  		ar_select(*mp++);
+  }
+  
+! ar_select(pairp)
+  int *pairp;
+  {
+  	register int n, *ap;
+
+--- 764,770 -----
+  		select(*mp++);
+  }
+  
+! select(pairp)
+  int *pairp;
+  {
+  	register int n, *ap;
+-- 
+David Barto, Celerity Computing, San Diego Ca, (619) 271-9940
+decvax-\    bang-\			ARPA: celerity!barto@sdcsvax.ARPA
+ucbvax--\   akgua-\
+ihnp4----\-sdcsvax-\-celerity!barto
+
+	"There are no moral lessons in nature" - Darwin
+
+

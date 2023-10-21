@@ -1,0 +1,101 @@
+# lp interface for HP 2686A Laserjet printer
+# modified for ISN dialout operation
+# assumes font cartridge 92286L Courier P&L
+#
+#	All output is printed after the printer setup strings
+#	are sent, unless the -f option is given, in which case
+#	no printer setup is done.
+#
+#	(not)SCCS @(#)ljet	0.0
+
+. /usr/spool/lp/interface/remote
+x="XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+printer=`basename $0`
+for i in $5
+do
+	case "$i" in
+	[Pp][Oo][Rr][Tt]*)
+		MODE=0
+		;;
+	[Ll][Aa][Nn][Dd]*)
+		MODE=1
+		;;
+	[Cc][Oo][Uu][Rr]*)
+		FONT=0
+		;;
+	[Ll][Pp]|[Ll][Ii][Nn][Ee]*)
+		FONT=2
+		;;
+	f | -f)
+		setup=NO
+		;;
+	r | -r)
+		raw=YES
+		options=-or
+		;;
+	esac
+done
+
+# set VMI values for portrait or landscape,
+# courier (12pt, squashed into 10pt line spacing) or lp (8.5pt) fonts
+# page print area is 10.5in by 8.0in
+
+case ${MODE}${FONT} in
+	00)	VMI=7.6364 ; TXTLGTH=42 ;;
+	02)	VMI=5.7273 ; TXTLGTH=42 ;;
+	10)	VMI=8.00 ; TXTLGTH=32 ;;
+	12)	VMI=5.8182 ; TXTLGTH=32 ;;
+	*)	VMI=7.64 ; TXTLGTH=42 ;;
+esac
+
+LINEWRAP="&s1C" # disables line wraparound ("&s0C" enables)
+TOPMGN="12c1e" # 1/4 inch
+# \033&l12c1E means 12/48 inch per line (VMI), 1 line top margin
+
+
+if [ \( "$6" = "-raw" \) -o \( x$raw = "YES" \) ]
+then
+	options=-or
+fi
+
+(		# everything from here is sent through uux
+
+if [ x$setup = xNO ]
+then
+	echo "\033E\c"
+else
+	echo "\033E\033&l${MODE}o${TOPMGN}${TXTLGTH}F\033${LINEWRAP}\033&l${VMI}C\033&k${FONT}S\c"
+fi
+echo "$x\r\n$x\r\n$x\r\n$x\r\n"
+banner "$2"
+echo "\r\n"
+user=`grep "^$2:" /etc/passwd | line | cut -d: -f5`
+if [ -n "$user" ]
+then
+	echo "User: $user\n"
+else
+	echo "\r\n"
+fi
+echo "Request id: $1    Printer: $printer\n"
+date
+echo "\r\n"
+if [ -n "$3" ]
+then
+	banner $3
+fi
+echo "\014\c"
+copies=$4
+shift; shift; shift; shift; shift
+if [ x$1 = "x-raw" ]
+then
+	shift
+fi
+files="$*"
+for file in $files
+do
+	cat ${file} 2>&1
+	echo "\014\c"	# flushes the last page
+done
+echo "\033E\c"	# flushes output, resets the machine
+) | uux - "$MACHINE!lp $options -n$copies -"
+exit 0

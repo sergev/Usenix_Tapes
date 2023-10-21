@@ -1,0 +1,170 @@
+Article 4694 of net.sources:
+Path: plus5!wucs1!cuae2!gatech!mcnc!seismo!uwvax!astroatc!prairie!dan
+From: dan@prairie.UUCP (Daniel M. Frank)
+Newsgroups: net.sources
+Subject: Changes to arc for 286 System V
+Message-ID: <420@prairie.UUCP>
+Date: 20 Feb 87 13:54:25 GMT
+Reply-To: dan@prairie.UUCP (Daniel M. Frank)
+Distribution: world
+Organization: Prairie Computing, Madison, Wisconsin
+Lines: 156
+
+
+   The following shell archive contains one new file, and some small
+diffs necessary to make the recently posted System V ARC work on 286
+systems.  Unbundle the archive, and apply the diffs with the `patch' 
+program.
+
+-------------------- slice, dice, etc. -----------------------------
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create:
+#	arcetab.c
+#	diffs
+# This archive created: Fri Feb 20 07:47:06 1987
+export PATH; PATH=/bin:/usr/bin:$PATH
+if test -f 'arcetab.c'
+then
+	echo shar: "will not over-write existing file 'arcetab.c'"
+else
+cat << \SHAR_EOF > 'arcetab.c'
+#include	"arc.h"
+
+#define TABSIZE	4096
+
+struct entry                    /* string table entry format */
+{   char used;                         /* true when this entry is in use */
+    unsigned INT next;                 /* ptr to next in collision list */
+    unsigned INT predecessor;          /* code for preceeding string */
+    unsigned char follower;            /* char following string */
+}   string_tab[TABSIZE];               /* the code string table */
+
+SHAR_EOF
+fi
+if test -f 'diffs'
+then
+	echo shar: "will not over-write existing file 'diffs'"
+else
+cat << \SHAR_EOF > 'diffs'
+*** Makefile.00	Fri Feb  6 20:36:52 1987
+--- Makefile	Fri Feb  6 20:37:39 1987
+***************
+*** 3,10
+  #  CFLAGS = -O
+  
+  OBJS = arc.o arcadd.o arccode.o arccvt.o arcdel.o arcdir.o \
+! arcdos.o arcext.o arcio.o arclst.o arclzw.o arcmatch.o arcpack.o \
+! arcsq.o arcsvc.o arctst.o arcunp.o arcusq.o arcmisc.o
+  
+  
+  SRCS = arc.c arcadd.c arccode.c arccvt.c arcdel.c arcdir.c \
+
+--- 3,10 -----
+  #  CFLAGS = -O
+  
+  OBJS = arc.o arcadd.o arccode.o arccvt.o arcdel.o arcdir.o \
+! arcdos.o arcetab.o arcext.o arcio.o arclst.o arclzw.o arcmatch.o \
+! arcpack.o arcsq.o arcsvc.o arctst.o arcunp.o arcusq.o arcmisc.o
+  
+  
+  SRCS = arc.c arcadd.c arccode.c arccvt.c arcdel.c arcdir.c \
+***************
+*** 8,15
+  
+  
+  SRCS = arc.c arcadd.c arccode.c arccvt.c arcdel.c arcdir.c \
+! arcdos.c arcext.c arcio.c arclst.c arclzw.c arcmatch.c arcpack.c \
+! arcs.c arcsq.c arcsvc.c arctst.c arcunp.c arcusq.c arcmisc.c
+  
+  arc:            ${OBJS}
+  	cc  ${CFLAGS} -o arc ${OBJS}
+
+--- 8,15 -----
+  
+  
+  SRCS = arc.c arcadd.c arccode.c arccvt.c arcdel.c arcdir.c \
+! arcdos.c arcetab.c arcext.c arcio.c arclst.c arclzw.c arcmatch.c \
+! arcpack.c arcs.c arcsq.c arcsvc.c arctst.c arcunp.c arcusq.c arcmisc.c
+  
+  arc:            ${OBJS}
+  	cc  ${CFLAGS} -o arc ${OBJS}
+*** arcio.c.00	Fri Feb  6 20:51:18 1987
+--- arcio.c	Fri Feb  6 20:57:36 1987
+***************
+*** 101,108
+           return;                       /* then write no more */
+  
+      fwrite(hdr->name,1,13,f);
+!     fputc(hdr->size&255,f);         fputc((hdr->size>>8)&255,f);
+!     fputc((hdr->size>>16)&255,f);   fputc((hdr->size>>24)&255,f);
+      fputc(hdr->date&255,f);         fputc((hdr->date>>8)&255,f);
+      fputc(hdr->time&255,f);         fputc((hdr->time>>8)&255,f);
+      fputc(hdr->crc&255,f);          fputc((hdr->crc>>8)&255,f);
+
+--- 101,110 -----
+           return;                       /* then write no more */
+  
+      fwrite(hdr->name,1,13,f);
+!     fputc((unsigned char)(hdr->size&255),f);         
+! 	fputc((unsigned char)((hdr->size>>8)&255),f);
+!     fputc((unsigned char)((hdr->size>>16)&255),f);   
+! 	fputc((unsigned char)((hdr->size>>24)&255),f);
+      fputc(hdr->date&255,f);         fputc((hdr->date>>8)&255,f);
+      fputc(hdr->time&255,f);         fputc((hdr->time>>8)&255,f);
+      fputc(hdr->crc&255,f);          fputc((hdr->crc>>8)&255,f);
+***************
+*** 106,113
+      fputc(hdr->date&255,f);         fputc((hdr->date>>8)&255,f);
+      fputc(hdr->time&255,f);         fputc((hdr->time>>8)&255,f);
+      fputc(hdr->crc&255,f);          fputc((hdr->crc>>8)&255,f);
+!     fputc(hdr->length&255,f);       fputc((hdr->length>>8)&255,f);
+!     fputc((hdr->length>>16)&255,f); fputc((hdr->length>>24)&255,f);
+  
+      /* note the newest file for updating the archive timestamp */
+  
+
+--- 108,117 -----
+      fputc(hdr->date&255,f);         fputc((hdr->date>>8)&255,f);
+      fputc(hdr->time&255,f);         fputc((hdr->time>>8)&255,f);
+      fputc(hdr->crc&255,f);          fputc((hdr->crc>>8)&255,f);
+!     fputc((unsigned char)(hdr->length&255),f);       
+! 	fputc((unsigned char)((hdr->length>>8)&255),f);
+!     fputc((unsigned char)((hdr->length>>16)&255),f); 
+! 	fputc((unsigned char)((hdr->length>>24)&255),f);
+  
+      /* note the newest file for updating the archive timestamp */
+  
+*** arclzw.c.00	Fri Feb  6 20:33:17 1987
+--- arclzw.c	Fri Feb  6 20:36:04 1987
+***************
+*** 41,47
+  static unsigned INT inbuf;             /* partial input code storage */
+  static INT sp;                         /* current stack pointer */
+  
+! static struct entry                    /* string table entry format */
+  {   char used;                         /* true when this entry is in use */
+      unsigned INT next;                 /* ptr to next in collision list */
+      unsigned INT predecessor;          /* code for preceeding string */
+
+--- 41,47 -----
+  static unsigned INT inbuf;             /* partial input code storage */
+  static INT sp;                         /* current stack pointer */
+  
+! extern struct entry                    /* string table entry format */
+  {   char used;                         /* true when this entry is in use */
+      unsigned INT next;                 /* ptr to next in collision list */
+      unsigned INT predecessor;          /* code for preceeding string */
+SHAR_EOF
+fi
+exit 0
+#	End of shell archive
+-- 
+      Dan Frank
+	ARPA: dan@db.wisc.edu			ATT: (608) 255-0002 (home)
+	UUCP: ... uwvax!prairie!dan		     (608) 262-4196 (office)
+	SNAILMAIL: 1802 Keyes Ave. Madison, WI 53711-2006
+
+

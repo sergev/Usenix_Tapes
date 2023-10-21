@@ -1,0 +1,1886 @@
+#! /bin/sh
+#
+# If these # comments don't work, trim them.  Don't worry about the other
+# shell scripts, Configure will trim # comments from them for you.
+#
+# $Header: Configure,v 1.12 87/02/02 15:44:21 sob Exp $
+#
+# $Log:	Configure,v $
+# Revision 1.12  87/02/02  15:44:21  sob
+# Added localflags option
+# 
+# Revision 1.11  86/12/15  13:27:39  sob
+# Fixed useknownhosts bug
+# 
+# Revision 1.10  86/11/06  01:58:57  sob
+# Altered DBM to UUDBM to avoid possible conflicts under 4.3 BSD
+# Thanks to page@ulowell for the report
+# 
+# Revision 1.9  86/11/03  22:57:41  sob
+# Spelling fix.
+# Sheesh.
+# 
+# Revision 1.8  86/11/03  22:53:43  sob
+# Fixes provided by lowell!page
+# 
+# Revision 1.5  86/10/21  15:35:10  sob
+# Added RETURN mail definition
+# 
+# Revision 1.4  86/10/21  15:07:07  sob
+# Changes to use the MANIFEST file effectively.
+# 
+# Revision 1.3  86/10/10  18:25:48  sob
+# Modified uuconf.h here
+# 
+# Revision 1.2  86/10/07  15:13:49  sob
+# Modifications for better use on SYSTEM V
+# 
+# Yes, you may rip this off to use in other distribution packages.
+# Thanks, Larry Wall. I did! Stan Barber
+#
+n=''
+c=''
+libc=''
+eunicefix=''
+eunice=''
+sysexits=''
+cpp=''
+useknownhost=''
+knownhost=''
+shsharp=''
+spitshell=''
+startsh=''
+test=''
+expr=''
+sed=''
+echo=''
+cat=''
+rm=''
+mv=''
+cp=''
+tail=''
+log=''
+sorted=''
+tr=''
+mkdir=''
+sort=''
+uniq=''
+grep=''
+egrep=''
+contains=''
+lib=''
+nametype=''
+cc=''
+iandd=''
+ndirlib=''
+libndir=''
+usendir=''
+ndirc=''
+ndiro=''
+debug=''
+resolve=''
+mailer=''
+localmail=''
+localflags=''
+internet=''
+returnmail=''
+bindir=''
+filexp=''
+Log=''
+Header=''
+sitename=''
+orgname=''
+mailadmin=''
+libdbm=''
+mansrc=''
+manext=''
+maildir=''
+spool=''
+active=''
+myactive=''
+mininact=''
+pref=''
+defeditor=''
+rootid=''
+mboxchar=''
+locpref=''
+orgpref=''
+citypref=''
+statepref=''
+cntrypref=''
+contpref=''
+strchr=''
+novoid=''
+novfork=''
+portable=''
+passnam=''
+berknam=''
+usgnam=''
+whoami=''
+termio=''
+fcntl=''
+ioctl=''
+database=''
+logfile=''
+noalias=''
+aliases=''
+havetlib=''
+getpwent=''
+gethostname=''
+douname=''
+phostname=''
+hostcmd=''
+norelay=''
+CONFIG=''
+
+echo "Beginning of configuration questions for uumail kit."
+: Eunice requires " " instead of "", can you believe it
+echo " "
+
+: sanity checks
+PATH='.:/bin:/usr/bin:/usr/local/bin:/usr/ucb:/usr/local:/usr/lbin:/etc'
+export PATH || (echo "OOPS, this isn't sh.  Desperation time.  I will feed myself to sh."; sh $0; kill $$)
+
+if test ! -t 0; then
+    echo "Say 'sh Configure', not 'sh <Configure'"
+    exit 1
+fi
+
+: some greps do not return status, grrr.
+echo "grimblepritz" >grimble
+if grep blurfldyick grimble >/dev/null 2>&1 ; then
+    contains=contains
+else
+    if grep grimblepritz grimble >/dev/null 2>&1 ; then
+	contains=grep
+    else
+	contains=contains
+    fi
+fi
+rm grimble
+: the following should work in any shell
+case $contains in
+contains*)
+    echo " "
+    echo "AGH!  Grep doesn't return a status.  Attempting remedial action."
+    cat >contains <<'EOSS'
+grep "$1" "$2" >.greptmp && cat .greptmp && test -s .greptmp
+EOSS
+chmod 755 contains
+esac
+
+: first determine how to suppress newline on echo command
+echo "Checking echo to see how to suppress newlines..."
+(echo "hi there\c" ; echo " ") >.echotmp
+if $contains c .echotmp >/dev/null 2>&1 ; then
+    echo "...using -n."
+    n='-n'
+    c=''
+else
+    echo "...using \\\c."
+    n=''
+    c='\c'
+fi
+echo $n "Type carriage return to continue.  Your cursor should be here-->$c"
+read ans
+rm .echotmp
+
+: now set up to do reads with possible shell escape
+: if this does not work on your machine, 1,$s/. myread/read ans/
+cat <<EOSC >myread
+ans='!'
+while expr "X\$ans" : "X!" >/dev/null; do
+    read ans
+    case "\$ans" in
+    !)
+	sh
+	echo " "
+	echo $n "Your answer: $c"
+	;;
+    !*)
+	set \`expr "X\$ans" : "X!\(.*\)\$"\`
+	sh -c "\$*"
+	echo " "
+	echo $n "Your answer: $c"
+	;;
+    esac
+done
+EOSC
+: general instructions
+cat <<'EOH'
+ 
+This installation shell script will examine your system and ask you questions
+to determine how uumail and its auxiliary files should be installed.  If you
+get stuck on a question, you may use a ! shell escape to start a subshell or
+execute a command.  Many of the questions will have default answers in
+square brackets--typing carriage return will give you the default.
+
+On some of the questions which ask for file or directory names you are
+allowed to use the ~name construct to specify the login directory belonging
+to "name", even if you don't have a shell which knows about that.  Questions
+where this is allowed will be marked "(~name ok)".
+
+Much effort has been expended to ensure that this shell script will run
+on any Unix system.  If despite that it blows up on you, your best bet is
+to edit Configure and run it again.  (Trying to install uumail without having
+run Configure is well nigh impossible.)  Also, let me (sob@rice.edu) know
+how I blew it.
+
+This installation script affects things in two ways: 1) it does direct
+variable substitutions on some of the files included in this kit, and
+2) it builds a uuconf.h file for inclusion in C programs.  You may edit
+any of these files as the need arises after running this script.
+
+EOH
+echo $n "[Type carriage return to continue] $c"
+. myread
+
+: get old answers, if there is a config file out there
+if test -f config.sh; then
+    echo " "
+    echo "(Fetching default answers from your old config.sh file...)"
+    . config.sh
+fi
+
+: get list of predefined functions in a handy place
+echo " "
+if test -f /lib/libc.a; then
+    echo "Your C library is in /lib/libc.a.  You're normal."
+    libc=/lib/libc.a
+else
+    if test -f /usr/lib/libc.a; then
+	echo "Your C library is in /usr/lib/libc.a, of all places."
+	libc=/usr/lib/libc.a
+    else
+	if test -f "$libc"; then
+	    echo "Your C library is in $libc, like you said before."
+	else
+	    cat <<'EOM'
+ 
+I can't seem to find your C library.  I've looked for /lib/libc.a and
+/usr/lib/libc.a, but neither of those are there.  What is the full name
+EOM
+	    echo $n "of your C library? $c"
+	    . myread
+	    libc="$ans"
+	fi
+    fi
+fi
+echo " "
+echo $n "Extracting names from $libc for later perusal...$c"
+if ar t $libc > libc.list; then
+    echo "done"
+else
+    echo " "
+    echo "The archiver doesn't think $libc is a reasonable library."
+    exit 1
+fi
+
+: make some quick guesses about what we are up against
+echo " "
+echo $n "Hmm...  $c"
+if $contains SIGTSTP /usr/include/signal.h >/dev/null 2>&1 ; then
+    echo "Looks kind of like a BSD system, but we'll see..."
+    echo exit 0 >bsd
+    echo exit 1 >usg
+    echo exit 1 >v7
+else
+    if $contains fcntl.o libc.list >/dev/null 2>&1 ; then
+	echo "Looks kind of like a USG system, but we'll see..."
+	echo exit 1 >bsd
+	echo exit 0 >usg
+	echo exit 1 >v7
+    else
+	echo "Looks kind of like a version 7 system, but we'll see..."
+	echo exit 1 >bsd
+	echo exit 1 >usg
+	echo exit 0 >v7
+    fi
+fi
+if $contains vmssystem.o libc.list >/dev/null 2>&1 ; then
+    cat <<'EOI'
+There is, however, a strange, musty smell in the air that reminds me of
+something...hmm...yes...I've got it...there's a VMS nearby, or I'm a Blit.
+EOI
+    echo "exit 0" >eunice
+    eunicefix=unixtovms
+    eunice=define
+: it so happens the Eunice I know will not run shell scripts in Unix format
+else
+    echo " "
+    echo "Congratulations.  You aren't running Eunice."
+    eunicefix=':'
+    eunice=undef
+    echo "exit 1" >eunice
+fi
+chmod 755 bsd usg v7 eunice
+$eunicefix bsd usg v7 eunice
+
+: see how we invoke the C preprocessor
+echo " "
+echo "Checking to see how your C preprocessor is invoked..."
+cat <<'EOT' >testcpp.c
+#define ABC abc
+#define XYZ xyz
+ABC+XYZ
+EOT
+echo 'Maybe "cc -E" will work...'
+cc -E testcpp.c >testcpp.out 2>&1
+if $contains 'abc+xyz' testcpp.out >/dev/null 2>&1 ; then
+    echo "Yup, it does."
+    cpp='cc -E'
+else
+    echo 'Nope...maybe "cc -P" will work...'
+    cc -P testcpp.c >testcpp.out 2>&1
+    if $contains 'abc+xyz' testcpp.out >/dev/null 2>&1 ; then
+	echo "Yup, that does."
+	cpp='cc -P'
+    else
+	echo 'Nixed again...maybe "/lib/cpp" will work...'
+	/lib/cpp testcpp.c >testcpp.out 2>&1
+	if $contains 'abc+xyz' testcpp.out >/dev/null 2>&1 ; then
+	    echo "Hooray, it works!  I was beginning to wonder."
+	    cpp='/lib/cpp'
+	else
+	    echo 'Hmm...maybe you already told me...'
+	    case "$cpp" in
+	    '') ;;
+	    *) $cpp testcpp.c >testcpp.out 2>&1;;
+	    esac
+	    if $contains 'abc+xyz' testcpp.out >/dev/null 2>&1 ; then
+		echo "Hooray, you did!  I was beginning to wonder."
+	    else
+		echo "Nope. I can't find a C preprocessor.  Name one: $c"
+		. myread
+		cpp="$ans"
+		$cpp testcpp.c >testcpp.out 2>&1
+		if $contains 'abc+xyz' testcpp.out >/dev/null 2>&1 ; then
+		    echo "OK, that will do."
+		else
+		    echo "Sorry, I can't get that to work.  Go find one."
+		    exit 1
+		fi
+	    fi
+	fi
+    fi
+fi
+rm -f testcpp.c testcpp.out
+
+: check for pdp11
+echo " "
+if usg; then
+    : pdp11 is already defined
+else
+    cat <<'EOT' >pdp11.c
+#ifdef pdp11
+exit 0
+#else
+exit 1
+#endif
+EOT
+    $cpp pdp11.c | grep exit >pdp11
+    chmod 755 pdp11
+    $eunicefix pdp11
+    rm pdp11.c
+fi
+if pdp11; then
+    echo "This looks like a pdp11 to me."
+else
+    echo "This doesn't look like a pdp11 to me."
+fi
+
+: see if sh knows # comments
+echo " "
+echo "Checking your sh to see if it knows about # comments..."
+if sh -c '#' >/dev/null 2>&1 ; then
+    echo "Your sh handles # comments correctly."
+    shsharp=true
+    spitshell=cat
+    echo " "
+    echo "Okay, let's see if #! works on this system..."
+    echo "#!/bin/echo hi" > try
+    $eunicefix try
+    chmod 755 try
+    try > today
+    if test -s today; then
+	echo "It does."
+	sharpbang='#!'
+    else
+	echo "#! /bin/echo hi" > try
+	$eunicefix try
+	chmod 755 try
+	try > today
+	if test -s today; then
+	    echo "It does."
+	    sharpbang='#! '
+	else
+	    echo "It doesn't."
+	    sharpbang=': use '
+	fi
+    fi
+else
+    echo "Your sh doesn't grok # comments--I will strip them later on."
+    shsharp=false
+    echo "exec grep -v '^#'" >spitshell
+    chmod 755 spitshell
+    $eunicefix spitshell
+    spitshell=`pwd`/spitshell
+    echo "I presume that if # doesn't work, #! won't work either!"
+    sharpbang=': use '
+fi
+
+: figure out how to guarantee sh startup
+echo " "
+echo "Checking out how to guarantee sh startup..."
+startsh=$sharpbang'/bin/sh'
+echo "Let's see if '$startsh' works..."
+cat >try <<EOSS
+$startsh
+set abc
+test "$?abc" != 1
+EOSS
+
+chmod 755 try
+$eunicefix try
+if try; then
+    echo "Yup, it does."
+else
+    echo "Nope.  You may have to fix up the shell scripts to make sure sh runs them."
+fi
+rm -f try today
+
+: find out where common programs are
+echo " "
+echo "Locating common programs..."
+pth="/usr/ucb /bin /usr/bin /usr/local /usr/local/bin /usr/lbin /etc /usr/lib"
+cat <<EOSC >loc
+$startsh
+thing=\$1
+shift
+dflt=\$1
+shift
+for dir in \$*; do
+    case "\$thing" in
+    .)
+	if test -d \$dir/\$thing; then
+	    echo \$dir
+	    exit 0
+	fi
+	;;
+    *)
+	if test -f \$dir/\$thing; then
+	    echo \$dir/\$thing
+	    exit 0
+	fi
+	;;
+    esac
+done
+echo \$dflt
+exit 1
+EOSC
+chmod 755 loc
+$eunicefix loc
+loclist="expr sed echo cat rm mv cp tail tr mkdir sort uniq grep"
+trylist="test egrep"
+for file in $loclist; do
+    xxx=`loc $file $file $pth`
+    eval $file=$xxx
+    case "$xxx" in
+    /*)
+	echo $file is in $xxx.
+	;;
+    *)
+	echo "I don't know where $file is.  I hope it's in everyone's PATH."
+	;;
+    esac
+done
+echo " "
+echo "Don't worry if any of the following aren't found..."
+for file in $trylist; do
+    xxx=`loc $file $file $pth`
+    eval $file=$xxx
+    case "$xxx" in
+    /*)
+	echo $file is in $xxx.
+	;;
+    *)
+	echo "I don't see $file out there, offhand."
+	;;
+    esac
+done
+case $egrep in
+egrep)
+    echo "Substituting grep for egrep."
+    egrep=$grep
+    ;;
+esac
+case $test in
+test)
+    echo "Hopefully test is built into your sh."
+    ;;
+/bin/test)
+    echo " "
+    echo $n 'Is your "test" built into sh? [n] (OK to guess) '"$c"
+    . myread
+    case $ans in
+    y*) test=test ;;
+    esac
+    ;;
+*)
+    test=test
+    ;;
+esac
+case $echo in
+echo)
+    echo "Hopefully echo is built into your sh."
+    ;;
+/bin/echo)
+    echo " "
+    echo "Checking compatibility between /bin/echo and builtin echo (if any)..."
+    $echo $n "hi there$c" >foo1
+    echo $n "hi there$c" >foo2
+    if cmp foo1 foo2 >/dev/null 2>&1; then
+	echo "They are compatible.  In fact, they may be identical."
+    else
+	echo "They are not compatible--the echo builtin will be used."
+	echo=echo
+    fi
+    $rm -f foo1 foo2
+    ;;
+*)
+    echo=echo
+    ;;
+esac
+
+: decide how portable to be
+case "$portable" in
+define) dflt=y;;
+*)	dflt=n;;
+esac
+$cat <<'EOH'
+ 
+I can set things up so that your shell scripts and binaries are more portable,
+at what may be a noticable cost in performance.  In particular, if you
+ask to be portable, the following happens:
+
+     1) ~username interpretations will be done at run time rather than
+	by Configure.
+     2) the system name will be determined at run time, if at all possible.
+
+EOH
+$echo $n "Do you expect to run these scripts and binaries on multiple machines? [$dflt] $c"
+. myread
+case $ans in
+'') ans=$dflt;;
+esac
+case $ans in
+    y*) portable=define
+	for file in $loclist; do
+	    eval $file=$file
+	done
+	;;
+    *)  portable=undef ;;
+esac
+
+: set up shell script to do ~ expansion
+cat >filexp <<EOSS
+$startsh
+: expand filename
+case \$1 in
+~/*|~)
+    $echo \$1 | $sed "s|~|\${HOME-\$LOGDIR}|"
+    ;;
+~*)
+    if $test -f /bin/csh; then
+	/bin/csh -f -c "glob \$1"
+	$echo ""
+    else
+	name=\`$expr x\$1 : '..\([^/]*\)'\`
+	dir=\`$sed </etc/passwd -n -e "/^\${name}:/{s/^[^:]*:[^:]*:[^:]*:[^:]*:[^:]*:\([^:]*\).*"'\$'"/\1/" -e p -e q -e '}'\`
+	if $test ! -d "\$dir"; then
+	    me=\`basename \$0\`
+	    $echo "\$me: can't locate home directory for: \$name" >&2
+	    exit 1
+	fi
+	case \$1 in
+	*/*)
+	    $echo \$dir/\`$expr x\$1 : '..[^/]*/\(.*\)'\`
+	    ;;
+	*)
+	    $echo \$dir
+	    ;;
+	esac
+    fi
+    ;;
+*)
+    $echo \$1
+    ;;
+esac
+EOSS
+chmod 755 filexp
+$eunicefix filexp
+
+: now get the site name
+$echo " "
+$echo "Figuring out site name..."
+$echo 'Maybe "hostname" will work...'
+if ans=`sh -c hostname 2>&1` ; then
+    sitename=$ans
+    hostcmd=hostname
+else
+    $echo 'No, maybe "uuname -l" will work...'
+    if ans=`sh -c 'uuname -l' 2>&1` ; then
+	sitename=$ans
+	hostcmd='uuname -l'
+    else
+	$echo 'Strange.  Maybe "uname -n" will work...'
+	if ans=`sh -c 'uname -n' 2>&1` ; then
+	    sitename=$ans
+	    hostcmd='uname -n'
+	else
+	    $echo 'Oh well, maybe I can mine it out of whoami.h...'
+	    if ans=`sh -c $contains' sysname /usr/include/whoami.h' 2>&1` ; then
+		sitename=`$echo "$ans" | $sed 's/^.*"\(.*\)"/\1/'`
+		hostcmd="sed -n -e '"'/sysname/s/^.*\"\\(.*\\)\"/\1/{'"' -e p -e q -e '}' </usr/include/whoami.h"
+	    else
+		case "$sitename" in
+		'') $echo "Does this machine have an identity crisis or something?"
+		    hostcmd=''
+		    ;;
+		*)  $echo "Well, you said $sitename before...";;
+		esac
+	    fi
+	fi
+    fi
+fi
+: you do not want to know about this
+set $sitename
+sitename=$1
+
+: translate upper to lower if necessary
+case $sitename in
+    *[A-Z]*)
+	sitename=`$echo $sitename | tr '[A-Z]' '[a-z]'`
+	$echo "(Normalizing case in your site name)"
+	;;
+esac
+
+: verify guess
+if $test "$sitename" ; then
+    $echo 'Your site name appears to be "'$sitename'".'
+    $echo $n "Is this correct? [y] $c"
+    . myread
+    case $ans in
+      y*|'')  ;;
+      *)      sitename='' ;;
+    esac
+fi
+
+: bad guess or no guess
+while $test "X$sitename" = X ; do
+    $echo $n "Please type the (one word) name of your site: $c"
+    . myread
+    sitename="$ans"
+    case $hostcmd in
+    sed*)
+	$echo "(That doesn't agree with your whoami.h file, by the way.)"
+	;;
+    *)
+	$echo "(That doesn't agree with your $hostcmd command, by the way.)"
+	;;
+    esac
+    hostcmd=''
+done
+: figure out knownhost
+case "$knownhost" in
+'')
+    dflt=none
+    ;;
+*)  dflt=$knownhost ;;
+esac
+
+knownhost=''
+
+: get uucp neighbors
+$echo " "
+$echo $n "Getting a list of uucp neighbors... $c"
+if uuname >uucp.local; then
+	$echo "done"
+else
+	$echo " "
+	$echo "I cannot seem to find a list of your uucp neighbors!"
+	exit 1
+fi
+
+testd=''
+useknownhost=''
+while $test "X$useknownhost" = X; do
+cat <<'EOUUCP'
+There may be some mail that your site cannot route. Uumail will send
+the mail to a neighbor for routing. Please enter the name of a 
+EOUUCP
+$echo $n "uucp neighbor to which unresolved mail may be routed: [$dflt] $c"
+. myread
+case "$ans" in
+'') ans=$dflt;;
+esac
+if $test "$ans" = 'none'; then
+    $echo "OK, you'll have to manually handle unknown routes yourself."
+    useknownhost=undef
+    knownhost=''
+else
+    if $contains "$ans" uucp.local >/dev/null 2>&1; then
+	$echo "OK, $ans will be used when $sitename cannot find a route"
+	useknownhost=define
+	knownhost="$ans"
+    else
+	$echo "$ans does not appear to be a uucp neighbor... try again"
+    fi
+fi
+done
+
+: figure out uucp library location
+case "$lib" in
+'')
+    dflt=/usr/lib/uucp
+    ;;
+*)  dflt=$lib ;;
+esac
+libexp=$lib
+libexp='blurfl/dyick'
+while $test ! -d "$libexp"; do
+    $echo " "
+    case "$libexp" in
+    blurfl*) ;;
+    *) $echo "Directory $libexp not found";;
+    esac
+    $echo $n "Where is your uucp library (~name okay)? [$dflt] $c"
+    . myread
+    case "$ans" in
+    '') ans="$dflt";;
+    esac
+    lib="$ans"
+    case $database in
+    ~*)
+	libexp=`filexp $lib`
+	$echo "(That is $libexp on this particular system.)"
+	case $portable in
+	  undef) lib=$libexp ;;
+	esac
+	;;
+    *)
+	libexp=$lib
+	;;
+    esac
+done
+: are we going to keep a log
+case "$log" in
+define) dflt=y;;
+*)	dflt=n;;
+esac
+
+$echo $n "Do you want to maintain a log of uumail transactions? [$dflt] $c"
+. myread
+case "$ans" in
+	'') ans=$dflt;;
+esac
+case $ans in
+	y*)log=define;;
+	*)log=undef;;
+esac
+
+if $test "X$log" = Xdefine ; then
+: figure out logfile location
+case "$logfile" in
+'')
+    dflt=/usr/adm/uumail.log
+    ;;
+*)  dflt=$logfile ;;
+esac
+libexp=$logfile
+libexp='blurfl/dyick'
+while $test ! -f "$libexp"; do
+    $echo " "
+    case "$libexp" in
+    blurfl*) ;;
+    *) $echo "File $libexp not found";;
+    esac
+    $echo $n "Where is your uumail log file (~name okay)? [$dflt] $c"
+    . myread
+    case "$ans" in
+    '') ans="$dflt";;
+    esac
+    logfile="$ans"
+    case $logfile in
+    ~*)
+	libexp=`filexp $logfile`
+	$echo "(That is $libexp on this particular system.)"
+	case $portable in
+	  undef) logfile=$libexp ;;
+	esac
+	;;
+    *)
+	libexp=$logfile
+	;;
+    esac
+done
+fi
+$echo "Determining the format of the routing database..."
+$echo $n "Looking for dbm library... $c"
+: see if there are database libraries
+if $test -r /usr/lib/libdbm.a || $test -r /usr/local/lib/libdbm.a ; then
+    $echo "found."
+    if $test -r /usr/lib/libdbm.a; then
+	libdbm='-ldbm'
+    else
+	libdbm="/usr/local/lib/libdbm.a"
+    fi
+    usedbm=define
+else
+    $echo " "
+    libdbm=''
+    usedbm=undef
+    if $contains dbminit.o libc.list >/dev/null 2>&1 ; then
+	$echo "No dbm library found, but you have dbminit() so we'll use that."
+	usedbm=define
+    else
+	$echo "No dbm library found -- assuming database in text format"
+	usedbm=undef
+    fi
+fi
+
+: figure out database location
+case "$database" in
+'')
+    dflt=$lib/paths
+    ;;
+*)  dflt=$database ;;
+esac
+if $test "X$usedbm" = Xdefine ;then
+	database="$database.pag"
+fi
+
+libexp='blurfl/dyick'
+while $test ! -f "$libexp"; do
+    $echo " "
+    case "$libexp" in
+    blurfl*) ;;
+    *) $echo "File $libexp not found";;
+    esac
+    $echo $n "Where is your uucp map database (~name okay)? [$dflt] $c"
+    . myread
+    case "$ans" in
+    '') ans="$dflt";;
+    esac
+    database="$ans"
+    case $database in
+    ~*)
+	libexp=`filexp $database`
+	$echo "(That is $libexp on this particular system.)"
+	case $portable in
+	  undef) database=$libexp ;;
+	esac
+	;;
+    *)
+	libexp=$database
+	;;
+    esac
+done
+
+testd=`$echo "$database" | $sed 's/.pag\$//'`
+
+: we assume the pathalias database is there already
+if $test ! -f "$testd.pag" ; then
+	libdbm=''
+	usedbm=undef
+	$echo "Database $database not in dbm format."
+	: is the database sorted?
+	case "$sorted" in
+	define) dflt=y;;
+	*)	dflt=n;;
+	esac
+
+	$echo $n "Is database $database sorted? [$dflt] $c"
+	. myread
+	case "$ans" in
+		'') ans=$dflt;;
+	esac
+	case "$ans" in
+		y*)sorted=define;;
+		*)sorted=undef;;
+	esac
+else
+	database="$testd"
+fi
+
+: ensure 'sorted' has a value
+case "$sorted" in
+	'') sorted=undef
+esac
+
+: are we going to use aliasing and forwarding
+case "$noalias" in
+define) dflt=n;;
+*)	dflt=y;;
+esac
+
+$echo $n "Do you want to use uumail to alias and forward mail? [$dflt] $c"
+. myread
+case "$ans" in
+	'') ans=$dflt;;
+esac
+case $ans in
+	n*)noalias=define;;
+	*)noalias=undef;;
+esac
+if $test "X$noalias" = Xundef ; then
+: figure out aliases location
+case "$aliases" in
+'')
+    dflt=$lib/Aliases
+    ;;
+*)  dflt=$aliases
+    ;;
+esac
+: libexp=$aliases
+libexp='blurfl/dyick'
+while $test ! -f "$libexp"; do
+    $echo " "
+    case "$libexp" in
+    blurfl*) ;;
+    *) $echo "File $libexp not found";;
+    esac
+    $echo $n "Where is your aliases file (~name okay)? [$dflt] $c"
+    . myread
+    case "$ans" in
+    '') ans="$dflt";;
+    esac
+    aliases="$ans"
+    case $aliases in
+    ~*)
+	libexp=`filexp $aliases`
+	$echo "(That is $libexp on this particular system.)"
+	case $portable in
+	  undef) aliases=$libexp ;;
+	esac
+	;;
+    *)
+	libexp=$aliases
+	;;
+    esac
+done
+fi
+: Shall we compile in the debugging information
+case "$debug" in
+	define) dflt=y;;
+	*)	dflt=n;;
+esac
+
+$echo $n "Want the debugging information compiled in? [$dflt] $c"
+. myread
+case "$ans" in
+	'') ans=$dflt;;
+esac
+case $ans in
+	y*)debug=define;;
+	*)debug=undef;;
+esac
+
+: figure out local delivery program
+case "$localmail" in
+'')
+    dflt=/bin/mail
+    ;;
+*)  dflt="$localmail"
+    ;;
+esac
+: libexp="$localmail"
+libexp='blurfl/dyick'
+while $test ! -f "$libexp"; do
+    $echo " "
+    case "$libexp" in
+    blurfl*) ;;
+    *) $echo "File $libexp not found";;
+    esac
+    $echo $n "What is the name of the local mail delivery program (~name okay)? [$dflt] $c"
+    . myread
+    case "$ans" in
+    '') ans="$dflt";;
+    esac
+    localmail="$ans"
+    case $localmail in
+    ~*)
+	libexp=`filexp $localmail`
+	$echo "(That is $libexp on this particular system.)"
+	case $portable in
+	  undef) localmail="$libexp" ;;
+	esac
+	;;
+    *)
+	libexp="$localmail"
+	;;
+    esac
+done
+
+: Do we need any special flags when calling the localmailer
+case "$localflags" in
+	'') dflt=none;;
+	*) dflt=$localflags;;
+esac
+
+$echo $n "Please enter any special flags needed when calling $localmail: [$dflt] $c"
+. myread
+case "$ans" in
+	'') ans='';;
+esac
+case $ans in
+	-*)localflags=$ans;;
+	*)localflags='';;
+esac
+
+
+
+
+: determine where manual pages go
+case "$mansrc" in
+'')
+    dflt=`loc . /usr/man/man1 /usr/man/mann /usr/man/local/man1 /usr/man/u_man/man1 /usr/man/man1`
+    ;;
+*)  dflt="$mansrc"
+    ;;
+esac
+mansrc='blurfl/dyick'
+while $test ! -d "$mansrc" ; do
+    case $mansrc in
+      blurfl*) ;;
+      *) $echo "$mansrc does not appear to exist." ;;
+    esac
+    $echo " "
+    $echo $n "Where do the manual pages (source) go? [$dflt] $c"
+    . myread
+    mansrc=`filexp "$ans"`
+    case $mansrc in
+      '') mansrc=$dflt ;;
+    esac
+done
+case "$mansrc" in
+*l)
+    manext=l
+    ;;
+*n)
+    manext=n
+    ;;
+*)
+    manext=1
+    ;;
+esac
+
+: determine where mail is spooled
+case "$maildir" in
+'')
+    dflt=`loc . /usr/spool/mail /usr/spool/mail /usr/mail`
+    ;;
+*)  dflt="$maildir"
+    ;;
+esac
+maildir='blurfl/dyick'
+while $test ! -d "$maildir" ; do
+    case $maildir in
+      blurfl*) ;;
+      *) $echo "$maildir does not appear to exist." ;;
+    esac
+    $echo " "
+    $echo $n "Where is yet-to-be-read mail spooled? [$dflt] $c"
+    . myread
+    maildir=`filexp "$ans"`
+    case $maildir in
+      '') maildir=$dflt ;;
+    esac
+done
+
+: find out how to find out full name
+$echo " "
+case "$berkname" in
+define)
+    dflt=y;;
+undef)
+    dflt=n;;
+*)
+    if bsd; then
+	dflt=y
+    else
+	dflt=n
+    fi
+    ;;
+esac
+$echo "Does your /etc/passwd file keep full names in Berkeley/V7 format (name first"
+$echo $n "thing after ':' in GCOS field)? [$dflt] $c"
+. myread
+case $ans in
+  '') ans=$dflt ;;
+esac
+case $ans in
+  y*)
+    passnam=define
+    berknam=define
+    usgnam=undef
+    nametype=bsd
+    ;;
+  *)
+    $echo " "
+    case "$usgname" in
+    define)
+	dflt=y;;
+    undef)
+	dflt=n;;
+    *)
+	if usg; then
+	    dflt=y
+	else
+	    dflt=n
+	fi
+	;;
+    esac
+    $echo "Does your passwd file keep full names in USG format (name sandwiched"
+    $echo $n "between a '-' and a '(')? [$dflt] $c"
+    . myread
+    case $ans in
+      '') ans=$dflt ;;
+    esac
+    case $ans in
+      n*)
+	$echo "Full name will be taken from ~/.fullname"
+	passnam=undef
+	berknam=undef
+	usgnam=undef
+	nametype=other
+	;;
+      *)
+	passnam=define
+	berknam=undef
+	usgnam=define
+	nametype=usg
+	;;
+    esac
+    ;;
+esac
+
+: figure out mailer daemons name
+case "$mailadmin" in
+'')
+    dflt=MAILER-DAEMON
+    ;;
+*)  dflt="$mailadmin"
+	;;
+esac
+$echo $n "What is the name of the mail subsystem? [$dflt] $c"
+. myread
+case "$ans" in
+    '') ans="$dflt"
+	;;
+esac
+mailadmin="$ans"
+
+
+: see if we need a special compiler
+$echo " "
+if usg; then
+    case "$cc" in
+    '')
+	case "$Mcc" in
+	/*) dflt='Mcc'
+	    ;;
+	*)
+	    if $contains '\-M' $mansrc/cc.1 >/dev/null 2>&1 ; then
+		dflt='cc -M'
+	    else
+		dflt='cc'
+	    fi
+	    ;;
+	esac
+	;;
+    *)  dflt="$cc";;
+    esac
+    $cat <<'EOM'
+ 
+On some systems the default C compiler will not resolve multiple global
+references that happen to have the same name.  On some such systems the
+"Mcc" command may be used to force these to be resolved.  On other systems
+a "cc -M" command is required.  What command will force resolution on
+EOM
+    $echo $n "this system? [$dflt] $c"
+    . myread
+    cc="$ans"
+    case "$cc" in
+	'') cc="$dflt" ;;
+    esac
+else
+    $echo "Not a USG system--assuming cc can resolve multiple definitions."
+    cc=cc
+fi
+
+: see if we should throw a -i into the Makefile
+$echo " "
+if pdp11; then
+    if $contains '\-i' $mansrc/cc.1 >/dev/null 2>&1 ; then
+	$echo $n "Your system appears to have separate I and D space.  Is this true? [y] $c"
+	. myread
+	case $ans in
+	    n*|f*) iandd='' ;;
+	    *)     iandd='-i' ;;
+	esac
+    else
+	$echo "Your system appears to NOT have separate I and D space."
+	$echo $n "Is this correct? [y] $c"
+	. myread
+	case $ans in
+	    n*|f*) iandd='-i' ;;
+	    *)     iandd='' ;;
+	esac
+    fi
+else
+    $echo "Not a pdp11--assuming no separate I and D."
+fi
+
+: index or strcpy
+$echo " "
+if $contains index.o libc.list >/dev/null 2>&1 ; then
+    $echo "Your system appears to use index() and rindex() rather than strchr()"
+    $echo $n "and strrchr().  Is this correct? [y] $c"
+    . myread
+    case $ans in
+	n*|f*) strchr='define' ;;
+	*)     strchr='undef' ;;
+    esac
+else
+    $echo "Your system appears to use strchr() and strrchr() rather than index()"
+    $echo $n "and rindex().  Is this correct? [y] $c"
+    . myread
+    case $ans in
+	n*|f*) strchr=undef ;;
+	*)     strchr=define ;;
+    esac
+fi
+
+: see if there is a whoami file
+if $test -r /usr/include/whoami.h ; then
+    whoami=define
+    $echo "whoami.h found."
+else
+    whoami=undef
+fi
+
+: see if this is a termio system
+if $test -r /usr/include/fcntl.h ; then
+    fcntl=define
+    $echo "fcntl.h found."
+else
+    fcntl=undef
+    $echo "No fcntl.h found, but that's ok."
+fi
+
+: see if ioctl defs are in sgtty/termio or sys/ioctl
+if $test -r /usr/include/sys/ioctl.h ; then
+    ioctl=define
+    $echo "sys/ioctl.h found."
+else
+    ioctl=undef
+    $echo "sys/ioctl.h not found, assuming ioctl args are defined in sgtty.h."
+fi
+
+: see if sysexits.h is out there
+if $test -r /usr/include/sysexits.h; then
+    sysexits=define
+    $echo "sysexits.h found."
+else
+    sysexits=undef
+    $echo "sysexits not found, added needed flags to uuconf.h"
+fi
+
+: see if there is a vfork
+if $contains vfork.o libc.list >/dev/null 2>&1 ; then
+    $echo "vfork() found."
+    novfork='undef'
+else
+    $echo "No vfork() found--will use fork() instead."
+    novfork='define'
+fi
+
+: see if there is a getpw
+if $contains getpw.o libc.list >/dev/null 2>&1 ; then
+    $echo "getpw() found."
+    getpwent='undef'
+else
+    $echo "No getpw() found--will use getpwent() instead."
+    getpwent='define'
+fi
+
+: see how we will look up site name
+douname=undef
+gethostname=undef
+phostname=undef
+if $contains gethostname.o libc.list >/dev/null 2>&1 ; then
+    $echo "gethostname() found."
+    gethostname=define
+else
+    if $contains uname.o libc.list >/dev/null 2>&1 ; then
+	$echo "uname() found."
+	douname=define
+    else
+	case $hostcmd in
+	  '') ;;
+	  *)
+	    $cat <<EOT
+ 
+There is no gethostname() or uname() on this system.  You have two
+possibilites at this point:
+
+1)  You can have your site name ($sitename) compiled into uumail, which lets rn
+    start up faster, but makes your binaries non-portable, or
+2)  you can have uumail use a
+	
+	popen("$hostcmd","r")
+
+    which will start slower but be more portable.
+
+Option 1 will use whoami.h if you have one.  If you want option 2 but with
+a different command, you can edit uuconf.h after this shell script is done.
+
+EOT
+	    case "$phostname" in
+	    define) dflt=n;;
+	    undef)  dflt=y;;
+	    '')
+		case $portable in
+		define) dflt=n ;;
+		*)      dflt=y ;;
+		esac
+		;;
+	    esac
+	    $echo $n "Do you want your site name compiled in? [$dflt] $c"
+	    . myread
+	    case $ans in
+	    '') ans=$dflt;;
+	    esac
+	    case $ans in
+	      n*) phostname=define ;;
+	      *)  hostcmd='' phostname=undef;;
+	    esac
+	    ;;
+	esac
+	case $hostcmd in
+	  '')
+	    case $whoami in
+	      define)
+		$echo 'No hostname function--using whoami.h.'
+		;;
+	      undef)
+		$echo 'No hostname function--hardwiring "'$sitename'".'
+		;;
+	    esac
+	    ;;
+	esac
+    fi
+fi
+
+: see if there are directory access routines out there
+if $test -r /usr/lib/libndir.a || $test -r /usr/local/lib/libndir.a ; then
+    $echo "Ndir library found."
+    if $test -r /usr/lib/libndir.a; then
+	ndirlib='-lndir'
+    else
+	ndirlib="/usr/local/lib/libndir.a"
+    fi
+    libndir=define
+    usendir=undef
+    ndirc=''
+    ndiro=''
+else
+    ndirlib=''
+    libndir=undef
+    if $contains readdir.o libc.list >/dev/null 2>&1 ; then
+	$echo "No ndir library found, but you have readdir() so we'll use that."
+	usendir=undef
+	ndirc=''
+	ndiro=''
+    else
+	$echo "No ndir library found and no readdir() found--using ./ndir.c."
+	usendir=define
+	ndirc='ndir.c'
+	ndiro='ndir.o'
+    fi
+fi
+: check for void type
+$echo " "
+$echo "Checking to see if your C compiler groks the void type..."
+$cat >try.c <<'EOCP'
+void main();
+EOCP
+if cc -c try.c >/dev/null 2>&1 ; then
+    novoid='undef'
+    $echo "Yup, it does."
+else
+    novoid='define'
+    $echo "Nope, it doesn't (boo hiss).  I will substitute int."
+fi
+$rm try.*
+
+: determine mailer for uumail to use to return mail
+$echo " "
+if $test -f /usr/lib/sendmail; then
+    mailer=/usr/lib/sendmail
+    resolve=undef
+    returnmail=undef
+else
+    if usg && $test -f $libexp/recmail; then
+	mailer=$libexp/recmail
+    else
+	mailer=$lib/uumail
+    fi
+    resolve=define
+    returnmail=define
+fi
+$echo "Mail sender is $mailer"
+
+: check for internet mailer
+case "$internet" in
+define) dflt=y;;
+undef)	dflt=n;;
+*)	dflt=n;;
+esac
+cat <<EOM
+ 
+Some newer mailers can deliver mail to addresses of the INTERNET persuasion,
+such as user@host.UUCP.  Other older mailers require the complete path
+to the destination to be specified in the address.  Does your mailer
+EOM
+$echo $n "(`basename $mailer`) understand INTERNET addresses? [$dflt] $c"
+. myread
+case "$ans" in
+'') ans=$dflt;;
+esac
+case "$ans" in
+y*) internet=define;;
+*)  internet=undef;;
+esac
+
+
+if $test X$internet = Xdefine && $test `basename $mailer` = uumail
+then 
+resolve=define
+else
+: shall uumail resolve addreses or just supply routes
+case "$resolve" in
+	define) dflt=y;;
+	*)	dflt=n;;
+esac
+
+cat <<'EOUUMAIL'
+
+Uumail is capable of resolving addresses in domain form (user@site.domain)
+however, some people who use sendmail prefer to use uumail just to provide
+uucp paths.
+EOUUMAIL
+$echo $n "Shall uumail resolve addresses? [$dflt] $c"
+. myread
+case "$ans" in
+	'') ans=$dflt;;
+esac
+case $ans in
+	y*)resolve=define;;
+	*)resolve=undef;;
+esac
+fi
+
+: determine where public executables go
+case "$bindir" in
+'')
+    dflt=`loc . /bin /usr/local/bin /usr/lbin /usr/local /usr/bin`
+    ;;
+*)  dflt="$bindir"
+    ;;
+esac
+bindir='blurfl/dyick'
+while $test ! -d "$bindir" ; do
+    case $bindir in
+      blurfl*) ;;
+      *) $echo "$bindir does not appear to exist." ;;
+    esac
+    $echo " "
+    $echo $n "Where do you want to put the public executables? [$dflt] $c"
+    . myread
+    bindir="$ans"
+    bindir=`filexp $bindir`
+    case $bindir in
+      '') bindir=$dflt ;;
+    esac
+done
+
+
+: determine root id
+rootid=`$sed </etc/passwd -e "/^root:/{s/^[^:]*:[^:]*:\([^:]*\).*"'$'"/\1/" -e "q" -e "}" -e "d"`
+case $rootid in
+  '') rootid=0 ;;
+  *)  $echo "Root uid = $rootid" ;;
+esac
+
+: weed out incompatibilities
+case $douname in
+  define) whoami=undef ;;
+esac
+
+: preserve RCS keywords in files with variable substitution, grrr
+Log='$Log'
+Header='$Header'
+
+: Warnings
+if v7; then
+    cat <<'EOM'
+ 
+NOTE: the V7 compiler may ignore some #undefs that uumail uses.  If so, you will
+get messages about redefining EXT.  Some V7 compilers also have difficulties
+with #defines near buffer boundaries, so beware.  You may have to play with
+the spacing in common.h.
+EOM
+fi
+
+if pdp11; then
+    cat <<'EOM'
+ 
+
+EOM
+fi
+
+$echo " "
+$echo "End of configuration questions."
+$echo " "
+
+: create config.sh file
+$echo " "
+$echo "Creating config.sh..."
+$spitshell <<EOT >config.sh
+$startsh
+# config.sh
+# This file was produced by running the Configure script.
+
+n='$n'
+c='$c'
+libc='$libc'
+eunicefix='$eunicefix'
+eunice='$eunice'
+cpp='$cpp'
+sysexits='$sysexits'
+shsharp='$shsharp'
+startsh='$startsh'
+spitshell='$spitshell'
+test='$test'
+expr='$expr'
+sed='$sed'
+echo='$echo'
+cat='$cat'
+rm='$rm'
+mv='$mv'
+cp='$cp'
+debug='$debug'
+resolve='$resolve'
+sorted='$sorted'
+log='$log'
+tail='$tail'
+tr='$tr'
+mkdir='$mkdir'
+sort='$sort'
+uniq='$uniq'
+grep='$grep'
+egrep='$egrep'
+contains='$contains'
+libdbm='$libdbm'
+libexp='$libexp'
+nametype='$nametype'
+cc='$cc'
+iandd='$iandd'
+useknownhost='$useknownhost'
+knownhost='$knownhost'
+ndirlib='$ndirlib'
+libndir='$libndir'
+usendir='$usendir'
+ndirc='$ndirc'
+ndiro='$ndiro'
+mailer='$mailer'
+localmail='$localmail'
+localflags='$localflags'
+internet='$internet'
+returnmail='$returnmail'
+bindir='$bindir'
+filexp='$filexp'
+Log='$Log'
+Header='$Header'
+sitename='$sitename'
+orgname='$orgname'
+mailadmin='$mailadmin'
+lib='$lib'
+mansrc='$mansrc'
+manext='$manext'
+maildir='$maildir'
+spool='$spool'
+active='$active'
+myactive='$myactive'
+mininact='$mininact'
+pref='$pref'
+defeditor='$defeditor'
+rootid='$rootid'
+mboxchar='$mboxchar'
+locpref='$locpref'
+orgpref='$orgpref'
+citypref='$citypref'
+statepref='$statepref'
+cntrypref='$cntrypref'
+contpref='$contpref'
+strchr='$strchr'
+novoid='$novoid'
+novfork='$novfork'
+portable='$portable'
+passnam='$passnam'
+berknam='$berknam'
+usgnam='$usgnam'
+whoami='$whoami'
+termio='$termio'
+fcntl='$fcntl'
+ioctl='$ioctl'
+database='$database'
+logfile='$logfile'
+noalias='$noalias'
+aliases='$aliases'
+havetlib='$havetlib'
+getpwent='$getpwent'
+gethostname='$gethostname'
+douname='$douname'
+phostname='$phostname'
+hostcmd='$hostcmd'
+norelay='$norelay'
+CONFIG=true
+EOT
+
+: create uuconf.h file
+$echo " "
+$echo "Creating uuconf.h..."
+$cat <<EOT >uuconf.h
+/***************************************************************************
+This work in its current form is Copyright 1986 Stan Barber
+with the exception of resolve, gethostname and the original getpath which
+as far as I know are in the Public Domain. This software may be distributed
+freely as long as no profit is made from such distribution and this notice
+is reproducted in whole.
+The Configuration script and idea are borrowed from Larry Wall. Thanks
+Larry!
+***************************************************************************
+This software is provided on an "as is" basis with no guarantee of 
+usefulness or correctness of operation for any purpose, intended or
+otherwise. The author is in no way liable for this software's performance
+or any damage it may cause to any data of any kind anywhere.
+***************************************************************************/
+
+#include <stdio.h>
+#include <ctype.h>
+#include <pwd.h>
+#include <signal.h>
+
+#$usedbm UUDBM
+#$sysexits SYSEXITS		/* sysexits.h is available */
+
+#define NAMESIZ 32 		/* system name size */
+#define PATHSIZ 16*NAMESIZ 	/* path length */
+#define MAXDOMS	16		/* maximum number of domain elements */
+#define TRUE	1
+#define FALSE	0
+/*
+ * sysexits is a file of exit codes that are used in sendmail
+ * and other programs ...
+ */
+#ifdef SYSEXITS
+#include <sysexits.h>
+#endif
+/* if you don't have sysexits.h here are the useful parts */
+#ifndef EX_OK
+
+# define EX_OK		0	/* successful termination */
+
+
+# define EX_USAGE	64	/* command line usage error */
+# define EX_DATAERR	65	/* data format error */
+# define EX_NOINPUT	66	/* cannot open input */
+# define EX_NOHOST	68	/* host name unknown */
+# define EX_UNAVAILABLE	69	/* service unavailable */
+# define EX_SOFTWARE	70	/* internal software error */
+# define EX_OSERR	71	/* system error (e.g., can't fork) */
+# define EX_OSFILE	72	/* critical OS file missing */
+# define EX_CANTCREAT	73	/* can't create (user) output file */
+# define EX_IOERR	74	/* input/output error */
+# define EX_TEMPFAIL    75      /* temp failure; user should retry */
+#endif
+
+typedef char bool;
+
+#ifndef TIMEOUT
+#define TIMEOUT ((unsigned) 180)
+#endif TIMEOUT
+
+#ifndef SENTINEL
+#define SENTINEL "@@@"
+#endif SENTINEL
+
+/* Does this solve the problem of null for dbm users?
+ * problem reported by pluto!warren */
+#ifndef NULL
+#define NULL	((char *) 0)
+#endif
+
+/* uuconf.h
+ * This file was produced by running the Configure script.
+ * Feel free to modify any of this as the need arises.
+ */
+
+/* name of the site.  May be overridden by gethostname, uname, etc. */
+#define SITENAME "$sitename"
+
+/* login name of mail administrator, if any. */
+#define MAILERDAEMON "$mailadmin"
+
+/* uucp library */
+#define LIB "$lib"
+
+/* location of mailer */
+#define MAILER "$mailer"
+
+/* local mail delivery program */
+#define LOCALMAIL "$localmail $localflags %s"
+
+/* local mail directory */
+#define MAILDIR	"$maildir"
+
+/* root uid */
+#define ROOTID $rootid
+
+#ifndef UUDBM
+#$sorted	SORTED		/* database is sorted */
+#endif
+
+#$resolve 	RESOLVE		/* resolve addresses */
+#$debug		DEBUG		/* compile in debugging */
+#$log		LOG		/* log transactions */
+#$noalias	NOALIAS		/* do aliasing? */
+#$returnmail	RETURNMAIL	/* shall uumail return failed mail? */
+
+#ifdef LOG
+#define LOGFILE 	"$logfile"
+#endif
+
+/* locations of database files */
+#define DATABASE 	"$database"
+
+#ifndef NOALIAS
+#define ALIASFILE 	"$aliases"
+#endif
+
+#$strchr	index strchr	/* cultural */
+#$strchr	rindex strrchr	/*  differences? */
+#$novoid	void int	/* is void to be avoided? */
+#$novfork	vfork fork	/* is vfork too virtual? */
+#$eunice	EUNICE		/* no linking? */
+#$eunice	VMS		/* not currently used, here just in case */
+#$usendir	USENDIR		/* include ndir.c? */
+#$libndir	LIBNDIR		/* include /usr/include/ndir.h? */
+#$portable	PORTABLE	/* do we do extra lookups to start up? */
+#$passnam	PASSNAMES	/* do names come from the passwd file? */
+				/*  (undef to take name from ~/.fullname) */
+#$berknam	BERKNAMES	/* if so, are they Berkeley format? */
+				/* (that is, ":name,stuff:") */
+#$usgnam	USGNAMES	/* or are they USG format? */
+				/* (that is, ":stuff-name(stuff):") */
+#$whoami	WHOAMI		/* should we include whoami.h? */
+#$fcntl		FCNTL		/* should we include fcntl.h? */
+#$ioctl		IOCTL		/* are ioctl args all defined in one place? */
+#$getpwent	GETPWENT	/* need we include slow getpwent? */
+#$internet	INTERNET	/* does our mailer do INTERNET addressing? */
+#$gethostname	GETHOSTNAME	/* do we have a gethostname function? */
+#$douname	DOUNAME		/* do we have a uname function? */
+#$phostname	PHOSTNAME "$hostcmd"	/* how to get host name with popen */
+
+#$useknownhost	KNOWNHOST "$knownhost" /* a smarter host to punt to */
+
+#ifdef _DEFINE
+#define EXTERN 
+#else
+#define EXTERN extern
+#endif
+/*
+The following structure is used in the aliasing and forwarding 
+feature that is based on the method used in MH.
+My thanks to the MH folks for making this stuff possible. */
+
+struct  mailname {
+	struct mailname *m_next;
+	char            *m_name;
+	int              m_pipe;
+} ;
+
+/* some people claim that some C-compilers cannot handle enums... */
+/* for the handle variable */
+#define ALL	1	/* UUCP and DOMAIN addresses */
+#define JUSTUUCP 2	/* UUCP only */
+#define NONE	3	/* all mail is LOCAL */
+
+/* for form determinations */
+#define ERROR 1
+#define LOCAL 2
+#define DOMAIN 3
+#define UUCP 4
+#define ROUTE 5
+
+
+EXTERN int handle;
+EXTERN int exitstat;	/* for resolve */
+EXTERN int Debug;
+EXTERN char *paths;
+EXTERN char *ConfFile;
+EXTERN char *AliasFile;
+EXTERN char Myname[NAMESIZ];
+EXTERN char * from;
+EXTERN char lbuf[512]; /* for pipe to uux */
+EXTERN char *logfile;
+EXTERN char	OpMode;		/* operation mode, see below */
+/* These don't do anything yet.... maybe next time they will do something */
+#define MD_DELIVER	'm'		/* be a mail sender */
+#define MD_ARPAFTP	'a'		/* old-style arpanet protocols */
+#define MD_SMTP		's'		/* run SMTP on standard input */
+#define MD_DAEMON	'd'		/* run as a daemon */
+#define MD_VERIFY	'v'		/* verify: don't collect or deliver */
+#define MD_TEST		't'		/* test mode: resolve addrs only */
+#define MD_INITALIAS	'i'		/* initialize alias database */
+#define MD_PRINT	'p'		/* print the queue */
+#define MD_FREEZE	'z'		/* freeze the configuration file */
+EOT
+
+CONFIG=true
+
+
+
+$rm -f libc.list .distlist kit*isdone
+
+$echo " "
+$echo "Doing variable substitutions on various files..."
+$echo " "
+set `$grep <MANIFEST '\.SH' | awk '{print $1}'`
+for file in $*; do
+    . $file
+done
+
+$echo " "
+$echo 'Now you need to generate make dependencies by running "makedepend".'
+$echo 'You might prefer to run it in background: "makedepend > makedepend.out &"'
+$echo $n "Would you like me to run it for you? [n] $c" 
+. myread
+case "$ans" in
+y*) makedepend;;
+esac
+$rm -f  uucp.local myread loc filexp bsd pdp11 v7 usg eunice
+: end of Configure

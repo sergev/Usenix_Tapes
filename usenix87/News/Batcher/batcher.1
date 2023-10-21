@@ -1,0 +1,102 @@
+.TH BATCHER 1 LOCAL
+.SH NAME
+batcher \- a new batching system for news
+.SH SYNOPSIS
+.B batcher
+[
+.IB \-c X
+]
+.br
+.B batcher
+[
+.I site
+]
+.IR "(typically run out of " cron ".)"
+.SH DESCRIPTION
+.I Batcher
+is designed to feed batched USENET neighbors in a controlled, orderly fashion.
+In particular, it is designed to replace multiple [cs7]sendbatch scripts,
+and put an upper limit on the amount of data that may be queued for a site.
+At some sites, it is also possible to perform checks that will prevent
+overflowing the filesystem that contains the UUCP spool directory.
+.PP
+.I Batcher
+reads the file
+.RI NEWSLIB/batch.ctrl
+to determine how to send data to each site.
+This control file contains one line per down\-stream site that describes how
+to send news to that site.
+.I Batcher
+itself is run out of
+.I cron
+as necessary, setuid news.
+It should be given a single argument, either the name of a site to batch the
+news for, or a class
+.RI ( batcher
+will then do work on all sites in that class).
+.PP
+In the control file, lines beginning with a pound sign (``#'') are ignored.
+Data lines, one per site being fed, are comprised of seven colon\-separated
+fields:
+.RS
+site:class:compress:uux_flags:b_size:q_size:uux_command
+.RE
+.TP site
+The name of the site being fed.  This is the same as the name in the news
+.I sys
+file.
+By using the ``F'' protocol in news, the file
+.IR /usr/spool/batch/ site
+should contain the full\-pathname list of articles intended for that site.
+.TP class
+A single letter; the default is ``z.''  Executing ``batcher \-cX'' works on all
+sites in class ``X.''
+.TP compress
+This is the command line to use to call
+.IR compress ;
+the default is no compression.
+If something is specified here, it is used as an intermediate pipe, and the
+``uux'' field defaults to ``uux\ ...\ !cunbatch.''
+.TP uux_flags
+These are the flags to insert on the uux command line.  As distributed, he
+default is ``\-r\ \-z\ \gd'' (just queue work, only acknowledge failures,
+grade d transmission).
+.TP b_size
+The size of batches, default is 100K.
+This is passed on to the standard
+.I batcher
+program.
+.TP q_size
+The maximum UUCP queue size, default is 500K.  As distributed, the program
+parses the output of the 4.3BSD command ``uuq\ \-l\ \-sSITE.''
+If the queue is currently greater than ``q_size,'' no work is done for
+the site until it drops below that number.
+.TP uux_command
+This can be a complete replacement for the uux command.  The default is
+``uux\ \-\ <uuxflags>\ site!<unbatch|cunbatch>.''
+.PP
+To use
+.IR batcher ,
+modify your news
+.I sys
+file so that all (most?) (some??) sites use the batching protocol, e.g.:
+.RS
+mnetor:net.flame,net.rumor,net.bizarre:F:/usr/spool/batch/mnetor
+.RE
+Note that the batch filename must be the same name as the site being fed.
+Next edit the control file, placing sites in classes and with queue sizes
+that seem appropriate.
+Then, edit
+.I /usr/lib/crontab
+to replace calls to the old batching programs with calls to
+.IR nbatcher .
+(It should be running setuid news.)
+You will probably want to use both ``job class'' calls and explicitly\-named
+sites.
+.SH BUGS
+Queue and spool\-fillage checking is done via
+.I uuq
+and
+.IR df ,
+respectively.  This is somewhat slow, but it is swamped by the execution
+of the batching itself.

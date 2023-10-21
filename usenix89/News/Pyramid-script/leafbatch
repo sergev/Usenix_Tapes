@@ -1,0 +1,91 @@
+#! /bin/sh
+# '@(#)leafbatch	1.2	86/08/07'
+#
+# Summary:
+#	leafbatch batchname grade [site1] [site2] [site3] [site4] ...
+#
+# Description:
+#	Leaf sites: Given the name of a normal batch queueing file, this script
+#	batches and compresses the bundle into a local file, then uses the -l
+#	option of uux to queue the same batch for a list of sites. This is an
+#	alternative to csendbatch, which will batch and compress the same data
+#	once for every site.
+#
+#	The assumption is that this script will be run hourly from cron, and
+#	that the ~news/sys file will be set to batch to a dummy sitename that
+#	this script will use.
+#
+#	To prevent shipping out lots of tiny bundles, leafbatch will *not* do
+#	batching if there are fewer than 10 lines in the batch queueing file.
+#	To prevent a 1-article queue from getting stranded, two null articles
+#	are appended to the batch queue on each failure; so at worst, 4 fours
+#	will ellapse before the lone article is finally sent. (This requires a
+#	fixed version of batch, that does not gag on blank lines.)
+
+if [ $# -lt 1 ]
+then
+	echo 'leafbatch: Missing arguments'
+	echo 'leafbatch batchname [-ggrade] [site1] [-ggrade] [site2] ...'
+	exit
+fi
+
+LIM=100000
+PATH=:/usr/ucb:/bin:/usr/bin:/usr/new:/usr/local/bin
+export PATH
+umask 022
+BATCH=$1
+GRADE=-gz
+shift
+
+cd /usr/spool/batch
+if [ ! -s leaf_${BATCH}.work ]
+then
+	if [ ! -s leaf_$BATCH ]
+	then
+		exit
+	fi
+	if [ `wc -l < leaf_$BATCH` -lt 9 ]
+	then
+		echo >> leaf_$BATCH
+		echo >> leaf_$BATCH
+		exit
+	fi
+fi
+
+while [ -s leaf_$BATCH -o -s leaf_${BATCH}.work ]
+do
+	while STAMP=`att date +%y%m%d%H%M%S` ; [ -s ${BATCH}.$STAMP ]
+	do
+		sleep 1
+	done
+	(echo "#! cunbatch"; \
+	/usr/lib/news/batch leaf_$BATCH $LIM | compress ) >${BATCH}.$STAMP
+
+	error=$?
+	if [ $? -ne 0 ]
+	then
+		Mail -s "Status $error on ${BATCH}.$STAMP" usenet << EOF
+Batcher Failed. Leafbatch script Aborted.
+EOF
+		exit
+	fi
+
+	GRADE=-gz
+	for site
+	do
+		case $site in
+		-g*)	GRADE=$site; continue;;
+		esac
+
+		uux -r -l -z $GRADE $site!rnews \< !${BATCH}.$STAMP
+		error=$?
+		if [ $? -ne 0 ]
+		then
+			Mail -s "Status $error on ${BATCH}.$STAMP" usenet << EOF
+Uux Failed. Leafbatch script continued for other hosts.
+EOF
+			exit
+		fi
+	done
+	rm ${BATCH}.$STAMP
+done

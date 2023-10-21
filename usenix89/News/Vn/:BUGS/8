@@ -1,0 +1,59 @@
+Path: plus5!wucs1!mcdchg!clyde!rutgers!husc6!seismo!cmcl2!philabs!prls!pyramid!hplabs!sdcrdcf!burdvax!wpl
+From: wpl@burdvax.PRC.Unisys.COM (William P Loftus)
+Newsgroups: net.sources.bugs
+Subject: Bug fix for vn
+Keywords: floating point exception
+Message-ID: <3086@burdvax.PRC.Unisys.COM>
+Date: 24 Mar 87 01:01:22 GMT
+Sender: news@burdvax.PRC.Unisys.COM
+Organization: Unisys/Paoli Research Center, Paoli, PA
+Lines: 47
+Posted: Mon Mar 23 20:01:22 1987
+
+
+I had a problem with vn.  Once in a while, vn would crash with a floating
+point exception (divide by zero).  I tracked to bug to the following lines
+of code in reader.c.
+
+	/* for conditional is abnormal - expected exit is break */
+	for (count = 0; count < HDR_LINES && fgets(buf,RECLEN-1,Fpread) != NULL; ++count)
+	{
+
+		/* reset position and bail out at first non-header line */
+		if (index(buf,':') == NULL)
+		{
+			pos = ftell(Fpread);
+			pos -= strlen(buf);
+			fseek (Fpread,pos,0);
+			break;
+		}
+
+
+Vn had thought the header ended when there was a line with no ':'. This is
+a false assumption (I think), a header ends when there is a line that doesn't
+begin with ' ' or '\t' and has no embedded ':'.
+Below is the fix to the above code.
+
+
+	/* for conditional is abnormal - expected exit is break */
+	for (count = 0; count < HDR_LINES && fgets(buf,RECLEN-1,Fpread) != NULL; ++count)
+	{
+
+		/* reset position and bail out at first non-header line */
+		if (index(buf,':') == NULL)
+		{
+                        if ((buf[0] != '\t') && (buf[0] != ' ')) {
+				pos = ftell(Fpread);
+				pos -= strlen(buf);
+				fseek (Fpread,pos,0);
+				break;
+                        }
+		}
+
+
+Bill Loftus
+-- 
+William P Loftus			UUCP:   wpl@burdvax, sword@excalibur
+Unisys/Paoli Research Center		ARPA: 	wpl@burdvax.prc.unisys.com
+PO Box 517				BITNET: SWORD@VUVAXCOM
+Paoli, PA 19301                         215-648-7222 (work) 215-649-0633 (home)

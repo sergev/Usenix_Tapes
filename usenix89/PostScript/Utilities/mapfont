@@ -1,0 +1,128 @@
+#! /bin/sh
+
+# This is a PostScript program wrapped as a shell script.
+
+# copyright 1987 by Peter Greenberg. You may use, copy, or redistribute this
+# work freely so long as this message and the copyright message are retained.
+
+# comments/bug fixes to:
+# Peter Greenberg
+# Swarthmore College
+# Swarthmore, PA 19081
+# (215) 328-8610
+# UUCP: ...!seismo!bpa!swatsun!greenber
+# ARPA: swatsun!greenber@seismo.CSS.GOV
+
+# USAGE:
+# mapfont [mapfrom [mapto]]
+# defaults: mapfrom=Courier ; mapto=Helvetica
+
+# CHANGE THESE LINES TO USE ANTOHER SPOOLER
+spooler=/usr/ucb/lpr
+spoolopts=-PPostScript
+
+emit_header() {
+cat <<End-Of-Header
+%!
+/Font1 /$1 def
+/Font2 /$2 def
+End-Of-Header
+}
+
+emit_main_stuff() {
+cat <<End-Of-Main-Stuff
+% This program maps one PostScript font to another. For each character
+% code in a specific range, this program will print (to the actual page)
+% the character code in octal, the character in Font1, then the character
+% in Font2. The reason for this is to show which characters are associated
+% with which ASCII codes in each font. It is especially useful to see what
+% non-alphabetical fonts like Symbol and ZapfDingbats have to offer. 
+% The output is in neat columns, determined by taking into account the
+% left and right margins and top and bottom margins and the pitch of the 
+% characters. Presently these are set to produce a nice looking 8.5 x 11 inch
+% page but this can be fiddled with.
+
+% Unfortunately, this program takes about 3 minutes to execute on an LW+.
+
+/ArrayToStr
+{
+	/Array exch def
+	/Length Array length def
+	/Str Length string def
+	
+	0 1 Length 1 sub { Str exch dup Array exch get put } for
+	Str
+} bind def
+
+/IntToChar %char is a one character string
+{
+	/Int exch def
+	/Str 1 string def
+	Str 0 Int put
+	Str
+} def
+
+/FontSet 
+{
+	findfont Size scalefont setfont
+} bind def
+ 
+/IntToOctString { %integer. Only handles 3-digit octal (0..511)
+	/DecInt exch def	
+	/OctStr 3 string def
+	OctStr 0 DecInt 64 idiv 48 add put
+	/DecInt DecInt 64 mod def
+	OctStr 1 DecInt 8 idiv 48 add put
+	/DecInt DecInt 8 mod def 
+	OctStr 2 DecInt 48 add put
+	OctStr
+} bind def
+
+/inch { 72 mul } def
+
+/Top 9.5 inch def
+/Bottom 0.5 inch def
+/Left 0.5 inch def
+/Right 7 inch def
+/Size 12 def
+/Lineheight Size 5 add def
+/FirstChar 0 def
+/LastChar 255 def
+/SpaceStr (: ) def
+
+/CharsPerCol Top Bottom sub Lineheight div cvi def
+/ColPerPage  LastChar FirstChar sub CharsPerCol div cvi def
+/ColWidth Right Left sub ColPerPage div cvi def
+
+ Left Top 0.5 inch add moveto
+Font1 FontSet
+(Mapping from ) show Font1 80 string cvs show ( to ) show Font2 80 string cvs 
+	show
+/PresentCol Left def
+/PresentRow Top def
+FirstChar 1 LastChar {
+	/ThisChar exch def
+	PresentCol PresentRow moveto
+	Font1 FontSet
+	ThisChar dup IntToOctString show ( ) show 
+	IntToChar dup show SpaceStr show
+	Font2 FontSet show
+	/PresentRow PresentRow Lineheight sub def
+	PresentRow Bottom lt { 
+		/PresentRow Top def 
+		/PresentCol PresentCol ColWidth add def
+	} if
+} bind for 
+showpage
+End-Of-Main-Stuff
+}
+
+case $# in
+	0) FONT1=Courier ; FONT2=Helvetica ;;
+	1) FONT1=Courier ; FONT2=$1 ;;
+	*) FONT1=$1 ; FONT2=$2 ;;
+esac
+
+(emit_header $FONT1 $FONT2 ; emit_main_stuff) | $spooler $spoolopts
+
+exit 0

@@ -1,0 +1,66 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site elsie.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxm!sftig!sfmag!eagle!ulysses!allegra!mit-eddie!genrad!panda!talcott!harvard!seismo!elsie!ado
+From: ado@elsie.UUCP (Arthur David Olson)
+Newsgroups: net.sources.bugs
+Subject: Re: "nmkdir" in the Bourne shell
+Message-ID: <5214@elsie.UUCP>
+Date: 2 Sep 85 21:41:49 GMT
+Date-Received: 4 Sep 85 00:45:45 GMT
+References: <1052@sdcsvax.UUCP> <309@cxsea.UUCP> <226@tikal.UUCP> <1090@noscvax.UUCP>
+Distribution: na
+Organization: NIH-LEC, Bethesda, MD
+Lines: 51
+Summary: Handling of "nmkdir a/b/c a/b/d" changes
+
+In article <1090@noscvax.UUCP>, broman@noscvax.UUCP (Vincent P. Broman) writes:
+> After seeing Bourne shell and C language versions of a program
+> to create sub-sub-sub directories, it seemed to me that the Cshell
+> offered the simplest quick implementation, one that only creates
+> ONE subprocess. It suffices to let mkdir produce all diagnostics.
+
+Note that the script that followed in the referenced article handles a command
+such as
+	nmkdir a/b/c a/b/d
+differently than do the programs it sought to emulate:
+	Script started on Mon Sep  2 16:36:30 1985
+	Warning: no access to tty; thus no job control in this shell...
+	% cd /tmp
+	% rm -f -r a
+	% nmkdir.sh a/b/c a/b/d
+	% rm -f -r a
+	% nmkdir.csh a/b/c a/b/d
+	mkdir: cannot make directory a
+	mkdir: cannot make directory a/b
+	% 
+	script done on Mon Sep  2 16:37:08 1985
+
+And I suppose I'm obliged to reveal my entry in the contest (with no warranty
+as to suitability for any purpose whatsoever).  The "set x" and "shift" nonsense
+gets around the odd handling of "$@" by sh when $# is zero:
+	for i
+	do
+		case "$i" in
+			/*)	tonow=/ ;;
+			*)	tonow= ;;
+		esac
+		set x
+		IFS=/
+		for j in $i
+		do
+			IFS=" "
+			tonow="$tonow$j"
+			test -d "$tonow" || set "$@" "$tonow"
+			tonow="$tonow/"
+		done
+		IFS=" "
+		case $# in
+			1)	;;
+			*)	shift ; /bin/mkdir "$@" || exit $?
+		esac
+	done
+--
+Bugs is a Warner Brothers trademark.
+--
+	UUCP: ..decvax!seismo!elsie!ado    ARPA: elsie!ado@seismo.ARPA
+	DEC, VAX and Elsie are Digital Equipment and Borden trademarks

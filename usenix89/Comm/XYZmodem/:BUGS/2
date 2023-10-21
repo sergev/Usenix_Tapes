@@ -1,0 +1,54 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!whuxl!whuxlm!akgua!rebel!george
+From: george@rebel.UUCP (George M. Sipe)
+Newsgroups: net.sources.bugs
+Subject: possible bug in sz
+Message-ID: <187@rebel.UUCP>
+Date: 12 Jun 86 20:48:09 GMT
+Reply-To: george@rebel.UUCP (George M. Sipe)
+Distribution: net
+Organization: Tolerant Systems, Atlanta GA
+Lines: 41
+Summary: suspected YMODEM byte ordering error
+Posted: Thu Jun 12 15:48:09 1986
+
+There *MAY BE* a bug in the recently posted rz and sz X/Y/ZMODEM
+communications programs.  When I used sz from a remote micro running
+MEX-Plus, the YMODEM protocol indicated an incorrect number of blocks
+were to be received.  I traced the problem to the byte-ordering of the
+block size in the YMODEM header transmitted by sz.  There is also a
+minor problem in that sz appears to understate the number of blocks by
+1 if the size of the file is not an exact multiple of 128.
+
+Since I don't have access to anything else running YMODEM, I couldn't
+determine positively if the bug is in MexPlus or in sz.  Assuming the
+bug is in sz (rightly or wrongly), the following patch corrects the
+problem for NS32000, MC68000, and VAXen processors (among others).
+
+
+*** old_sz.c	Mon Jun  9 18:48:36 1986
+--- sz.c	Mon Jun  9 18:51:17 1986
+***************
+*** 463,470
+  	else {		/* A little goodie for IMP/KMD */
+  		if (Zmodem)
+  			blklen = SECSIZ;
+! 		txbuf[127] = f.st_size >>7;
+! 		txbuf[126] = f.st_size >>15;
+  	}
+  	if (Zmodem)
+  		return zsendfile(txbuf, 1+strlen(p)+(p-txbuf));
+
+--- 463,470 -----
+  	else {		/* A little goodie for IMP/KMD */
+  		if (Zmodem)
+  			blklen = SECSIZ;
+! 		txbuf[126] = (f.st_size + SECSIZ - 1) >>7;
+! 		txbuf[127] = (f.st_size + SECSIZ - 1) >>15;
+  	}
+  	if (Zmodem)
+  		return zsendfile(txbuf, 1+strlen(p)+(p-txbuf));
+-- 
+UUCP:	...ihnp4!akgua!rebel!george
+	...{hplabs,seismo}!gatech!rebel!george
+Phone:	(404) 662-1533
+Snail:	Tolerant Systems, 6961 Peachtree Industrial, Norcross, GA  30071

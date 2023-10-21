@@ -1,0 +1,518 @@
+.PH ""
+\"
+\"  A guide to the Elm Filter program
+\"  format with 'tbl Filter.guide | troff -mm > Filter.format'
+\"  or something similar.
+\"  (C) Copyright 1986 Dave Taylor
+\"
+\"  Last modification: January 19th, 1987
+\"
+.SA 1
+.nr Hy 1
+.nr Pt 1
+.nr Pi 8
+.lg
+.HM 1 1
+.rs
+.ds HF 3  3  
+.ds HP 12 12 10 10 10
+.PF ""
+.ce 99
+.sp 9
+.ps 20
+\fBElm Filter Guide\fR
+.sp 7
+.ps 12
+\fIWhat the filter program is, what it does,
+and how to use it\fR
+.sp 5
+Dave Taylor
+.sp
+Hewlett-Packard Laboratories
+1501 Page Mill Road
+Palo Alto CA
+94304
+.sp 
+email: taylor@hplabs.HP.COM or hplabs!taylor
+.sp 10
+.ps 18
+\fB\(co\fR\s12 Copyright 1986, 1987 by Dave Taylor
+.ps 10
+.SK
+.sp 5
+.ps 14
+\fBElm Filter Guide\fR
+.PH "'Filter Guide''version 1.5'
+.PF "''Page \\\\nP''"
+.nr P 1
+.sp
+.ps 10
+(version 1.5)
+.sp 2
+Dave Taylor
+.sp
+Hewlett-Packard Laboratories
+1501 Page Mill Road
+Palo Alto CA
+94304
+.sp 
+email: taylor@hplabs.HP.COM or hplabs!taylor
+.sp 2
+\*(DT
+.ce 0
+.sp 3
+.P
+One of the greatest problems with the burgeoning electronic mail
+explosion is that we tend to get mail that we don't care about.
+Amusingly, perhaps, we have the equivalent of electronic junk mail.
+Not amusing, however, is the fact that this can rapidly 
+accumulate and end up taking over your mailbox!
+.P
+At the same time we often get mail that, while it is interesting
+and important, can easily be filed to be read later, without ever
+actually cluttering up the mailbox.
+.sp 2
+This, then, is what \fIfilter\fR does for you!  The \fIfilter\fR program
+allows you to define a set of rules by which all incoming mail should
+be screened, and a subsequent set of actions to perform based on whether
+the rules were met or not.  \fIFilter\fR also has the ability to mail
+a summary of what actions it performed on the incoming mail as often as
+you'd like.
+.sp
+.ps 12
+\fB
+Writing the Rules\fR
+.ps 10
+.sp
+The language for writing \fIfilter\fR rules is pretty simple, actually.
+The fundamental structure is;
+.nf
+
+	if  (\fIcondition\fR)  then  \fIaction\fR
+
+.fi
+Where \fIcondition\fR is constructed by an arbitrary number of 
+individual conditions of the form ``\fIfield\fR  \fIrelation\fR  \fIvalue\fR''.
+The \fIfield\fR value can be;
+.nf
+
+	subject
+	from
+	to
+	lines
+	contains
+
+.fi
+where, if ``lines'' is choosen, the \fIrelation\fR can be any of the
+standard relationships (`>', `<', `>=', `<=', `!=' and `=').  
+If another action is
+choosen, ``contains'' can be used as the relation, ``='', or, if you'd
+like, you can skip the relationship entirely (e.g. `subject "joe"').
+The \fIvalue\fR is any quoted string that is to be matched against
+or number if ``lines'' is the field being considered.
+.sp
+Invidivual conditions are joined together by using the word ``and'',
+and the logic of a condition can be flipped by using ``not'' as the
+first word (e.g. `not subject "joe"').  We'll see more examples of
+this later.
+.sp
+Note that the ``or'' logical conjunction isn't a valid part of the
+\fIfilter\fR conditional statement.  
+.sp
+Finally, <\fIaction\fR> can be any of;
+.nf
+
+	delete
+
+	save   \fIfoldername\fR
+
+	savecopy  \fIfoldername\fR
+
+	forward  \fIaddress\fR
+
+	execute  \fIcommand\fR
+
+	leave
+
+.fi
+where they result in the actions;  \fBdelete\fR deletes the message;
+\fBsave\fR saves a copy of the message in the specified foldername;
+\fBsavecopy\fR does the same as save, but also puts a copy in your mailbox;
+\fBforward\fR sends the message to the specified address; 
+\fBexecute\fR feeds the message to the specified command (or complex
+sequence of commands) as standard input;
+and \fBleave\fR leaves the message in your mailbox.
+.sp
+Foldernames can contain any of a number of macros, too, as we'll see in
+the example ruleset below.  The macros available for the string fields are;
+.DS CB
+.TS
+l l.
+     Macro	   Meaning
+
+      %d	   day of the month
+      %D	   day of the week (0-6)
+      %h	   hour of the day (0-23)
+      %m	   month of the year (0-11)
+      %r	   return address of message
+      %s	   subject of original message
+      %S	   ``Re: \fIsubject of original message\fR''
+      %t	   current hour and minute in HH:MM format
+      %y	   year (last two digits)
+.TE
+.DE
+.sp
+The rules file can also contain comments (any line starting with a `#')
+and blank lines.  
+.sp 
+The file itself needs to reside in your home directory and be 
+called \fI.filter-rules\fR.  Here's an example;
+.nf
+
+    #  $HOME/.filter-rules
+    #
+    #  Filter  rules  for  the  Elm  Filter  program.  Don't  change  without  some
+    #  serious  thought.  (remember  -  order  counts)
+    #
+    #     Dave  Taylor
+   
+    #  rule  1
+    if  (from  contains  "!uucp")  then  delete
+
+    #  rule  2
+    to   "postmaster"   ?   save  "/tmp/postmaster-mail.%d"
+
+    #  rule  3
+    if  (to  "culture"  and  lines  >  20)  ?   save  "/users/taylor/Mail/culture"
+
+    #  rule  4
+    subject  =  "filter test"   ?   forward  "hpldat!taylor"
+
+    #  rule  5
+    if  [  subject  =  "elm"  ]   savecopy  "/users/taylor/Mail/elm-incoming"
+
+    #  rule  6
+    subject  =  "display-to-console" ?  execute "cat - > /dev/console"
+
+.fi
+(notice the loose syntax - there are lots of valid ways to specify a
+rule in the \fIfilter\fR program!!)
+.sp
+To translate these into English;
+.sp
+.AL
+.LI
+All messages from uucp should be summarily deleted.
+.LI
+All mail to postmaster should be saved in a folder (file) called 
+/tmp/posmaster-mail.\fInumeric-day-of-the-week\fR
+.LI
+All mail addressed to `culture' with at least 20 lines
+ should be automatically appended to the folder
+/users/taylor/Mail/culture.
+.LI
+All messages that contain the subject `filter test' should be forwarded to
+me, but via the address `hpldat!taylor' (to force a non-user forward)
+.LI
+All messages with a subject that contains the word `elm' should be saved in
+the folder ``/users/taylor/Mail/elm-incoming'' and also dropped into my
+mailbox.
+.LI
+Any message with the subject ``display-to-console'' will be immediately
+written to the console.
+.LE
+.sp
+Notice that the \fIorder\fR of the rules is very important.  If we, for 
+example, were to get a message from `uucp' that had the subject `filter test',
+the \fIfilter\fR program would match rule 1 and delete the message.  It 
+would never be forwarded to `hpldat!taylor'.  It is for this reason that
+great care should be taken with the ordering of the rules.
+.sp
+.ps 12
+\fBChecking the rules out\fR
+.ps 10
+.sp
+The \fIfilter\fR program has a convenient way of check out the rules you 
+have written.  Simply invoke it with the \fB-r\fR (\fBr\fRules) flag;
+.nf
+
+	% \fBfilter -r\fR
+
+	Rule 1: if (from = "!uucp") then
+	          Delete 
+
+	Rule 2: if (to = "postmaster") then
+	          Save  /tmp/postmaster-mail.2
+
+	Rule 3: if (to = "culture" and lines > 20) then
+	          Save  /users/taylor/Mail/culture
+
+	Rule 4: if (subject = "filter test") then
+	        Forward  hpldat!taylor
+
+	Rule 5: if (subject="elm") then
+	          Copy  and  Save  /users/taylor/Mail/elm-incoming
+
+	Rule 6: if (subject="display-to-console") then
+		  Execute "cat - > /dev/console"
+
+.fi
+There are a few things to notice - first off, these are the parsed and
+rebuilt rules, so we can see that they are all in a 
+consistent format.  Also, notice on the filename for rule 2 that the
+program has correctly expanded the ``%d'' macro to be the day of the 
+month.
+.sp 2
+It is \fBhighly\fR recommended that you always check your ruleset before
+actually letting the program use it!
+.sp
+.ps 12
+\fBActually Using the Program\fR
+.ps 10
+.sp
+Now the bad news.  If you aren't running \fIsendmail\fR you cannot use
+this program as currently written.  Why?  Because the \fIfilter\fR
+program expects to be put in your \fI.forward\fR file and that is something
+that only \fIsendmail\fR looks at!
+.sp
+The format for the entry in the \fI.forward\fR file (located in your
+home directory) is simply;
+.nf
+
+	"|filter"
+
+.fi
+Alright, it isn't quite \fIthat\fR simple!  Since \fIfilter\fR will be invoked
+by processes that don't know where you are logged in, you need to have some
+way to trap the error messages.  For ease of use, it was decided to have all
+the messages written to \fIstderr\fR which means that you have two main
+choices for the actual entry.  Either;
+.nf
+
+	"|filter  >  /dev/console  2>&1"
+
+.fi
+which will log all errors on the system console (each error is prefixed with
+``filter (\fIusername\fR)'' to distinguish it), or;
+.nf
+
+	"|filter  >>  $HOME/.filter_errors  2>&1"
+
+.fi
+If you want to have a copy saved to a file.  A possible strategy would be
+to have the errors written to a file and to then have a few lines in 
+your \fI.login\fR script like;
+.nf
+
+        if  (  -f  .filter_errors)  then
+           echo  "\ \ "
+           echo  "Filter  program  errors;"
+           cat  .filter_errors
+           echo  "\ \ "
+        endif
+
+.fi
+You can also use the \fB-v\fR flag in combination with the above to have
+the errors written to a file and a single line indicating messages being
+sent off or saved to folders written to the console by having 
+your \fI.forward\fR file;
+.nf
+
+	"|filter  -v  > /dev/console  2>>  $HOME/.filter_errors"
+
+.fi
+Suffice to say, you can get pretty tricky with all this!!  One last point - if
+you're interested in having it beep (for output to the screen, I would
+think) you can use the \fB-a\fR (\fBa\fRudible) flag for any of these 
+invocations!
+.sp
+.ne 5
+.ps 12
+\fBSummarizing the Actions Taken\fR
+.ps 10
+.sp
+The \fIFilter\fR program keeps a log of all actions performed, including
+what rules it matched against, in your home directory in a file 
+called \fI.filter_log\fR.  You can either directly operate on this file,
+or, much more recommended, you can one of the two summarize flags to
+the program and let \fIit\fR do the work for you!
+.sp
+The difference between the two is best demonstrated by example;
+.nf
+
+	% \fBfilter -s\fR
+
+	Summary of filter activity;
+
+	The default rule of putting mail into your mailbox was used 18 times
+
+	Rule #3: (save in "/users/taylor/Mail/culture") was applied 2 times.
+
+vs
+
+	% \fBfilter -S\fR
+
+	Mail from root about 
+		PUT in mailbox: the default action
+
+	Mail from taylor about Filter Summary
+		PUT in mailbox: the default action
+
+	Mail from hpcea!hpcesea!hpcesed!scott@hplabs.HP.COM
+	   about Comments and questions about elm
+		PUT in mailbox: the default action
+
+	[etc etc]
+
+.fi
+To actually use either of the summarizing options, there 
+are two ways that are recommended;
+.sp
+The preferred way is to have a line in either your \fIcrontab\fR
+(ask your administrator for help with this) that invokes the \fIfilter\fR
+program as often as you desire with the \fB-s\fR flag.  For example, I
+have a summary mailed to me every morning at 8:00 am;
+.nf
+
+    0   8   *   *   *   "/usr/local/bin/filter  -s  |  elm  -s  'Filter  Summary'  taylor"
+
+.fi
+.sp
+An alternative is to have your \fI.login\fR execute the command each time.
+.sp 2
+Note that if you want to have your log files cleared out each time the 
+summary is generated you'll need to use the '-c' flag too.  Also,
+if you want to keep a long list of actions performed you can do this
+by saving it as you display it.  A way to do this would be, if you were to
+have the invocation in your \fI.login\fR script, to use;
+.nf
+
+	echo  "Filter  Log;"
+	filter  -c  -s  |  tee  -a  PERM.filter.log
+
+.fi
+which would append a copy of all the output to the file `PERM.filter.log'
+and would avoid you having to read larger and larger summaries of
+what the program had done.
+.sp
+.ne 5
+.ps 12
+\fBFurther Testing of the Ruleset\fR
+.ps 10
+.sp
+With the \fIreadmsg\fR command available, it is quite easy to test the
+rules you've written to see if they'll do what you desire.  
+.sp
+For example, we can use the \fB-n\fR flag to \fIfilter\fR, which means
+`don't actually do this, just tell me what rule you matched, if any, and
+what action you would have performed' (you can see why a single letter 
+flag is easier to type in!!), and feed it each message in our mailbox 
+by using a command like;
+.nf
+
+	% \fBset message=1\fR
+	% \fBset total_messages=`messages`\fR
+
+	% \fBwhile  (1)\fR
+	> \fBif ($message > $total_messages) exit\fR
+	> \fBecho processing message $message\fR
+	> \fBreadmsg -h $message | filter -n\fR
+	> \fBecho " "\fR
+	> \fB@ messages++\fR
+	> \fBend\fR
+
+.fi
+which will then hand each of the messages in your mailbox to the \fIfilter\fR
+program and display what action would have been taken with that message and
+why.
+.sp
+For example, if we do this for a few interesting messages in my mailbox,
+we'd end up with output like;
+.nf
+
+       Mail from taylor about filter test
+	     FORWARDED to hpldat!taylor by rule;
+	        subject="filter test"  ? forward "hpldat!taylor"
+
+       Mail from bradley%hplkab@hplabsc about Re:  AI-ED mailing address for HP
+	     PUT in mailbox: the default action
+
+       Mail from taylor about display-to-console
+	     EXECUTED "cat - > /dev/console"
+
+.fi
+(sharp users will notice that this is exactly the same format as the longer
+summary listing!!)
+.sp 
+.ps 12
+\fBWhat Forwarded Messages Look Like\fR
+.ps 10
+.sp
+When a message is forwarded to another user by the \fIaction\fR being specified
+as ``forward \fIaddress\fR'', then the program can generate one of two styles
+of message.  If the message is to you, then it'll simply add it to your mailbox
+in such a way as to ensure that the return address is that of the person who
+sent the message and so on.
+.sp
+If not, then the message is enclosed in a message of the form;
+.nf
+
+   From taylor Thu Oct  2 15:07:04 1986
+   Date: Thu, 2 Oct 86 15:06:58 pdt
+   Subject: "filter test"
+   From: The filter of taylor@hpldat <taylor>
+   To: hpldat!taylor
+   X-Filtered-By: filter, version 1.4
+
+   -- Begin filtered message --
+   
+       From taylor Thu Oct  2 15:06:41 1986
+       Date: Thu, 2 Oct 86 15:06:33 pdt
+       From: Dave Taylor <taylor>
+       Subject: filter test
+ 
+       Just a simple test.
+ 
+   -- End of filtered message --
+
+.fi
+The subject of the actual message is the same as the subject of the 
+message being forwarded, but in quotes.  The `From:'  field indicates
+how the message was sent, and the `X-Filtered-By:' identifies what
+version of filter is being used.
+.sp
+.ps 12
+\fBAreas to Improve\fR
+.ps 10
+.sp
+While the \fIfilter\fR program as presented herein is obviously a
+nice addition to the set of tools available for dealing with electronic
+mail, there are some key features that are missing and will be added in
+the future based on demand.
+.sp
+As I see it, the main things missing are;
+.AL
+.LI
+The ability to use regular expressions in the patterns.  
+This would be a \fIvery\fR nice feature!
+.LI
+Perhaps more \fIactions\fR available (but what?)
+.LI
+Certainly the ability to filter based on any field or combination of
+fields.  
+.LE
+.sp 2
+.ps 12
+\fBWarnings and Things to Look Out For\fR
+.ps 10
+.sp
+Since this is a pretty simple program, there are a few pitfalls, some
+of which have already been mentioned;
+.sp
+\fBOrder\fR counts in the rules.  Beware!
+.sp
+\fBMatching\fR is pretty simple - make sure your patterns are sufficiently
+exclusive before having any destructive rules.
+.sp 2
+Finally, as with the rest of the \fBElm\fR mail system, I welcome feedback
+and suggestion on how to improve this program!!

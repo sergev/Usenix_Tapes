@@ -1,0 +1,1606 @@
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by bob on Fri Apr  3 16:21:18 CST 1987
+# Contents:  output.c
+ 
+echo x - output.c
+sed 's/^@//' > "output.c" <<'@//E*O*F output.c//'
+#include	<stdio.h>
+#include 	"main.h"
+
+char *type_names[4] = {
+			"int ",
+			"double ",
+			"char *",
+			"struct "
+};
+
+
+gen_test()
+/* generate the myalloc procedure for allocating data structures */
+/* generate procedures to test each data type and return a relop code */
+{
+	int i;
+	FILE *fp;
+
+	fp = misc;
+	fprintf(fp,"\n\nchar* %smyalloc(n)\nint n;\n{\n", prefix);
+	fprintf(fp,"\tchar *r;\n\n\tr = (char *) malloc(n);\n");
+	fprintf(fp,"\tif(r == NULL){\n\t\tfprintf(stderr,\"OUT OF MEMORY\\n\");\n");
+	fprintf(fp,"\t\tfprintf(stderr,\"TRC IS EXITING\\n\");\n");
+	fprintf(fp,"\t\texit(0);\n\t}\n\treturn(r);\n}");
+	for(i = 0; i < 2; i++){
+	    fprintf(fp,"\n\n%stest_%s(a,b)\n%s a, b;\n{\n", prefix,type_names[i], type_names[i]);
+	    fprintf(fp,"\tif(a < b) return(4);\n");
+	    fprintf(fp,"\tif(a == b) return(2);\n");
+	    fprintf(fp,"\treturn(1);\n}\n");
+	}
+	fprintf(fp,"\n\n%stest_string(a,b)\nchar *a, *b;\n{\n",prefix);
+	fprintf(fp,"\tint i;\n\n\ti = strcmp(a, b);\n");
+	fprintf(fp,"\tif(i < 0) return(4);\n");
+	fprintf(fp,"\tif(i == 0) return(2);\n");
+	fprintf(fp,"\treturn(1);\n}\n");
+}
+
+
+gen_search()
+/* generate procedures to search each structure for a compound match */
+{
+	int    i;
+	struct def_list *temp;
+	struct data_type *temp2;
+	struct case_list *c_temp;
+	FILE *fp;
+
+	temp = token_list;
+	while(temp){
+	    if(temp->data_types){
+		fp = loop;
+		fprintf(fp,"\nextern struct %s%s_struct *search_%s%s_struct();\n", prefix, temp->name, prefix, temp->name);
+		fp = search;
+		fprintf(fp,"\n\nstruct %s%s_struct *search_%s%s_struct(index", prefix, temp->name, prefix, temp->name);
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(temp2->type <= 2){
+			    fprintf(fp,",\n\t\t\t\t");
+			    for(i = 0; i < strlen(temp2->name)-2; i++)
+				fprintf(fp,"  ");
+			    fprintf(fp," ");
+		        fprintf(fp,"%s, %s_relop",temp2->name, temp2->name);
+			if(temp2->elts)
+			    fprintf(fp,", %s_case",temp2->name);
+		    }
+		    temp2 = temp2->next;
+		}
+		fprintf(fp,")\n");
+		if(temp->data_types) fprintf(fp,"int  index");
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(temp2->type <= 2)
+		        fprintf(fp,", %s_relop",temp2->name);
+		    temp2 = temp2->next;
+		}
+		if(temp->data_types) fprintf(fp,";\n");
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(temp2->type <= 2)
+		        fprintf(fp,"%s%s;\n",type_names[temp2->type], temp2->name);
+		    temp2 = temp2->next;
+		}
+		fprintf(fp,"{\n");
+		if(temp->data_types){
+		    fprintf(fp,"\tint\tflag;\n");
+		    fprintf(fp,"\tstruct %s%s_struct *temp;\n\n", prefix,temp->name);
+		    fprintf(fp,"\ttemp = %s%s_temp[index];\n\twhile(temp){", prefix,temp->name);
+		    temp2 = temp->data_types;
+		    fprintf(fp,"\n\t\tif(temp->MARK == 0){");
+		    fprintf(fp,"\n\t\t\tflag = 7;");
+		    while(temp2){
+		      if(temp2->type <= 2){
+			if(temp2->elts){
+			    fprintf(fp,"\n\t\t\tswitch(%s_case){",temp2->name);
+			    fprintf(fp,"\n\t\t\tcase 0:");
+			}
+			fprintf(fp,"\n");
+			if(temp2->elts) fprintf(fp,"\t");
+		        fprintf(fp,"\t\t\tif(flag & %stest_", prefix);
+		        switch(temp2->type){
+		            case 0: fprintf(fp,"int");
+			            break;
+		            case 1: fprintf(fp,"double");
+			            break;
+		            case 2: fprintf(fp,"string");
+			    default: break;
+		        }
+		        fprintf(fp,"(temp->%s, %s) & %s_relop);",
+			    temp2->name, temp2->name, temp2->name);
+			fprintf(fp,"\n\t\t\t\telse flag = 0;");
+			if(temp2->elts){
+			    fprintf(fp,"\n\t\t\t\tbreak;");
+			    c_temp = temp2->elts;
+			    while(c_temp){
+				fprintf(fp,"\n\t\t\tcase %d:", c_temp->id);
+		        	fprintf(fp,"\n\t\t\t\tif(flag & test_");
+		        	switch(temp2->type){
+		            	    case 0: fprintf(fp,"int");
+			            	    break;
+		            	    case 1: fprintf(fp,"double");
+			            	    break;
+		            	    case 2: fprintf(fp,"string");
+			    	    default: break;
+		        	}
+		        	fprintf(fp,"(temp->%s, temp->%s) & %s_relop);",
+			    		temp2->name, c_temp->name, temp2->name);
+				fprintf(fp,"\n\t\t\t\telse flag = 0;");
+				fprintf(fp,"\n\t\t\t\tbreak;");
+				c_temp = c_temp->next;
+			    }
+			    fprintf(fp,"\n\t\t\tdefault: flag = 0;\n\t\t\t}");
+			}
+		      }
+		      temp2 = temp2->next;
+		    }
+		    fprintf(fp,"\n\t\t\tif(flag){\n\t\t\t\ttemp->MARK = 1;\n");
+		    fprintf(fp,"\t\t\t\treturn(temp);\n\t\t\t}\n\t\t}\n\t\ttemp = temp->next;\n");
+		    fprintf(fp,"\t}\n\treturn(NULL);\n}\n");
+	            
+		}
+	    }
+	    temp = temp->next;
+	}
+}
+
+
+gen_free()
+/* generate procedures to free a structure */
+{
+	int 	i;
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	fp = fre;
+	temp = token_list;
+	while(temp){
+	  if(temp->data_types){
+	    fprintf(fp,"\n\nfree_%s%s_struct(start)\nint start;\n{\n", prefix,temp->name);
+	    fprintf(fp,"\tint i;\n\n");
+	    fprintf(fp,"\tfor(i = start; i < %s%s_max; i++)\n", prefix,temp->name);
+	    fprintf(fp,"\t\tif(%s%s_list[i]){\n", prefix,temp->name);
+		fprintf(fp,"\t\t\tif(%s%s_list[i]->prev == NULL)\n", prefix,temp->name);
+		fprintf(fp,"\t\t\t\t%s%s_list[0] = %s%s_list[i]->next;\n", prefix, temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\telse\n\t\t\t\t%s%s_list[i]->prev->next = %s%s_list[i]->next;\n", prefix, temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\tif(%s%s_list[i]->next)\n\t\t\t\t%s%s_list[i]->next->prev = %s%s_list[i]->prev;\n",
+		prefix, temp->name, prefix, temp->name, prefix, temp->name);
+		temp2 = temp->data_types;
+		while(temp2){
+	    	   if(temp2->type == 2)
+			fprintf(fp,"\t\t\tfree(%s%s_list[i]->%s);\n", prefix,temp->name, temp2->name);
+	    	    temp2 = temp2->next;
+		}
+	    fprintf(fp,"\t\t\tfree(%s%s_list[i]);\n", prefix,temp->name);
+	    fprintf(fp,"\t\t\t%s%s_list[i] = NULL;\n", prefix,temp->name);
+	    fprintf(fp,"\t\t\ti = %s%s_max;\n", prefix,temp->name);
+	    fprintf(fp,"\t\t\t%stoken[%s%s]--;\n\t\t}", prefix, prefix,temp->name);
+	    fprintf(fp,"\n}\n");
+	  }
+	  temp = temp->next;
+	}
+}
+
+
+gen_relink()
+/* generate procedures to relink a structure */
+{
+	int 	i;
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	fp = relink;
+	temp = token_list;
+	while(temp){
+	    fprintf(fp,"\n\n%srelink_%s_struct(start)\nint start;\n{\n", prefix,temp->name);
+	    fprintf(fp,"\tint i, j;\n");
+	    if(temp->data_types){
+	        fprintf(fp,"\tstruct %s%s_struct *temp;\n\n", prefix,temp->name);
+	        fprintf(fp,"\tfor(i = start; i < %s%s_max; i++)\n", prefix,temp->name);
+	        fprintf(fp,"\t\tif(%s%s_list[i]){\n", prefix,temp->name);
+		fprintf(fp,"\t\t\ttemp = %s%s_list[0];\n", prefix,temp->name);
+		fprintf(fp,"\t\t\tj = 0;\n");
+		fprintf(fp,"\t\t\twhile(temp != %s%s_list[i]){\n", prefix,temp->name);
+		fprintf(fp,"\t\t\t\ttemp = temp->next;\n");
+		fprintf(fp,"\t\t\t\tj++;\n\t\t\t}\n");
+		fprintf(fp,"\t\t\tif(%s%s_list[i]->prev == NULL)\n", prefix,temp->name);
+		fprintf(fp,"\t\t\t\t%s%s_list[0] = %s%s_list[i]->next;\n", prefix, temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\telse\n\t\t\t\t%s%s_list[i]->prev->next = %s%s_list[i]->next;\n", prefix, temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\tif(%s%s_list[i]->next)\n\t\t\t\t%s%s_list[i]->next->prev = %s%s_list[i]->prev;\n",
+		prefix, temp->name, prefix, temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\t%s%s_list[i]->MARK = j;\n", prefix, temp->name);
+		fprintf(fp,"\t\t\t%s%s_list[i]->next = %sbacktrack->mark_%s;\n",prefix , temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t\t%sbacktrack->mark_%s = %s%s_list[i];\n", prefix, temp->name, prefix, temp->name);
+	        fprintf(fp,"\t\t\t%s%s_list[i] = NULL;\n", prefix,temp->name);
+	        fprintf(fp,"\t\t\ti = %s%s_max;\n", prefix,temp->name);
+	        fprintf(fp,"\t\t\t%stoken[%s%s]--;\n\t\t}", prefix, prefix,temp->name);
+	    }
+	    else{
+		fprintf(fp,"\t\t\t%sbacktrack->mark_%s++;\n", prefix, temp->name);
+	        fprintf(fp,"\t\t\t%stoken[%s%s]--;\n", prefix, prefix,temp->name);
+	    }
+	    fprintf(fp,"\n}\n");
+	    temp = temp->next;
+	}
+}
+
+
+gen_restore()
+/* generate procedure to restore structures */
+{
+	int 	i;
+	struct def_list *temp;
+	FILE *fp;
+
+	fp = misc;
+	temp = token_list;
+	fprintf(fp,"\n\n%srestore()\n{\n\tint i;\n", prefix);
+	while(temp){
+	  if(temp->data_types){
+	    fprintf(fp,"\n\tfor(i = 1; i < %s%s_max; i++)\n", prefix,temp->name);
+	    fprintf(fp,"\t\tif(%s%s_list[i]){\n", prefix,temp->name);
+	    fprintf(fp,"\t\t\t%s%s_list[i]->MARK = 0;\n", prefix, temp->name);
+	    fprintf(fp,"\t\t\t%s%s_list[i] = NULL;\n\t\t}\n", prefix,temp->name);
+	  }
+	  temp = temp->next;
+	}
+	fprintf(fp,"}\n");
+}
+
+
+gen_add()
+/* generate procedures to add each structure to a list */
+{
+	int 	i;
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	fp = add;
+	temp = token_list;
+	while(temp){
+	    fprintf(fp,"\n%sadd_%s_struct(", prefix,temp->name);
+	    if(temp->data_types){
+		temp2 = temp->data_types;
+		i = 0;
+		while(temp2){
+		    if((temp2->type >= 0) && (temp2->type <= 2)){
+			if(i) fprintf(fp,",");
+		        fprintf(fp," %s",temp2->name);
+		    }
+		    i = 1;
+		    temp2 = temp2->next;
+		}
+	    }
+	    fprintf(fp,")\n");
+	    if(temp->data_types){
+		temp2 = temp->data_types;
+		while(temp2){
+		    switch(temp2->type){
+			case 0: fprintf(fp,"int \t");
+				break;
+			case 1: fprintf(fp,"double\t");
+				break;
+			case 2: fprintf(fp,"char\t*");
+			default: break;
+		    }
+		    if((temp2->type >= 0) && (temp2->type <= 2))
+		        fprintf(fp,"%s;\n",temp2->name);
+		    temp2 = temp2->next;
+		}
+	    }
+	    fprintf(fp,"{\n");
+	    if(temp->data_types){
+		fprintf(fp,"\n\tstruct %s%s_struct *temp;\n\n", prefix,temp->name);
+
+	        fprintf(fp,"\ttemp = (struct %s%s_struct *) %smyalloc(sizeof(struct %s%s_struct));\n", prefix, temp->name, prefix, prefix, temp->name);
+	        temp2 = temp->data_types;
+	        while(temp2){
+		    if((temp2->type == 0) || (temp2->type == 1))
+		        fprintf(fp,"\ttemp->%s = %s;\n",temp2->name, temp2->name);
+		    else{
+			fprintf(fp,"\ttemp->%s = (char *) %smyalloc((strlen(%s)) + 1);\n",
+				  temp2->name, prefix, temp2->name);
+			fprintf(fp,"\tstrcpy(temp->%s, %s);\n",temp2->name, temp2->name);
+		    }
+	  	    temp2 = temp2->next;
+	        }
+		fprintf(fp,"\ttemp->MARK = 0;\n");
+	        fprintf(fp,"\ttemp->next = %s%s_list[0];\n", prefix,temp->name);
+	        fprintf(fp,"\ttemp->prev = NULL;\n");
+	        fprintf(fp,"\tif(%s%s_list[0])\n", prefix, temp->name);
+	        fprintf(fp,"\t\t%s%s_list[0]->prev = temp;\n", prefix,temp->name);
+	        fprintf(fp,"\t%s%s_list[0] = temp;\n", prefix,temp->name);
+	    }
+	    fprintf(fp,"\t%stoken[%s%s]++;\n", prefix, prefix,temp->name);
+	    if(backtracking){
+		fprintf(fp,"\tif(%srestoring == 0)\n", prefix);
+		fprintf(fp,"\t\t%sbacktrack->Add_%s++;\n", prefix, temp->name);
+	    }
+	    fprintf(fp,"\n}\n\n");
+	    temp = temp->next;
+	}
+}
+
+
+gen_save(test, fire)
+int test, fire;
+/* generate procedures to save the contents of 
+   dynamically allocated structures on a file */
+{
+	int i, j;
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	fp = save;
+	/* profiling arrays */
+	if(profiling)
+	    fprintf(fp,"extern int %sfire_profile[], %stest_profile[];\n", prefix, prefix);
+	/* boolean shared by scan and load procedures */
+	fprintf(fp,"int %seof_flag;\n", prefix);
+	/* procedure to read a line from a file */
+	fprintf(fp,"\n\nchar *%sscan(fp)\nFILE *fp;\n{\n", prefix);
+	fprintf(fp,"\tchar *s, c[512];\n\tint i;\n");
+	fprintf(fp,"\n\ti = 0;\n\twhile(1){\n");
+	fprintf(fp,"\t\tc[i] = getc(fp);\n");
+	fprintf(fp,"\t\tif((c[i] == '\\n') || (c[i] == EOF)){\n");
+	fprintf(fp,"\t\t\tif(c[i] == EOF)\n\t\t\t\t%seof_flag = 0;\n", prefix);
+	fprintf(fp,"\t\t\tc[i] = '\\0';\n");
+	fprintf(fp,"\t\t\ts = (char *) %smyalloc (i + 1);\n", prefix);
+	fprintf(fp,"\t\t\tstrcpy(s,c);\n\t\t\treturn(s);\n");
+	fprintf(fp,"\t\t}\n\t\tif(i < 511)\n\t\t\ti++;\n");
+	fprintf(fp,"\t}\n}\n");
+	/* procedures to save stm on a file */
+	fprintf(fp,"\n\n%ssave_stm(fp)\n", prefix);
+	fprintf(fp,"FILE *fp;\n{\n");
+	temp = token_list;
+	while(temp){
+	    fprintf(fp,"\tsave_%s%s_struct(fp);\n", prefix,temp->name);
+	    temp = temp->next;
+	}
+	fprintf(fp,"}\n\n");
+	temp = token_list;
+	while(temp){
+	    fprintf(fp,"\nsave_%s%s_struct(fp)\n", prefix,temp->name);
+	    fprintf(fp,"FILE *fp;\n{\n");
+	    if(temp->data_types){
+		fprintf(fp,"\tstruct %s%s_struct *temp;\n\n", prefix,temp->name);
+		fprintf(fp,"\ttemp = %s%s_list[0];\n", prefix,temp->name);
+		fprintf(fp,"\twhile(temp->next != NULL)\n");
+		fprintf(fp,"\t\ttemp = temp->next;\n");
+		fprintf(fp,"\twhile(temp){\n");
+	    }
+	    fprintf(fp,"\t\tfprintf(fp,\"%s%s\\n\");\n", prefix, temp->name);
+	    if(temp->data_types){
+		temp2 = temp->data_types;
+		while(temp2){
+			if((temp2->type <= 2) && (temp2->type >= 0)){
+		            fprintf(fp,"\t\tfprintf(fp,\"");
+			    switch(temp2->type){
+			        case 0: fprintf(fp,"%cd", '%');
+				        break;
+			        case 1: fprintf(fp,"%cf", '%');
+				        break;
+			        case 2: fprintf(fp,"%cs", '%');
+			        default: break;
+			    }
+		            fprintf(fp,"\\n\",temp->%s);\n", temp2->name);
+			}
+			temp2 = temp2->next;
+		}
+		fprintf(fp,"\t\ttemp = temp->prev;\n\t}\n");
+	    }
+	    else{
+		fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",%stoken[%s%s]);\n",'%', prefix, prefix,temp->name);
+	    }
+	    fprintf(fp,"}\n\n");
+	    temp = temp->next;
+	}
+
+	/* procedure to load stm from a file */
+	fprintf(fp,"\n\n%sload_stm(fp)\nFILE *fp;\n{\n\tchar *s;\n", prefix);
+	temp = token_list;
+	while(temp){
+	    temp2 = temp->data_types;
+	    while(temp2){
+		if((temp2->type <= 2) && (temp2->type >= 0))
+		    fprintf(fp,"\t%s%s%s_%s;\n",type_names[temp2->type], prefix,
+					      temp->name, temp2->name);
+		temp2 = temp2->next;
+	    }
+	    temp = temp->next;
+	}
+	temp = token_list;
+	fprintf(fp,"\t%srestoring = 1;\n", prefix);
+	fprintf(fp,"\n\n\t%seof_flag = 1;\n", prefix);
+	fprintf(fp,"\twhile(%seof_flag){\n", prefix);
+	fprintf(fp,"\t\ts = %sscan(fp);\n", prefix);
+	i = 0;
+	while(temp){
+	    fprintf(fp,"\t\t");
+	    if(i)
+		fprintf(fp,"else ");
+	    fprintf(fp,"if(strcmp(s, \"%s%s\") == 0){\n", prefix,temp->name);
+	    fprintf(fp,"\t\t\tfree(s);\n");
+	    if(temp->data_types){
+	        temp2 = temp->data_types;
+	        while(temp2){
+			    fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+			    switch(temp2->type){
+			        case 0: fprintf(fp,"\t\t\t%s%s_%s = atoi(s);\n", prefix,temp->name, temp2->name);
+		    	    		fprintf(fp,"\t\t\tfree(s);\n");
+				        break;
+			        case 1: fprintf(fp,"\t\t\t%s%s_%s = atoi(s);\n", prefix,temp->name, temp2->name);
+		    	    		fprintf(fp,"\t\t\tfree(s);\n");
+				        break;
+			        case 2: fprintf(fp,"\t\t\t%s%s_%s = s;\n", prefix,temp->name, temp2->name);
+			        default: break;
+			    }
+		    	    temp2 = temp2->next;
+		}
+		/* generate the add statement here */
+		fprintf(fp,"\t\t\t%sadd_%s_struct(", prefix, temp->name);
+		i = 0;
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(i)
+			fprintf(fp," ,");
+		    i = 1;
+		    fprintf(fp,"%s%s_%s", prefix,temp->name, temp2->name);
+		    temp2 = temp2->next;
+		}
+		fprintf(fp,");\n");
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(temp2->type == 2)
+		        fprintf(fp,"\t\t\tfree(%s%s_%s);\n", prefix,temp->name, temp2->name);
+		    temp2 = temp2->next;
+		}
+	    }
+	    else{
+	        /* read in the count and increment token[] */
+		fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+		fprintf(fp,"\t\t\t%stoken[%s%s] += atoi(s);\n", prefix, prefix, temp->name);
+		fprintf(fp,"\t\t\tfree(s);\n");
+	    }
+	    fprintf(fp,"\t\t}\n");
+	    i = 1;
+	    temp = temp->next;
+	}
+	fprintf(fp,"\t}\n");
+	fprintf(fp,"\t%srestoring = 0;\n", prefix);
+	fprintf(fp,"}\n");
+	if(backtracking){
+	    fprintf(fp,"\n%ssave_backtrack(fp)\nFILE *fp;\n{\n", prefix);
+	    fprintf(fp,"\tstruct %sback_track_stack *temp;\n",prefix);
+	    temp = token_list;
+	    while(temp){
+		if(temp->data_types)
+	    	    fprintf(fp,"\tstruct %s%s_struct *%s_tmp;\n",prefix, temp->name, temp->name);
+		temp = temp->next;
+	    }
+	    fprintf(fp,"\n\ttemp = %sbacktrack;\n\twhile(temp){\n", prefix);
+	    fprintf(fp,"\t\tfprintf(fp,\"%sbacktrack\\n\");\n", prefix);
+	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",temp->next_rule);\n",'%');
+	    temp = token_list;
+	    while(temp){
+	    	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",temp->Add_%s);\n", '%', 
+			temp->name);
+		    if(temp->data_types == NULL)
+	    	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",temp->mark_%s);\n",
+			    '%', temp->name);
+		    temp = temp->next;
+	    }
+	    temp = token_list;
+	    while(temp){
+		if(temp->data_types){
+		    fprintf(fp,"\t\t%s_tmp = temp->mark_%s;\n", temp->name, temp->name);
+		    fprintf(fp,"\t\twhile(%s_tmp){\n", temp->name);
+	    	    fprintf(fp,"\t\t\tfprintf(fp,\"%s%s\\n\");\n", prefix, temp->name);
+	    	    fprintf(fp,"\t\t\tfprintf(fp,\"%cd\\n\",%s_tmp->MARK);\n", '%', temp->name);
+		    temp2 = temp->data_types;
+		    while(temp2){
+		      if((temp2->type >= 0) && (temp2->type <= 2)){
+	    	        fprintf(fp,"\t\t\tfprintf(fp,\"%c", '%');
+			switch(temp2->type){
+			    case 0: fprintf(fp,"d");
+				    break;
+			    case 1: fprintf(fp,"f");
+				    break;
+			    case 2: fprintf(fp,"s");
+			    default:break;
+			}
+			fprintf(fp,"\\n\",%s_tmp->%s);\n", temp->name, temp2->name);
+		      }
+		      temp2 = temp2->next;
+		    }
+		    fprintf(fp,"\t\t\t%s_tmp = %s_tmp->next;\n", temp->name, temp->name);
+		    fprintf(fp,"\t\t}\n");
+		    }
+		temp = temp->next;
+		}
+	    fprintf(fp,"\t\ttemp = temp->next;\n\t}\n");
+	    fprintf(fp,"}\n");
+	    fprintf(fp,"\n%sload_backtrack(fp)\nFILE *fp;\n{\n", prefix);
+	    fprintf(fp,"\tchar *s;\n");
+	    fprintf(fp,"\tstruct %sback_track_stack *temp;\n",prefix);
+	    temp = token_list;
+	    while(temp){
+		if(temp->data_types)
+	    	    fprintf(fp,"\tstruct %s%s_struct *%s_tmp;\n",prefix, temp->name, temp->name);
+		temp = temp->next;
+	    }
+	    fprintf(fp,"\n\t%seof_flag = 1;\n\ttemp = NULL;\n", prefix);
+	    fprintf(fp,"\twhile(%seof_flag){\n", prefix);
+	    fprintf(fp,"\t\ts = %sscan(fp);\n", prefix);
+	    fprintf(fp,"\t\tif(strcmp(s,\"%sbacktrack\") == 0){\n", prefix);
+	    fprintf(fp,"\t\t\tfree(s);\n");
+	    fprintf(fp,"\t\t\tif(temp == NULL)\n\t\t\t\t%sbacktrack = temp = ", prefix);
+	    fprintf(fp,"(struct %sback_track_stack *) %smyalloc ", prefix, prefix);
+	    fprintf(fp,"(sizeof(struct %sback_track_stack));\n",prefix);
+	    fprintf(fp,"\t\t\telse{\n\t\t\t\ttemp->next = ", prefix);
+	    fprintf(fp,"(struct %sback_track_stack *) %smyalloc ", prefix, prefix);
+	    fprintf(fp,"(sizeof(struct %sback_track_stack));\n",prefix);
+	    fprintf(fp,"\t\t\t\ttemp = temp->next;\n\t\t\t}\n");
+	    fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+	    fprintf(fp,"\t\t\ttemp->next_rule = atoi(s);\n");
+	    fprintf(fp,"\t\t\tfree(s);\n");
+	    temp = token_list;
+	    while(temp){
+	        fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+	        fprintf(fp,"\t\t\ttemp->Add_%s = atoi(s);\n", temp->name);
+	        fprintf(fp,"\t\t\tfree(s);\n");
+		if(temp->data_types)
+	            fprintf(fp,"\t\t\t%s_tmp = temp->mark_%s = NULL;\n", temp->name, temp->name);
+		else{
+	            fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+	            fprintf(fp,"\t\t\ttemp->mark_%s = atoi(s);\n", temp->name);
+	            fprintf(fp,"\t\t\tfree(s);\n");
+		}
+		temp = temp->next;
+	    }
+	    fprintf(fp,"\t\t\ttemp->next = NULL;\n");
+	    fprintf(fp,"\t\t}\n");
+	    temp = token_list;
+	    while(temp){
+		if(temp->data_types){
+	    	fprintf(fp,"\t\telse if(strcmp(s,\"%s%s\") == 0){\n", prefix,temp->name);
+	    	fprintf(fp,"\t\t\tfree(s);\n");
+	    	    fprintf(fp,"\t\t\tif(%s_tmp == NULL)\n\t\t\t\ttemp->mark_%s = %s_tmp = ", temp->name, temp->name, temp->name);
+	    	    fprintf(fp,"(struct %s%s_struct *) %smyalloc ", prefix, temp->name, prefix);
+	    	    fprintf(fp,"(sizeof(struct %s%s_struct));\n",prefix, temp->name);
+	    	    fprintf(fp,"\t\t\telse{\n\t\t\t\t%s_tmp->next = ", temp->name);
+	    	    fprintf(fp,"(struct %s%s_struct *) %smyalloc ", prefix, temp->name, prefix);
+	    	    fprintf(fp,"(sizeof(struct %s%s_struct));\n",prefix, temp->name);
+	    	    fprintf(fp,"\t\t\t\t%s_tmp = %s_tmp->next;\n\t\t\t}\n", temp->name, temp->name);
+		    temp2 = temp->data_types;
+	            fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+		    fprintf(fp,"\t\t\t%s_tmp->MARK = atoi(s);\n",temp->name);
+	    	    fprintf(fp,"\t\t\tfree(s);\n");
+		    while(temp2){
+		      if((temp2->type >= 0) && (temp2->type <= 2)){
+			fprintf(fp,"\t\t\ts = %sscan(fp);\n", prefix);
+	    	        fprintf(fp,"\t\t\t%s_tmp->%s = ",temp->name, temp2->name);
+			switch(temp2->type){
+			    case 0: fprintf(fp,"atoi(s);\n");
+				    fprintf(fp,"\t\t\tfree(s);\n");
+				    break;
+			    case 1: fprintf(fp,"atof(s);\n");
+				    fprintf(fp,"\t\t\tfree(s);\n");
+				    break;
+			    case 2: fprintf(fp,"s;\n");
+			    default:break;
+			}
+		      }
+		      temp2 = temp2->next;
+		    }
+		    fprintf(fp,"\t\t}\n");
+	        }
+		temp = temp->next;
+	    }
+	    fprintf(fp,"\t}\n");
+	    fprintf(fp,"}\n");
+	}
+	if(profiling){
+	    fprintf(fp,"\n%ssave_profile(fp)\nFILE *fp;\n{\n", prefix);
+	    fprintf(fp,"\tint i;\n\n");
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++)\n",fire);
+	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",%sfire_profile[i]);\n", '%', prefix);
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++)\n",test);
+	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\",%stest_profile[i]);\n", '%', prefix);
+	    fprintf(fp,"}\n");
+	    fprintf(fp,"\n%sload_profile(fp)\nFILE *fp;\n{\n", prefix);
+	    fprintf(fp,"\tchar *s;\n\tint i;\n\n");
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++){\n",fire);
+	    fprintf(fp,"\t\t%sfire_profile[i] = atoi(s = %sscan(fp));\n", prefix, prefix);
+	    fprintf(fp,"\t\tfree(s);\n\t}\n");
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++){\n",test);
+	    fprintf(fp,"\t\t%stest_profile[i] = atoi(s = %sscan(fp));\n", prefix, prefix);
+	    fprintf(fp,"\t\tfree(s);\n\t}\n");
+	    fprintf(fp,"}\n");
+	}
+	if(tracing){
+	    fprintf(fp,"\n%ssave_trace(fp)\nFILE *fp;\n{\n", prefix);
+	    fprintf(fp,"\tstruct %strace *temp;\n\n", prefix);
+	    fprintf(fp,"\ttemp = %strace_front;\n", prefix);
+	    fprintf(fp,"\twhile(temp){\n");
+	    fprintf(fp,"\t\tfprintf(fp,\"%cd\\n\", temp->rule);\n",'%');
+	    fprintf(fp,"\t\ttemp = temp->next;\n\t}\n}\n");
+	    fprintf(fp,"\n%sload_trace(fp)\nFILE *fp;\n{\n\tchar *s;\n\n", prefix);
+	    fprintf(fp,"\t%seof_flag = 1;\n\ts = %sscan(fp);\n",prefix ,prefix);
+	    fprintf(fp,"\twhile(%seof_flag){\n", prefix);
+	    fprintf(fp,"\t\tif(%strace_back){\n", prefix);
+	    fprintf(fp,"\t\t\t%strace_back->next = (struct %strace *) ",prefix, prefix);
+	    fprintf(fp,"%smyalloc (sizeof(struct %strace));\n", prefix, prefix);
+	    fprintf(fp,"\t\t\t%strace_back = %strace_back->next;\n", prefix, prefix);
+	    fprintf(fp,"\t\t}\n\t\telse\n");
+	    fprintf(fp,"\t\t\t%strace_front = %strace_back = (struct %strace *) ",prefix, prefix, prefix);
+	    fprintf(fp,"%smyalloc (sizeof(struct %strace));\n", prefix, prefix);
+	    fprintf(fp,"\t\t%strace_back->rule = atoi(s);\n", prefix);
+	    fprintf(fp,"\t\tfree(s);\n\t\ts = %sscan(fp);\n", prefix);
+	    fprintf(fp,"\t}\n}\n");
+	}
+}
+
+
+gen_print()
+/* generate procedures to print the contents of stm on the standard output */
+{
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	fp = dump;
+	fprintf(fp,"\n\n%sdump_stm()\n{\n", prefix);
+	temp = token_list;
+	while(temp){
+	    fprintf(fp,"\t%sdump_%s_struct();\n", prefix,temp->name);
+	    temp = temp->next;
+	}
+	fprintf(fp,"}\n\n");
+	temp = token_list;
+	while(temp){
+		fprintf(fp,"\n%sdump_%s_struct()\n{\n", prefix,temp->name);
+	    if(temp->data_types){
+		fprintf(fp,"\tint\ti;\n\tstruct %s%s_struct *temp;\n\n", prefix,temp->name);
+		fprintf(fp,"\ti = 1;\n");
+	    }
+		fprintf(fp,"\tprintf(\"\\nDumping %s list (%cd)\\n\",%stoken[%s%s]);\n", temp->name, '%', prefix, prefix, temp->name);
+	    if(temp->data_types){
+		fprintf(fp,"\ttemp = %s%s_list[0];\n\twhile(temp){\n", prefix,temp->name);
+		fprintf(fp,"\t\tprintf(\"%cd.\\t",'%');
+		temp2 = temp->data_types;
+		while(temp2){
+			switch(temp2->type){
+			    case 0: fprintf(fp,"%cd\\t", '%');
+				    break;
+			    case 1: fprintf(fp,"%cf\\t", '%');
+				    break;
+			    case 2: fprintf(fp,"%cs\\t", '%');
+			    default: break;
+			}
+			temp2 = temp2->next;
+		}
+		fprintf(fp,"\\n\", i");
+		temp2 = temp->data_types;
+		while(temp2){
+			if((temp2->type >= 0) && (temp2->type <= 2))
+			    fprintf(fp,"\n\t\t\t, temp->%s",temp2->name);
+			temp2 = temp2->next;
+		}
+		fprintf(fp,");\n\t\ttemp = temp->next;\n\t\ti++;\n\t}\n");
+	    }
+	    fprintf(fp,"}\n\n");
+	    temp = temp->next;
+	}
+}
+
+
+gen_init(mode)
+/* generate procedure to initialize stm */
+/* if mode is zero, then generate only code to add to stm */
+int mode;
+{
+	int i;
+	struct init *temp;
+	struct fields *temp2;
+	struct def_list *t;
+	struct data_type *t2;
+	FILE *fp;
+
+	if(mode)
+	    fp = add;
+	else
+	    fp = loop;
+	temp = init_list->next;			/* the first one is a place holder */
+	if(mode){
+	    fprintf(fp,"\n\n%sinit()\n{\n\tint i;\n", prefix);
+	    if(backtracking){
+		fprintf(fp,"\n\t%sbacktrack = (struct %sback_track_stack *)", prefix, prefix);
+		fprintf(fp," %smyalloc (sizeof(struct %sback_track_stack));\n", prefix, prefix);
+	    }
+	}
+
+	while(temp){
+	    if(temp->count){
+	        if(mode == 0) fprintf(fp,"\t\t");
+		fprintf(fp,"\tfor(i = 0; i < %d; i++)\n\t",temp->count);
+	    }
+	    if(mode == 0) fprintf(fp,"\t\t");
+	    fprintf(fp,"\t%sadd_%s_struct(" , prefix, temp->object);
+	    t = token_list;
+	    while(strcmp(t->name, temp->object) != 0)
+		t = t->next;
+	    i = 0;
+	    t2 = t->data_types;
+	    while(t2){
+		temp2 = temp->items;
+		while((temp2) && (strcmp(temp2->element, t2->name) != 0))
+			temp2 = temp2->next;
+		if((temp2) && (temp2->type != 3)){
+		    if(i) fprintf(fp,", "); i = 1;
+		    if(temp2->type >= 0){
+		        if(temp2->type == 2) fprintf(fp,"\"");
+		        fprintf(fp,"%s",temp2->value);
+		        if(temp2->type == 2) fprintf(fp,"\"");
+		    }
+		    else{
+			if(temp2->empty)
+			   fprintf(fp,"%s%s_empty[%d].%s", prefix,temp2->object,
+				temp2->index, temp2->value);
+			else
+			   fprintf(fp,"%s%s_list[%d]->%s", prefix,temp2->object,
+				temp2->index, temp2->value);
+		    }
+		}
+		else if(t2->type != 3){
+		    if(i) fprintf(fp,", "); i = 1;
+		    if(t2->type == 2)
+			fprintf(fp,"\"\"");
+		    if(t2->type == 1)
+			fprintf(fp,"0.0");
+		    if(t2->type == 0)
+			fprintf(fp,"0");
+		}
+		t2 = t2->next;
+	    }
+	    fprintf(fp,");\n");
+	    temp = temp->next;
+	}
+	if(mode){
+	    if(backtracking){
+	        fprintf(fp,"\tfree(%sbacktrack);\n", prefix);
+	        fprintf(fp,"\t%sbacktrack = NULL;\n", prefix);
+	    }
+	    fprintf(fp,"}\n\n\n");
+	}
+}
+
+
+gen_structs()
+/*
+generate structure definitions from token list
+*/
+{
+	int i;
+	struct def_list *temp;
+	struct data_type *temp2;
+	FILE *fp;
+
+	i = 0;
+	fp = header;
+	temp = token_list;
+	while(temp){
+	  if(temp->data_types){
+	    fprintf(fp,"\nstruct %s%s_struct {\n", prefix,temp->name);
+	    if(temp->data_types){
+		temp2 = temp->data_types;
+		while(temp2){
+		    if(temp2->type != 3)
+		        fprintf(fp,"\t\t%s%s;\n",type_names[temp2->type],temp2->name);
+		    else
+		        fprintf(fp,"\t\tstruct %s%s_struct *%s;\n", prefix,temp->name, temp2->name);
+		    temp2 = temp2->next;
+		}
+	    }
+	    fprintf(fp,"\t\tint MARK;\n");
+	    fprintf(fp,"\t\tstruct %s%s_struct *prev;\n", prefix,temp->name);
+	    fprintf(fp,"\t\tstruct %s%s_struct *next;\n", prefix,temp->name);
+	    fprintf(fp,"} *%s%s_list[%s%s_max],", prefix,temp->name, prefix, temp->name);
+	    if(max_empty[i])
+	        fprintf(fp," %s%s_empty[%d],", prefix,temp->name, max_empty[i]);
+	    fprintf(fp," *%s%s_temp[%s%s_max];\n", prefix,temp->name, prefix, temp->name);
+	  }
+	  i++;
+	  temp = temp->next;
+	}
+	if(backtracking){
+	    fprintf(fp,"\nstruct %sback_track_stack {\n", prefix);
+	    temp = token_list;
+	    while(temp){
+		    fprintf(fp,"\tint Add_%s;\n",temp->name);
+		    if(temp->data_types)
+		        fprintf(fp,"\tstruct %s%s_struct *mark_%s;\n", prefix,temp->name, temp->name);
+		    else
+		        fprintf(fp,"\tint mark_%s;\n", temp->name);
+		    temp = temp->next;
+	    }
+	    fprintf(fp,"\tint next_rule;\n");
+	    fprintf(fp,"\tstruct %sback_track_stack *next;\n} *%sbacktrack;\n", prefix, prefix);
+	}
+}
+
+
+gen_back()
+/* generate procedures required for backtracking */
+{
+	struct def_list *temp;
+	FILE *fp;
+
+	fp = backtrack;
+	temp = token_list;
+	fprintf(fp,"\n%sinsert_backtrack(rule)\nint rule;\n{\n", prefix);
+	fprintf(fp,"\tstruct %sback_track_stack *temp;\n\n", prefix);
+	fprintf(fp,"\ttemp = (struct %sback_track_stack *) %smyalloc", prefix, prefix);
+	fprintf(fp,"(sizeof(struct %sback_track_stack));\n", prefix);
+	fprintf(fp,"\ttemp->next_rule = rule;\n");
+	while(temp){
+	    fprintf(fp,"\ttemp->Add_%s = 0;\n", temp->name);
+	    if(temp->data_types)
+		fprintf(fp,"\ttemp->mark_%s = NULL;\n", temp->name);
+	    else
+	        fprintf(fp,"\ttemp->mark_%s = 0;\n", temp->name);
+	    temp = temp->next;
+	}
+	fprintf(fp,"\ttemp->next = %sbacktrack;\n", prefix);
+	fprintf(fp,"\t%sbacktrack = temp;\n}\n", prefix);
+
+	fprintf(fp,"\n%sbackup()\n{\n\tint i;\n", prefix);
+	fprintf(fp,"\tstruct %sback_track_stack *temp;\n", prefix);
+	temp = token_list;
+	while(temp){
+	    if(temp->data_types)
+		fprintf(fp,"\tstruct %s%s_struct *%s_temp, *%s_temp2;\n",
+			prefix, temp->name, temp->name, temp->name);
+	    temp = temp->next;
+	}
+	fprintf(fp,"\n\tif(%sbacktrack == NULL)\n\t\treturn;\n", prefix);
+	temp = token_list;
+	while(temp){
+	    if(temp->data_types){
+		fprintf(fp,"\twhile(%sbacktrack->mark_%s){\n", prefix, temp->name);
+		fprintf(fp,"\t\t%s_temp2 = %sbacktrack->mark_%s;\n",
+			temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t%sbacktrack->mark_%s = %sbacktrack->mark_%s->next;\n", prefix,
+			temp->name, prefix, temp->name);
+		fprintf(fp,"\t\t%s_temp2->prev = NULL;\n", temp->name);
+		fprintf(fp,"\t\t%s_temp2->next = NULL;\n", temp->name);
+		fprintf(fp,"\t\t%s_temp = %s%s_list[0];\n", temp->name, prefix, temp->name);
+		fprintf(fp,"\t\tif(%s_temp){\n", temp->name);
+		fprintf(fp,"\t\t\tfor(i = 0; i < %s_temp2->MARK; i++)\n", temp->name);
+		fprintf(fp,"\t\t\t\tif(%s_temp->next)\n", temp->name);
+		fprintf(fp,"\t\t\t\t\t%s_temp = %s_temp->next;\n",
+
+			temp->name, temp->name);
+		fprintf(fp,"\t\t\t\telse\n");
+		fprintf(fp,"\t\t\t\t\ti = %s_temp2->MARK + 1;\n", temp->name);
+		fprintf(fp,"\t\t}\n\t\telse i = -1;\n");
+		fprintf(fp,"\t\tif(i == %s_temp2->MARK){\n", temp->name);
+		fprintf(fp,"\t\t\t%s_temp2->next = %s_temp;\n", temp->name, temp->name);
+		fprintf(fp,"\t\t\t%s_temp2->prev = %s_temp->prev;\n",
+			temp->name, temp->name);
+		fprintf(fp,"\t\t\tif(%s_temp->prev)\n", temp->name);
+		fprintf(fp,"\t\t\t\t%s_temp->prev->next = %s_temp2;\n",
+			temp->name, temp->name);
+		fprintf(fp,"\t\t\telse\n");
+		fprintf(fp,"\t\t\t\t%s%s_list[0] = %s_temp2;\n", prefix, temp->name, temp->name);
+		fprintf(fp,"\t\t\t%s_temp->prev = %s_temp2;\n", temp->name, temp->name);
+		fprintf(fp,"\t\t}\n\t\telse{\n");
+		fprintf(fp,"\t\t\tif(%s_temp){\n", temp->name);
+		fprintf(fp,"\t\t\t\t%s_temp->next = %s_temp2;\n", temp->name, temp->name);
+		fprintf(fp,"\t\t\t\t%s_temp2->prev = %s_temp;\n", temp->name, temp->name);
+		fprintf(fp,"\t\t\t\t%s_temp2->next = NULL;\n", temp->name);
+		fprintf(fp,"\t\t\t}\n\t\t\telse %s%s_list[0] = %s_temp2;\n", prefix, temp->name, temp->name);
+		fprintf(fp,"\t\t}\n");
+		fprintf(fp,"\t\t%s_temp2->MARK = 0;\n", temp->name);
+		fprintf(fp,"\t\t%stoken[%s%s]++;\n", prefix, prefix, temp->name);
+		fprintf(fp,"\t}\n");
+	        fprintf(fp,"\tfor(i = 0; i < %sbacktrack->Add_%s; i++){\n", prefix, temp->name);
+	        fprintf(fp,"\t\t%s%s_list[1] = %s%s_list[0];\n", prefix,temp->name, prefix, temp->name);
+	        fprintf(fp,"\t\tfree_%s%s_struct(1);\n\t}\n", prefix, temp->name);
+	    }
+	    else{
+		fprintf(fp,"\t%stoken[%s%s] += %sbacktrack->mark_%s;\n", prefix, prefix,
+			temp->name, prefix, temp->name);
+		fprintf(fp,"\t%stoken[%s%s] -= %sbacktrack->Add_%s;\n",
+		prefix, prefix, temp->name, prefix, temp->name);
+	    }
+	    temp = temp->next;
+	}
+	fprintf(fp,"\ttemp = %sbacktrack;\n", prefix);
+	fprintf(fp,"\t%sbacktrack = %sbacktrack->next;\n", prefix, prefix);
+	fprintf(fp,"\tfree(temp);\n");
+	fprintf(fp,"}\n");
+}
+
+
+gen_trace()
+/* generate code to support building a trace list */
+{
+	int i;
+	struct rule *temp;
+	FILE *fp;
+
+	fp = header;
+	fprintf(fp,"\nstruct %strace{\n\tint rule;\n", prefix);
+	fprintf(fp,"\tstruct %strace *next;\n} ", prefix);
+	fprintf(fp,"*%strace_front, *%strace_back;\n\n", prefix, prefix);
+	temp = rule_list;
+	i = 1;
+	while(temp->next){
+	    temp = temp->next;
+	    i++;
+	}
+	fp = loop;
+	fprintf(fp,"char *%srule_names[%d] = {\n", prefix,i+2);
+	fprintf(fp,"\t\"%sStart\",\n", prefix);
+	while(temp){
+	    fprintf(fp,"\t\"%s%s\",\n", prefix,temp->label);
+	    temp = temp->prev;
+	}
+	fprintf(fp,"\t\"%sEnd\"\n};\n\n", prefix);
+	fp = misc;
+	fprintf(fp,"\n%sappend_trace(i)\nint i;\n{\n", prefix);
+	fprintf(fp,"\tstruct %strace *temp;\n\n\t", prefix);
+	fprintf(fp,"temp = (struct %strace *) %smyalloc (sizeof(struct %strace));\n", prefix, prefix, prefix);
+	fprintf(fp,"\ttemp->rule = i;\n\ttemp->next = NULL;\n");
+	fprintf(fp,"\tif(%strace_front){\n\t\t%strace_back->next = temp;\n", prefix, prefix);
+	fprintf(fp,"\t\t%strace_back = %strace_back->next;\n\t}\n", prefix, prefix);
+	fprintf(fp,"\telse %strace_front = %strace_back = temp;\n}\n\n", prefix, prefix);
+}
+
+
+gen_profile(n,d)
+int n,d;
+/* generate procedures and structures to generate profile */
+{
+	struct list *temp;
+	struct rule *r_temp;
+	FILE *fp;
+
+	fp = profile;
+	temp = label_list;
+	fprintf(fp,"\nint %stest_profile[%d];\n\n", prefix, n);
+	fprintf(fp,"\nint %sfire_profile[%d];\n\n", prefix, d);
+	fprintf(fp,"char *%slabel_names[%d] = {\n", prefix, n);
+	while(temp){
+	    fprintf(fp,"\t\"%s%s\"", prefix, temp->name);
+	    if(temp->next)
+		fprintf(fp,",\n");
+	    temp = temp->next;
+	}
+	r_temp = rule_list;
+	while(r_temp->next)
+	    r_temp = r_temp->next;
+	fprintf(fp,"};\n\nchar *%srules[%d] = {\n\t\"\",\n", prefix, d);
+	while(r_temp){
+	    fprintf(fp,"\t\"%s%s\"", prefix, r_temp->label);
+	    if(r_temp->prev)
+		fprintf(fp,",\n");
+	    r_temp = r_temp->prev;
+	}
+	fprintf(fp,"};\n\n%sprint_profile()\n{\n", prefix);
+	fprintf(fp,"\tint i, t;\n\n\tt = 0;\n\tprintf(\"\\nRules Tested\\n\");\n", n);
+	fprintf(fp,"\tfor(i = 0; i < %d; i++){\n", n);
+	fprintf(fp,"\t\tprintf(\"%cd",'%');
+	fprintf(fp,"\\t%cs\\n\",%stest_profile[i],", '%', prefix);
+	fprintf(fp," %slabel_names[i]);\n", prefix);
+	fprintf(fp,"\t\tt += %stest_profile[i];\n\t}\n", prefix);
+	fprintf(fp,"\tprintf(\"%cd\\n\", t);\n\tt = 0;\n", '%');
+	fprintf(fp,"\tprintf(\"\\nRules Fired\\n\");\n", n);
+	fprintf(fp,"\n\tfor(i = 1; i < %d; i++){\n", d);
+	fprintf(fp,"\t\tprintf(\"%cd",'%');
+	fprintf(fp,"\\t%cs\\n\",%sfire_profile[i],", '%', prefix);
+	fprintf(fp," %srules[i]);\n", prefix);
+	fprintf(fp,"\t\tt += %sfire_profile[i];\n\t}\n", prefix);
+	fprintf(fp,"\tprintf(\"%cd\\n\", t);\n}\n", '%');
+}
+
+
+gen_zero(test,fire)
+int test, fire;
+/*
+generate a procedure that will free or zero all data
+structures generated by trc
+*/
+{
+	int i;
+	FILE *fp;
+	struct def_list *d_temp;
+	struct data_type *dt_temp;
+
+	fp = zero;
+	if(profiling)
+	    fprintf(fp,"extern int %stest_profile[], %sfire_profile[];\n",prefix, prefix);
+	fprintf(fp,"\n\n%szero()\n{\n\tint i;\n",prefix);
+	if(backtracking)
+	    fprintf(fp,"\tstruct %sback_track_stack *b_temp;\n", prefix);
+	/* pointer definitions */
+	d_temp = token_list;
+	while(d_temp){
+	    if(d_temp->data_types)
+	        fprintf(fp,"\tstruct %s%s_struct *%s_tmp;\n", prefix,d_temp->name,d_temp->name);
+	    d_temp = d_temp->next;
+	}
+	/* free struct lists */
+	d_temp = token_list;
+	while(d_temp){
+	    if(d_temp->data_types){
+	        fprintf(fp,"\twhile(%s%s_list[0]){\n", prefix,d_temp->name);
+	        fprintf(fp,"\t\t%s%s_list[1] = %s%s_list[0];\n", prefix,d_temp->name, prefix,d_temp->name);
+	        fprintf(fp,"\t\tfree_%s%s_struct(1);\n\t}\n", prefix,d_temp->name);
+	    }
+	    d_temp = d_temp->next;
+	}
+	/* free backtracking data */
+	if(backtracking){
+	    fprintf(fp,"\twhile(%sbacktrack){\n", prefix);
+	    fprintf(fp,"\t\tb_temp = %sbacktrack;\n", prefix);
+	    fprintf(fp,"\t\t%sbacktrack = %sbacktrack->next;\n", prefix, prefix);
+	    d_temp = token_list;
+	    while(d_temp){
+	        if(d_temp->data_types){
+	            fprintf(fp,"\t\t%s_tmp = b_temp->mark_%s;\n",d_temp->name,d_temp->name);
+	            fprintf(fp,"\t\twhile(%s_tmp){\n",d_temp->name);
+	            fprintf(fp,"\t\t\tb_temp->mark_%s = b_temp->mark_%s->next;\n",d_temp->name,d_temp->name);
+		    dt_temp = d_temp->data_types;
+		    while(dt_temp){
+			if(dt_temp->type == 2)
+	                    fprintf(fp,"\t\t\tfree(%s_tmp->%s);\n",d_temp->name,dt_temp->name);
+			dt_temp = dt_temp->next;
+		    }
+	            fprintf(fp,"\t\t\tfree(%s_tmp);\n",d_temp->name);
+	            fprintf(fp,"\t\t\t%s_tmp = b_temp->mark_%s;\n\t\t}\n",d_temp->name,d_temp->name);
+	        }
+	        d_temp = d_temp->next;
+	    }
+	    fprintf(fp,"\t\tfree(b_temp);\n");
+	    fprintf(fp,"\t}\n");
+	}
+	/* zero structure pointers */
+	d_temp = token_list;
+	while(d_temp){
+	    if(d_temp->data_types){
+	        fprintf(fp,"\tfor(i = 0; i < %s%s_max; i++)\n", prefix,d_temp->name);
+	        fprintf(fp,"\t\t%s%s_list[i] = %s%s_temp[i] = NULL;\n", prefix,d_temp->name, prefix,d_temp->name);
+	    }
+	    d_temp = d_temp->next;
+	}
+	/* zero integer arrays */
+	fprintf(fp,"\tfor(i = 0; i < %d; i++)\n",total_tokens);
+	fprintf(fp,"\t\t%stoken[i] = 0;\n", prefix);
+	if(profiling){
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++)\n",fire);
+	    fprintf(fp,"\t\t%sfire_profile[i] = 0;\n", prefix);
+	    fprintf(fp,"\tfor(i = 0; i < %d; i++)\n",test);
+	    fprintf(fp,"\t\t%stest_profile[i] = 0;\n", prefix);
+	}
+	/* zero trace list */
+	if(tracing){
+	    fprintf(fp,"\twhile(%strace_front){\n", prefix);
+	    fprintf(fp,"\t\t%strace_back = %strace_front;\n", prefix, prefix);
+	    fprintf(fp,"\t\t%strace_front = %strace_front->next;\n", prefix, prefix);
+	    fprintf(fp,"\t\tfree(%strace_back);\n", prefix);
+	    fprintf(fp,"\t}\n\t%strace_back = NULL;\n", prefix);
+	}
+	fprintf(fp,"}\n");
+}
+
+
+trans_code(rule, list, fp, label)
+/* translate references to objects in embedded C code */
+struct rule *rule;
+struct list *list;
+FILE *fp;
+char *label;
+{
+	struct match *m_temp;
+	struct list *l_temp;
+	int i, j;
+	char c[512];
+
+	l_temp = list;
+	while(l_temp){
+		    i = 0;
+		    while(l_temp->name[i]){
+			if(l_temp->name[i] == '$'){
+			    i++; j = 0;
+			    while(l_temp->name[i] != '.'){
+				c[j] = l_temp->name[i];
+				if(c[j] == '\0'){
+				    fprintf(stderr,"cannot translate %s in rule %s\n",c, rule->label);
+				    fprintf(stderr,"%s\n", l_temp->name);
+				    return;
+				}
+				i++; j++;
+			    }
+			    i++;
+			    c[j] = '\0';
+			    m_temp = rule->complex;
+			    if((strcmp(c, "FAIL")) == 0){
+				fprintf(fp,"{");
+				if(rule->recurs == 0)
+				    fprintf(fp,"%srestore();\n", prefix);
+				fprintf(fp,"goto %s;}\n", label);
+			    }
+			    else{
+			      while(m_temp && j){
+				if((strcmp(c, m_temp->free_name)) == 0){
+				    fprintf(fp,"%s%s_", prefix , m_temp->object);
+				    if(m_temp->empty)
+				        fprintf(fp,"empty[%d].", m_temp->index);
+				    else
+				        fprintf(fp,"list[%d]->", m_temp->index);
+				    j = 0;
+				}
+				m_temp = m_temp->next;
+			      }
+			      if(j){
+				fprintf(stderr,"cannot translate %s in rule %s\n",c, rule->label);
+				fprintf(stderr,"%s\n", l_temp->name);
+				return;
+			      }
+			    }
+			}
+			else{
+			    fprintf(fp,"%c",l_temp->name[i]);
+			    i++;
+			}
+		    }
+		fprintf(fp,"\n");
+		l_temp = l_temp->next;
+	}
+}
+
+
+translate()
+/*
+Produce the output code
+*/
+{
+	int i, j, k, l, count, prev_index, label_count;
+	char s[512];
+	struct list *l_temp;
+	struct def_list *d_temp, *d_temp2;
+	struct data_type *dt_temp;
+	struct rule *r_temp, *r_temp2, *r_const;
+	struct match *m_temp, *m_temp2, *m_temp3, *m_temp4;
+	struct test *t_temp;
+	struct list *label_temp;
+	FILE *fp;
+
+	fp = header;
+	l_temp = header_code;
+	while(l_temp){
+		fprintf(fp,"%s\n",l_temp->name);
+		l_temp = l_temp->next;
+	}
+	fprintf(fp,"\n#include\t<stdio.h>\n\n");
+	d_temp = token_list;
+	for(i = 0; i < total_tokens; i++)
+	    {
+	    fprintf(fp,"#define %s%s %d\n", prefix,d_temp->name, i);
+	    j = max_free[i];
+	    if(j <= 2) j = 2;
+	    fprintf(fp,"#define %s%s_max %d\n", prefix,d_temp->name, j);
+	    d_temp = d_temp->next;
+	}
+	fprintf(fp,"\n");
+	fp = loop;
+	fprintf(fp,"int %stotal_tokens = %d;\n", prefix,total_tokens);
+	fprintf(fp,"int %stoken[%d];\n", prefix,total_tokens);
+	if(profiling){
+	    fprintf(fp,"extern int %stest_profile[];\n", prefix);
+	    fprintf(fp,"extern int %sfire_profile[];\n", prefix);
+	}
+	d_temp = token_list;
+	fprintf(fp,"char *%stoken_name[%d] = {\n", prefix,total_tokens);
+	for(i = 0; i < total_tokens; i++)
+	{
+
+	    fprintf(fp,"\t\t\t\042%s%s\042", prefix,d_temp->name);
+	    d_temp = d_temp->next;
+	    if(d_temp)
+		fprintf(fp,",\n");
+	}
+	fprintf(fp,"};\n");
+	fp = header;
+	gen_structs();
+	gen_test();
+	if(backtracking){
+	    gen_back();
+	    gen_relink();
+	}
+	if(tracing)
+	    gen_trace();
+	if(dumping)
+	    gen_print();
+	gen_free();
+	gen_restore();
+	gen_search();
+	gen_add();
+	init_list = init_list2;
+	gen_init(1);
+	fp = loop;
+	fprintf(fp,"\n%sloop()\n{\n\tint i;\n", prefix);
+	fprintf(fp,"\twhile(1){\n%sStart:\n", prefix);
+	if(profiling){
+	    label_list = (struct list *) malloc(sizeof(struct list));
+	    label_list->name = (char *) malloc(strlen(prefix) + 6);
+	    label_temp = label_list;
+	    label_count = 1;
+	    strcpy(label_list->name, prefix );
+	    strcat(label_list->name, "Start");
+	    fprintf(fp,"\t%stest_profile[0]++;\n", prefix);
+	}
+	r_temp = rule_list;
+	while(r_temp->next != NULL)
+		r_temp = r_temp->next;
+	r_const = r_temp;
+	while(r_temp){
+
+	    /* label of this rule */
+	    fprintf(fp,"%s%s:\n", prefix,r_temp->label);
+
+	    if(profiling){
+	        label_temp->next = (struct list *) malloc(sizeof(struct list));
+		label_temp = label_temp->next;
+	        label_temp->name = (char *) malloc(strlen(prefix) + strlen(r_temp->label) + 1);
+	        strcpy(label_temp->name, prefix);
+	        strcat(label_temp->name, r_temp->label);
+	        fprintf(fp,"\t%stest_profile[%d]++;\n", prefix, label_count);
+	        label_count++;
+	    }
+
+	    /* test for code that must precede all tests */
+	    m_temp3 = NULL;
+	    m_temp = r_temp->complex;
+	    /* skip over empty definitions */
+	    while((m_temp) && (m_temp->empty)){
+		m_temp3 = m_temp;
+		m_temp = m_temp->next;
+	    }
+	    /* if the first non empty entry is c_code it must precede all tests */
+  	    if(m_temp)
+	       if(m_temp->c_code){
+		if(r_temp->prev)
+		    sprintf(s,"%s%s\0",prefix, r_temp->prev->label);
+		else
+		    sprintf(s,"%sEnd\0",prefix);
+		trans_code(r_temp, m_temp->c_code, fp, s);
+		/* unlink the code so it isn't inserted twice */
+		if(m_temp3)
+		    m_temp3->next = m_temp->next;
+		else
+		    r_temp->complex = r_temp->complex->next;
+	    }
+
+	    /* test for object counts */
+	    fprintf(fp,"\t\tif(");
+	    d_temp = token_list;
+	    for(i = 0; i < total_tokens; i++){
+		if(r_temp->search[i] > 0)
+		    fprintf(fp,"(%stoken[%s%s] >= %d) &&\n\t\t\t", prefix, prefix,d_temp->name,r_temp->search[i]);
+		if(r_temp->search[i] < 0)
+		    fprintf(fp,"(%stoken[%s%s] <= 0) &&\n\t\t\t", prefix, prefix,d_temp->name);
+		d_temp = d_temp->next;
+	    }
+	    d_temp = token_list;
+	    fprintf(fp,"1){");
+
+	    /* generate complex matching code */
+
+	    /* first initialize the current free variable matrix */
+	    for(i = 0; i < total_tokens; i++)
+		current_free[i] = 1;
+
+	        m_temp = m_temp3 = r_temp->complex;
+		prev_index = 0;
+	        while(m_temp){
+		 if(m_temp->c_code){
+		    if((prev_index == 0) || (r_temp->recurs == 0)){
+		        if(r_temp->prev)
+		            sprintf(s,"%s%s\0", prefix,r_temp->prev->label);
+		        else
+		            sprintf(s,"%sEnd\0", prefix);
+		    }
+		    else
+			sprintf(s,"%s%s_%s_%d\0", prefix,
+		    	r_temp->label, m_temp3->object, prev_index);
+		    trans_code(r_temp, m_temp->c_code, fp, s);
+		 }
+		 else if(m_temp->empty){
+		     /* declaration only - don't generate any code */
+		     i = 0;
+		 }
+		 else{
+		 i = 0;
+		 d_temp = token_list;
+		 while(strcmp(m_temp->object, d_temp->name) != 0){
+		     i++;
+		     d_temp = d_temp->next;
+		 }
+		 if(d_temp->data_types){
+		  for(count = 0; count < m_temp->count; count++){
+
+		    /* initialize temp */
+		    fprintf(fp,"\n\t\t\t%s%s_temp[%d] = %s%s_list[0];\n"
+		    , prefix, m_temp->object, current_free[i], prefix, m_temp->object);
+
+		    /* print a label */
+		    if((r_temp->recurs) || (profiling)){
+			fprintf(fp,"%s%s_%s_%d:\n", prefix, r_temp->label, m_temp->object, current_free[i]);
+	    		if(profiling){
+	        	    label_temp->next = (struct list *) malloc(sizeof(struct list));
+			    label_temp = label_temp->next;
+	        	    label_temp->name = (char *) malloc(strlen(r_temp->label) + strlen(m_temp->object) + strlen(prefix) + 10);
+			    sprintf(label_temp->name,"%s%s_%s_%d", prefix, 
+				    r_temp->label, m_temp->object, current_free[i]);
+	        	    fprintf(fp,"\t%stest_profile[%d]++;\n", prefix, label_count);
+	        	    label_count++;
+	    		}
+		    }
+
+		    /* free the previously found item */
+		    if(r_temp->recurs){
+			fprintf(fp,"\t\t\tif(%s%s_list[%d])\n", prefix, m_temp->object, current_free[i]);
+			fprintf(fp,"\t\t\t\t%s%s_list[%d]->MARK = 0;\n", prefix, m_temp->object, current_free[i]);
+		    }
+
+		    /* do the search */
+		    fprintf(fp,"\t\t\tif((%s%s_list[%d] = search_%s%s_struct(%d"
+		   , prefix , m_temp->object, current_free[i], prefix, m_temp->object, current_free[i]);
+		    dt_temp = d_temp->data_types;
+		    while(dt_temp){
+		        if(dt_temp->type <= 2){
+			    t_temp = m_temp->tests;
+			    j = 1;
+			    while(j && t_temp){
+			        if(strcmp(t_temp->element, dt_temp->name) == 0){
+				    j = 0;
+				    if((t_temp->type == 0) || (t_temp->type == 1))
+				        fprintf(fp,", %s",t_temp->value);
+				    if(t_temp->type == 2)
+				        fprintf(fp,", \"%s\"",t_temp->value);
+				    if(t_temp->type == -1){
+					if(t_temp->id)
+					    fprintf(fp,", 0");
+					else{
+				            l = 0;
+				            m_temp2 = r_temp->complex;
+				            while(m_temp2){
+					        if(strcmp(m_temp2->free_name, t_temp->free_name) == 0){
+					            l = m_temp2->index;
+						    m_temp4 = m_temp2;
+					            m_temp2 = NULL;
+					        }
+					        else
+					            m_temp2 = m_temp2->next;
+				            }
+					    if(m_temp4->empty)
+				                fprintf(fp,", %s%s_empty[%d].%s", prefix,m_temp4->object,l,t_temp->value);
+					    else
+				                fprintf(fp,", %s%s_list[%d]->%s", prefix,m_temp4->object,l,t_temp->value);
+				        }
+				    }
+				    fprintf(fp,", %d", t_temp->relop);
+			    	    if(dt_temp->elts)
+					fprintf(fp,", %d",t_temp->id);
+			        }
+			        else
+				    t_temp = t_temp->next;
+			    }
+			    if(j){
+			        switch(dt_temp->type){
+			        case 0: fprintf(fp,", 0, 7");
+				        break;
+			        case 1: fprintf(fp,", 0.0, 7");
+				        break;
+			        case 2: fprintf(fp,", \"\", 7");
+			        default: break;
+			        }
+			        if(dt_temp->elts)
+				    fprintf(fp,", 0");
+			    }
+		        }
+		        dt_temp = dt_temp->next;
+		    }
+		    fprintf(fp,")) == NULL){\n");
+		    /* search failed on first of rule */
+
+		    if((prev_index == 0) || (r_temp->recurs == 0)){
+		        fprintf(fp,"\t\t\t\t%srestore();\n", prefix);
+		        if(r_temp->prev)
+		            fprintf(fp,"\t\t\t\tgoto %s%s;\n\t\t\t}", prefix,r_temp->prev->label);
+		        else
+		            fprintf(fp,"\t\t\t\tgoto %sEnd;\n\t\t\t}", prefix);
+		    }
+
+		    /* search failed - not first of rule */
+		    else{
+			fprintf(fp,"\t\t\t\tgoto %s%s_%s_%d;\n\t\t\t}", prefix,
+		    	r_temp->label, m_temp3->object, prev_index);
+		    }
+
+		    /* move index one beyond the one currently found */
+		    if(r_temp->recurs) fprintf(fp,"\n\t\t\t%s%s_temp[%d] = %s%s_list[%d]->next;", prefix,
+				m_temp->object, current_free[i], prefix,
+				m_temp->object, current_free[i]);
+
+		    m_temp3 = m_temp;
+		    prev_index = current_free[i];
+		    current_free[i]++;
+		   }
+		  }
+		 }
+		 m_temp = m_temp->next;
+	        }
+
+	    /* get rule number for next 3 statements */
+
+		i = 1;
+		r_temp2 = r_const;
+		while(r_temp != r_temp2){
+		    r_temp2 = r_temp2->prev;
+		    i++;
+		}
+
+	    /* generate profile code if profiling */
+
+	    if(profiling){
+	        fprintf(fp,"\n\t\t\t%sfire_profile[%d]++;", prefix, i);
+	    }
+
+	    /* generate append code if tracing */
+
+	    if(tracing){
+	        fprintf(fp,"\n\t\t\t%sappend_trace(%d);", prefix, i);
+	    }
+
+	    /* generate insert code if backtracking */
+
+	    if(backtracking){
+	        fprintf(fp,"\n\t\t\t%sinsert_backtrack(%d);", prefix, i);
+	    }
+
+	    /* generate ADD code */
+
+	    fprintf(fp,"\n");
+	    init_list = r_temp->add;
+	    gen_init(0);
+
+	    /*
+	    generate MARK code
+	    */
+	    /* first MARK objects deleted by name */
+	    m_temp = r_temp->complex;
+	    while(m_temp){
+		if(m_temp->mark){
+		    if(backtracking)
+		        fprintf(fp,"\n\t\t\t\t%srelink_%s_struct(%d);", prefix,m_temp->object, m_temp->index);
+		    else{
+			d_temp = token_list;
+			while(strcmp(m_temp->object, d_temp->name))
+			    d_temp = d_temp->next;
+			if(d_temp->data_types)
+		            fprintf(fp,"\n\t\t\t\tfree_%s%s_struct(%d);", prefix,m_temp->object, m_temp->index);
+			else
+		            fprintf(fp,"\n\t\t\t\t%stoken%s[%s]--;", prefix, prefix,d_temp->name);
+		    }
+		}
+		m_temp = m_temp->next;
+	    }
+
+	    /* now MARK the rest of the objects */
+	    d_temp = token_list;
+	    for(i = 0; i < total_tokens; i++){
+		if(r_temp->mark[i]){
+		    fprintf(fp,"\n\t\t\tfor(i = 0; i < %d; i++)",r_temp->mark[i]);
+		    if(backtracking)
+		        fprintf(fp,"\n\t\t\t\t%srelink_%s_struct(1);", prefix,d_temp->name);
+		    else{
+			if(d_temp->data_types)
+		            fprintf(fp,"\n\t\t\t\tfree_%s%s_struct(1);", prefix,d_temp->name);
+			else
+		            fprintf(fp,"\n\t\t\t\t%stoken[%s%s]--;", prefix, prefix,d_temp->name);
+		    }
+		}
+		d_temp = d_temp->next;
+	    }
+	    d_temp = token_list;
+
+	    fprintf(fp,"\n\t\t\t%srestore();", prefix);
+
+	    l_temp = r_temp->c_code;
+	    trans_code(r_temp, l_temp, fp);
+	    if(find_name(r_temp->opt))
+	    	fprintf(fp,"\t\t\tgoto %s%s;\n\t\t}\n", prefix, r_temp->opt);
+	    else
+	    	fprintf(fp,"\t\t\tgoto %sStart;\n\t\t}\n", prefix);
+	    r_temp = r_temp->prev;
+	}
+	fprintf(fp,"\n%sEnd:\n", prefix);
+
+	    if(profiling){
+	        label_temp->next = (struct list *) malloc(sizeof(struct list));
+		label_temp = label_temp->next;
+	        label_temp->name = (char *) malloc(strlen(prefix) + 4);
+	        strcpy(label_temp->name, prefix);
+	        strcat(label_temp->name, "End");
+	        fprintf(fp,"\t%stest_profile[%d]++;\n", prefix, label_count);
+	        label_count++;
+	    }
+
+	if(tracing){
+		i = 1;
+		r_temp2 = r_const;
+		while(r_temp2){
+		    r_temp2 = r_temp2->prev;
+		    i++;
+		}
+		fprintf(fp,"\t\t\t%sappend_trace(%d);\n", prefix,i);
+	}
+	if(backtracking){
+	    fprintf(fp,"\t\t\tif(%sbacktrack){\n", prefix);
+	    fprintf(fp,"\t\t\t\ti = %sbacktrack->next_rule;\n", prefix);
+	    fprintf(fp,"\t\t\t\t%sbackup();\n", prefix);
+	    fprintf(fp,"\t\t\t\tswitch(i){\n");
+	    i = 1;
+	    r_temp2 = r_const;
+	    while(r_temp2){
+	        fprintf(fp,"\t\t\t\t\tcase %d: goto ", i);
+	        if(r_temp2->prev)
+	    	    fprintf(fp,"%s%s;\n", prefix, r_temp2->prev->label);
+	        else
+	    	    fprintf(fp,"%sEnd;\n", prefix);
+	        r_temp2 = r_temp2->prev;
+		i++;
+	    }
+	    fprintf(fp,"\t\t\t\t\tdefault: goto %sEnd;", prefix);
+	    fprintf(fp,"\n\t\t\t\t}\n\t\t\t}\n");
+	}
+	fprintf(fp,"\t\t\treturn(1);\n\t}\n}\n");
+	l_temp = trailer_code;
+	while(l_temp){
+		fprintf(fp,"%s\n",l_temp->name);
+		l_temp = l_temp->next;
+	}
+
+		i = 0;
+		r_temp2 = r_const;
+		while(r_temp2){
+		    r_temp2 = r_temp2->prev;
+		    i++;
+		}
+	if(profiling)
+	    gen_profile(label_count, i+1);
+	if(zeroing)
+	    gen_zero(label_count, i+1);
+	if(saving)
+	    gen_save(label_count, i+1);
+}
+@//E*O*F output.c//
+chmod u=rw,g=r,o=r output.c
+ 
+exit 0

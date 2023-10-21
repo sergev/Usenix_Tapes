@@ -1,0 +1,181 @@
+#
+# Makefile for Amiga MicroGNUmacs, using Manx small model.
+#
+#	This Makefile should be executed in the main Emacs directory.
+#
+# System-dependent conditional compilation possibilities:
+#
+#	V11		-- must be defined for the editor to either run on
+#			   or compile on a version 1.1 AmigaDOS system.
+#			   It mainly wards against bugs in the 1.1 ROM
+#			   Kernel.
+#
+#	STARTUP		-- if defined, code for using a startup file
+#			   is included.  This is handy for folks who
+#			   won't be able to hack the editor to their
+#			   taste.
+#
+#	MENU		-- if defined, Intuition menu selection is
+#			   enabled.  If you #define this, the XOBJ macro
+#			   must contain $(MENUOBJ).
+#
+#	BROWSER		-- BROWSER uses the Amiga menu to present a MENU of
+#			   files. Selecting a directory entry (ends with a /)
+#			   makes the contents if that directory the next menu
+#			   (deleting any menus that used to follow it);
+#			   selecting a plain file does a "find-file" on that
+#			   file name. Really has to be seen to be understood.
+#			   XOBJ must contain $(MENUOBJ) for this to link.
+#
+#	MOUSE		-- if defined, the Amiga mouse is active.
+#			   If you #define this, XOBJ must contain $(MOUSEOBJ)
+#
+#	TOGGLE_ZOOMS	-- the function toggle-menu-hack switches between
+#			   a bordered, sizeable window and a borderless
+#			   window.  By default, the borderless window
+#			   retains the size of the sizeable window.
+#			   If TOGGLE_ZOOMS is #defined, however, the
+#			   borderless window always takes up the whole
+#			   screen.
+#
+#	XKEYS		-- if defined, the editor understands the Amiga
+#			   function keys.
+#
+#	DO_METAKEY	-- if defined, characters with high bit set (i.e.
+#			   most ALT-ed characters in the usa0 keymap)
+#			   are translated into internal META keys
+#
+#	CHANGE_COLOR	-- if defined, adds commands to manipulate
+#			   the rendition of the mode line and the
+#			   foreground and background color of the
+#			   text window and mode line.  The names match
+#			   the regular expression
+#			   set-{text,mode}-{foreground,background}
+#	CHANGE_FONT	-- if defined, adds "set-font", which prompts
+#			   for a font name and size, then tries to reopen
+#			   the Emacs window using the new font.
+#
+#
+#	MODE_RENDITION	-- the these values indicate the way to render
+#	TEXT_RENDITION	   characters in the text area and mode line.
+#			   TEXT_RENDITION is mainly there for completeness.
+#			   Possible values are:
+#				0 -- plain text
+#				1 -- boldface
+#				3 -- italic
+#				4 -- underscore
+#				7 -- reverse-video (default if not defined)
+#
+#	TEXT_FG		-- specifies which system color (0-7) to use
+#	TEXT_BG		   when drawing the text and mode line.  If they
+#	MODE_FG		   aren't between 0 and 7, or if a combination
+#	MODE_BG		   comes out badly, it's *YOUR* fault.  If
+#			   CHANGE_COLOR is defined, you get to change these
+#			   values on the fly.  Naturally, making both
+#			   FG and BG the same results in an unusable display...
+#
+############################################################################
+SYS	= amiga
+S	= sys/amiga
+TTY	= amiga
+T	= tty/amiga
+LIBS	= -lc
+
+#
+# PREFS contains the defines used to select compile-time options.
+# XOBJ is used to denote any extra object files needed for these
+# options.  MENUOBJ MOUSEOBJ denote the extra object files needed
+# for the menu, mouse and Browser.
+
+MOUSEOBJ = ttymouse.o
+MENUOBJ  = ttymenu.o menustack.o
+
+# The big burrito, with the Browser *and* the editing MENU.  Tough
+# on space, but boy is it neat...
+PREFS = -DSTARTUP  -DBROWSER -DMENU -DMOUSE -DCHANGE_FONT \
+	-DCHANGE_COLOR -DXKEYS -DDO_METAKEY
+XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Burrito style, with just the Browser...
+#PREFS = -DSTARTUP  -DBROWSER -DMOUSE -DCHANGE_COLOR -DXKEYS -DDO_METAKEY
+#XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Burrito style, with just the menu...
+#PREFS = -DSTARTUP  -DMENU -DMOUSE -DCHANGE_COLOR -DXKEYS -DDO_METAKEY
+#XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Mike's favorite version
+#PREFS = -DMOUSE -DBROWSER -DMODE_RENDITION=0 -DMODE_FG=2 -DDO_METAKEY -DGOSREC -DV11 -DMEYN
+#XOBJ = $(MOUSEOBJ) $(MENUOBJ)
+
+# Mic's favorite version
+#PREFS = -DSTARTUP -DBROWSER -DMENU -DMOUSE -DXKEYS -DDO_METAKEY
+#XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Absolutely bare-bones, default editor (~49K with Manx small model)
+#PREFS = -DDO_METAKEY
+#XOBJ  =
+	
+CFLAGS	= -I$(T) -I$(S) $(PREFS) -DMANX
+
+OBJ   =	basic.o buffer.o cinfo.o display.o echo.o extend.o file.o kbd.o \
+	line.o main.o match.o random.o region.o search.o symbol.o version.o \
+	window.o paragraph.o prefix.o word.o \
+	fileio.o spawn.o sleep.o\
+	ttyio.o tty.o ttykbd.o console.o $(XOBJ)
+#
+# OSRCS = system-dependent modules, SRCS = denotes system-independent ones
+#
+OSRCS = $(S)/fileio.c $(S)/spawn.c $(S)/sleep.c \
+	$(T)/ttyio.c $(T)/tty.c $(T)/ttykbd.c $(T)/console.c \
+	$(T)/ttymenu.c $(T)/menustack.c $(T)/ttymouse.c
+
+SRCS  =	basic.c buffer.c cinfo.c display.c echo.c extend.c file.c kbd.c \
+	line.c main.c match.c random.c region.c search.c symbol.c version.c \
+	window.c word.c paragraph.c prefix.c
+#
+# Include files
+#
+OINCS =	$(T)/ttydef.h $(S)/sysdef.h
+INCS  =	def.h
+
+#
+# The editor
+#
+mg:		$(OBJ)
+		copy df0:lib/c.lib ram:
+		set CLIB=ram:
+		ln -o mg $(OBJ) $(LIBS)
+		delete ram:c.lib
+
+$(OBJ):		$(INCS) $(OINCS)
+
+fileio.o:	$(S)/fileio.c
+		cc $(CFLAGS) -o fileio.o $(S)/fileio.c
+
+spawn.o:	$(S)/spawn.c
+		cc $(CFLAGS) -o spawn.o $(S)/spawn.c
+
+sleep.o:	$(S)/sleep.c
+		cc $(CFLAGS) -o sleep.o $(S)/sleep.c
+
+tty.o:		$(T)/tty.c
+		cc $(CFLAGS) -o tty.o $(T)/tty.c
+
+ttyio.o:	$(T)/ttyio.c
+		cc $(CFLAGS) -o ttyio.o $(T)/ttyio.c
+
+ttykbd.o:	$(T)/ttykbd.c
+		cc $(CFLAGS) -o ttykbd.o $(T)/ttykbd.c
+
+ttymenu.o:	$(T)/ttymenu.c
+		cc $(CFLAGS) -o ttymenu.o $(T)/ttymenu.c
+
+ttymouse.o:	$(T)/ttymouse.c
+		cc $(CFLAGS) -o ttymouse.o $(T)/ttymouse.c
+
+menustack.o:	$(T)/menustack.c
+		cc $(CFLAGS) -o menustack.o $(T)/menustack.c
+
+console.o:	$(T)/console.c
+		cc $(CFLAGS) -o console.o $(T)/console.c

@@ -1,0 +1,98 @@
+From rtn@ncsu.UUCP (Robert T. Neece) Tue Oct 23 10:28:38 1984
+Relay-Version: version B 2.10.2 9/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site ncsu.UUCP
+Path: plus5!gang!wuphys!busch!we53!mgnetp!ihnp4!zehntel!dual!amd!decwrl!decvax!mcnc!ncsu!rtn
+From: rtn@ncsu.UUCP (Robert T. Neece)
+Newsgroups: net.unix
+Subject: How to Read IBM Standard Label Tapes
+Message-ID: <2707@ncsu.UUCP>
+Date: 23 Oct 84 15:28:38 GMT
+Date-Received: 26 Oct 84 04:45:31 GMT
+Organization: N.C. State University, Raleigh
+Lines: 84
+
+
+
+     In response to my request for help in reading  IBM  standard
+label tapes, I received as much sympathy as advice so I thought I
+ought to post a follow-up.  If you are holding an IBM SL tape the
+following directions should help you to read it.
+
+Tape Density
+
+     You must know your tape density (for example 1600 bpi),  and
+it  must  be compatible with the tape drive you plan to use.  Ask
+your system manager which tape interface is correct for your tape
+density.  You need to use a nonrewind raw magnetic tape drive in-
+terface.  You can list the raw mag tape drive interfaces with:
+
+          ls -l /dev/*rmt*
+
+You want to use an interface like  /dev/nrmt#,  where  #  is  the
+correct minor number for the tape density you are using.
+
+Tape Format
+
+     IBM SL tape format includes a header  (HDR)  and  a  trailer
+(EOF)  file for each of your files on the tape.  Since your files
+lie between these tape marks, your Nth file is the (3N-1)th  phy-
+sical  file  on  the  tape.  The HDR and EOF files can be skipped
+over, or read.  They can be useful since they contain information
+about the file that they delimit.  A sample tape mark follows:
+
+VOL1N006070                              NEECE
+HDR1AC.FORT.MAIN     N0060700010001       84291 000000000000IBM OS/VS 370
+HDR2F045600008030LDTP1   /G           B   82167
+
+This is the HDR file for my file  ac.fort.main  on  tape  N00607.
+The  blocksize  (blksize)  is  4560 and the logical record length
+(lrecl) is 80.
+
+File Format
+
+     In order to read your files you must know  if  the  tape  is
+ebcdic  or  ascii,  or  whatever.  I was warned by several people
+that IBM is notorious for using nonstandard forms of  ebcdic.   I
+did  not  have any problems with this, but you should be aware of
+the possibility.  You should also know the blksize and  lrecl  of
+your files, but this can be read from the tape marks.
+
+Moving Around
+
+     If you don't want to read all the tape marks and  files  you
+can use mt to move around on the tape.  For example:
+
+          mt -f /dev/nrmt# fsf 5
+
+will skip 5 files.  If you need to backspace, mt will  leave  you
+at  the end of a file, so you should backspace one more file than
+you want to move and then do a dummy read operation to get to the
+desired file (more on this later).
+
+Reading Files
+
+     Files are easily read using dd.  A sample usage follows:
+
+          dd conv=ascii cbs=80 ibs=3600 </dev/nrmt0 >$1
+
+I used this as a macro to read tapemarks  and  some  files.   The
+conversion  is  ebcdic  to ascii, /dev/nrmt0 is the 1600 bpi tape
+interface here, and $1 is a file name or can be  allowed  to  de-
+fault  to  the  standard output.  This macro was also useful as a
+dummy read to help position the tape after backspacing.  In order
+to read your files use something like this:
+
+dd conv=ascii cbs="lrecl" ibs="blksize" </dev/nrmt# >"afile"
+
+If you have trouble with the ebcdic  translation,  try  conv=ibm.
+If  that  doesn't  work you may have to process your files to get
+the correct translation.
+
+
+     I wish you the best of luck, and I extend my thanks  to  all
+the kind people that helped me.
+
+                          Robert T. Neece
+                          NCSU
+
+

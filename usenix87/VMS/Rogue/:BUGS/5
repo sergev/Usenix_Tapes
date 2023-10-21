@@ -1,0 +1,62 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!allegra!mit-eddie!uw-beaver!tektronix!teklds!zeus!tims
+From: tims@zeus.UUCP
+Newsgroups: net.sources.games
+Subject: Re: rogue source
+Message-ID: <1325@zeus.TEK.COM>
+Date: 3 Mar 87 18:28:56 GMT
+References: <1476@bnrmtv.UUCP> <338@chutepc.UUCP>
+Organization: Tektronix Inc., Beaverton, Or.
+Lines: 51
+Posted: Tue Mar  3 13:28:56 1987
+
+In article <338@chutepc.UUCP>, chute@chutepc.UUCP (Chris Chute MD) writes:
+> 
+> I am delighted to see a source, I always wondered about rogue.  I tried
+> compiling this on a (my) AT&T UNIX-pc which runs System V.  It seems a
+> lot of things in init.c are system dependent (of course).  Goodies like
+> TIOCGETC are nowhere to be found in my /usr/include, they seem to live in
+> /usr/include/sys/ioctl.h on  BSD derivatives.
+>    Not being much of a programmer, and a system level whimp to boot, I 
+> thought I'ld ask if anybody got this to run under System V.  Diffs or hints
+> would be appreciated.
+
+When I wrote this code, I did not attempt to #ifdef it for different systems.
+I left that up to the user, who probably knows more about those systems than
+I, or at least can take the time to find out.
+
+I did, however, attempt to make porting very easy.  I used the standard I/O
+package wherever possible, such as reading/writing score files and
+saved games.  A few things however, had to be system dependent:
+
+1.)  In init.c, the routine edchars().  This routine contains various
+     system-dependent ioctl calls.  These are intended to disassociate
+     any special meaning from keyboard characters.  The program is run
+     in cbreak mode instead of raw so that keyboard signals can be recieved.
+     However, no other special treatment of the characters by the terminal
+     device driver is desired.
+     The simplest solution to this is to just delete, or comment-out, the
+     contents of the routine edchars().  You may find that a few keyboard
+     characters, like ^J, don't work.  But you should be able to play
+     just fine with this minor inconvenience.  This routine should work
+     find on BSD systems.
+
+2.)  In save.c, to check the validity of saved game files, stat() and
+     gettimeofday() are called.
+     This should be OK for most UNIX systems, but non-UNIX
+     systems probably won't like it.  Some equivalent routine should
+     be subsituted, or this functionality deleted.  If you want to delete
+     these, you will have to delete the references to associated structures
+     like:
+
+    struct stat sbuf;
+    struct timeval tv;
+    struct timezone tzp;
+
+    Then you must make sure that these structures, or fields within, are
+    not written/read to/from the save file, or referenced in any way.
+    This should be fairly easy.
+
+3.)  In message.c, in the routine rgetchar(), there is a switch statement
+     with a call to tstp() in it.  This is BSD-dependent.  Non-BSD users
+     can remove the the case containg the tstp() call from the switch
+	 statement.

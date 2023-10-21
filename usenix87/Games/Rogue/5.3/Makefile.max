@@ -1,0 +1,129 @@
+#
+# Makefile for rogue
+# @(#)Makefile	4.17 (Berkeley) 9/29/82
+#
+GDIR = /usr/games
+HDRS=	rogue.h extern.h score.h
+DOBJS=	vers.o extern.o armor.o chase.o command.o daemon.o daemons.o \
+	fight.o init.o io.o list.o main.o misc.o monsters.o move.o \
+	new_level.o options.o pack.o passages.o potions.o rings.o rip.o \
+	rooms.o save.o scrolls.o sticks.o things.o weapons.o wizard.o
+OBJS=	$(DOBJS) mach_dep.o
+POBJS=	vers.po extern.po armor.po chase.po command.po daemon.po daemons.po \
+	fight.po init.po io.po list.po main.po misc.po monsters.po move.po \
+	new_level.po options.po pack.po passages.po potions.po rings.po rip.po \
+	rooms.po save.po scrolls.po sticks.po things.po weapons.po wizard.po \
+	.po mach_dep.po
+CFILES=	vers.c extern.c armor.c chase.c command.c daemon.c daemons.c \
+	fight.c init.c io.c list.c main.c misc.c monsters.c move.c \
+	new_level.c options.c pack.c passages.c potions.c rings.c rip.c \
+	rooms.c save.c scrolls.c sticks.c things.c weapons.c wizard.c \
+	mach_dep.c
+
+SCOREFILE =	/usr/usr/max/rogue/hiscores
+DEFS=		-DWIZARD -DDUMP -DNMTVAX
+CFLAGS=		-O $(DEFS)
+PROFLAGS=	-pg -O
+LDFLAGS=	# For VAXen
+
+SF=		-DSCOREFILE='"$(SCOREFILE)"'
+NAMELIST=	/arix
+NL=		-DNAMELIST='"$(NAMELIST)"'
+MACHDEP=	# -DMAXLOAD=40 -DLOADAV -DCHECKTIME=4
+BINARY=		distr.out
+
+VGRIND=/usr/ucb/vgrind
+CRLIB=	-lcurses
+PCRLIB= -lcurses
+MISC=	Makefile Dist.fmt prob.c findpw.c
+GET=	get
+LD=	ld
+
+.SUFFIXES: .po
+
+.c.po:
+	cc -c $(PROFLAGS) $*.c
+
+.c.o:
+	cc -c $(CFLAGS) $*.c
+
+a.out: $(HDRS) $(OBJS)
+	$(CC) $(LDFLAGS) $(OBJS) $(CRLIB)
+	size a.out
+
+vers.o:
+	$(CC) -c $(CFLAGS) vers.c
+
+mach_dep.o:
+	$(CC) -c $(CFLAGS) $(SF) $(NL) $(MACHDEP) mach_dep.c
+
+rogue: newvers a.out
+	cp a.out rogue
+	strip rogue
+
+install: rogue
+	install -pog 700 games snsr rogue $(GDIR)
+
+distr: rmmach distmod.o mach_dep.o
+	rm -f x.c
+	$(CC) -s $(LDFLAGS) -o =bin/$(BINARY) distmod.o mach_dep.o $(CRLIB)
+	size =bin/$(BINARY)
+
+rmmach:
+	rm -f mach_dep.o
+
+findpw: findpw.c
+	$(CC) -s -o findpw findpw.c
+
+prob: prob.o extern.o
+	$(CC) -O -o prob prob.o extern.o
+
+prob.o: prob.c rogue.h
+	$(CC) -O -c prob.c
+
+scedit: scedit.o scmisc.o vers.o
+	$(CC) -o scedit vers.o scedit.o scmisc.o -lcurses
+
+scmisc.o scedit.o:
+	$(CC) -O -c $(SF) $*.c
+
+mach_dep.po:
+	$(CC) -c $(PROFLAGS) $(SF) $(NL) $(MACHDEP) mach_dep.c
+	mv mach_dep.o mach_dep.po
+
+newvers:
+
+tags: $(HDRS) $(CFILES)
+	ctags -u $?
+	ed - tags < :ctfix
+	sort tags -o tags
+
+lint:
+	/bin/csh -c "lint -hxbc $(DEFS) $(MACHDEP) $(SF) $(NL) $(CFILES) -lcurses > linterrs"
+
+clean:
+	rm -f $(POBJS) $(OBJS) core a.out p.out rogue strings make.out ? rogue.tar vgrind.* x.c x.o xs.c xs.o linterrs findpw distmod.o xs.po
+
+count:
+	wc -l $(HDRS) $(CFILES)
+
+realcount:
+	cc -E $(CFILES) | ssp - | wc -l
+
+update:
+	ar uv .SAVE $(CFILES) $(HDRS) Makefile
+
+dist:
+	cp $(CFILES) $(HDRS) Makefile /ra/csr/toy/_dist
+
+xtar: $(HDRS) $(CFILES) $(MISC)
+	rm -f rogue.tar
+	tar cf rogue.tar $? :ctfix
+	touch xtar
+
+vgrind:
+	csh $(VGRIND) -t -h "Rogue Version 3.7" $(HDRS) *.c > vgrind.out
+	ctags -v $(HDRS) *.c > index
+	csh $(VGRIND) -t -x index > vgrind.out.tbl
+
+cfiles: $(CFILES)

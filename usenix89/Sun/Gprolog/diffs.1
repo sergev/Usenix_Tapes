@@ -1,0 +1,240 @@
+
+Index: arith.c
+28a29,30
+> static int sawfloat;		/* Convert results to integer conditionally */
+> 
+38a41,45
+> #ifdef GRAPHICS
+> extern	double	fabs(),ceil();
+> extern	int	abs();
+> #endif
+> 
+57c64,71
+<     ffail
+---
+> #ifdef GRAPHICS
+> 	ffail,		/* abs/fabs */
+> 	ffail,		/* float */
+> 	ffail,		/* int */
+> 	ceil
+> #else
+> 	ffail
+> #endif
+76,77c90,99
+<     SOMETIMES,			/*   15     1    SPARE */
+<     ALWAYS,			/*   16     - UNUSABLE */
+---
+> #ifdef GRAPHICS
+> 	SOMETIMES,		/*   15     1 abs/fabs */
+> 	ALWAYS,			/*   16	    1	 float */
+> 	SOMETIMES,		/*   17	    1	   int */
+> 	SOMETIMES,		/*   18	    1	  ceil */
+> 	ALWAYS,			/*   19     - UNUSABLE */
+> #else
+> 	SOMETIMES,		/*   15     1    SPARE */
+> 	ALWAYS,			/*   16     - UNUSABLE */
+> #endif
+130a153,155
+> #ifdef GRAPHICS
+> 		sawfloat++;
+> #endif
+201a227,230
+> #ifdef GRAPHICS
+> 	if (fl == ALWAYS)
+> 		sawfloat++;
+> #endif
+211a241,261
+> #ifdef GRAPHICS
+> 	case FLOAT:
+> 		break;
+> 	case INT:
+> 		if (typ) {
+> 			if (v.AsFloat >= 0.0)
+> 				v.AsInt = (int)(v.AsFloat + 0.5);
+> 			else
+> 				v.AsInt = (int)(v.AsFloat - 0.5);
+> 			v.Float = FALSE;
+> 			if (sawfloat)
+> 				sawfloat--;
+> 		}
+> 		break;
+> 	case ABS:
+> 		if (typ)
+> 			v.AsFloat = fabs(v.AsFloat);
+> 		else
+> 			v.AsInt = abs(v.AsInt);
+> 		break;
+> #endif
+224c274,278
+<     int fl = floatable[op+16], typ;
+---
+> #ifdef GRAPHICS
+> 	int fl = floatable[op+19], typ;
+> #else
+> 	int fl = floatable[op+16], typ;
+> #endif
+240a295,298
+> #ifdef GRAPHICS
+> 	if (fl == ALWAYS)
+> 		sawfloat++;
+> #endif
+305c363
+< 	r.Float = !Narrow(r.AsFloat, &(r.AsInt));
+---
+> 	r.Float = !Narrow_to_int(r.AsFloat, &(r.AsInt));
+318a377
+>     sawfloat = 0;				/* BJB */
+320a380,381
+>     if (r.Float && sawfloat == 0)		/* BJB */
+> 	r.Float = !Narrow_to_int(r.AsFloat, &(r.AsInt));
+322,323d382
+< 	r.Float = !Narrow(r.AsFloat, &(r.AsInt));
+<     if (r.Float)
+335a395
+>     sawfloat = 0;	/* BJB */
+337a398,399
+>     if (r.Float && sawfloat == 0)		/* BJB */
+> 	r.Float = !Narrow_to_int(r.AsFloat, &(r.AsInt));
+339,340d400
+< 	r.Float = !Narrow(r.AsFloat, &(r.AsInt));
+<     if (r.Float)
+352a413
+>     sawfloat = 0;				/* BJB */
+355a417,418
+>     if (r.Float && sawfloat == 0)		/* BJB */
+> 	r.Float = !Narrow_to_int(r.AsFloat, &(r.AsInt));
+357,358d419
+< 	r.Float = !Narrow(r.AsFloat, &(r.AsInt));
+<     if (r.Float)
+486a548,550
+> #ifdef GRAPHICS
+> 	return FALSE;
+> #else
+490a555
+> #endif
+492a558,580
+> #ifdef GRAPHICS
+> int
+> Narrow_to_int(f,i)
+> double f; 
+> int *i;
+> {
+> 	register int k;
+> 
+> 	if (f < MinInt || f > MaxInt)  return FALSE;
+> 	if ((double)(k = (int)f) != f) return FALSE;
+> 	*i = k;
+> 	return TRUE;
+> }
+> #else
+> int
+> Narrow_to_int(f,i)
+> double f; 
+> int *i;
+> {
+> 	return(Narrow(f,i));
+> }
+> #endif
+> 
+497c585
+< 	if (v->Float) v->Float = !Narrow(v->AsFloat, &(v->AsInt));
+---
+> 	if (v->Float) v->Float = !Narrow_to_int(v->AsFloat, &(v->AsInt));
+
+Index: arithop.h
+47a48,54
+> #ifdef GRAPHICS
+> #define ABS	15
+> #define FLOAT	16
+> #define INT	17
+> #define CEIL	18
+> #endif
+> 
+
+Index: bootcmd
+1c1
+< ['all.pl'].
+---
+> ['pl/grall.pl'].
+
+Index: main.c
+1345a1346,1351
+> #ifdef GRAPHICS
+> 	case _unary+ABS:
+> 	case _unary+FLOAT:
+> 	case _unary+INT:
+> 	case _unary+CEIL:
+> #endif
+
+Index: parms.c
+80a81,83
+> #ifdef GRAPHICS
+> char version[] = "C-Prolog version 1.5 + SunCore";
+> #else
+81a85
+> #endif
+
+Index: rewrite.c
+205a206
+> #ifdef GRAPHICS
+206a208,236
+> 		int k;
+> 		char *p1,buf[256];
+> 		float num;
+> 
+> 		num = XtrFloat(t);
+> 		sprintf(OutBuf,"%g",num);
+> 		if (index(OutBuf,'.') == 0) {
+> 			p1 = index(OutBuf,'e');
+> 			if (p1 == 0) {
+> 				k = strlen(OutBuf);
+> 				OutBuf[k] = '.';
+> 				OutBuf[k+1] = '0';
+> 				OutBuf[k+2] = '\0';
+> 			}
+> 			else {
+> 				k = p1 - OutBuf;
+> 				strncpy(buf,OutBuf,k);
+> 				buf[k] = '.';
+> 				buf[k+1] = '0';
+> 				strcpy(buf+k+2,p1);
+> 				PutString(buf);
+> 				return;
+> 			}
+> 		}
+> 		PutString(OutBuf);
+> 		return;
+> 	}
+> #else
+> 	if (IsFloat(t)) {
+209a240
+> #endif
+773a805,807
+> #ifdef GRAPHICS
+> 	int flag = 0;
+> #endif
+779a814,817
+> #ifdef GRAPHICS
+> 	if (chtyp[*t] == N)
+> 		flag = 1;
+> #endif
+794a833,838
+> #ifdef GRAPHICS
+> 	if (flag)
+> 		*p = ConsFloat(d);
+> 	else
+>     if (Narrow_to_int(d,&i))
+> #else
+795a840
+> #endif
+
+Only in gprolog1.5: gprolog.nr
+Only in gprolog1.5: gr.h
+Only in gprolog1.5: gr1.c
+Only in gprolog1.5: gr2.c
+Only in gprolog1.5: gr3.c
+Only in gprolog1.5: makefile
+Only in gprolog1.5: prtable.c
+Only in gprolog1.5: pushargs.s
+Only in gprolog1.5: demo/*
+

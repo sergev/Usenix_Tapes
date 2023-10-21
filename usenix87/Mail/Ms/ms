@@ -1,0 +1,175 @@
+#
+# ms - a simple mail shell script
+# (invented after I got sick of Pixel/80 BerkMail cockroaches nipping me)
+#
+# Brandon S. Allbery
+#
+
+: "${HOME:?'?'}"
+: "${FOLDER:=$HOME/.mail}"
+: "${MAIL:=/usr/mail/${LOGNAME:-${USER:?'Who are you?'}}}"
+: "${PAGER:=/usr/plx/more}"
+: "${EDITOR:=/usr/plx/vi}"
+: "${SAVEMAIL:=$HOME/mbox}"
+
+if test ! -d "$FOLDER"; then
+	echo "Making default folder "'"'"$FOLDER"'"'"..."
+	mkdir "$FOLDER"
+fi
+msgno=1
+trap 'rm -f /tmp/edc$$; exit' 2
+ls "$FOLDER" > /tmp/edc$$
+if test -s /tmp/edc$$; then
+	awk '{print "mv $0 NR"}' < /tmp/edc$$ | sh
+fi
+rm -f /tmp/edc$$
+trap 2
+while read msgline; do
+	case "$msgline" in
+	"From "*)
+		while test -f "$FOLDER/$msgno"; do
+			msgno=`expr "$msgno" + 1`
+		done
+		curmsg="$FOLDER/$msgno"
+		echo "$msgline" > $curmsg
+		echo "Message $msgno: $msgline..."
+		;;
+	*)	if [ "$curmsg" = "" ]; then
+			echo "ms: $MAIL is not a mailbox" >&2
+			exit 2
+		fi
+		echo "$msgline" >> "$curmsg"
+		;;
+	esac
+done < "$MAIL"
+cp /dev/null "$MAIL"
+echo
+msgno=1
+while {
+	echo "MS> \c"
+	read command msg junk || command="q"
+}; do
+	case "$command" in
+	!*)	trap 'rm -f /tmp/edc$$; continue' 2
+		echo "$command" | sed 's/^!//' > /tmp/edc$$
+		shcmd="`cat /tmp/edc$$`"
+		rm -f /tmp/edc$$
+		trap '' 2
+		sh -c "$shcmd"
+		trap 2
+		continue
+		;;
+	S|s)	savefile="${msg:-$SAVEMAIL}"
+		msg="$junk"
+		;;
+	esac
+	case "$msg" in
+	"")	;;
+	[0-9]|[0-9][0-9]|[0-9][0-9][0-9]|[0-9][0-9][0-9][0-9])
+		msgno="$msg"
+		;;
+	*)	echo "Invalid message number: "'"'"$msg"'"'"."
+		continue
+		;;
+	esac
+	case "$command" in
+	"")	if test ! -r "$FOLDER/$msgno"; then
+			echo "No such message: "'"'"$msgno"'"'"."
+			continue
+		fi
+		echo "Message $msgno:"
+		$PAGER "$FOLDER/$msgno"
+		;;
+	l|L)	trap 'rm -f /tmp/edl$$; continue' 2
+		ls "$FOLDER" | while read msg; do
+			head -1 "$FOLDER/$msg" > /tmp/edl$$
+			from="`cat /tmp/edl$$`"
+			echo "Message $msg: $from."
+		done
+		rm -f /tmp/edl$$
+		trap 2
+		;;
+	r|R)	if test ! -r "$FOLDER/$msgno"; then
+			echo "No such message: "'"'"$msgno"'"'"."
+			continue
+		fi
+		trap 'rm -f /tmp/edt$$; continue' 2
+		head -1 "$FOLDER/$msgno" | sed 's/^From \([^ ][^ ]*\) .*$/\1/' > /tmp/edt$$
+		to="`cat /tmp/edt$$`"
+		rm -f /tmp/edt$$
+		trap '' 2
+		sed 's/^/> /' < "$FOLDER/$msgno" > /tmp/re$$
+		$EDITOR /tmp/re$$
+		trap 'rm -f /tmp/re$$; continue' 2
+		while {
+			echo "Send? Y\b\c"
+			read yesno || yesno="n"
+		}; do
+			case "$yesno" in
+			""|y*|Y*)
+				send=y
+				break
+				;;
+			n*|N*)	send=n
+				break
+				;;
+			*)	echo "Please enter Y or N."
+				;;
+			esac
+		done
+		case "$send" in
+		y)	echo "Sending reply to $to..."
+			mail $to < /tmp/re$$ || {
+				echo "Send failed, status: $?."
+				continue
+			}
+			;;
+		n)	cat /tmp/re$$ >> $HOME/dead.letter && echo "Reply saved in $HOME/dead.letter."
+			;;
+		esac
+		rm -f /tmp/re$$
+		trap 2
+		;;
+	q|Q)	break
+		;;
+	d|D)	if test ! -r "$FOLDER/$msgno"; then
+			echo "No such message: "'"'"$msgno"'"'"."
+			continue
+		fi
+		rm -f "$FOLDER/$msgno" && echo "Message $msgno deleted."
+		msgno="`expr $msgno + 1`"
+		if test ! -r "$FOLDER/$msgno"; then
+			echo "No more mail."
+		fi
+		;;
+	"?")	cat << --HELP--
+MS Commands:
+
+	RETURN	Read the current message in the folder.
+	D	Delete the current message; go to the next message.
+		If there is no more mail, you will be told.
+	L	List the messages in the folder.
+	R	Reply to the current message.
+	!cmd	Run cmd in a subshell.
+	Q	Exit MS.
+	S file	Save the current message in the specified file.
+
+All commands (except !) may have a message number specified after them.  This
+will make that message the current message before executing the command.
+
+--HELP--
+		;;
+	S|s)	if test ! -r "$FOLDER/$msgno"; then
+			echo "No such message: "'"'"$msgno"'"'"."
+			continue
+		fi
+		cat "$FOLDER/$msgno" >> $filename || {
+			echo "Couldn't append message $msgno to "'"'"$filename"'"'"."
+			continue
+		}
+		echo "Message $msgno appended to "'"'"$filename"'"'"."
+		;;
+	*)	echo "Unrecognized command: "'"'"$command"'"'"."
+		;;
+	esac
+done

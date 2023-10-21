@@ -1,0 +1,330 @@
+
+
+
+
+
+
+       QP                       8/19/80                          QP
+
+       NAME
+               QP - query processor derived from M7.
+
+       SYNOPSIS
+          QP [-p] [-t] [-f "<syn_file>" "<sem_file>"
+             [<syn_file> <sem_file>]
+
+       DESCRIPTION
+
+       QP takes as input a grammar table, a semantic table,  and  a
+       query.  It  produces a sequence of calls to primitive opera-
+       tions, as specified in the semantic table.
+
+       The syntax and the semantic tables are stored  in  M7  macro
+       files  referred to as <syn_file> and <sem_file>, respective-
+       ly. These filenames are specified to QP in the command line.
+       After  QP preprocesses the macro files the user may begin to
+       type in queries.  For a description on how to set  up  macro
+       files, see the M7__ User____'s_ Manual______.
+
+
+       The syntax and semantics macro files operate  on  the  query
+       simultaneously.   The syntax macros process the actual query
+       and leave information on the stacks for the  semantics  mac-
+       ros.
+
+
+       The syntax file should be constructed so that if  the  query
+       is  valid, the result will be the final metasymbol.  In nor-
+       mal use, the output of the syntax macros, the final metasym-
+       bol,  goes  to  the file "QP_SYNOUT" while the output of the
+       semantics macros, the sequence of calls to primitive  opera-
+       tions,  is  routed to the standard output.  However the user
+       may wish to use the t option to obtain a trace of the match-
+       ing process. With this option, a trace of the syntax and se-
+       mantics macros being matched is provided on standard  output
+       while  the  output  of  the  semantics  macros  is routed to
+       "QP_SEMOUT".  Either way, the user has a clean copy  of  the
+       semantics output to serve as input to a database processor.
+
+
+       QP CALLING OPTIONS:
+
+       The p option in the QP call will give the user a prompt with
+       the  word  "ready"  after  it has finished preprocessing the
+       syntax and semantics macros.  The f option enables the  user
+       to  skip  the  preprocessing stage if he still has a copy of
+       the preprocessed macro files.  Normally, when the  f  option
+       is  not  used,  the  syntax macros are preprocessed into the
+       file "QP_SYN" and the semantics macros are  preprocessed  in
+
+
+                                   -1-
+
+
+
+
+
+
+
+
+
+
+
+       the file "QP_SEM".  For example, suppose the user had a syn-
+       tax  macro  file  and a semantics file called "syntable" and
+       "semtable" respectively.  To use these files the first time,
+       the user must go through the preprocessing stage with a call
+       to QP which is similar to the following:
+
+               QP syntable semtable
+
+       However, the user may reuse the preprocessed files original-
+       ly created by QP by calling QP in the following manner:
+
+               QP -f "QP_SYN" "QP_SEM"
+
+       It is not necessary to use these specific names if the  user
+       has a copy of the preprocessed files in some other file.
+
+
+       The following is another example of the use of  QP  to  con-
+       vert TDMS queries into primitive operations according to the
+       root-bars philosophy as discussed in [HARD 80].  (The  files
+       referenced  in  this  example will eventually be included as
+       appendices.) The calling sequence for QP with the trace  and
+       prompt options is:
+
+               QP -p -t syntaxtbl roottbl
+
+       where syntaxtbl contains the macros corresponding to a  sim-
+       plified  grammar for TDMS (see the file grammar) and roottbl
+       has the macros corresponding to the semantic table  for  the
+       root-bars philosophy (see the file root.bars).
+
+       A sample query is:
+        QUALIFY.WHERE.((C11.EQ.PHYSICS.OR.C12.GT.50).AND..NOT.
+           ((C21.HAS.C31.EQ.PRINTER).AND.(C21.HAS.C32.EQ.PERTEC)));
+
+       The above query can be typed by the  user  after  QP  prints
+       "ready" or it could be input from a <query_file> by specify-
+       ing "< <query_file>" on the QP command line. The syntax out-
+       put  will consist of a trace of the pattern matching and re-
+       placement (see the file query.trace) and will end  with  the
+       final metasymbol: <QS/Q>;. The semantic output will be a se-
+       quence of TDMS primitive operations (see the file  root.out)
+       stored in the file "QP_SEMOUT".
+
+       NOTE: Files referenced in parenthetical notes can  be  found
+       in   subdirectory  /642/draper/research/query.proc/filesrof.
+       To obtain information on how to set up the syntax and seman-
+       tics macro files the user must refer to the M7__ User____'s_ Manual______
+       which can be found in the file hardgrav/skillman/m7v2.doc on
+       Unix  3  and in the file /642/skillman/m7/m7manuals/m7v2.doc
+       on Unix 1.  Note that this file must  be  nroffed  with  the
+       "mtn" macros before being printed.
+
+
+                                   -2-
+
+
+
+
+
+
+
+
+
+
+
+       DIFFERENCES BETWEEN M7 MACROS AND QP MACROS:
+
+       There are a few features mentioned in the M7__  User____'s_  Manual______
+       that were not incorporated into QP. These are:
+
+
+
+           The macro files for QP are read from the top down unlike
+              M7  which  reads  them  from  the bottom up. Thus the
+              first QP macros to be executed are the  ones  at  the
+              top of the user's file.
+
+
+           The M7 commands which begin with the character  "%"  are
+              not implemented in QP.
+
+
+           The user should see the sample syntax and semantics mac-
+              ro files to understand how the syntax macros pass in-
+              formation to the semantics macros via the 26  stacks.
+              When  a syntax macro matches some portion of the syn-
+              tax input line (the input  query),  that  same  macro
+              puts its name (an identifying sequence of characters)
+              on stack "a" and puts any other information its  com-
+              panion semantics macro needs on the other stacks.  QP
+              then puts the letter "S" on the "semantic line".  The
+              "semantic  line"  is  created by QP for the user as a
+              buffer for the semantic output.  The first  semantics
+              macro should check for the letter "S" on the semantic
+              line. If it matches, then it replaces the letter  "S"
+              with  the  contents of stack "a". This is how the se-
+              mantics macro file knows which syntax macro has  just
+              been matched. The semantic line now contains the name
+              of  the  syntax  macro  that  was  just   used.   The
+              corresponding  semantics  macro  will be checking the
+              semantic line for the name of its partner syntax mac-
+              ro.   If  it sees its name on the input line, then it
+              will perform the substitution to complete that  stage
+              in processing the query.
+
+
+           QP only searches for a match of the semantics  macro  at
+              column one of the semantic line.  Thus, the semantics
+              macro:
+
+                      'S' = 'LET S = DONE';
+
+              would match
+
+                      'S1' = 'ERROR';
+
+              but not
+
+
+                                   -3-
+
+
+
+
+
+
+
+
+
+
+
+                      'QS' = '<QS/Q>';
+
+              The value of the semantics line, as far as  the  user
+              is concerned, is merely what a syntax macro places on
+              stack "a". Thus the user must be careful not  to  put
+              anything on stack "a" that begins with an "S".
+
+
+           The '<' feature to turn off the rescanning algorithm  is
+              not  allowed on a semantic macro but may be used on a
+              syntax macro.
+
+
+           QP does not have the n and a options found in M7.
+
+
+           Only one syntax and one semantics file may be  specified
+              on  the  command  line.  This means that the f option
+              can not be used in conjunction with specifying a  set
+              of non-preprocessed macro files.
+
+
+       FUTURE ADDITIONS TO QP:
+
+
+           -e option: test if the syntax output (final  metasymbol)
+              matches the pattern "'<?2\/?2>'". If it does, QP will
+              exit normally. If not, QP will print an error message
+              and halt. For both cases, the file M7_SYNOUT will not
+              be created.
+
+
+       QP FATAL ERROR MESSAGES:
+
+
+           1.  "QP: illegal placement of  f  option"  indicates  QP
+               found more macro files listed before the 'f' option.
+
+           2.  "QP: cannot open 'f'  option  files"  indicates  the
+               files on the 'f' option don't exist.
+
+           3.  "QP: more macro files can't be used with  f  option"
+               indicates  QP  found  more macro files listed before
+               some non-preprocessed macro files.
+
+           4.  "QP: cannot open  macro  file"  indicates  the  non-
+               preprocessed  syntax or semantics macro file did not
+               exist.
+
+
+
+
+
+
+                                   -4-
+
+
+
+
+
+
+
+
+
+
+
+           5.  "QP: Error - all semantic macros must  use  '='  not
+               '<'"  indicates  QP found a semantics macro with "<"
+               as the replacement symbol.
+
+
+       References
+
+       HARD 80a Ambiguity in Processing  Boolean  Queries  on  TDMS
+       Tree Structures:
+                A Study of Four Different Philosophies
+                IEEE____ Transactions____________ on__ Software________ Engineering___________
+                Vol. Se-6, No. 4, July 1980, pp. 357 - 372
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   -5-
+
+
+
+
+

@@ -1,0 +1,45 @@
+
+In article <5434@sri-spam.ARPA>, argv@sri-spam.ARPA (AAAARRRRGGGGv) writes:
+> In article <1963@trwrba.UUCP>, ries@trwrba.UUCP (Marc A. Ries) writes:
+> > "vis.c", line 25: SIGWINCH undefined
+> > "vis.c", line 37: warning: illegal combination of pointer and integer, op =
+> SIGWINCH is very important for sun users be careful with this.  If you
+> stretch or overlay another window on top of the window running vis, which
+> is how I usually run it, then SIGWINCH being ignored will prevent the
+> program from dying.  I recommend doing an #ifdef SIGWINCH for that particular
+> entry.
+
+The real problem is that this program, "vis", is remapping all the signals
+*except* a few that it knows about.  Far better would be to remap the
+signals that it *does* know about.  If the program manages to take a
+floating point trap, it should core dump like everybody else.
+
+Also, if some signals are set to SIG_IGN (ignore it) then the program
+should continue to ignore them.  This happens with SIGINT under the
+Bourne shell when running things in the background.  If you set the
+signal handler anyway, and you are running in background and the user
+types interrupt, the bg program will stop, which is probably not what
+you wanted.  The same is true of SIGHUP for programs run under "nohup".
+So try:
+
+<    for(sig = 0; sig < NSIG; sig++)
+<	if(sig != SIGTSTP && sig != SIGCONT && sig != SIGCHLD &&sig != SIGWINCH)
+<	    signal(sig, die); /* preserver job control and ignore signal
+<				 when execvp exits */
+---
+>    if (signal(SIGINT, SIG_IGN) != SIG_IGN)	/* for non-job-ctl & */
+>        signal(SIGINT, die);
+>    if (signal(SIGHUP, SIG_IGN) != SIG_IGN)	/* for nohup */
+>        signal(SIGHUP, die);
+>    signal(SIGTERM, die);
+
+This is not only cleaner, but also is portable to systems that don't
+have job control (SIGTSTP, etc), systems that don't have windows (SIGWINCH),
+and systems that have new funny signals that you don't need to concern
+yourself with.
+
+Since I was in there, I also added an option that makes "vis" not eat
+100% of your CPU; you can specify a delay between executions of the
+command.  I also folded in the other changes suggested by Marc Ries.
+Here's the full source, since it's small.
+

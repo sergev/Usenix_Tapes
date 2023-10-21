@@ -1,0 +1,222 @@
+#
+# Makefile for Amiga MicroGNUmacs, using lattice and PD make.
+#
+#	This Makefile should be executed in the main Emacs directory.
+#
+# Conditional compilation possibilities:
+#
+#	V11		-- must be defined for the editor to either run on
+#			   or compile on a version 1.1 amigados system
+#
+#	STARTUP		-- if defined, code for using a startup file
+#			   is included.  This is handy for folks who
+#			   won't be able to hack the editor to their
+#			   taste.
+#
+#	MENU		-- if defined, Intuition menu selection is
+#			   enabled.  This uses a good bit of space,
+#			   both on disk and in memory.  If you #define
+#			   this, the XOBJ macro must contain $(MENUOBJ).
+#
+#	BROWSER		-- BROWSER uses the Amiga menu to
+#			   present a MENU of files. Selecting a directory
+#			   entry (ends with a /) makes the contents if that
+#			   directory the next menu (deleting any menus that
+#			   used to follow it); selecting a plain file does a
+#			   "find-file" on that file name. Really has to be
+#			   seen to be understood. XOBJ must contain
+#			   $(MENUOBJ) for this to work.
+#
+#	MOUSE		-- if defined, the Amiga mouse is active.
+#			   If you #define this, XOBJ must contain $(MOUSEOBJ)
+#
+#	XKEYS		-- if defined, the editor understands the Amiga
+#			   function keys.
+#
+#	DO_METAKEY	-- if defined, characters with high bit set (i.e.
+#			   most ALT-ed characters in the usa0 keymap)
+#			   are translated into internal META keys
+#
+#	CHANGE_COLOR	-- if defined, adds commands to manipulate
+#			   the rendition of the mode line and the
+#			   foreground and background color of the
+#			   text window and mode line.  The names match
+#			   the regular expression
+#			   set-{text,mode}-{foreground,background}
+#
+#	MODE_RENDITION	-- the these values indicate the way to render
+#	TEXT_RENDITION	   characters in the text area and mode line.
+#			   TEXT_RENDITION is mainly there for completeness.
+#			   Possible values are:
+#				0 -- plain text
+#				1 -- boldface
+#				3 -- italic
+#				4 -- underscore
+#				7 -- reverse-video (default if not defined)
+#
+#	TEXT_FG		-- specifies which system color (0-7) to use
+#	TEXT_BG		   when drawing the text and mode line.  If they
+#	MODE_FG		   aren't between 0 and 7, or if a combination
+#	MODE_BG		   comes out badly, it's *YOUR* fault.  If
+#			   CHANGE_COLOR is defined, you get to change these
+#			   values on the fly.  Naturally, making both
+#			   FG and BG the same results in an unusable display...
+#
+#	TOGGLE_ZOOMS	-- the function toggle-menu-hack switches between
+#			   a bordered, sizeable window and a borderless
+#			   window.  By default, the borderless window
+#			   retains the size of the sizeable window.
+#			   If TOGGLE_ZOOMS is #defined, however, the
+#			   borderless window always takes up the whole
+#			   screen.
+#
+############################################################################
+CC =		cc
+#DEBUGFLAG =	-g
+TTYDIR =	tty/amiga
+SYSDIR =	sys/amiga
+MENUOBJ =	ttymenu.o menustack.o
+MOUSEOBJ =	ttymouse.o
+
+INCS = def.h $(TTYDIR)/ttydef.h $(SYSDIR)/sysdef.h
+
+# The whole enchilada (~60K with Manx small model)
+PREFS = -DSTARTUP -DBROWSER -DMENU -DMOUSE -DCHANGE_COLOR -DXKEYS -DDO_METAKEY 
+XOBJ  = $(MENUOBJ) $(MOUSEOBJ)
+
+# Burrito style, with just the Browser...
+#PREFS = -DSTARTUP  -DBROWSER -DMOUSE -DCHANGE_COLOR -DXKEYS -DDO_METAKEY
+#XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Burrito style, with just the menu...
+#PREFS = -DSTARTUP  -DMENU -DMOUSE -DCHANGE_COLOR -DXKEYS -DDO_METAKEY
+#XOBJ  = $(MOUSEOBJ) $(MENUOBJ)
+
+# Mike's favorite version
+#PREFS = -DMOUSE -DBROWSER -DMODE_RENDITION=0 -DMODE_FG=2 -DTOGGLE_ZOOMS -DDO_METAKEY -DGOSREC -DMEYN
+#XOBJ = $(MOUSEOBJ) $(MENUOBJ)
+
+# Absolutely bare-bones editor (~49K with Manx small model)
+#PREFS = -DDO_METAKEY
+#XOBJ  =
+
+CFLAGS =	-O -I$(TTYDIR) -I$(SYSDIR) $(DEBUGFLAG) $(PREFS)
+
+EXEFILE =	mg
+COM1	= basic.o buffer.o cinfo.o display.o echo.o extend.o file.o kbd.o
+COM2	= line.o main.o match.o random.o region.o search.o symbol.o version.o
+COM3	= window.o paragraph.o prefix.o word.o
+TTYOBJ	= console.o tty.o ttyio.o ttykbd.o
+SYSOBJ	= fileio.o sleep.o spawn.o
+OBJ	= comlib1.o comlib2.o comlib3.o ttylib.o syslib.o $(XOBJ)
+
+$(EXEFILE) :	$(OBJ)
+		$(CC) -o $(EXEFILE) $(OBJ)
+
+comlib1.o :	$(COM1)
+		join $(COM1) as comlib1.o
+
+comlib2.o :	$(COM2)
+		join $(COM2) as comlib2.o
+
+comlib3.o :	$(COM3)
+		join $(COM3) as comlib3.o
+
+ttylib.o :	$(TTYOBJ)
+		join $(TTYOBJ) as ttylib.o
+
+syslib.o :	$(SYSOBJ)
+		join $(SYSOBJ) as syslib.o
+
+basic.o :	basic.c $(INCS)
+		$(CC) -c $(CFLAGS) basic.c
+
+buffer.o :	buffer.c $(INCS)
+		$(CC) -c $(CFLAGS) buffer.c
+
+cinfo.o :	cinfo.c $(INCS)
+		$(CC) -c $(CFLAGS) cinfo.c
+
+display.o :	display.c $(INCS)
+		$(CC) -c $(CFLAGS) display.c
+
+echo.o :	echo.c $(INCS)
+		$(CC) -c $(CFLAGS) echo.c
+
+extend.o :	extend.c $(INCS)
+		$(CC) -c $(CFLAGS) extend.c
+
+file.o :	file.c $(INCS)
+		$(CC) -c $(CFLAGS) file.c
+
+kbd.o :		kbd.c $(INCS)
+		$(CC) -c $(CFLAGS) kbd.c
+
+line.o :	line.c $(INCS)
+		$(CC) -c $(CFLAGS) line.c
+
+match.o :	match.c $(INCS)
+		$(CC) -c $(CFLAGS) match.c
+
+prefix.o :	prefix.c $(INCS)
+		$(CC) -c $(CFLAGS) prefix.c
+
+paragraph.o :	paragraph.c $(INCS)
+		$(CC) -c $(CFLAGS) paragraph.c
+
+main.o :	main.c $(INCS)
+		$(CC) -c $(CFLAGS) main.c
+
+random.o :	random.c $(INCS)
+		$(CC) -c $(CFLAGS) random.c
+
+region.o :	region.c $(INCS)
+		$(CC) -c $(CFLAGS) region.c
+
+search.o :	search.c $(INCS)
+		$(CC) -c $(CFLAGS) search.c
+
+symbol.o :	symbol.c $(INCS)
+		$(CC) -c $(CFLAGS) symbol.c
+
+version.o :	version.c $(INCS)
+		$(CC) -c $(CFLAGS) version.c
+
+window.o :	window.c $(INCS)
+		$(CC) -c $(CFLAGS) window.c
+
+word.o :	word.c $(INCS)
+		$(CC) -c $(CFLAGS) word.c
+
+console.o :	$(TTYDIR)/console.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/console.c
+
+menustack.o :	$(TTYDIR)/menustack.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/menustack.c
+
+tty.o :		$(TTYDIR)/tty.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/tty.c
+
+ttyio.o :	$(TTYDIR)/ttyio.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/ttyio.c
+
+ttykbd.o :	$(TTYDIR)/ttykbd.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/ttykbd.c
+
+
+ttymouse.o :	$(TTYDIR)/ttymouse.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/ttymouse.c
+
+ttymenu.o :	$(TTYDIR)/ttymenu.c $(INCS)
+		$(CC) -c $(CFLAGS) $(TTYDIR)/ttymenu.c
+abort.o :	$(SYSDIR)/abort.c $(INCS)
+		$(CC) -c $(CFLAGS) $(SYSDIR)/abort.c
+
+fileio.o :	$(SYSDIR)/fileio.c $(INCS)
+		$(CC) -c $(CFLAGS) $(SYSDIR)/fileio.c
+
+sleep.o :	$(SYSDIR)/sleep.c $(INCS)
+		$(CC) -c $(CFLAGS) $(SYSDIR)/sleep.c
+
+spawn.o :	$(SYSDIR)/spawn.c $(INCS)
+		$(CC) -c $(CFLAGS) $(SYSDIR)/spawn.c

@@ -1,0 +1,855 @@
+.th E I 4/29/78
+.sh NAME
+e \*- an augmented text editor (version 6.1)
+.sh SYNOPSIS
+.bd e
+[ -command ... ] [ file [ arg ... ] ]
+.s2
+.sh DESCRIPTION
+.bd E
+is an extended version of the UNIX
+text editor,
+.bd ed.
+In addition to modifications which make it
+a worthwhile improvement over
+.bd ed
+in general,
+it includes some features particularly useful
+on high-speed (9600 baud) video display terminals.
+.s1
+All documentation concerning
+.bd ed
+applies to
+.bd e,
+with the following changes and extensions.
+.s1
+Backus normal form is used for syntax descriptions in the following.
+The vertical bar (\*v) and the
+Kleene star (*) are used to indicate
+"or" and "zero or more occurrences", respectively.
+Brackets ("[" and "]") indicate optional arguments.
+.s2
+.in +5
+.ti -8
+The neighborhood command:
+.br
+( . ) n [ + \*v - ] *
+.br
+This is a new command
+which permits the "neighborhood" of a line to be displayed.
+The neighborhood initially consists of
+five lines before and five lines after the current line.
+For example, "20n" will set the current line to 20,
+and will print lines 15 through 25.
+Any sequence of plusses (+) and minuses (\*-)
+may be appended to the command to indicate
+preceding or following neighborhoods.
+Thus, "20n\*-" will set the current line
+to 9 and will print lines 4 through 14.
+"n"
+(without plusses or minuses)
+may be used as a suffix to other commands
+in the same manner as
+"p"
+and
+"l".
+The size of the displayed neighborhood may be changed
+using the
+"ns"
+command (q.v.).
+.s2
+.ti -8
+The junk command:
+.br
+( . ) j [ + \*v - ] *
+.br
+This is the same as
+"n" above except that it displays in "l" format rather than "p" format.
+.s2
+.ti -8
+Suffixes:
+.br
+Any command which could be suffixed with
+"p"
+or
+"l"
+when using
+.bd ed
+may be suffixed in
+.bd e
+by "n", "p", "l", or "j".
+.br
+From here on, whenever we refer to "<suffix>",
+we shall mean any one of these four forms.
+.s2
+.ti -8
+The output-mode command:
+.br
+( . ) o [ n \*v p \*v l \*v j ] [ <suffix> ]
+.br
+In the standard editor,
+.bd ed,
+a command of the form "<address>"
+was interpreted as "<address>p",
+and a null (blank) line was interpreted
+as ".+1p".
+In
+e,
+there are four possible interpretations.
+The output modes and the corresponding
+interpretations of
+"<address>"
+and
+"<null line>"
+are:
+.s1
+.nf
+          mode       <address>      <null line>
+            p      <address>p           .+1p
+            l      <address>l           .+1l
+            n      <address>n           n+
+            j      <address>j           j+
+.sp
+.fi
+The initial output mode for the editor
+defaults to "n".
+Entering the "o" command with the name of the desired output mode
+as an argument will cause the editor to change to that output mode.
+Entering "o" without argument will print the name of the current
+output mode.
+.s2
+.ti -8
+Line numbering:
+.br
+Whenever a line of text is printed,
+it is prefixed by a left margin consisting of
+(1) a ">" if the line is the current line,
+(2) the number of the line,
+(3) a "$" if the line is the last line,
+(4) several blanks,
+and
+(4) a "!" to mark the beginning of the text.
+If the line is printed using "l" or "j", then the "!" is
+replaced by "[", and a corresponding "]"
+appears at the end of the line.
+The printing of the left margin can be suppressed by
+using the "np" command (q.v.).
+.s2
+.ti -8
+Prompts:
+.br
+Depending on whether
+.bd e
+is accepting edit commands or
+taking lines of input (for the
+"a", "i", and "c"
+commands) the editor will prompt for input
+with the forms:
+.s1
+.nf
+  e<blanks>:                  if accepting command input
+  e<line number><blanks>:     if accepting text input
+.sp
+.fi
+The printing of this material can be turned off and on by
+using the "np" command (q.v.).
+.s2
+.ti -8
+Out-of-range addresses:
+.br
+If the user enters a command with addresses which are out of
+range but which specify a range of lines which overlaps with
+the lines in the file, the addresses are forced to within range
+rather than being considered in error.
+For example, "1,20p" will be a valid command
+even if the file being edited has only 10 lines.
+If there is no overlap, the addresses are considered illegal;
+for example, "30,40d" in a 20-line file would be treated as an error.
+.s2
+.ti -8
+Messages:
+.br
+The return messages produced by
+the "w", "r", and "!" commands
+are suffixed by
+.sp
+.nf
+;<blank><current filename>
+.fi
+.s2
+.ti -8
+Confirmation for "e" and "q", and the use of "quit":
+.br
+If any unsaved changes have been made to the file being edited
+and the user enters "e [ <filename> ]", "q", or control-d,
+then
+the editor responds with "enter e or command:"
+or "enter q or command:" and waits for
+appropriate confirmation.
+(
+.bd e
+doesn't consider the changes to have been saved until the user
+enters "w [ <filename> ]" WITHOUT addresses.)
+Confirmation is read from standard input even if the "e" or "q"
+command was taken from a "g" command, a "<" file, or a "dash" argument
+(see below).
+.s1
+Using "quit" instead of "q" will always cause a
+quit without a request for confirmation.
+.s2
+.ti -8
+Single-line add, change, and insert:
+.br
+    ( . ) a [ <suffix> ] .<text>
+    ( . ) i [ <suffix> ] .<text>
+.br
+( . , . ) c [ <range> ] [ <suffix> ] .<text>
+.br
+These are single line add, insert,
+and change commands,
+which may be preceded by addresses
+(as with the conventional forms of
+"a", "i", and "c").
+The function of the optional range argument to "c" will
+be explained later.
+.s2
+.ti -8
+Changes to search strings:
+.br
+The regular expression handler has been extended
+so that "<char1>\*-<char2>" appearing in
+square brackets denotes the range of characters
+from <char1> to <char2> inclusively.
+For example, "[b-g]" means the same
+as "[bcdefg]".
+.s1
+The string delimiter may be omitted;
+for example,
+"?abc" abbreviates "?abc?",
+and "/" abbreviates "//".
+.s1
+If the string is not found,
+the error message is "??" instead of "?".
+.s2
+.ti -8
+Changes to replacement strings:
+.br
+The closing delimiter of a non-empty string
+may be omitted;
+for example
+"s/abc/def" abbreviates "s/abc/def/".
+.s1
+In
+.bd ed,
+a "\en" in the replacement string is mapped into an "n".  In
+.bd e,
+it is mapped into a newline character in the same way as is an
+escaped newline.  This allows line splitting to be done inside
+"g" commands.
+.fi
+.s2
+.ti -8
+Range indicators for most commands:
+.br
+If <command> is any command which can be performed over a
+range of lines (i.e.,
+"c", "d", "g", "m", "l", "p", "s", "t", "u", "v",
+and
+"w"),
+then
+	"( . , .) <command> <range>"
+.br
+is equivalent to
+	"(. , .+<range>-1 ) <command>"
+.br
+where <range> is a positive integer.
+From here on, <range> shall be used to denote such a
+range indicator.
+.s1
+Examples:  "d2" will delete the
+lines "." and ".+1" ; "3,5p3"
+print lines 3 through 7; and
+"5s4/.//" will remove the first character from lines
+5 through 8.
+.s1
+In the case of "m" and "t", since <range> appears before
+another number, it must be followed by a comma.
+For example, "23m2,31" will move lines 23 and 24 to line 31.
+.s1
+In contrast to the "p" and "l" commands, the "p" and "l" suffixes
+cannot have range indicators.
+.s2
+.ti -8
+"q" suffix to the write command:
+.br
+( . , . ) w [ <range> ] [ q ] [ <blanks><filename> ]
+.br
+The command acts in the usual way if the "q" is omitted.  If
+the "q" is present, a "w" and then a "q" are executed.
+.s2
+.ti -8
+The unite command:
+.br
+( . , . ) u [ <range> ] [ <suffix> ] [ .<text> ]
+.br
+This command
+replaces the indicated range of lines
+by their concatenation.
+If ".<text>" is given, <text> is inserted
+between each pair of concatenated lines.
+For example, if lines 3, 4, and 5 are
+"Oh, no!", "Another",
+and "editor improvement!", respectively, then "3,5u" and
+"3u3" both replace this set of lines by
+	"Oh, no!Anothereditor improvement!",
+.br
+whereas "3,5u. " and "3u3. " replace the lines by
+	"Oh, no! Another editor improvement!".
+.br
+Note that if the indicated range contains
+only one line
+(e.g. "2,2u1" and ".u"),
+the effect is merely to set the current line (which can be
+handy on occasion).
+Note that the "u" command complements the capability of splitting
+lines which is provided by such constructions as
+"s/<text>/<text>\e<newline>/"
+and "s/<text>/<text>\en/".
+.s2
+.ti -8
+Interactive substitute:
+.br
+"s/string1/string2/i" is like "s/string1/string2/g" except that
+the editor consecutively underlines each occurrence of string1
+and asks the user to confirm that the substitution should be
+made.  In each case, the user can respond with any of the
+following three subcommands:
+
+.in +16
+.ti -16
+subcommand	meaning
+
+.ti -16
+null line	Leave the present occurrence of string1 unchanged.
+
+.ti -16
+s[q][.string3]	Substitute for the present occurrence of string1.
+If ".string3" is given, string3 is substituted; otherwise,
+string2 is substituted.  If "q" is given, the interactive
+substitute then terminates, and the changes are incorporated
+into the file.
+
+.ti -16
+    q		Stop searching.
+All previous changes are incorporated into the file.
+.in -16
+
+Aside from making substitutions for a given string in "noisy"
+files (i.e. files in which some occurrences of the string should
+be changed and some shouldn't), the interactive substitute is
+also useful for finding all occurrences of a given string, since
+it underlines each one.
+.s1
+With the optional range number, the optional final delimiter,
+and the "i" option, the full syntax for the substitute command is now
+.nf
+( . , . ) s [<range>] /<text>/<text>/ [g\*vi] [<suffix>]
+or ( . , . ) s [<range>] /<text>/<nonnull text>
+.fi
+where any other unambiguous character may be used in place of
+the "/".
+.s2
+.ti -8
+Global substitute:
+.br
+"gs/string1/string2/" (with the various optional arguments
+as in the syntax for "s" above)
+is shorthand for "g/string1/s//string2/".
+.s2
+.ti -8
+Upper and lower case:
+.br
+The editor command names,
+the arguments to the
+"k"
+command, and the letter addresses
+created by the "k" command
+may be entered in either upper
+or lower case, and are mapped to lower case.
+.s2
+.ti -8
+The newline indicator:
+.br
+In
+.bd e,
+"`" is interpreted as an end-of-line,
+in order to allow several commands to be entered
+on the same line.
+This "newline indicator" may be escaped by
+using a "\e", and may be changed
+by using the "nl" command (below).
+.s2
+.ti -8
+The neighborhood size command:
+.br
+ns [ <num1>,<num2> ]
+.br
+This command changes the size
+of the neighborhood (explained above)
+to <num1> lines before the current line
+and <num2> lines following.
+"ns"
+without any arguments displays
+the current neighborhood size parameters.
+.s2
+.ti -8
+The newline indicator command:
+.br
+nl [ <blanks> ] [ <char> ]
+.br
+This command changes the newline indicator (q.v.) to <char>. "nl"
+without an argument prints the character currently in use.
+"nl<blanks>" removes the newline indicator entirely.
+Note that <blank> cannot be used as a newline indicator.
+.sp
+Within macros,
+the newline indicator is "`", even if the newline
+indicator is something else outside of macros.  This is
+so that a user can use macros even after changing the
+newline indicator.  If the "nl" command is used within a macro,
+the newline indicator is changed for the duration of the macro only.
+.s2
+.ti -8
+The number-and-prompt command:
+.br
+np [ <c1> <c2> ]
+.br
+This command controls the printing of line numbers and prompts.
+Printing of line numbers is enabled
+if <c1> is "1", disabled if it is "0", and remains
+the same if it is ".".
+Printing of prompts is controlled similarly
+by <c2>.
+"np" without arguments prints out the current values of <c1> and <c2>.
+.s2
+.ti -8
+Arguments to
+.bd e:
+.br
+In Backus normal form, the syntax for invoking
+.bd e
+is
+.br
+e [ - \*v + \*v -<command> ] * [ <filename> [ <arg> * ] ]
+
+Editor commands may be passed as arguments when invoking the
+editor, by preceding them by dashes.
+For example, "e\ -nl_\ file" edits "file" with the newline
+character set to "_" instead of "`".
+When "e" and "q" are used as "dash" arguments and confirmation is
+necessary, it is taken from the standard input.
+.s1
+Up to the optional file name,
+arguments to
+.bd e
+are processed in the order they occur.
+For example, "e -6n myfile" will not print out the first six lines of
+"myfile", since "-6" is read before "myfile" gets edited.
+The way to get around this is by using "e '-e myfile'
+-6n" instead.
+.s1
+In multi-line "dash" commands, only the first line of the command
+should be preceded by a dash.  For example, "e -a hello there ."
+creates a file containing the lines "hello" and "there",
+whereas "e -a -hello -there -." creates a file containing the
+lines "-hello", "-there", and "-.", and appends additional
+lines from standard input.
+.s1
+The effect of the "-" argument is similar to its effect in
+.bd ed:
+it turns off line numbering and prompting, the "!" and byte count
+messages, and the confirmation requests on "q" and "e".  The "+" argument
+has the opposite effect.
+.s1
+Arguments following <filename> are ignored, but (as with the
+other arguments) cause the editor variables ~A and ~1 through
+~9 to be set (see below); thus, they can be accessed from inside the
+editor.
+.s2
+.ti -8
+Comments and labels (the colon command):
+.br
+: [ <blank> <text> ]
+.br
+The text, if present, is ignored.
+This allows the user to put comments into editor scripts, and
+also to implement looping, since "!goto label" works inside
+editor scripts.  Conditional looping can be done by constructions
+such as "3g/<text>/!goto label", which will execute the "goto"
+only if <text> is found in line 3.
+.s2
+.ti -8
+The "<" command:
+.br
+< [ <blanks> ] <filename>
+.br
+This command causes editor input to be taken from the named file.
+However, interactive substitutes and confirmation requests still
+take their input from the standard input.
+"<" may be used recursively, if desired.
+.s2
+.ti -8
+The ">" command:
+.br
+> [ > ] [ <blanks> ] [ <filename> ]
+.br
+This command causes subsequent editor output (except for
+prompts, confirmation requests, and interactive substitute requests)
+to be sent to the named file.
+">>" instead of ">" appends this output to the file.
+">" or ">>" without argument causes output to be sent to standard
+output again.
+.s1
+While a ">" or ">>" is in effect, the colon at the end of prompts
+is replaced by a ">" as a reminder that the editor output is
+going elsewhere.
+.s2
+.ti -8
+The message command:
+.br
+ms.<text>
+.br
+ms'<text>
+.br
+"ms.<text>" prints <text> as a message.  "ms'<text>" does the
+same thing without the carriage return at the end.
+Some possible uses of this command are
+in "<" files,
+with the ">" command,
+and with global printing to produce more readable output
+(e.g. "g/<text>/p2\e<newline>ms.").
+.s2
+.ti -8
+The echo command:
+.br
+ec [ 0 | 1 ]
+.br
+"ec1" causes
+.bd e
+to echo every character it reads.  "ec0" causes it to stop echoing.
+This feature is useful mainly for debugging macros and editor scripts.
+.s2
+.ti -8
+Handling of empty or nonexistent files:
+.br
+.bd e
+allows several things here which are not allowed in
+.bd ed.
+Several of these features can be handy inside shell and editor scripts,
+since editor errors inside files cause the files to be exited.
+.s1
+In
+.bd e,
+"i" works inside empty files.
+.s1
+.bd ed
+treats the attempted editing of nonexistent files as an error,
+whereas
+.bd e
+simply informs the user that the file is new.
+.bd e
+also allows empty files to be written.
+.s1
+In
+.bd e,
+"g" works in empty files in the sense that "g/<text>/<command>" causes
+no error, just as it causes no error in any other case in
+which <text> cannot be found.
+.s2
+.ti -8
+The double dot:
+.br
+"..", when used as an address, denotes the beginning
+of the last line or range of lines which the user referred to by using
+addresses or
+range indicators.
+A command entered without any addresses or range indicators will
+never cause ".." to point to a different line, unless it deletes
+the line to which ".." was pointing.
+Examples:
+
+.in +16
+.ti -16
+command			new value of ".."
+
+.ti -16
+4,9s/a/b/		4
+.ti -16
+/xyz/s;a;b;		the line found by /xyz/
+.ti -16
+p3			old value of "."
+.ti -16
+s/a/b/			unchanged
+.ti -16
+33,35t7			7
+.ti -16
+n+			unchanged
+.in -16
+.s2
+.ti -8
+Editor variables:
+.br
+A variable indicator is a character used to signal that the
+following character represents an editor variable.
+Outside of macros, the default is for the variable indicator
+feature to be turned off,
+although there are a number of useful editor variables
+which may be accessed if the user turns this feature on
+using the "vb" command (q.v.).
+Inside macros, the variable indicator is set to "~" for
+the duration of the macro,
+but the variable indicator may be escaped by using a "\e",
+and may be changed or removed for the duration of the macro by
+using the "vb" command.
+.sp
+Suppose the variable indicator has been set to "~".
+Then "~" followed by any single character denotes
+an editor variable.
+Currently, the following variables have meaning:
+.sp
+Inside macros, ~0 is the macro name.  Outside of macros,
+~0 is the name of the editor.
+.sp
+Inside macros,
+~1 thru ~9 are the first nine arguments to the macro.
+Outside of macros,
+~1 through ~9 are the first nine
+arguments to
+.bd e.
+Thus, if
+.bd e
+were invoked by "e name1 name2" and the command "vb ~" were executed,
+then the command "e ~2" would cause "name2" to be edited.
+.sp
+~A is the entire argument list (i.e. ~1 thru whatever),
+with blanks in between each pair of arguments.
+.sp
+~B is the name of the user's bin directory, suffixed with a slash.
+.sp
+~D is a rubout.  This is useful in macro files containing
+substitution commands.  For example,
+	s/~1//
+.br
+might cause problems if ~1 contains a slash, but since it is
+almost inconceivable that ~1 will contain a rubout,
+	s~D~1~D~D
+.br
+should work without any problems.
+.sp
+~E is the name of the user's ebin directory, suffixed with a slash.
+.sp
+~F
+is the name of the file being edited.
+.sp
+In macros,
+if addresses and/or a range were specified when the macro was
+invoked, then ~G is the concatenation of the two addresses,
+separated by a comma.  Otherwise, ~G is a null string.
+Outside of macros, ~G is a null string.
+.sp
+~H is the name of the user's home directory, suffixed with a slash.
+.sp
+Inside macros,
+~I and ~J
+are the addresses specified when the macro was invoked.
+If only one address (and no range) was specified, then
+~I and ~J are the same.  If no addresses and no range were specified, then both
+~I and ~J default to the current line.  However, if the range
+argument was also given, <range>-1 is added to ~J.
+Note that if a range and/or one or more addresses were specified,
+then "~G" is the same as "~I,~J".
+.sp
+~K is the editor's procss ID in octal.  This is useful
+for creating unique names for temporary files.
+.sp
+~N is the number of arguments which were given when the macro (or the editor) was invoked.
+.s2
+.ti -8
+The variable indicator command:
+.br
+vb [ <blanks> ] [ <char> ]
+.br
+The use of variable indicators is discussed under "editor variables"
+(q.v.).  The function of the "vb" command is to change the
+variable indicator to <char>.  "vb"
+without an argument prints the character currently in use.
+"vb<blanks>" removes the variable indicator entirely.
+Note that <blank> cannot be used as a variable indicator.
+.sp
+Outside of macros, there is no variable indicator unless one has
+been set using "vb <char>".
+Within
+macros, the variable indicator is "~", even if the variable
+indicator is something different outside of macros.
+This is
+so that a user can use macros even after changing the
+variable indicator.
+If the "vb" command is used within a macro,
+the variable indicator is changed for the duration of the macro only.
+.s2
+.ti -8
+The shift command:
+.br
+sh
+.br
+This command has an analogous effect to "shift" in the shell:
+~2 becomes ~1, ~3 becomes ~2, etc.
+.s2
+.ti -8
+Editor macros (the "x" command):
+.br
+( . , . ) x [<range>] [<suffix>] <d> <macro> [<d> <arg>] *
+.br
+This command executes the macro <macro>, with the <arg>s as arguments.
+<d>, which may be any single character, serves to delimit the macro
+name and any arguments which are present.
+Any occurrences of <d> which are intended to be part of the macro name
+or the arguments, rather than delimiters, should be escaped with a
+"\e".
+It is usually convenient to use a blank for <d>.
+.sp
+The actual file from which
+.bd e
+reads is
+<macro>.em,
+which should be a file containing editor commands.
+.bd E
+looks for this file in the following places, in the order given:
+.s1
+	the current directory
+	the user's ebin directory
+	/usr/ebin
+.sp
+While
+.bd e
+is executing the macro, ~I, ~J, ~A, and ~0 through ~9 are
+set as described under "editor variables".
+After the macro finishes, these variables revert to their
+original values.
+.sp
+Examples of how to write and use editor macros and editor variables
+are given in the macro tutorial, which may be accessed by
+"tell e.macros" or "man e.macros".
+Macros may be invoked recursively, if desired.
+.s2
+.ti -8
+Changes to the "!" command:
+.br
+Unlike
+.bd ed,
+.bd e
+allows the user to use the "!" command inside the "g" command.
+Among other things, this allows conditional branching to labels
+(see above).
+In addition, "!" without arguments invokes a shell which is
+immune to breaks and quits.
+
+When used inside "<" files and macro files, "!" invokes a
+shell or shell command which has the "<" file or macro file as
+its standard input.  However, "!!" invokes a shell or shell
+command which has the editor's standard input as its standard
+input.
+.s2
+.ti -8
+Miscellany:
+.s1
+.ti -3
+a. In
+.bd ed,
+"f<blank>" removes the current filename
+but also is treated as an error.
+In
+.bd e,
+it merely removes the current filename.
+.s1
+.ti -3
+b. In
+.bd ed,
+"r <filename>" sets the current filename
+to <filename> if the current filename is blank.
+In
+.bd e,
+this is no longer the case.
+.s1
+.ti -3
+c. In
+.bd ed,
+the "l" command does not print octal 177
+as "\e177", making its existence in a file
+impossible to detect on most terminals.
+This bug has been corrected in
+.bd e.
+In addition, a glitch in the operation of "l" on lines exactly 71
+characters long has been corrected in
+.bd e.
+.s1
+.ti -3
+d. \c
+.bd ed
+loses the last line of a file if the file does
+not end in a newline character, but
+.bd e
+appends a newline character and sends an
+informatory message to the user.
+Similarly,
+.bd ed
+cannot handle lines longer than 512 characters, but
+.bd e
+inserts newline characters as necessary to split them into
+lines of 512 characters each.
+.s1
+.ti -3
+e. \c
+.bd e
+produces the following return codes:
+.nf
+	0  if exit is via "q", "quit", or "wq".
+	1  if exit is via an end-of-file (control-d).
+	2  if called with an invalid parameter.
+.fi
+.s1
+.ti -3
+.s1
+.ti -3
+f. \c
+.bd ed
+has a bug in the "s" command which causes it to remove names
+which have been created using the "k" command.  In
+.bd e,
+this bug has been fixed.
+.fi
+.sh FILES
+/tmp/e#, /usr/ebin/*, and *.em,
+    where # is the process ID in octal.
+.sh DIAGNOSTICS
+? and ?? for errors in commands
+.sh AUTHOR
+Dana S. Nau; Dept. of Computer Science;
+Duke University; Durham, NC  27706.
+.br
+Modified from the UNIX text editor "ed"
+written by Dennis Ritchie and Ken Thompson.
+.sh "SEE ALSO"
+ed (I),  em (I)
+.br
+A Tutorial Introduction to the ED
+Text Editor (B. W. Kernigan)
+.sh BUGS
+Some of the currently available
+.bc
+e
+macros create temporary files in the
+user's home directory
+(for details, see the documentation on "e.macros").  If
+"break" is signalled when such macros are executing,
+the files may be left lying around.

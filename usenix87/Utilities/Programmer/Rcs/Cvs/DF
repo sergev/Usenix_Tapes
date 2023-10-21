@@ -1,0 +1,140 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: DF,v 1.22 86/06/22 18:11:14 dick Exp $
+
+#
+#		D i f f e r e n c e
+#	Does a nice form of diff(1) on each of its arguments and the
+#	RCS file it derives from.
+#	The call is
+#		DF <options> [ file-name ... ]
+#	If there are <options>, these are passed to diff(1) and the diff
+#	format is adhered to; otherwise a more readable format is produced.
+#	Standard diff(1) format can also be forced by a single -.
+#	If there are no file names, the names of the interesting files
+#	are taken from CVS.adm/Mod.  If the option is -n, diff(1) will not
+#	be called, but the contents of CVS.adm/Mod will be listed instead.
+#
+Name=DF; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+# get possible options
+. $CVSLIB/OP.aux			# sets $Options
+
+# special cases
+case "$Options" in
+" -")
+	# single -, just plain old diff
+	Options=" "
+	;;
+" -n")
+	# no diff at all, just show contents of CVS.adm/Mod
+	cat CVS.adm/Mod
+	exit 0
+	;;
+esac
+
+# determine the way we are called
+case $# in
+0)
+	# no file names: read CVS.adm/Mod
+	if	# CVS.adm/Mod is empty
+		[ ! -s CVS.adm/Mod ]
+	then
+		echo $Name: no modifications to report
+		exit 0
+	fi
+	set `cat CVS.adm/Mod`
+	;;
+esac
+
+for User in $@
+do
+	. $CVSLIB/LR.aux	# sets $Rcs to $Repository/$User,v or /Attic/
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	# what entry is this?
+	case $VN_User in
+	"")
+		# no entry available, $TS_Rcs is invalid
+		
+		echo $Name: I know nothing about $User >&2
+		continue
+		;;
+	
+	0)
+		# an entry for a new-born file, $TS_Rcs is dummy
+		
+		echo $Name: $User is a new entry, no comparison available >&2
+		continue
+		;;
+	
+	-*)
+		# an entry for a removed file, $TS_Rcs is valid
+		
+		echo $Name: $User was removed, no comparison available >&2
+		continue
+		;;
+	
+	*)
+		# a normal entry, $TS_Rcs is valid
+		
+		# how is the RCS file?
+		case $VN_Rcs in
+		"")
+			# there is no RCS file
+			
+			echo $Name: cannot find $Rcs >&2
+			continue
+			;;
+		*)
+			# there is an RCS file
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: cannot find $User >&2
+				continue
+				;;
+			esac
+			;;
+		esac
+		;;
+	esac
+
+	echo FILE $User VERSUS $Rcs, version $VN_User
+	$RCSBIN/co -p -q -r$VN_User $Rcs |
+	diff $Options $User - |
+	case "$Options" in
+	"")
+		# nothing special, user seems to like my taste in diffs
+		sed '
+			s/^[1-9][0-9]*/&/
+			s/.*//
+			s/^[1-9]/\
+AT &/
+			s/^> /WAS:	/
+			s/^< /NEW:	/
+		'
+		;;
+	*)
+		# have it you own way
+		cat
+		;;
+	esac
+	echo ''
+
+done

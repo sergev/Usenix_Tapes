@@ -1,0 +1,154 @@
+memdisk: a silicon disk driver for UNIX.
+	 Currently in use on 4.3BSD, mtXinu 4.3+NFS, and Sunix 3.0.
+
+You should have received:
+
+	- memdisk.doc (this file)
+	- memdisk.c
+	- mdset.c
+
+You will need to:
+
+	- Look over the configuration section at the top of memdisk.c
+	   and change the #defines to match the system you will be
+	   using it on.  If none of the possibilities listed quite fit,
+	   you will have to guess.  If you have to guess:
+		For lockout(), try splhigh() first and if that doesn't
+		 work ("loading vmunix"/"Undefined:"/"_splhigh") then
+		 use spl7().
+		For mount.h, try doing "echo ../*/*mount.h" and see if
+		 that helps.
+
+	- Put memdisk.c somewhere; I'll assume it's in
+	   ../local/memdisk.c (that's where we have it).  If you put it
+	   somewhere else, change the filename in the next item to
+	   point to wherever you did put it.
+
+	- Put a line
+local/memdisk.c		optional memdisk
+	   in ../conf/files.YOURSYSTEMNAME.  For example, our
+	   configuration is in ../conf/LARRY and the kernel is built in
+	   ../LARRY; the file with the above line is then
+	   ../conf/files.LARRY (clear enough?).
+
+	- Put a line
+pseudo-device	memdisk		1
+	   in ../conf/YOURSYSTEMNAME.  The 1 specifies how many silicon
+	   disk devices you want to configure in; you may want to
+	   increase it.
+
+	- Edit conf.c.  This file is in ../vax for VAX and MicroVAX
+	   configurations and seems to be in ../sun (rather than
+	   ../machine, which is a link to sun2 or sun3 depending on
+	   which sort of Sun you have) for Suns.  You will need to
+	   insert the following, somewhere early (before both cdevsw[]
+	   and bdevsw[]).
+#include "memdisk.h"
+#if NMEMDISK > 0
+extern int memdiskopen();
+extern int memdiskstrategy();
+extern int memdiskread();
+extern int memdiskwrite();
+extern int memdiskioctl();
+extern int memdiskdump();
+extern int memdisksize();
+#else
+#define memdiskopen nodev
+#define memdiskstrategy nodev
+#define memdiskread nodev
+#define memdiskwrite nodev
+#define memdiskioctl nodev
+#define memdiskdump nodev
+#define memdisksize nodev
+#endif
+	   Now you need to add a device to each of bdevsw[] and
+	   cdevsw[].  The bdevsw entry should look like
+	{ memdiskopen,	nulldev,	memdiskstrategy,memdiskdump,	/* 10 */
+	  memdisksize,	0 },
+	   (the 10 should be changed to whatever number you choose to
+	   put it at).  The cdevsw entry should look like
+    {
+	memdiskopen,	nulldev,	memdiskread,	memdiskwrite,	/* 34 */
+	memdiskioctl,	nulldev,	nodev,		0,
+	seltrue,	0,
+    },
+	   again, with the 34 changed to whatever is appropriate.
+
+	- add a #define to ../h/ioctl.h:
+#define LIOC_MEM_SET	_IOW(l,0,int)			/* start/stop disk */
+
+You can now re-run config and rebuild your kernel.  If you get
+complaints when trying to rebuild your kernel about "Don't know how to
+make ../h/mount.h" (or ../ufs/ufsmount.h, or ../ufs/mount.h), then try
+taking the ones it complains about right out of memdisk.c and redoing
+the make depend.
+
+If I haven't forgotten anything (:-), it should run fine.  Test the new
+kernel.  When you are satisfied that adding the memdisk driver hasn't
+broken anything else, you can try it out:
+
+	- Create entries in /dev.  We use /dev/mdisk0 and /dev/rmdisk0
+	   (just 0 since we have just one configured in - if we had
+	   two, they'd be mdisk0/rmdisk0 and mdisk1/rmdisk1).
+
+	- Compile mdset.c; put the binary wherever you feel
+	   appropriate.  As with any disk drive, the /dev entries
+	   should be mode xx0, probably mode 600 is best, unless you
+	   wouldn't mind entrusting all your users with your root
+	   password.  Mdset must be able to open the raw device
+	   /dev/rmdisk0 (or rmdisk1, or 2, or...) in order to function.
+
+	- Run mdset to allocate memory to the disk.  When the system is
+	   booted, no memory is allocated to the disk.  Mdset takes two
+	   arguments.  The first argument must be the disk unit number
+	   (the trailing number on the /dev entry), the second must be
+	   the number of bytes of memory to allocate to the disk and
+	   must be a multiple of 512 (the usual sector size for a
+	   disk).  The second argument can have a trailing k or m to
+	   indicate kilo- or mega- bytes (eg, 512k indicates a half-meg
+	   disk).  If mdset runs and doesn't crash the system, the
+	   silicon drive should now have some memory allocated to it.
+	   You can now run mkfs (or newfs, if you give it a size) to
+	   create a filesystem on the disk, then you can put whatever
+	   you want there.  Note that the size argument to mkfs is the
+	   number of sectors, ie, the number of bytes divided by 512.
+	   If you use the k abbreviation, the number to pass to mkfs
+	   will be twice the number before the k; if you use m, the
+	   mkfs size will be 2048 times the number before the m.
+
+For example, suppose we want to allocate a half-meg to /tmp:
+
+# mdset 0 512k
+
+If the driver can't get the memory, it will produce a message
+mdset: cannot set size for /dev/rmdisk0: <message>
+where <message> is one of the standard error messages (see intro(2)),
+most likely "Not enough core".
+
+Now the disk has memory, but the contents of the memory are basically
+random.  So we make a filesystem:
+
+# /etc/mkfs /dev/rmdisk0 1024
+....mkfs messages....
+
+Now sync the disk just to be safe.  It works just as well to run fsck
+on it, I find; but if you do neither, I have had it crash mysteriously
+sometimes (I suspect that some critical filesystem data, like
+superblocks, is still waiting to be written to the disk, because the
+mkfs used /dev/rmdisk0 instead of /dev/mdisk0).
+
+# sync
+
+Now we can mount it somewhere:
+
+# /etc/mount /dev/mdisk0 /tmp
+
+And away we go!  Note that you do not want to put anything on a silicon
+drive that is both important and difficult to recreate, because every
+time the machine goes down, everything on a silicon drive is lost.
+/tmp is a reasonable thing to put on a silicon drive; a read-only copy
+of something that gets used heavily could also be a win.
+
+					der Mouse
+
+				(mouse@mcgill-vision.uucp)

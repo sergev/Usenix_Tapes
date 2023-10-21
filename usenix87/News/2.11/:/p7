@@ -1,0 +1,348 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA11128; Thu, 9 Apr 87 02:37:17 CDT
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!ucbvax!decvax!seismo!rick
+From: seismo.CSS.GOV!rick (Rick Adams)
+Newsgroups: news.software.b
+Subject: Patch #7 for news 2.11 src
+Message-Id: <43252@beno.seismo.CSS.GOV>
+Date: 7 Apr 87 17:58:13 GMT
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 335
+Posted: Tue Apr  7 12:58:13 1987
+Apparently-To: hokey
+
+This patch contains no enhancements. It is intended to only correct
+problems in patch #6. In theory, patch #7 should be a stable,
+largely bugfree version. #8 will add more enhancements and undoubtably
+introduce new bugs.
+
+Description:
+	This is patch #7 for news 2.11 source. It addresses the following
+	problems:
+
+	Fix more problems with the GENERICPATH/GENERICFROM defines.
+	Fix a problem with the interaction of SPOOLNEWS and moderators
+	posting.
+	Add ifdef so machines that support flock() but not the fcntl()
+	interface can define FLOCK.
+	username was not set in expire causing it to drop core when it
+	tried to log an error.
+	inews now handles non-batched rnews input correctly.
+	checknews now complains if no argument is given with -N
+
+Fix:
+	cd to the src directory and apply the following patch
+
+Index: patchlevel.h
+Prereq: 6
+*** .d/patchlevel.h	Tue Mar 24 13:51:17 1987
+--- patchlevel.h	Mon Apr  6 19:43:42 1987
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	6
+  
+! #define NEWS_VERSION   "B 2.11 3/23/87"
+--- 1,3 ----
+! #define	PATCHLEVEL	7
+  
+! #define NEWS_VERSION   "B 2.11 4/06/87"
+
+Index: params.h
+Prereq: 2.22
+*** .d/params.h	Tue Mar 24 13:51:47 1987
+--- params.h	Mon Apr  6 19:43:42 1987
+***************
+*** 3,7 ****
+   */
+  
+! /*	@(#)params.h	2.22	3/20/87	*/
+  
+  #include <stdio.h>
+--- 3,7 ----
+   */
+  
+! /*	@(#)params.h	2.23	4/6/87	*/
+  
+  #include <stdio.h>
+***************
+*** 118,121 ****
+--- 118,122 ----
+  #  ifndef GENERICFROM		/* Ugly fix, only for use in pathinit.c */
+  #    define GENERICFROM "%s%0.0s%s", HIDDENNET
++ #    define HIDDENNET_IN_LOCALSYSNAME
+  #  endif
+  #  ifndef GENERICPATH
+
+Index: pathinit.c
+Prereq: 1.22
+*** .d/pathinit.c	Tue Mar 24 13:51:48 1987
+--- pathinit.c	Mon Apr  6 19:43:43 1987
+***************
+*** 35,39 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.22	3/23/87";
+  #endif /* SCCSID */
+  
+--- 35,39 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.23	4/6/87";
+  #endif /* SCCSID */
+  
+***************
+*** 118,125 ****
+  	char *p;
+  #endif /* EXP */
+! #if !defined(CHKN) && !defined(EXP)
+! #ifdef GENERICFROM
+! 	int len;
+! #endif /* GENERICFROM */
+  	struct utsname ubuf;
+  	char buf[BUFLEN];
+--- 118,122 ----
+  	char *p;
+  #endif /* EXP */
+! #ifndef CHKN
+  	struct utsname ubuf;
+  	char buf[BUFLEN];
+***************
+*** 128,149 ****
+  	uname(&ubuf);
+  
+  #ifdef GENERICFROM
+  	(void) sprintf(buf, GENERICFROM, ubuf.nodename, mydomain());
+  	FROMSYSNAME = AllocCpy(buf);
+! 	len = strlen(ubuf.nodename);
+! 	if (FROMSYSNAME[len] == '.' &&
+! 		strncmp(ubuf.nodename, FROMSYSNAME, len) == 0)
+! 		LOCALSYSNAME = FROMSYSNAME;
+! 	else {
+! 		(void) sprintf(buf, "%s.%s", ubuf.nodename, FROMSYSNAME);
+! 		LOCALSYSNAME = AllocCpy(buf);
+! 	}
+! #else	/* !GENERICFROM */
+! 	(void) sprintf(buf, "%s%s", ubuf.nodename, mydomain());
+! 	LOCALSYSNAME = AllocCpy(buf);
+  	FROMSYSNAME = LOCALSYSNAME;
+! #endif	/* !GENERICFROM */
+  
+  	LOCALPATHSYSNAME = AllocCpy(ubuf.nodename);
+  #ifdef GENERICPATH
+  	(void) sprintf(buf, GENERICPATH, ubuf.nodename, mydomain());
+--- 125,147 ----
+  	uname(&ubuf);
+  
++ #ifdef HIDDENNET_IN_LOCALSYSNAME
++ 	/* old compatibility code, remove when HIDDENNET is used no more */
++ 	if (strcmp(ubuf.nodename, HIDDENNET) != 0)
++ 		(void) sprintf(buf, "%s.%s%s", ubuf.nodename, HIDDENNET,
++ 			mydomain());
++ 	else
++ #endif
++ 		(void) sprintf(buf, "%s%s", ubuf.nodename, mydomain());
++ 	LOCALSYSNAME = AllocCpy(buf);
++ 
+  #ifdef GENERICFROM
+  	(void) sprintf(buf, GENERICFROM, ubuf.nodename, mydomain());
+  	FROMSYSNAME = AllocCpy(buf);
+! #else /* !GENERICFROM */
+  	FROMSYSNAME = LOCALSYSNAME;
+! #endif /* !GENERICFROM */
+  
+  	LOCALPATHSYSNAME = AllocCpy(ubuf.nodename);
++ 
+  #ifdef GENERICPATH
+  	(void) sprintf(buf, GENERICPATH, ubuf.nodename, mydomain());
+***************
+*** 153,157 ****
+  #endif	/* !GENERICPATH */
+  
+! #endif /* !CHKN  && ! EXP */
+  
+  #ifdef HOME
+--- 151,155 ----
+  #endif	/* !GENERICPATH */
+  
+! #endif /* !CHKN */
+  
+  #ifdef HOME
+
+Index: ifuncs.c
+Prereq: 2.63
+*** .d/ifuncs.c	Tue Mar 24 13:51:41 1987
+--- ifuncs.c	Mon Apr  6 19:43:39 1987
+***************
+*** 17,21 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.63	3/23/87";
+  #endif /* SCCSID */
+  
+--- 17,21 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.64	4/6/87";
+  #endif /* SCCSID */
+  
+***************
+*** 1052,1057 ****
+  {
+  	int c;
+  
+! 	setbuf(infp, NULL);
+  	while ((c = getc(infp)) == '#') {
+  		/* some kind of batch, investigate further */
+--- 1052,1058 ----
+  {
+  	int c;
++ 	char *cp;
+  
+! 	setbuf(infp, (char *)NULL);
+  	while ((c = getc(infp)) == '#') {
+  		/* some kind of batch, investigate further */
+***************
+*** 1194,1197 ****
+--- 1195,1201 ----
+  		}
+  	}			/* while a batch */
++ 	cp = malloc((unsigned)BUFSIZ);
++ 	if (cp != NULL)
++ 		setbuf(infp, cp);
+  	if (c != EOF)
+  		(void) ungetc(c, infp);
+***************
+*** 1398,1402 ****
+  	LockFd = open(SUBFILE, 2);
+  	if (LockFd < 0)
+! 		logerr("Can't open(%s,2) to lock", SUBFILE);
+  	/* This will sleep until the other program releases the lock */
+  	/* We may need to alarm out of this, but I don't think so */
+--- 1402,1406 ----
+  	LockFd = open(SUBFILE, 2);
+  	if (LockFd < 0)
+! 		logerr("Can't open(\"%s\",2) to lock", SUBFILE);
+  	/* This will sleep until the other program releases the lock */
+  	/* We may need to alarm out of this, but I don't think so */
+
+Index: inews.c
+Prereq: 2.78
+*** .d/inews.c	Tue Mar 24 13:51:45 1987
+--- inews.c	Mon Apr  6 19:43:41 1987
+***************
+*** 18,22 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.78	3/23/87";
+  #endif /* SCCSID */
+  
+--- 18,22 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.79	4/6/87";
+  #endif /* SCCSID */
+  
+***************
+*** 27,31 ****
+--- 27,33 ----
+  # include <fcntl.h>
+  
++ #  ifdef F_RDLCK
+  struct flock news_lock;
++ #  endif /* F_RDLCK */
+  # endif /* LOCKF */
+  
+***************
+*** 353,357 ****
+  			/* there are certain fields we won't let him specify. */
+  			if (header.from[0]) {
+! 				if (Sflag) {
+  					register char *p;
+  					strcpy(bfr, header.from);
+--- 355,360 ----
+  			/* there are certain fields we won't let him specify. */
+  			if (header.from[0]) {
+! 				if (Sflag && !Mflag && !header.approved[0] &
+! 					!header.sender[0]) {
+  					register char *p;
+  					strcpy(bfr, header.from);
+***************
+*** 533,537 ****
+  	mfd = mailhdr((struct hbuf *)NULL,
+  		exists(dir) ? "Unwritable directories" : "Missing directories");
+! 	if (mfs == NULL)
+  		return;
+  	putc('\n', mfd);
+--- 536,540 ----
+  	mfd = mailhdr((struct hbuf *)NULL,
+  		exists(dir) ? "Unwritable directories" : "Missing directories");
+! 	if (mfd == NULL)
+  		return;
+  	putc('\n', mfd);
+***************
+*** 941,946 ****
+  			savehist(histline);
+  	} else {
+! 		if (s_find(&srec, PATHSYSNAME) == FALSE) {
+! 			logerr("Cannot find my name '%s' in %s", PATHSYSNAME, SUBFILE);
+  			srec = dummy_srec;
+  		}
+--- 944,950 ----
+  			savehist(histline);
+  	} else {
+! 		if (s_find(&srec, LOCALPATHSYSNAME) == FALSE) {
+! 			logerr("Cannot find my name '%s' in %s",
+! 				LOCALPATHSYSNAME, SUBFILE);
+  			srec = dummy_srec;
+  		}
+Index: checknews.c
+Prereq: 2.28
+*** .d/checknews.c	Tue Feb 24 17:55:41 1987
+--- checknews.c	Mon Apr  6 19:43:35 1987
+***************
+*** 17,21 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.28	2/22/87";
+  #endif /* SCCSID */
+  
+--- 17,21 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.29	4/6/87";
+  #endif /* SCCSID */
+  
+***************
+*** 72,75 ****
+--- 72,77 ----
+  			case 'N':
+  				nflag++;
++ 				if (argc <= 1)
++ 					xerror("No newsgroup specified with -N");
+  				strcpy(narggrp,argv[1]);
+  				strcat(narggrp,",");
+Index: expire.c
+Prereq: 2.52
+*** .d/expire.c	Tue Mar 24 13:51:29 1987
+--- expire.c	Mon Apr  6 19:43:37 1987
+***************
+*** 18,22 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.52	3/20/87";
+  #endif /* SCCSID */
+  
+--- 18,22 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.53	4/6/87";
+  #endif /* SCCSID */
+  
+***************
+*** 114,117 ****
+--- 114,118 ----
+  	pathinit();
+  	(void) umask(N_UMASK);
++ 	username = NEWSUSR;
+  
+  	/*

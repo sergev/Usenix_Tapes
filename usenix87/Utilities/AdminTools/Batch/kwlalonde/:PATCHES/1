@@ -1,0 +1,92 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 alpha 4/3/85; site ukma.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!ukma!sean
+From: sean@ukma.UUCP (Sean Casey)
+Newsgroups: net.sources
+Subject: unique() for batch
+Message-ID: <1891@ukma.UUCP>
+Date: 22 Jun 85 23:50:08 GMT
+Date-Received: 24 Jun 85 08:13:17 GMT
+Organization: The White Tower @ The Univ. of KY
+Lines: 80
+
+The batch system recently posted by Ken Lalonde had a unique() function
+that was implemented in their kernel.  He posted a way to implement it
+using time().  This technique is certainly valid, but produces numbers
+that I feel a bit too long.  Submit files start looking like
+"cfq488331903".  These can be hard to remember, especially for someone
+who often has a lot of jobs in the queue.  I have written a short
+routine to store sequence numbers in a file, wrapping them around when
+they get to 4096.  This keeps them reasonably small.  Patch follows:
+
+
+*** batch.c.orig	Tue Jun 18 12:29:18 1985
+--- batch.c	Tue Jun 18 21:33:25 1985
+***************
+*** 90,96
+  	 *  a unique sequential number.  The files are sorted by this name
+  	 *  for priority of execution.
+  	 */
+! 	spoolnumber = unique();
+  	sprintf(tfname, tffmt, SPOOLDIR, queue, grade, spoolnumber);
+  	deleteerr = tfname;
+  	umask(0077);
+
+--- 98,104 -----
+  	 *  a unique sequential number.  The files are sorted by this name
+  	 *  for priority of execution.
+  	 */
+! 	spoolnumber = unique(queue);
+  	sprintf(tfname, tffmt, SPOOLDIR, queue, grade, spoolnumber);
+  	deleteerr = tfname;
+  	umask(0077);
+***************
+*** 259,262
+  Usage()
+  {
+  	error("Usage: batch [-Pn] queue [file ...]\n");
+  }
+
+--- 269,310 -----
+  Usage()
+  {
+  	error("Usage: batch [-Pn] queue [file ...]\n");
++ }
++ 
++ 
++ /*	unique - return unique identifier for queue
++  *
++  *	This takes a queue name and returns a new sequence number based
++  *	on the contents of the file "seq" in that spool directory. The
++  *	sequence numbers wrap at 4096.	[ukma!sean  18-Jun-85]
++  */
++ 
++ unique(queue)
++ char *queue;
++ 
++ {
++ 	FILE	*seqfp;
++ 	char	seqfn[100];
++ 	long	sequence;
++ 	
++ 	sprintf(seqfn, "%s/%.14s/seq", SPOOLDIR, queue);
++ 
++ 	if((seqfp = fopen(seqfn, "r+")) == NULL) {
++ 
++ 		if((seqfp = fopen(seqfn, "w")) == NULL)
++ 			error("can't create seq file\n");
++ 		else {
++ 			sequence = 0;
++ 			fprintf(seqfp,"%ld",sequence);
++ 			fclose(seqfp);
++ 		}
++ 	}
++ 	else {
++ 		fscanf(seqfp,"%ld", &sequence);
++ 		sequence = (sequence + 1) % 4096;
++ 		rewind(seqfp);
++ 		fprintf(seqfp,"%ld",sequence);
++ 		fclose(seqfp);
++ 	}
++ 	return(sequence);	
+  }

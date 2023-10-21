@@ -1,0 +1,96 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!gamma!epsilon!zeta!sabre!petrus!bellcore!decvax!decwrl!reuter@cookie.dec.com
+From: reuter@cookie.dec.com
+Newsgroups: net.games.emp
+Subject: Re: Too much bad weather
+Message-ID: <4326@decwrl.DEC.COM>
+Date: 21 Jul 86 23:58:25 GMT
+Sender: daemon@decwrl.DEC.COM
+Organization: Digital Equipment Corporation
+Lines: 87
+Posted: Mon Jul 21 18:58:25 1986
+
+The weather is computed using a bunch of sine functions of the time
+(it has to be predictable for the forecast command to work) but
+this is not causing your terrible weather.  The size of the world
+(actually, the area) is used in the weather calculations, and this is
+what is causing the terrible weather (I bet you have a large world).
+
+Apparently the purpose of using the area in the calculations is to make
+weather patterns larger for larger worlds.  This way you don't have a huge
+world with teeny storms.  Unfortunately, the equation makes the patterns
+larger by making the weather much worse!
+
+I changed the code a bit so the area is used, but does not make the
+weather patterns worse, just larger.  Take the function below and
+use it to build a new wethr.o, and replace the current one in empsub.a.
+You will find weather much more tolerable, but still interesting.
+
+	Jim
+
+-	-	-	-	- wethr.c -	-	-	-
+
+#define D_WEATHER
+#include "empdef.h"
+
+#define SECS_PER_HOUR 3600
+#define SECS_PER_MIN 60
+
+extern double pslsin();
+
+int
+wethr( x, y, weth_hour )
+int x;
+int y;
+int weth_hour;
+{
+    register int lodist;
+    register int hidist;
+    register int minute;
+    register int tmp;
+    register int wx;
+    register int wy;
+    long now;
+    double area;
+    double dtmp;
+
+    time( &now );
+    now += weth_hour * SECS_PER_HOUR;
+    tmp = now - wthr_date;
+
+    if ( tmp > 300 || tmp < -300 ) {
+
+	minute = now / SECS_PER_MIN;
+	wthr_date = minute * SECS_PER_MIN + SECS_PER_MIN - 1;
+	wx = w_xsize >> 2;
+	wy = w_ysize >> 2;
+
+	dtmp = pslsin( minute * 17 );
+	wthr_hi = ( pslsin( minute * 19 ) + dtmp ) * 85. + 180.;
+
+	dtmp = pslsin( minute * 15 );
+	wthr_lo = ( pslsin( minute * 24 ) + dtmp ) * 85. - 180.;
+
+	dtmp = pslsin( minute * 14 );
+	tmp = (int)( ( pslsin( minute * 29 ) + dtmp ) * (double)wx );
+	wthr_xh = tmp - capx;
+
+	dtmp = pslsin( minute * 9 );
+	tmp = (int)( ( pslsin( minute * 28 ) + dtmp ) * (double)wy );
+	wthr_yh = tmp - capy;
+
+	dtmp = pslsin( minute * 13 );
+	tmp = (int)( ( pslsin( minute * 23 ) + dtmp ) * (double)wx );
+	wthr_xl = tmp - capx;
+
+	dtmp = pslsin( minute * 11 );
+	tmp = (int)( ( pslsin( minute * 26 ) + dtmp ) * (double)wy );
+	wthr_yl = tmp - capy;
+    }
+
+    hidist = mapdist( x, y, wthr_xh, wthr_yh ) + 1;
+    lodist = mapdist( x, y, wthr_xl, wthr_yl ) + 1;
+
+    area = (double)w_xsize / 32. * (double)w_ysize / 32.;
+    dtmp = (wthr_hi * area)/(hidist + area) + (wthr_lo * area)/(lodist + area);
+    return (int)(dtmp + 760.);
+}

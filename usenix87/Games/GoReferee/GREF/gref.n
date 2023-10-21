@@ -1,0 +1,300 @@
+.TL
+GREF \*- An Automated GO Referee
+.AU
+Peter S. Langston
+.AI
+Bell Communications Research
+.AB
+A program which acts as a referee between two competing
+game programs is described.
+The referee program appears to be a human player to each of the programs,
+but merely forwards the moves from one program to the other while
+maintaining a time clock, giving warnings of time limits, checking
+legality of moves, and watching for other rule infringements.
+.AE
+.hy 15
+.LP
+\fIGref\fR's primary function is to pass the moves back and forth between
+two competing GO programs.  It also records the sequence of moves,
+maintains and displays the current configuration of the board,
+checks moves for legality,
+monitors the accumulated user time for each program,
+and watches for any indication that either program
+has forked another process, (and mentions it if so).
+.in 1.1i
+.ft B
+.PS
+	down
+	ellipse "CRT" "terminal"
+	line <-> down
+Grefbox:
+	box wid 1.5i ht 0.5i "go referee program" "``gref''"
+	arrow right from Grefbox.e; circle diam 0.9i "file" "``gref.trans''"
+	line <-> down left from Grefbox.sw
+	down; box wid 1i ht 0.5i "go program" "``go1.5''"
+	arrow down from last box.s; circle diam 0.85i "file" "``log.black''"
+	line <-> down right from Grefbox.se
+	down; box wid 1i ht 0.5i "go program" "``gobelle''"
+	arrow down from last box.s; circle diam 0.85i "file" "``log.white''"
+.PE
+.in
+.ft B
+.ce
+figure 1:  Data Paths
+.ft R
+.LP
+Data paths from invoking \fIgref\fR
+("gref go1.5 gobelle" for example)
+are as shown in figure 1.
+The three files involved are:
+.IP \fBgref.trans\fR 10
+A transcript of the game,
+including logging of events like ``byo-romi''
+being sent to either program or forking detected,
+and final board.
+.IP \fBlog.black\fR
+All characters sent to the standard error
+by the program playing black (``go1.5'' in our example).
+.IP \fBlog.white\fR
+All characters sent to the standard error
+by the program playing white (``gobelle'' in our example).
+.LP
+One problem inherent in this arrangement is that some
+I/O routines like to buffer output to pipes.
+Several solutions are available:
+.IP 1
+Include setbuf(stdout, NULL) in game programs that use <stdio.h>.
+.IP 2
+Follow each printf() with an fflush(stdout).
+.IP 3
+Use "write" system calls for all move output.
+.LP
+Another obvious problem with using the standard output for passing moves
+to the referee is that many game programs print much more than
+just the moves on the standard output.
+In many cases this extra output will be ignored by \fIgref\fR,
+but there are instances in which other output
+will be incorrectly interpreted as a move.
+Whenever possible it is recommended that diagnostic
+or trace information be suppressable or be sent
+to the standard error output.
+.SH
+NAMING CONVENTIONS
+.LP
+The game board is a square grid with
+19 columns labeled ``A'' through ``T'' (excluding ``I'') left to right, and
+19 rows labeled ``1'' through ``19'' bottom to top.
+.SH
+THE BOARD DISPLAY
+.LP
+\fIGref\fR uses the \fIcurses\fR screen management package
+to maintain a display of the game in progress.
+The board is displayed
+along with a list of moves as in figure 2.
+
+.KS
+.B1
+.ft lb
+.nf
+   A B C D E F G H J K L M N O P Q R S T       #  black  white   time
+19 + + + + + + + + + + + + + + + + + + + 19   122        S10    10:06:18
+18 + + + + + + + + + + + + + + + + + + + 18   123 C4            10:07:21
+17 + + + + + + + + + + + + + + X + + + + 17   124        T11    10:08:26
+16 + + + X O O O O + + + + + O X + + + + 16   125 Q11           10:09:30 
+15 + + + X O X X O O + + + X O X O O + + 15   126        O12    10:10:34 
+14 + + X X X O X X O + + + + O O X O O + 14   127 F4            10:11:37
+13 + + + + + O O X X O + + O O X X X O O 13   128        G3     10:12:41
+12 + + + + + + O X X O + + + O O O X X X 12   129 S5            10:13:44
+11 + + + + + + O X X O + + + + O X X O O 11   130        P11    10:14:49
+10 + + + + + O O X X O + + + + O X + O + 10   131 Q10           10:15:51
+ 9 + + + X X X O X X O + + + + + X + + + 9    132        P10    10:16:55
+ 8 + + O X + + + X X O + + + O + + + + + 8    133 Q9            10:17:58
+ 7 + + O X O + O X X O + + + O X + + + + 7    134        B4     10:19:00
+ 6 + + O X O O O O X O + X X O X O O + + 6    135 C3            10:20:03
+ 5 + + O O X O X + X + + X O X X X + X + 5    136        C5     10:21:06
+ 4 + O X O X X X + + + + + O + + + + + + 4
+ 3 + + X O X O O + + + + X + X + X + + + 3    116        D4     09:59:56
+ 2 + + + + X + + X + + + + + + + + + + + 2    117 E4            10:01:00
+ 1 + + + + + + + + + + + + + + + + + + + 1    118        T11    10:02:03
+   A B C D E F G H J K L M N O P Q R S T      119 T12           10:03:06
+    BLACK/go1.5     vs.    WHITE/gobelle      120        S11    10:04:10
+         0       PRISONERS       0            121 R11           10:05:13
+      0:48:53    USER TIME    0:40:12
+.fi
+.B2
+.ft B
+.ce
+figure 2:  The CRT Display
+.ft R
+.KE
+.LP
+The moves are presented as a circular list with
+a blank line following the most recent move.
+Otherwise the move list is identical to the contents
+of the transcript file ``gref.trans''.
+The count of captured stones (``PRISONERS'') is updated
+on the receipt of each move as is the accumulated time used
+(``USER TIME'').
+.SH
+COMMAND SYNTAX
+.LP
+Programs to compete under \fIgref\fR must interpret a standard set
+of input commands and must generate output commands which meet
+standard specifications for syntax and semantics.
+.SH
+Input Syntax
+.RS
+.LP
+All input (from the referee) to the competing programs are
+in the form of lines of text appearing at the standard
+input and terminated by newline (linefeed).
+.LP
+The first line of input to each program will be either
+``black'' or ``white'' to indicate which color
+that program will be playing
+(and thereby whether that program is to play first or second).
+Note that neither ``black'' nor ``white'' is capitalized.
+.LP
+The placement of an opponent's stone will be expressed as
+letter-number with the letter capitalized.
+Examples are: A1, the lower left corner,
+T19, the upper right corner, and K10, the center.
+.LP
+The opponent passing is expressed as ``pass'', (lower case).
+.LP
+When the initial time limit on accumulated ``user'' time
+is exceeded the command ``byo-romi'' will be given by the
+referee to the offending program.
+All further moves must be generated within a shorter
+(10 seconds by default) time limit.
+.LP
+The opponent resigning the game is expressed as ``resign'',
+(lower case).
+.RE
+.SH
+Output Syntax
+.RS
+.LP
+All output from the competing programs is in the
+form of lines of characters sent to the ``standard output'',
+terminated by a newline, and flushed after every line.
+.LP
+The placement of a stone is expressed as letter-number (e.g. "G12").
+.LP
+A pass is expressed as "pass" (lower case).
+.LP
+A resignation is expressed as "resign" (lower case).
+.LP
+Any other output lines that do not start with a syntactically
+well-formed move will be considered garbage and ignored.
+.RE
+.SH
+BAD MOVES
+.LP
+Any syntactically well-formed but illegal move
+that is recognized by \fIgref\fR will be logged and
+in some cases (noted below) will halt the game.
+.LP
+\fIGref\fR recognizes the following types of moves as illegal:
+.IP \(bu
+Playing on a non-empty spot.
+.br
+This includes playing off the edge of the board
+(e.g. ``B0'' or ``M20'')
+and playing on a spot which already contains a stone.
+This is a fatal illegal move and will halt the game.
+.IP \(bu
+Suicide.
+.br
+This involves playing into a position with no ``liberties''.
+This is a fatal illegal move and will halt the game.
+.IP \(bu
+Ko violation.
+.br
+This involves the usual illegal recapture in a ko
+and is a fatal illegal move.
+The line ``ko violation'' is logged and the game stops.
+.SH
+GAME END
+.LP
+Play continues until both programs pass in sequence or until
+one of the fatal illegal moves mentioned above occurs.
+.SH
+TIME LIMIT
+.LP
+\fIGref\fR implements a limit on the amount of accumulated
+``user time'' (as defined by UNIX systems) used by each program.
+The default limit is 60 minutes, but it may be changed with
+the \fB-l\fR argument (see ``Invoking Gref'').
+Once a program has exceeded the initial limit it is allowed a
+maximum of 10 seconds of user time for each move thereafter.
+If a program exceeds the 10 second limit it is considered
+a forfeit and the game halts.
+.SH
+INVOKING GREF
+.LP
+\fIGref\fR has several optional command line arguments.
+Its syntax is:
+.IP
+\fBgref\fR [\fB-l\fR#] [\fB-q\fR] [\fB-t\fR] prog-to-play-black prog-to-play-white
+.LP
+The optional arguments are:
+.RS
+.IP \fB-l\fR#
+Set the user time limit to ``#'' seconds.
+The default value is 3600.
+.IP \fB-q\fR
+Run the games ``quietly'', i.e. without maintaining a display
+of the game board on the CRT screen.
+.IP \fB-t\fR
+Turn on tracing information.  If this argument is specified
+more than once even more output will be produced.
+.RE
+.SH
+SIGNALS
+.LP
+\fIGref\fR catches write-on-broken-pipe signals and comments on them,
+but takes no other specific action.
+.LP
+\fIGref\fR ignores interrupts, (SIGINT), as do the game programs
+unless they use signal() to do otherwise.
+.LP
+\fIGref\fR catches quits (SIGQUIT) and runs a little routine that asks why
+you interrupted it.  There are four requests you can make at that point:
+.RS
+.IP q 7
+Quit gracefully; update the transcript, log time statistics, etc.
+.IP Q
+Quit quickly; don't bother with logging anything.
+.IP r
+Redraw the screen.
+Since \fIgref\fR will do this anyway after handling whatever
+is requested, this is effectively a null request.
+.IP s#msg
+Send \fImsg\fR to player \fI#\fR.
+\fI#\fR must be 1 (black) or 2 (white) and \fImsg\fR
+will be sent exactly as typed.
+.IP t#
+Set trace level to \fI#\fR.
+At the moment only 0 (no tracing), 1 (some tracing),
+and 2 (all tracing) are meaningful.
+.RE
+.LP
+The game programs ignore SIGQUIT unless they
+use signal() to do otherwise.
+.LP
+All other signals, (e.g. SIGHUP), are left as they default.
+.SH
+BUGS
+.LP
+There is no ``nice'' way to find out the amount
+of user time consumed by a non-terminated child
+process in UNIX; I'm sure to spend an extra day
+or two in Hell atoning for the sleazy hack that
+\fIgref\fR uses to get around that shortcoming.
+.SH
+ACKNOWLEDGEMENT
+.LP
+The original version of the program described here
+(and the original version of this document)
+were written at Lucasfilm Ltd., San Rafael, California.

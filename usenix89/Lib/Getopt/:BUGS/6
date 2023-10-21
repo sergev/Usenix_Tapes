@@ -1,0 +1,111 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site seismo.CSS.GOV
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!ucbvax!ucdavis!lll-crg!seismo!keith
+From: keith@seismo.CSS.GOV (Keith Bostic)
+Newsgroups: net.sources.bugs
+Subject: Re: getopt(3) posting
+Message-ID: <498@seismo.CSS.GOV>
+Date: 22 Oct 85 04:47:30 GMT
+Date-Received: 25 Oct 85 06:06:39 GMT
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 98
+Summary: more on getopt(3), wander on, it's boring.
+
+References: <910@utcs.uucp> <306@graffiti.UUCP> <444@seismo.CSS.GOV> <324@graffiti.UUCP>
+
+> But according to the docs & both versions of getopt that have shown up on the
+> net that won't do the same thing. According to them, you need:
+> 
+> 	sort -mubdfincr -tx
+
+> Now then: you may have an improved version of getopt, or the versions posted
+> to the net may be incomplete or innacurate. In either case you still can't use
+> *AVAILABLE* versions of getopt to parse those args.
+
+There have been several versions of getopt(3) running around the public domain.
+The one I'm talking about here I have posted to the net at least 3 times, once
+to net.bugs, once to mod.sources, and once somewhere else.  It is fully S5
+compatible and handles the above case.
+
+> Why? It's an unabiguous parse, and doesn't break anything to leave it in.
+> I can see a situation where you have 2 flags like that: -tx -sx. Someone's
+> going to type 'foo -s:t:' and get hit with an un-necessary error message.
+
+This is a special case that just doesn't occur.  You're stipulating that a
+program takes two arguments of one character apiece, no more, no less.  That's
+the *only* way the above example becomes relevant.  Since I can't think of a
+single program with such an interface, I'm forced to conclude that its
+sacrifice is a small price to pay for command line consistency.
+
+> Not according to what I've seen. Getopt requires that flags with arguments
+> stand alone.
+
+No, it requires flags with arguments to be *followed* by whitespace.  This is
+standard in most command interfaces, since it can only be avoided by exact
+knowledge of argument length.
+
+> A counterexample to show you what I'm talking about:
+> 
+> 	connect: a UNIX modem program that I wrote. It allows a series of
+> phone numbers on the command line & keeps trying them until it gets one that
+> works. Handy for calling bbs-es:
+> 	usage: connect -s<baud> -l<line> number...
+> 		Note: direct is considered a number for compatibility with cu.
+> 
+> 	connect -s 1200 4445555 4446666 -s300 5556666 6667777 -l tty1 direct
+> 
+> How would you deal with that using getopt, which seems to require that all
+> options be before all arguments?
+
+The key is your usage statement.  Why doesn't ls allow "ls foo bar -l"?  What's
+wrong with expecting "connect -s<baud> -l<line> number..."?  Answer: Nothing,
+and it's easier.  After all, that's what your usage statement says.  Yes, we
+could rewrite the UNIX application software universe so that programs parsed
+their entire argv array *before* handling any of their arguments, but think how
+much slower "ls /sys/sys/* -l" is going to be.  Besides, the only real value
+would accrue to programs that want to allow flags *per* argument, e.g. "nm -n
+/vmunix -p /old_vmunix".  And that too, has hidden problems; note in the
+example I just gave, the flags 'p' and 'n' are contradictory -- how are you
+going to handle that?  Exactly what relationship are the flags going to have?
+Do they apply to the entire command string, the command string after they
+appear, or the command string until the next flag shows up?  It's just not
+worth the effort, especially since the problem can be solved without any
+further effort by separating the commands, e.g. "nm -m /vmunix; nm -p
+/old_vmunix".  It should also be noted that the latter approach is much simpler
+for Joe User to cope with.
+
+> But sometimes it's necessary. Like the above example. Or like any reasonable
+> permutation of "find".
+
+No, not true.  In either case.  For connect it's no more necessary than it's
+necessary for ls.  And, on the basis of the 30 seconds of thought I've just
+devoted to the problem, find doesn't need it either.
+
+> The "tail" on the Tek development system I've been using has exactly that
+> change, and it causes much heartbreak & swearing every time I forget and
+> type "tail -60" instead of "tail -e 60".
+
+A problem.  For some reason UNIX decided early on that numbers didn't need
+flags, while other arguments did, and people are used to that.  Perhaps an
+alias would be a nice solution here.  I suspect that after a little practice
+you'd become comfortable entering "tail -e60"; after all, you aren't suprised
+when "mt /dev/rmt0 off" fails, are you?  Why should tail be any different, just
+because it's argument is numeric.  It's the price you pay for not having to
+list arguments in a specific order.
+
+> I never said it did use stdio. All I said was that it's not of negligable
+> size.
+
+OK, I'll rephrase my answer.  It's not significantly bigger than the code
+you're going to have to write to parse the same arguments.  And it's going
+to be consistent, and it's going to be bug free, blah, blah, blah, ad nauseum.
+
+> 	Well, the program I provided does all these things too, and allows you
+> to handle multiple sets of options, variant option flags, and so on.
+
+No, your program handled a special case.  And I'll have to rewrite it each
+time, twitching it just a little, to fit each new special case.  I'm not
+saying that you're never going to have to write such a beast.  getopt just
+makes those joyful occasions a rarity.
+
+Keith Bostic

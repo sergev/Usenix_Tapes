@@ -1,0 +1,132 @@
+/*
+ * Copyright 1985, Todd Brunhoff.
+ *
+ * This software was written at Tektronix Computer Research Laboratories
+ * as partial fulfillment of a Master's degree at the University of Denver.
+ * This is not Tektronix proprietary software and should not be
+ * confused with any software product sold by Tektronix.  No warranty is
+ * expressed or implied on the reliability of this software; the author,
+ * the University of Denver, and Tektronix, inc. accept no liability for
+ * any damage done directly or indirectly by this software.  This software
+ * may be copied, modified or used in any way, without fee, provided this
+ * notice remains an unaltered part of the software.
+ *
+ * $Header: rmt_data_template,v 2.0 85/12/07 18:19:42 toddb Rel $
+ *
+ * $Log:	rmt_data_template,v $
+ * Revision 2.0  85/12/07  18:19:42  toddb
+ * First public release.
+ * 
+ */
+#include	"../h/errno.h"
+#include	"../h/param.h"
+#include	"../h/mbuf.h"
+#include	"../h/socket.h"
+#include	"../remote/remotefs.h"
+
+
+extern int
+		rmt_access(),
+		rmt_chdir(),
+		rmt_chmod(),
+		rmt_chown(),
+		rmt_dup(),
+		rmt_dup2(),
+		rmt_error(),
+		remote_exit(),
+		rmt_fcntl(),
+		rmt_flock(),
+		remote_fork(),
+		rmt_fsync(),
+		rmt_ioctl(),
+		rmt_lseek(),
+		rmt_mknod(),
+		rmt_noop(),
+		rmt_onearg(),
+		rmt_open(),
+		rmt_readlink(),
+		rmt_stat(),
+		rmt_truncate(),
+		rmt_utimes(),
+		rmt_execinfo(),
+		rmt_execread(),
+		rmt_execve(),
+		remote_fd(),
+		remote_path1(),
+		remote_path2(),
+		rmt_datafin();
+
+/*
+ * This table depends on the order of system calls as defined in
+ * sys/sys/init_sysent.c, and our local map in remote_sysmap, which
+ * is generated (and appended to this file) by the program mkdata.
+ * The latter is a table of indices into remote_syscall[].
+ * Remote_syscall[] is a table containing general and specific actions
+ * for each system call, whether to follow symbolic links in namei and
+ * flags that are passed to rmt_msgfin() and rmt_datafin().
+ */
+
+syscalls	remote_syscall[] = {
+/*
+ * general	specific    flags to	follow	call before
+ *			  rmt_fin()   symlinks	real syscall
+ */
+{ remote_fork,	rmt_noop,    RFLG_INFO,	FALSE,	TRUE	}, /* RSYS_fork */
+{ remote_fd,	rmt_datafin,  RFLG_RD,	FALSE,	TRUE	}, /* RSYS_read */
+{ remote_fd,	rmt_datafin,  RFLG_WR,	FALSE,	TRUE	}, /* RSYS_write */
+{ remote_path1,	rmt_open,	0,	TRUE,	FALSE	}, /* RSYS_open */
+{ remote_fd,	rmt_onearg,  RFLG_INFO,	FALSE,	TRUE	}, /* RSYS_close */
+{ remote_path1,	rmt_open,	0,	TRUE,	FALSE	}, /* RSYS_creat */
+{ remote_path2,	rmt_noop,	0,	FALSE,	FALSE	}, /* RSYS_link */
+{ remote_path1,	rmt_onearg,	0,	FALSE,	FALSE	}, /* RSYS_unlink */
+{ remote_path1,	rmt_chdir,	0,	TRUE,	FALSE	}, /* RSYS_chdir */
+{ remote_path1,	rmt_mknod,	0,	FALSE,	FALSE	}, /* RSYS_mknod */
+{ remote_path1,	rmt_chmod,	0,	TRUE,	FALSE	}, /* RSYS_chmod */
+{ remote_path1,	rmt_chown,	0,	FALSE,	FALSE	}, /* RSYS_chown */
+{ remote_path1,	rmt_stat,	0,	TRUE,	FALSE	}, /* RSYS_stat */
+{ remote_fd,	rmt_lseek,	0,	FALSE,	TRUE	}, /* RSYS_lseek */
+{ remote_path1,	rmt_access,	0,	FALSE,	FALSE	}, /* RSYS_lstat */
+{ remote_path1,	rmt_stat,	0,	TRUE,	FALSE	}, /* RSYS_access */
+{ remote_fd,	rmt_dup,	0,	FALSE,	TRUE	}, /* RSYS_dup */
+{ remote_fd,	rmt_ioctl,	0,	FALSE,	TRUE	}, /* RSYS_ioctl */
+{ remote_path2,	rmt_noop,	0,	TRUE,	FALSE	}, /* RSYS_symlink */
+{ remote_path1,	rmt_readlink,  RFLG_RD,	FALSE,	FALSE	}, /* RSYS_readlink */
+{ remote_fd,	rmt_stat,	0,	FALSE,	TRUE	}, /* RSYS_fstat */
+{ remote_fd,	rmt_dup2,	0,	FALSE,	TRUE	}, /* RSYS_dup2 */
+{ remote_fd,	rmt_fcntl,	0,	FALSE,	TRUE	}, /* RSYS_fcntl */
+{ remote_fd,	rmt_onearg,  RFLG_INFO,	FALSE,	TRUE	}, /* RSYS_fsync */
+{ remote_fd,	rmt_datafin, RFLG_RD|RFLG_DATAV,
+					FALSE,	TRUE	},/* RSYS_readv */
+{ remote_fd,	rmt_datafin, RFLG_WR|RFLG_DATAV,
+					FALSE,	TRUE	},/* RSYS_writev */
+{ remote_fd,	rmt_chown,	0,	FALSE,	TRUE	}, /* RSYS_fchown */
+{ remote_fd,	rmt_chmod,	0,	FALSE,	TRUE	}, /* RSYS_fchmod */
+{ remote_path2,	rmt_noop,	0,	TRUE,	FALSE	}, /* RSYS_rename */
+{ remote_path1,	rmt_truncate,	0,	TRUE,	FALSE	}, /* RSYS_truncate */
+{ remote_fd,	rmt_truncate,	0,	FALSE,	TRUE	}, /* RSYS_ftruncate */
+{ remote_fd,	rmt_flock,	0,	FALSE,	TRUE	}, /* RSYS_flock */
+{ remote_path1,	rmt_mknod,	0,	FALSE,	FALSE	}, /* RSYS_mkdir */
+{ remote_path1,	rmt_onearg,	0,	FALSE,	FALSE	}, /* RSYS_rmdir */
+{ remote_path1,	rmt_noop,	0,	TRUE,	FALSE	}, /* RSYS_utimes */
+{ remote_exit,	rmt_noop,      RFLG_INFO,FALSE,	TRUE	}, /* RSYS_exit */
+{ remote_fork,	rmt_noop,    RFLG_INFO,	FALSE,	TRUE	}, /* RSYS_vfork */
+{ remote_path1,	rmt_execinfo,	0,	TRUE,	FALSE	}, /* RSYS_execinfo */
+{ rmt_error,	rmt_noop,	0,	FALSE,	FALSE	}, /* RSYS_execread */
+{ remote_path1,	rmt_error,	0,	TRUE,	FALSE	}, /* RSYS_execve */
+{ rmt_error,	rmt_noop,	0,	FALSE,	FALSE	}, /* RSYS_nosys */
+{ rmt_error,	rmt_noop,	0,	FALSE,	FALSE	}, /* RSYS_qlseek */
+};
+
+struct remoteinfo	remote_info[ R_MAXSYS ];
+struct remoteinfo	*remote_generic;
+long			remote_debug;
+long			remote_sysindex;
+long			remote_maxchunk = (1024*10);
+struct mbuf		*remote_path;
+struct nameserver	remote_ns;
+
+/*
+ * The following list maps all of the actual system call numbers into our
+ * idea of the system call numbers.  THIS IS GENERATED AUTOMATICALLY...
+ * DO NOT MODIFY!
+ */

@@ -1,0 +1,79 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: CV,v 1.19 86/06/22 18:10:31 dick Exp $
+
+#
+#		C r e a t e   V e r s i o n
+#	CV creates a "version" of an RCS repository.  This version
+#	is owned totally by the user and is actually an independent
+#	copy, to be dealt with as seen fit.  Once CV has been called
+#	in a given directory, it never needs to be called again.  The
+#	user can keep up-to-date by calling UV when he feels like it;
+#	this will supply him with a merge of his own modifications
+#	and the changes made in the RCS original.  See UV for details.
+#
+#	When the user is satisfied with his own modifications, the
+#	present version can be committed by CM; this keeps the present
+#	version in tact.
+#
+#	The call is
+#		CV <repository-name>
+#	with preferably the full path name of the RCS repository.
+#	CV will then make the initial copy (at rcs speed).
+#
+#	CV creates a directory ./CVS.adm, in which it keeps its
+#	administration, in two files, Repository and Entries.
+#	The first contains the name of the repository.  The second
+#	contains one line for each registered file,
+#	consisting of the version number it derives from,
+#	its time stamp at derivation time and its name.  Both files
+#	are normal files and can be edited by the user, if necessary (when
+#	the repository is moved, e.g.)
+#
+Name=CV; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# is the call correct?
+case $# in
+1)
+	# the number of parameters is alright; prepare for CA.aux
+	Repository=$1
+	InitRecord=/dev/null
+	;;
+*)
+	echo $Name: call is $Name \<repository-name\> >&2
+	exit 1
+	;;
+esac
+
+# create the administration directory
+. $CVSLIB/CA.aux			# uses $Repository and $InitRecord
+
+# make dummy entries for files already present, for UV to work on
+for User in `$CVSLIB/FN.aux $Repository`
+do
+	Rcs=$Repository/$User,v
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	case "$TS_User" in
+	"")
+		# no problem
+		;;
+	*)
+		# the file is already there, we acknowledge its presence
+		$CVSLIB/RG.aux $User $VN_Rcs "Initial $User"
+		;;
+	esac
+done
+
+# call UV
+$CVSBIN/UV

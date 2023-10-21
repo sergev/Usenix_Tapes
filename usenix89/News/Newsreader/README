@@ -1,0 +1,128 @@
+Installation procedure steps for UCB 4.2-like systems:
+
+1) Edit file config.h, which defines system dependent parameters such as
+spool directory, and so on.
+
+2) decide which makefile to use, edit it to fill in the correct libraries
+for your system.  See notes 2) below for explanation.
+
+3) make vn
+
+4) put the executable where you want it.  put the man page, vn.man
+where you want it.  roff it with -man to print it out.
+
+Notes:
+
+1)
+	If you modify the default mailer, poster, printer or editor, this is
+	their invocation, ufile being a tempfile name.
+
+	"mailer path <ufile" - path obtained from newsarticle, possibly
+		modified by user.
+	"poster <ufile" - thus the "inews -h" to get header lines from
+		file, giving user a chance to modify headers.
+	"printer files 2>/dev/null"
+	"editor ufile"
+
+	Should you change the hash table size, a few convenient prime numbers:
+
+	211 503 809 1009 1201 1511 2003 2503 3001 4001 5003
+
+	The hash table uses linear probe to resolve collisions.  Works well
+	as long as the density stays reasonably low.  I would say to keep
+	HASHMAX / HASHSIZE around 60%.  The number of hashtable entries will
+	actually be the number of active newsgroups.
+
+	You may also be interested in the header file "tune.h" which contains
+	some sizing / performance affecting parameters.
+
+2)
+	There are two makefile templates, both very simple, because I
+	want to make you think about whether you have the system V
+	regular expression library or not.  If you have regex and
+	regcmp (as opposed to re_exec and re_comp, the ucb regular
+	expression library), I advise you to use them.  regex and
+	regcmp are used because they have the ability to keep several
+	regular expressions compiled at once.  The file "reg.c" is an
+	implementation of regcmp and regex on top of the ucb calls,
+	with a special procedure called "regfree" used in place of the
+	generic "free" call used with regcmp / regex.  Use the system V
+	calls if you have them available because:
+
+		i) They should be faster than the reg.c code, which
+		recompiles the "current" ucb string every time you
+		switch regular expressions.
+
+		ii) I briefly checked out reg.c once, and it seemed to
+		work.  Our system has the "real" calls available, so I
+		run with those.  reg.c hasn't been used much.
+
+	If you have regex/regcomp:
+
+		mf.re is the makefile template.  Fill in your local
+		libraries (termcap), the library to find regex/regcmp in.
+		This makefile defines "regfree" simply to be "free", and
+		doesn't link the "reg" object.
+
+	If you don't:
+
+		mf.nore is the makefile template.  Fill in your local
+		libraries (termcap).  This makefile pulls in the "reg"
+		object, which implements regcmp and regex on top of
+		the ucb library, with the special "regfree" call.
+
+	ucb.c defines a couple more trivial system V calls.  Might
+	as well use it anyhow.  We are currently running under Ultrix
+	on a microvax, and in fact, the Ultrix tmpnam() doesn't work
+	right.  Ultrix has regcmp/regex in the normal c runtime library,
+	mf.re reflects this.
+
+	Something pretty close to the current vn version used to run here
+	on a VAX 780 under BSD 4.2.
+
+SYSTEM V:
+
+I would be interested if somebody would #ifdef this thing up for system V.
+Very early versions ran on system V.  I would hope that it would not be
+terribly difficult to convert.  "sig_set.c" contains all the signal handling.
+"tty_set.c" contains all the ioctl() calls.  These two things would obviously
+have to change drastically.  You would have to #define index() to be strchr().
+The current working directory interface is different, if I remember properly,
+envir_set.c bears study.  You should be able to dispense with ucb.c.
+
+NEWS VERSIONS:
+
+I know there's a lot of news versions running out there.  We seem to
+be running something called B2.10.2, for those of you whom that signifies
+anything to.  Something to look at is your "active" file.  I expect to
+find a newsgroup followed by the high, then low, spooling numbers (followed
+by a y/n for posting priveledge, which I don't care about).  Earlier news
+versions used to only have a single spooling number.  vn is written to
+handle this, assuming 0 for a low spool.  My basic assumptions are that
+the "active" file gives the newsgroups and spooling information and that
+articles will be numeric filenames living in the directory obtained by
+replacing periods with slashes in the newsgroup, and prefixing the spool
+directory.  I hope these really are "basic" assumptions that work across all
+versions.  vn is intended to be highly fault-tolerant regarding what it
+finds for header lines - it may not be able to make sense out of an "article",
+but it's willing to let you look at it anyway.
+
+RESOURCE USE:
+
+vn should look like people sitting in an editor once it is done with its
+reading phase.  During the reading phase, it is beating mercilessly on
+the spooling directory, reading file after file.  I have thought from time
+to time about having a daemon do this work periodically, building a master
+file of title information for vn to access.  Its reading phase would then
+be a "pause" rather than a "phase", with the penalty that you couldn't
+read anything until the daemon had gotten around to it.
+
+vn maintains a large temporary file containing the users page screens.
+Again, it should look a lot like the user is using an editor which has
+a temp file out there for its edit buffer.  MAX_C in "tune.h" can be
+used to help control the size.
+
+malloc() usage - Around 40 bytes per newsgroup is dynamically allocated,
+plus storage for character strings and the current screen structure.
+My guess would be on the order of 20K.  It's all "permanent" information
+maintained for the entire session, hence unfreed.

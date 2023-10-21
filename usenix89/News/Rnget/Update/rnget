@@ -1,0 +1,90 @@
+#!/bin/sh
+#
+# NAME
+#	rnget - get a shar archive from rn output.
+#
+# SYNOPSIS
+#	rnget [-p pattern] [-r file] [f prog] [ directory ]
+#
+# DESCRIPTION
+#	Rnget changes to the given directory (if given) and then
+#	reads its standard input and searches for the given pattern
+#	(default to "[#:]") at the beginning of a line and passes that
+#	and all subsequent lines to the filter, defaulting to the
+#	bourne shell, for processing.  Lines prior to the first line
+#	matching the pattern are saved to the file, default READ_ME.
+#
+#	The idea is that the input is a shar file contained inside
+#	of a news article, with a scan done before hand for the
+#	beginning of the shar.  For shars that don't begin with '#'
+#	or ':' -p can be used to specify something else.
+#
+#	Note:  If the directory does not exist, it is created.
+prog="$0"
+usage="usage: $prog [-p pattern] [-r file ] [-f prog] [directory]"
+pattern="/^[:#]/"
+readme="READ_ME"
+filter=/bin/sh
+while [ $# -gt 0 ]; do
+	if [ $1 = -p ]; then
+		shift
+		if [ $# -lt 1 ]; then
+			echo $usage
+			exit 1
+		fi
+		pattern="/^$1/"
+		echo "$prog: Trigger pattern is $pattern."
+		shift
+	elif [ $1 = -f ]; then
+		shift
+		if [ $# -lt 1 ]; then
+			echo $usage
+			exit 1
+		fi
+		filter=$1
+		echo "$prog: Filter is $filter."
+		shift
+	elif [ $1 = -r ]; then
+		shift
+		if [ $# -lt 1 ]; then
+			echo $usage
+			exit 1
+		fi
+		readme="$1"
+		echo "$prog: Header information is in $readme."
+		shift
+	else		# got a directory
+		if [ -f $1 ]; then
+			echo "$prog: $1 is not a directory!!"
+			exit 2
+		fi
+		if [ ! -d $1 ]; then
+			mkdir $1 > /dev/null 2>&1
+			if [ $? -ne 0 ]; then
+				echo "$prog: Could not create directory $1."
+				exit 2
+			fi
+		fi
+		cd $1
+		echo "$prog: Directory is $1."
+		shift
+	fi
+done
+rm -f $readme
+awk "
+BEGIN	{
+	skip = 1; copy = 2;
+	state = skip;
+}
+state == skip && $pattern	{
+	state = copy;
+}
+state == skip	{
+	print \$0 >> \"$readme\";
+}
+state == copy	{
+	print \$0
+}" | $filter
+if [ $? -ne 0 ]; then
+	echo "$prog:  error in writing to shell"
+fi

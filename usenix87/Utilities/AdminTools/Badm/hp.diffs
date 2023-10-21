@@ -1,0 +1,79 @@
+Modifications to 4.2bsd vaxmba/hp.c to support badm Rev 2.0.
+
+These changes apply to vaxmba/hp.c bearing the identification
+	/*	hp.c	6.2	83/09/25	*/
+
+Comments in brackets have been added to line-number markers to
+help you locate the proper places to modify if your hp.c differs.
+--------------------------------------------------------------------------
+36a37		[add file.h for symbol "FWRITE"]
+> #include "../h/file.h"				/* BADM */
+207a209		[add new element at end of "struct hpst"]
+> 	char	vname[12];	/* BADM vendor's name for device */
+209,222c211,224	[add vendor name string to hpst initializers]
+< 	{ 32,	5,	32*5,	823,	rm03_sizes,	3, 4 },	/* RM03 */
+< 	{ 32,	19,	32*19,	823,	rm05_sizes,	3, 4 },	/* RM05 */
+< 	{ 22,	19,	22*19,	815,	rp06_sizes,	3, 4 },	/* RP06 */
+< 	{ 31,	14, 	31*14,	559,	rm80_sizes,	3, 4 },	/* RM80 */
+< 	{ 22,	19,	22*19,	411,	rp05_sizes,	3, 4 },	/* RP04 */
+< 	{ 22,	19,	22*19,	411,	rp05_sizes,	3, 4 },	/* RP05 */
+< 	{ 50,	32,	50*32,	630,	rp07_sizes,	7, 8 },	/* RP07 */
+< 	{ 1,	1,	1,	1,	0,		0, 0 },	/* ML11A */
+< 	{ 1,	1,	1,	1,	0,		0, 0 },	/* ML11B */
+< 	{ 32,	40,	32*40,	843,	cdc9775_sizes,	3, 4 },	/* 9775 */
+< 	{ 32,	10,	32*10,	823,	cdc9730_sizes,	3, 4 },	/* 9730 */
+< 	{ 32,	16,	32*16,	1024,	capricorn_sizes,7, 8 },	/* Capricorn */
+< 	{ 48,	20,	48*20,	842,	eagle_sizes,	7, 8 },	/* EAGLE */
+< 	{ 32,	19,	32*19,	815,	ampex_sizes,	3, 4 },	/* 9300 */
+---
+> 	{ 32,	5,	32*5,	823,	rm03_sizes,	3, 4, "rm03" },
+> 	{ 32,	19,	32*19,	823,	rm05_sizes,	3, 4, "rm05" },
+> 	{ 22,	19,	22*19,	815,	rp06_sizes,	3, 4, "rp06" },
+> 	{ 31,	14, 	31*14,	559,	rm80_sizes,	3, 4, "rm80" },
+> 	{ 22,	19,	22*19,	411,	rp05_sizes,	3, 4, "rp04" },
+> 	{ 22,	19,	22*19,	411,	rp05_sizes,	3, 4, "rp05" },
+> 	{ 50,	32,	50*32,	630,	rp07_sizes,	7, 8, "rp07" },
+> 	{ 1,	1,	1,	1,	0,		0, 0, "ml11a" },
+> 	{ 1,	1,	1,	1,	0,		0, 0, "ml11b" },
+> 	{ 32,	40,	32*40,	843,	cdc9775_sizes,	3, 4, "9775" },
+> 	{ 32,	10,	32*10,	823,	cdc9730_sizes,	3, 4, "9730" },
+> 	{ 32,	16,	32*16,	1024,	capricorn_sizes,7, 8, "capricorn" },
+> 	{ 48,	20,	48*20,	842,	eagle_sizes,	7, 8, "eagle" },
+> 	{ 32,	19,	32*19,	815,	ampex_sizes,	3, 4, "9300" },
+241a244		[add new element at end of "struct hpsoftc"]
+> 	long	sc_ecccnt;	/* BADM ECC correction count */
+730a734,737	[add automatic variables in hpioctl()]
+> 	register int unit = minor(dev) >> 3;		/* BADM */
+> 	register struct iogstat *d;			/* BADM */
+> 	struct mba_device *mi;				/* BADM */
+> 	int ds;						/* BADM */
+737a745,767	[add new cases to switch in hpioctl()]
+> 	case DKIOGETECC:					/* BADM */
+> 		*(long *)data = hpsoftc[unit].sc_ecccnt;	/* BADM */
+> 		return 0;					/* BADM */
+> 
+> 	case DKIOGSTAT:						/* BADM */
+> 		mi = hpinfo[unit];				/* BADM */
+> 		bzero(data, sizeof (struct iogstat));		/* BADM */
+> 		d = (struct iogstat *)data;			/* BADM */
+> 		d->iogs_areasize = hpst[mi->mi_type].sizes[minor(dev)&7].nblocks; /* BADM */
+> 		bcopy(hpst[mi->mi_type].vname,d->iogs_vname,sizeof d->iogs_vname); /* BADM */
+> 		ds = ((struct hpdevice *)mi->mi_drv)->hpds;	/* BADM */
+> 		if (ds & HPDS_MOL) 				/* BADM */
+> 			d->iogs_online++;			/* BADM */
+> 		if (ds & HPDS_WRL) 				/* BADM */
+> 			d->iogs_writelock++;			/* BADM */
+> 		return 0;					/* BADM */
+> 
+> 	case DKIONEWBAD:					/* BADM */
+> 		if ((flag & FWRITE) == 0) 			/* BADM */
+> 			return EBADF;				/* BADM */
+> 		hpsoftc[unit].sc_hpinit = 0;			/* BADM */
+> 		return 0;					/* BADM */
+> 
+791a822		[add to hpecc() after statement "bit -= 8;"]
+> 			hpsoftc[mi->mi_unit].sc_ecccnt++;	/* BADM */
+848c879		[repair bug in hpecc()]
+< 	mi->mi_tab.b_errcnt = 0;	/* error has been corrected */
+---
+> 	mi->mi_tab.b_errcnt--;		/* error has been corrected */

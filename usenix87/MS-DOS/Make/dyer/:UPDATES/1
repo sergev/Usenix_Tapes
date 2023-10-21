@@ -1,0 +1,235 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!mirror!sources-request
+From: sources-request@mirror.UUCP
+Newsgroups: mod.sources
+Subject: v07i025:  Patch to msdos_mk for Microsoft C
+Message-ID: <237@mirror.UUCP>
+Date: 15 Sep 86 03:55:20 GMT
+Sender: rs@mirror.UUCP
+Organization: Mirror Systems, Cambridge MA
+Lines: 223
+Approved: mirror!rs
+Posted: Sun Sep 14 22:55:20 1986
+
+Submitted by: seismo!mcvax!kbsc!yorick
+Mod.sources: Volume 7, Issue 25
+Archive-name: msdos_mk.patch
+
+#!/bin/sh
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+echo 'Start of pack.out, part 01 of 01:'
+echo 'x - README'
+sed 's/^X//' > README << '/'
+X
+XThis is a fix to Landon M. Dyer's "make" program which enables it to
+Xcompile using Microsoft C v3.0.  The file osdate.asm has been replaced
+Xby a C function, as the original osdate caused a system crash (the stack
+Xgot messed up).  Rather that try to debug the asm file I thought it would
+Xbe a better move to rewrite in C, so that all the files are now C files.
+X
+XA comment to the program itself.  It is quite nice, and useful, but I'm
+Xnot keen on all the batch files.  At the moment I am looking into getting
+Xthis program to act as a stand alone unit.  Apart from that I like it.
+X
+XIn this archive are the following files:
+X
+X	cmake.bat	- to make the program
+X	makefile	- modified for MS C
+X	osdate.c	- a function to replace osdate.asm
+X
+XTo get this program to work put these new files into the same directory
+Xas the existing source, and type "cmake".
+X
+XNick Thompson,	20th August 1986
+XPolytechnic of the South Bank, London, UK
+X
+/
+echo 'x - cmake.bat'
+sed 's/^X//' > cmake.bat << '/'
+Xmsc -AM -Zd -Od make;
+Xmsc -AM -Zd -Od macro;
+Xmsc -AM -Zd -Od token;
+Xmsc -AM -Zd -Od parsedir;
+Xmsc -AM -Zd -Od file;
+Xmsc -AM -Zd -Od osdate;
+Xlink make+macro+token+parsedir+file+osdate,make;
+X
+X
+/
+echo 'x - makefile'
+sed 's/^X//' > makefile << '/'
+X!
+X! MSDOS Make utility
+X! (compile with Microsoft C version 3.0)
+X!
+X
+XCLIB = /usr/msc/lib
+XCFLAGS = /AS ;
+XCC = msc
+XH = make.h
+XFILES = #H make.c macro.c token.c parsedir.c file.c osdate.asm
+XDOCUMENTATION = readme make.man makefile
+X
+Xxmake.exe : make.obj macro.obj token.obj parsedir.obj file.obj osdate.obj
+X	link  make+macro+token+parsedir+file+osdate,xmake;
+X
+Xmake.obj : make.c #H
+X	#(CC) make #(CFLAGS)
+X
+Xmacro.obj : macro.c #H
+X	#(CC) macro #(CFLAGS)
+X
+Xtoken.obj : token.c #H
+X	#(CC) token #(CFLAGS)
+X
+Xparsedir.obj : parsedir.c #H
+X	#(CC) parsedir #(CFLAGS)
+X
+Xfile.obj : file.c
+X	#(CC) file #(CFLAGS)
+X
+Xosdate.obj : osdate.c
+X	#(CC) osdate #(CFLAGS)
+X
+X!
+X! Print files associated with MAKE
+X!
+Xprint :
+X	print make.man #(FILES) makefile
+X
+X
+X!
+X! collect source and documentation files
+X!
+Xcollect :
+X	collect -o make.col @make.lis
+X
+X
+X!
+X! copy to distribution disk (on A:)
+X!
+Xdistribution :
+X	copy readme a:
+X	copy make.man a:
+X	copy makefile a:
+X	copy make.bat a:
+X	copy make.c a:
+X	copy macro.c a:
+X	copy token.c a:
+X	copy parsedir.c a:
+X	copy file.c a:
+X	copy osdate.asm a:
+X	copy cmake.bat a:
+X	copy make.lis a:
+X	copy xmake.exe a:
+X
+/
+echo 'x - osdate.c'
+sed 's/^X//' > osdate.c << '/'
+X/*
+X * osdate - return the last date of modification of the given file
+X *	    this version for Microsoft C medium or small memory model
+X *	    will require modification to get the segment offset of the
+X *	    file on open operation to work with large memory model.
+X *
+X * This file replaces osdate.asm in Landon M. Dyer's 'Make' program for
+X * MS-DOS when using Microsoft C (the rest compiles OK).
+X *
+X * Author: Nick Thompson, South Bank Polytechnic, London.
+X *
+X * --------------------------------------------------------------
+X * "You can do what you will with this code, but don't sell it!!"
+X * --------------------------------------------------------------
+X *
+X * Note: as the program does not need large memory support all the
+X *	 large stuff is commented out.  I have tested this fregment
+X *	 with both medium and small models, but not large.  I have
+X *	 put in what I think is needed (but it is not tested).
+X *
+X */
+X
+X
+X#include <dos.h>
+X#include <stdio.h>
+X
+X#define DOS_CALL	0x21		/* symbolic constants representing*/
+X#define	OPEN_FILE	0x3D		/* the O/S calls to make	*/
+X#define	GET_DATE_TIME	0x57
+X#define	CLOSE_FILE	0x3E
+X
+Xint osdate(name, time1, time2)		/* get time of last modification*/
+Xchar *name;				/*  for this file "name"	*/
+Xint  *time1;				/*  time (least significant)	*/
+Xint  *time2;				/*  date (most significant)	*/
+X{
+X	int result;			/* stores the result of DOS call*/
+X	int handle;			/* stores file handle		*/
+X	union REGS inregs, outregs;	/* registers for DOS call	*/
+X
+X/*	struct SREGS segregs;*/	/* you will need this for large memory model*/
+X
+X
+X	/* try to open the file	*/
+X
+X	inregs.h.ah = OPEN_FILE;	/* DOS function call		*/
+X	inregs.h.al = 1;		/* mode				*/
+X	inregs.x.dx = FP_OFF(name);	/* offset of ptr to filename	*/
+X
+X/*	segregs.ds = FP_SEG(name); */	/* large memory model		*/
+X/*	result = int86x(DOS_CALL, &inregs, &outregs, &segregs);*//*large model*/
+X
+X	result = int86(DOS_CALL, &inregs, &outregs);	/* open it	*/
+X	if(outregs.x.cflag) {		/* check for error		*/
+X
+X		return(-1);
+X
+X	}
+X	else {
+X	        handle = outregs.x.ax;	/* assign file handle		*/
+X	}
+X
+X	inregs.x.bx = handle;		/* put handle returned by the	*/
+X					/* open operation into bx	*/
+X
+X	inregs.h.ah = GET_DATE_TIME;	/* dos function to call		*/
+X	inregs.h.al = 0;		/* al = 0 so get time 		*/
+X
+X	result = int86(DOS_CALL, &inregs, &outregs);	/* do it	*/
+X	if(outregs.x.cflag) {		/* has an error occured		*/
+X		printf("Can't obtain file date/time: Error code = %d\n", result);
+X		inregs.h.ah = CLOSE_FILE;		/* clean up	*/
+X		inregs.h.al = 0;
+X		result = int86(DOS_CALL, &inregs, &outregs);
+X		if(outregs.x.cflag) {
+X			printf("Can't close file: Error code = %d\n", result);
+X		}
+X		return(-1);		/* and go home			*/
+X	}
+X
+X
+X        *time1 = (int)outregs.x.cx;	/* time (least significant)	*/
+X        *time2 = (int)outregs.x.dx;     /* date (most significant)	*/
+X
+X	inregs.h.ah = CLOSE_FILE;	/* close up the file		*/
+X	inregs.h.al = 0;
+X
+X	result = int86(DOS_CALL, &inregs, &outregs);
+X	if(outregs.x.cflag) {
+X		printf("Can't close file: Error code = %d\n", result);
+X		return(-1);
+X	}
+X
+X	return(0);
+X}
+X
+X
+/
+echo 'Part 01 of pack.out complete.'
+exit
+---------------------------------------------------------------------------
+   yorick@kbsc.uucp
+   ..mcvax!ukc!hrc63!kbsc!yorick
+
+  +-----------------------------------------------------------------------+
+  | Yorick Phoenix (Systems Support @ The Knowledge-Based Systems Centre) |
+  +-----------------------------------------------------------------------+

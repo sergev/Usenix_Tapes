@@ -1,0 +1,232 @@
+Path: plus5!wucs1!cuae2!clyde!rutgers!uwvax!astroatc!prairie!dan
+From: dan@prairie.UUCP (Daniel M. Frank)
+Newsgroups: net.sources.games
+Subject: ATC for Microport (and possibly Xenix)
+Message-ID: <389@prairie.UUCP>
+Date: 13 Jan 87 16:37:16 GMT
+Reply-To: dan@prairie.UUCP (Daniel M. Frank)
+Distribution: world
+Organization: Prairie Computing, Madison, Wisconsin
+Lines: 221
+
+
+   Here are some diffs to do a bit of necessary tidying up for picky
+architectures like the iAPX286.  I would suggest that these be included
+in the next official release; their only effect on other systems is
+to make the thing lint cleaner.
+
+   These apply to the recent System V redistribution by djmolny.  They
+include a bug fix just posted for list handling.
+
+   I should mention that the -Ml flag should be used for compilation
+under Microport Unix.
+
+*** grammar.y.00	Tue Jan 13 09:55:48 1987
+--- grammar.y	Tue Jan 13 09:56:34 1987
+***************
+*** 24,29
+  
+  %{
+  #include "include.h"
+  
+  int	errors = 0;
+  int	line = 1;
+
+--- 24,30 -----
+  
+  %{
+  #include "include.h"
++ extern char *malloc(), *realloc() ;
+  
+  int	errors = 0;
+  int	line = 1;
+*** input.c.00	Tue Jan 13 08:32:34 1987
+--- input.c	Tue Jan 13 08:33:01 1987
+***************
+*** 291,297
+  						base = shell;
+  					else
+  						base++;
+! 					execl(shell, base, 0);
+  				}
+  				else
+  					execl("/bin/sh", "sh", 0);
+
+--- 291,297 -----
+  						base = shell;
+  					else
+  						base++;
+! 					execl(shell, base, (char *)0);
+  				}
+  				else
+  					execl("/bin/sh", "sh", (char *)0);
+***************
+*** 294,300
+  					execl(shell, base, 0);
+  				}
+  				else
+! 					execl("/bin/sh", "sh", 0);
+  
+  				exit(0);	/* oops */
+  			}
+
+--- 294,300 -----
+  					execl(shell, base, (char *)0);
+  				}
+  				else
+! 					execl("/bin/sh", "sh", (char *)0);
+  
+  				exit(0);	/* oops */
+  			}
+*** list.c.00	Tue Jan 13 09:53:57 1987
+--- list.c	Tue Jan 13 10:16:22 1987
+***************
+*** 12,17
+  PLANE	*
+  newplane()
+  {
+  	return ((PLANE *) calloc(1, sizeof (PLANE)));
+  }
+  
+
+--- 12,19 -----
+  PLANE	*
+  newplane()
+  {
++ 	extern char *calloc() ;
++ 
+  	return ((PLANE *) calloc(1, sizeof (PLANE)));
+  }
+  
+***************
+*** 46,51
+  			}
+  		} else {
+  			l->tail->next = p;
+  			p->prev = l->tail;
+  			l->tail = p;
+  		}
+
+--- 48,54 -----
+  			}
+  		} else {
+  			l->tail->next = p;
++ 			p->next = NULL ;
+  			p->prev = l->tail;
+  			l->tail = p;
+  		}
+*** log.c.00	Tue Jan 13 08:31:52 1987
+--- log.c	Tue Jan 13 10:10:19 1987
+***************
+*** 47,52
+  	return (s);
+  }
+  
+  log_score(list_em)
+  {
+  	register int	i, fd, num_scores = 0, good, changed = 0, found = 0;
+
+--- 47,54 -----
+  	return (s);
+  }
+  
++ static SCORE	score[100] ;	/* can't put this on stack on iAPX286 */
++ 
+  log_score(list_em)
+  {
+  	register int	i, fd, num_scores = 0, good, changed = 0, found = 0;
+***************
+*** 53,59
+  	struct passwd	*pw;
+  	FILE		*fp;
+  	char		*cp, logstr[BUFSIZ];
+! 	SCORE		score[100], thisscore;
+  #ifdef SYSV
+  	struct utsname	name;
+  #endif
+
+--- 55,61 -----
+  	struct passwd	*pw;
+  	FILE		*fp;
+  	char		*cp, logstr[BUFSIZ];
+! 	SCORE		thisscore;
+  #ifdef SYSV
+  	struct utsname	name;
+  #endif
+***************
+*** 57,62
+  #ifdef SYSV
+  	struct utsname	name;
+  #endif
+  
+  	strcpy(logstr, SPECIAL_DIR);
+  	strcat(logstr, LOG);
+
+--- 59,66 -----
+  #ifdef SYSV
+  	struct utsname	name;
+  #endif
++ 	extern long		time() ;
++ 	extern struct passwd	*getpwuid() ;
+  
+  	strcpy(logstr, SPECIAL_DIR);
+  	strcat(logstr, LOG);
+***************
+*** 126,132
+  
+  		thisscore.time = clock;
+  		thisscore.planes = safe_planes;
+! 		thisscore.real_time = time(0) - start_time;
+  
+  		for (i = 0; i < num_scores; i++) {
+  			if (strcmp(thisscore.name, score[i].name) == 0 &&
+
+--- 130,136 -----
+  
+  		thisscore.time = clock;
+  		thisscore.planes = safe_planes;
+! 		thisscore.real_time = time((long *)0) - start_time;
+  
+  		for (i = 0; i < num_scores; i++) {
+  			if (strcmp(thisscore.name, score[i].name) == 0 &&
+*** main.c.00	Tue Jan 13 08:32:14 1987
+--- main.c	Tue Jan 13 08:36:34 1987
+***************
+*** 22,27
+  #endif
+  	extern int		update(), quit(), log_score();
+  	extern char		*default_game(), *okay_game();
+  
+  	start_time = seed = time(0);
+  
+
+--- 22,28 -----
+  #endif
+  	extern int		update(), quit(), log_score();
+  	extern char		*default_game(), *okay_game();
++ 	extern long		time() ;
+  
+  	start_time = seed = time((long *)0);
+  
+***************
+*** 23,29
+  	extern int		update(), quit(), log_score();
+  	extern char		*default_game(), *okay_game();
+  
+! 	start_time = seed = time(0);
+  
+  	name = *av++;
+  	while (*av) {
+
+--- 24,30 -----
+  	extern char		*default_game(), *okay_game();
+  	extern long		time() ;
+  
+! 	start_time = seed = time((long *)0);
+  
+  	name = *av++;
+  	while (*av) {
+-- 
+    Dan Frank
+    uucp: ... uwvax!prairie!dan
+    arpa: dan%caseus@spool.wisc.edu

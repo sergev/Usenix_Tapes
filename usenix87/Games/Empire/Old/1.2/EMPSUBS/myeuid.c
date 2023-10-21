@@ -1,0 +1,4 @@
+myeuid()
+{
+        return(geteuid());
+}

@@ -1,0 +1,139 @@
+
+Apply these diffs to your VAX source for /etc/getty to get the
+screensaver version for the SUN
+
+*** gettytab.h	Mon Oct 14 21:11:52 1985
+--- ../gettytab.h	Wed Jul 24 11:28:49 1985
+***************
+*** 
+  #define DS	gettystrs[19].value
+  #define RP	gettystrs[20].value
+  #define FL	gettystrs[21].value
+  #define WE	gettystrs[22].value
+  #define LN	gettystrs[23].value
+  
+--- 
+  #define DS	gettystrs[19].value
+  #define RP	gettystrs[20].value
+  #define FL	gettystrs[21].value
+  #define WE	gettystrs[22].value
+  #define LN	gettystrs[23].value
++ #define GP	gettystrs[24].value
+
+*** init.c	Mon Oct 14 21:11:53 1985
+--- ../init.c	Wed Jul 24 11:28:49 1985
+***************
+*** 38
+  	{ "ds", &ltc.t_dsuspc },	/* delayed suspend */
+  	{ "rp", &ltc.t_rprntc },	/* reprint char */
+  	{ "fl", &ltc.t_flushc },	/* flush output */
+  	{ "we", &ltc.t_werasc },	/* word erase */
+  	{ "ln", &ltc.t_lnextc },	/* literal next */
+  	{ 0 }
+  };
+  
+--- 38
+  	{ "ds", &ltc.t_dsuspc },	/* delayed suspend */
+  	{ "rp", &ltc.t_rprntc },	/* reprint char */
+  	{ "fl", &ltc.t_flushc },	/* flush output */
+  	{ "we", &ltc.t_werasc },	/* word erase */
+  	{ "ln", &ltc.t_lnextc },	/* literal next */
++ 	{ "gp" },			/* greeting program */
+  	{ 0 }
+  };
+  
+
+*** main.c	Mon Oct 14 21:11:55 1985
+--- ../main.c	Mon Oct 14 21:07:13 1985
+***************
+*** 90,99
+  main(argc, argv)
+  	char *argv[];
+  {
+  	char *tname;
+  	long allflags;
+  
+  	signal(SIGINT, SIG_IGN);
+  /*
+  	signal(SIGQUIT, SIG_DFL);
+  */
+
+--- 90,100 -----
+  main(argc, argv)
+  	char *argv[];
+  {
+  	char *tname;
+  	long allflags;
++ 	int	gprun = 0;
+  
+  	signal(SIGINT, SIG_IGN);
+  /*
+  	signal(SIGQUIT, SIG_DFL);
+  */
+***************
+*** 133
+  			continue;
+  		}
+  		if (CL && *CL)
+  			putpad(CL);
+  		edithost(HE);
+  		if (IM && *IM)
+  			putf(IM);
+
+--- 134
+  			continue;
+  		}
+  		if (CL && *CL)
+  			putpad(CL);
+  		edithost(HE);
++ 		if (GP && *GP && gprun == 0) {
++ 			rung(GP);
++ 			gprun++;
++ 		}
+  		if (IM && *IM)
+  			putf(IM);
+
+*** subr.c	Mon Oct 14 21:11:57 1985
+--- ../subr.c	Wed Jul 24 11:28:50 1985
+***************
+*** 355,364
+  			*ep++ = p;
+  	}
+  	*ep = (char *)0;
+  }
+  
+  # ifdef	DEVELCON
+  /*
+   * This speed select mechanism is written for the Develcon DATASWITCH.
+   * The Develcon sends a string of the form "B{speed}\n" at a predefined
+   * baud rate. This string indicates the user's actual speed.
+
+--- 355,381 -----
+  			*ep++ = p;
+  	}
+  	*ep = (char *)0;
+  }
+  
++ rung(prog)
++ char	*prog;
++ {
++ 	register int	child,
++ 			waitpid;
++ 
++ 	if ((child = vfork()) == 0) {
++ 		setuid(1);	/* Don't run greeter as SU */
++ 		execl("/bin/sh","sh","-c", prog, (char *)0);
++ /*		execl(prog, prog, (char *)0); */ /* Is an alternative */
++ 		_exit(0);
++ 	}
++ 	if (child < 0)
++ 		return;
++ 	while ((waitpid = wait(0)) != child && waitpid != -1);
++ }
++ 
+  # ifdef	DEVELCON
+  /*
+   * This speed select mechanism is written for the Develcon DATASWITCH.
+   * The Develcon sends a string of the form "B{speed}\n" at a predefined
+   * baud rate. This string indicates the user's actual speed.
+

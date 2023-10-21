@@ -1,0 +1,283 @@
+In our work on the Distributed Sensor Network Project at
+MIT Lincoln Laboratory we have encountered a need for
+a universal macro processor usable for the following tasks:
+
+1) As a front end for the C compiler.
+
+2) As a front end for a variety of assemblers, including
+   as(1) and an assembler for the FPS-120B signal processor.
+
+3) For a data description language so that a single data description
+   will suffice to create-
+	a) .h file definitions for C
+	b) .s file definitions for as(1) or some other assembler
+	c) debug scripts for adb(1)
+
+A requirement on this macro processor is that it be able to
+generate output indicating the correspondence between input and
+output line numbers, so that post processors can associated
+error messages with macro processor input line numbers correctly.
+
+The first question is whether to upgrade cpp, the C macro processor,
+or m4(1).  We have chosen cpp because
+
+1)  Inspection of implementation reveals that line numbering may be
+    harder to add to m4 than the m4 features are to add to cpp.
+    This is because for speed macro processors do not copy their
+    character streams, but examine it in place in a buffer, and
+    therefore detect line feeds in many different places.  They
+    have no central place like a call to getchar or putchar to
+    detect line feeds.
+
+2)  Most of our existing macro code is cpp code for C.
+
+
+The following are the proposed changes to upgrade cpp.
+We would appreciate helpful comments upon this proposal.
+
+				NOTES
+				-----
+
+The name of a macro is expanded from a simple identifier to
+an identifier plus the number of arguments plus whether or not
+these arguments are surrounded by () or [] or {} plus whether or
+not the identifier x is in the context y.x, y->x, or some other context.
+Thus
+
+	#define x(z)
+	#define x(z, u)
+	#define x[z]
+	#define x{z}
+	#define y->x
+	#define y.x[z,u,v]
+
+all define different macros.  The undef must give the correct name:
+
+	#undef x(z)
+	#undef x(z, u)
+	#undef x[z]
+	#undef x{z}
+	#undef y->x
+	#undef y.x[z,u,v]
+
+There are three major contexts: x, y->x, and y.x; and many argument
+contexts supplementing these.  It is not permitted to have a definition
+without argument brackets in a given major context and simultaneously have any
+definition with argument brackets.  The convention is that for
+#undef and #endmac below the name without argument brackets will also undefine
+or terminate any definition with the same major context with argument brackets.
+
+A definition with argument brackets may have a specific number of
+arguments, including the number zero, as in "#define x()".  Also,
+a definition with the magic argument "#list" can have N or more
+arguments: "#define x(a, #list, b)" has 2 or more.  There may not be
+two definitions which the same major context and bracket type which
+might have the same number of arguments: e.g. given the last definiton
+then the definition "#define x(a,b,c,d)" is not legal.
+
+If there is a definition of x without arguments in a given major context,
+that definition will be activated for all occurances of x, including
+those followed by (, [, or {.  However, a definition of x with zero
+arguments, as in "#define x()", will only be activated if x is followed by
+a (.
+
+If there is a definition of x (possibly with arguments) in the non-element
+context, but no definition y->x or y.x in the element context, then
+occurrances of x in the element context will activate the
+non-element definition, just as in the current macro processor.
+
+If there is a y->x definition but no y.x definition, then the definition
+"#define y.x (&(y)->x)" is implied.  Similarly if there is a y.x
+definition but no y->x definition, "#define y->x (*(y).x)" is implied.
+These implied definitions are created independently for every
+number of arguments and type of argument surrounding brackets, (), [],
+or {}.
+
+
+#<identifier>	# is taken to be an identifier character, like _, by the
+		macro processor.  If # begins a line, then spaces between
+		it and the next non-blank character are ignored, the # is
+		prepended to that next identifier to make what must be
+		a macro name else it is an error, and the rest of the line
+		after the macro name is taken to be the single macro argument
+		(with comments removed).  Also, the line feed following this
+		argument is ignored.  Thus
+
+		#	include "file"
+
+		is equivalent to
+
+			#include ("file")
+
+		except for the fact that the second form outputs a tab
+		before the expansion of #include and a line feed after,
+		whereas the first form does not.
+
+		Another example is "(#if (x < 0) 55 #else 66 #endif)".
+		Another is "#define (foo (7*8))".
+
+Recall that the arguments to macros are not generally expanded before
+they are used; however, the value returned by a macro is inserted in
+place of the macro call and expansion resumed at the beginning of the
+returned value; so returned values are expanded.  The #if and #include
+statements are exceptions that expand their argument before use.
+
+				NEW COMMANDS
+				--- --------
+
+#macro		Like #define but macro definition consists of an integral
+		number of lines ending in line feeds.
+
+#endmac x	Ends macro started by #macro x.  Allows #macro definitions
+		to be nested and contain other lines beginning with #.
+		Allows a macro definition to define a variation of the
+		#macro statment itself: e.g. (see below)
+
+		#macro newmac(x)
+		#	macro y->x
+		#	endmac newmac(x)
+
+# 2 "<file> <lineno>"	Output to indicate that the following lines are
+		generated by line feeds output by macros called by
+		line number <lineno> of <file>.
+
+#define y->x	The macro named x is defined, but is recognized only
+		in element name contexts after "->".  Y is
+		a formal argument name for the macro x, and represents
+		the expression before the "->".  See the notes above.
+		E.g.
+		#define pc->pc_name ((*(pc)->pc_func) (pc, 1))
+
+#define y.x	Ditto but with "." in place of "->".
+
+#define x[y,...]  Like x(y,...) but Indicates arguments are supposed
+		to be in square rather than round brackets.
+
+#define x{y,...}  Ditto but with {} instead of [].
+
+#define y->x(z,...)  Like definition of y->x but with arguments.
+		"." may replace "->" and [] or {} may replace
+		() to define other macros: see notes above.
+
+#define x(y, #list, z)  The special arg name #list indicates a list of
+		0 or more arguments is allowed at that point in
+		the argument list.  This special formal argument can
+		occur only once in a formal argument list, but need
+		not occur at the end.
+
+#list		Inside a macro body denotes the comma separated list
+		of all actual arguments corresponding to the formal
+		argument #list, or the null string if none.
+
+`...'		Protects the string ... from expansion.  The outmost
+		quotes ` and ' are stripped during expansion.
+		Useful in actual arguments of special functions
+		like #assign that expand one or more of their
+		arguments.  May be used to concatenate names, as in
+		x`'8, or to protect special characters as in `"'.
+
+'...'		Ditto but the single quotes are not removed.
+
+"..."		Ditto with " in place of '.
+
+#subst (x, y, z)  Evaluates to the string x after the string z is
+		substituted for the substring y of x.  y is an ed (1) regular
+		expression and z an ed (1) replacement expression.  As in
+		the s/y/z/ ed (1) command applied to x as the current line.
+		X, y, and z are expanded before they are used.
+
+#gsubst (x, y, z)  Ditto but the substitution is iterated throughout
+		the string x.  As in the s/y/z/g command of ed (1).
+
+#select (x, y, z)  The string x is broken into substrings separated by
+		occurrences of the regular expression z,
+		and the y'th of these is returned.  X and z are
+		expanded before use.  #eval is applied to y before use.
+		Occurrances of the substring z inside (), [], or {}
+		within z are not considered to be separators.
+		E.g. "#select (#list, 4, `,')".
+
+#nselect (x, z)	The string x is broken into substrings as for #select
+		and the number of substrings is returned.
+
+#match (x, y)	Evaluates to 1 if the string x matches the regular
+		expression y.  Otherwise evaluates to 0.
+		X and y are expanded before use.
+
+#upper (x)	The string x with all lower case letters converted to
+		upper case.  X is expanded before the conversion.
+
+#lower (x)	Ditto with all upper case converted to lower case.
+		X is expanded before the conversion.
+
+#eval (x)	The string x evaluated as an integer expression using
+		32 bit signed arithmetic internaly (as for #if).
+		X is expanded before evaluation.
+
+#assign		Like #undef followed by #define with the difference that
+		the definition (but not the macro name) is expanded
+		before being assigned
+		to the macro name.  E.g. #assign (x, #eval (3*6))
+		defines x as 18 and not "#eval (3*6)".
+
+#edefine	Like #define but expands its entire single argument
+		before making the definition.  The macro name must
+		need to be all or partly in `' quotes: e.g.
+		#edefine (x`alloc(y)' ...)
+
+#eassign	Like #assign but expands the macro name too.
+
+#expand (x)	Expands the argument x and returns the expanded
+		result.  Since the result is then re-expanded
+		this function introduces one extra expansion.
+		Useful with `' mostly.  E.g. #expand (x`'alloc).
+
+#quote (x)	Returns `...' where ... is the expansion of x.
+
+#squote (x)	Returns '...' where ... is the expansion of x.
+
+#dquote (x)	Returns "..." where ... is the expansion of x.
+		Defined as `"'x`"'.
+
+x(...{...,...}...)  Commas inside {} inside arguments are protected
+		from recognition as argument separators: this is
+		an incompatibility with current cpp.
+
+#sys(x)		Expands the string x and runs it as a system command.
+		Evaluates to the output of that system command with
+		the trailing linefeed removed.
+
+#syserr		The condition code from the last system command run.
+
+#include (x)	The current include command.  Note that this exands
+		its argument before use.
+
+#sinclude	Like #include but does not complain if file does not
+		exist.
+
+#run (x)	Like #sys but evaluates to the null string.
+
+#eprint (x)	Prints the expanded string x as an error message.
+
+#null (x, ...)	Evaluates to the null string after expanding all the
+		arguments x, ... .
+
+#if (x)		The standard if macro.  Applies #eval to x.
+
+#elseif (x)	The else-if construction.  Applies #eval to x.
+
+#isdef (x)	Evaluates to 1 if x is defined and 0 otherwise.
+		X is a macro name, as discussed in the notes above.
+		If x has no arguments, it is nevertheless considered
+		to be defined if there is a defined macro with the same
+		identifier and major context but also with arguments;
+		and conversely if x is a name with arguments, it
+		is nevertheless considered to be defined if there
+		is a macro with the same identifier and major context
+		but with no arguments.
+
+#ifdef (x)	Same as #if (#isdef (x)).
+
+#ifndef (x)	Same as #if (! #isdef (x)).
+
+#eisdef (x)	Same as #isdef (x) but evaluates x before use.

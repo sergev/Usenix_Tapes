@@ -1,0 +1,109 @@
+SPOOL=/usr/spool/news
+LIB=/usr/local/lib/news
+ACTIVE=$LIB/active
+LOG=$LIB/log
+JUNK=$SPOOL/junk
+NEWSBIN=$SPOOL/bin
+UUCPDIR=$SPOOL/uucp
+PATH=/usr/local:/bin:/usr/bin:$NEWSBIN
+FOO=trash	# Only needed to prevent "set" headaches.
+#
+#	Process TM files.  Three cases are known:
+#		1. Empty file (that is easy!)
+#		2. Mail file -- send it to the intended
+#			recipient.
+#		3. Compressed mail -- this is the case
+#			that takes all the code.
+#
+#	This script assumes that the TM files have been moved into the
+#	directory $UUCPDIR/TM.  It is unwise to process the TM
+#	files in /usr/spool/uucp without somehow turning off all the
+#	uucp stuff, and moving the files is easy enough to do.
+#
+cd $UUCPDIR/TM
+for i in TM.?????.???
+do
+	filetype=`file $i | sed "s/.*:	//"`
+	case "$filetype" in
+	empty)		rm -f $i ;;
+	"ascii text")	receiver=`sed "s/^To: //p/" $i`
+			case "$receiver" in
+			"")	;;
+			*)	mail $receiver < $i
+			esac ;;
+	data)		testing=`( /usr/local/lib/news/compress -d < $i 2>&1 ) |
+							sed 1q`
+			case "$testing" in
+			"stdin: not in compressed format"*)
+				testing=`( tar tvf $i 2>&1 ) | sed 1q`
+				case "$testing" in
+				"tar: errno returned 0, Can't read input"*) ;;
+				"directory checksum error"*) ;;
+				*)	echo $i may be a tar-format data file. 1>&2
+					continue
+				esac
+				testing=`( cpio -itv < $i 2>&1 ) | sed 1q`
+				case "$testing" in
+				"Out of phase--get help")
+					echo $i is a data file of undetermined format ;;
+				*)	echo $i may be a cpio-format data file. 1>&2
+				esac
+				continue
+			esac
+			(mkdir $UUCPDIR/$i 2>&1) > /dev/null
+			cd $UUCPDIR/$i
+			/usr/local/lib/news/compress -d < $UUCPDIR/TM/$i |
+				deTM_unbatch $i
+			cd $UUCPDIR/TM ;;
+	*)		echo "filetype is $filetype!!" 1>&2 ;;
+	esac
+done
+
+#
+#	Make a directory containing all the news articles, without
+#	duplication.  "deTM_unbatch" creates files named after their article ID.
+#	"deTM_unbatch" also creates in each of the "TM" directories containing
+#	the news articles, a file called "index" that is a list of all the
+#	article ID's (== filenames) in the TM directory.
+#
+cd $UUCPDIR
+zerodirs=`find $UUCPDIR/*/index -size 0 -print`
+rm -f `echo $zerodirs`
+rmdir `echo $zerodirs | sed "s/.index//g"`
+mkdir all_articles
+for i in TM.?????.???
+do
+	if test ! -d $UUCPDIR/$i
+	then
+		echo Oh, how terrible -- $UUCPDIR/$i not a directory! 1>&2
+		exit
+	fi
+	cd $UUCPDIR/$i
+	for j in *
+	do
+		case "$j" in
+		index)	continue ;;
+		[1-9]*)	destination=$UUCPDIR/all_articles/$j
+			if test ! -f "$destination"
+			then
+				ln $j "$destination"
+			else
+				set $FOO `ls -l "$destination"`
+				oldsize=$6
+				set $FOO `ls -l $UUCPDIR/$i/$j`
+				newsize=$6
+				if test "$oldsize" -lt "$newsize"
+				then
+					rm -f "$destination"
+					ln $UUCPDIR/$i/$j $destination
+				fi
+			fi ;;
+		*)	echo Oooh, what a weird file -- $UUCPDIR/$i/$j 1>&2
+		esac
+	done
+done
+#
+#	Now run "mv2junk", and then "process_junk".  Those two programs should
+#	be run with normal news processing disabled, to avoid having two
+#	programs simultaneously trying to update $ACTIVE.
+#

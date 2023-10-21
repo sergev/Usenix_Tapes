@@ -1,0 +1,251 @@
+.th LIB2 VII 3/21/79
+.sh NAME
+lib2 \*- library of system call routines with EM1 calling sequence
+.sh SYNOPSIS
+.ta 11 21 37
+const
+	MAXFILES	= 14;
+	BUFSIZE	= ??;
+.s3
+type
+	ok	= -1..0;	{-1 error}
+	byte	= 0..255;
+	string	= ^packed array[1..?] of char;
+			{c+ option pc:pem(VI)}
+	path	= string;
+.s3
+	fd	=  0..MAXFILES;
+	fdok	= -1..MAXFILES;	{-1 error}
+.s3
+	pid	=  1..32767;
+	pidok	= -1..32767;	{-1 error, 0 child}
+.s3
+	bsize	=  1..BUFSIZE;
+	bsizeok	= -1..BUFSIZE;	{-1 error, 0 eof}
+.s3
+	nicerange	= -220..20;
+.s3
+	modebits	= (XHIM,WHIM,RHIM,XYOU,WYOU,RYOU,
+		   XME,WME,RME,TEXT,SGID,SUID,
+		   LARGE,TYPE1,TYPE2,ALLOC);
+.s3
+	ttybits	= (HANG,NOTABS,NOLCASE,ECHO,CRLF,RAW,
+		   ODDOK,EVENOK,NL1,NL2,TAB1,TAB2,
+		   CR1,CR2,FF,BS);
+.s3
+	signals	= (NULL,BREAK,DEL,QUIT,ILLINS,TRACE,
+		   IOT,EMT,FLOAT,KILL,BUS,SEG,
+		   SYS,PIPE,CLK,TERM);
+.s3
+	speed	= (ZERO,b50,b75,b110,b134_5,b150,
+		   b300,b600,b1200,b1800,b2400,b4800,
+		   b9600,EXTA,EXTB);
+.s3
+	tracereq	= (ENABLE,GETI,GETD,GETU,PUTI,PUTD,
+		   PUTU,SIG,KILL);
+.s3
+	seekreq	= (ABS,REL,PLUS,ABSB,RELB,PLUSB);
+.s3
+	opencode	= (R,W,RW);
+.s3
+	long	= record
+		    high,low:integer;
+		  end;
+.s3
+	ugid	= record
+		    uid,gid:byte;
+		  end;
+.s3
+	device	= record
+		    major,minor:byte;
+		  end;
+.s3
+	statbuf	= record
+		    d      : device;
+		    inumber: integer;
+		    flags  : set of modebits;
+		    nlinks : byte;
+		    uid    : byte;
+		    gid    : byte;
+		    size0  : byte;
+		    size1  : integer;
+		    addr   : array[1..8] of integer;
+		    acctim : long;
+		    modtim : long;
+		  end;
+.s3
+	ttybuf	= record
+		    ispeed : speed;
+		    ospeed : speed;
+		    erase  : char;
+		    kill   : char;
+		    mode   : set of ttybits;
+		  end;
+.s3
+	timesbuf	= record
+		    utime  : long;
+		    stime  : long;
+			{UNIX version 6+}
+		    cutime : long;
+		    cstime : long;
+		  end;
+.s3
+	waitstat	= record
+		    termination  : byte;
+		    exitstatus   : byte;
+		  end;
+.s3
+	arglist	= array[1..?] of string;
+			{last entry must be nil}
+.s3
+	pipebuf	= array[0..1] of fd;
+.s3
+	buf	= packed array[bsize] of byte;
+.s3
+.s3
+{all routines need to be declared extern}
+.s3
+.s3
+procedure	exit	(b:byte);
+.s3
+function	fork	:pidok;
+.s3
+function	read	(f:fd; var b:buf; s:bsize):bsizeok;
+.s3
+function	write	(f:fd; var b:buf; s:bsize):bsizeok;
+.s3
+function	open	(p:path; m:openmode):fdok;
+.s3
+function	close	(f:fd):ok;
+.s3
+function	wait	(var w:waitstat):pidok;
+.s3
+function	creat	(p:path; m:set of XHIM..SUID):fdok;
+.s3
+function	link	(p1,p2:path):ok;
+.s3
+function	unlink	(p:path):ok;
+.s3
+procedure	execv	(p:path; var a:arglist);
+.br
+procedure	execl	(var a:arglist);
+.s3
+function	chdir	(p:path):ok;
+.s3
+procedure	time	(var t:long);
+.s3
+function	mknod	(p:path; m:set of modebits;
+		    special:device):ok;
+.s3
+function	chmod	(p:path; m:set of XHIM..SUID):ok;
+.s3
+function	chown	(p:path; ug:uigd):ok;
+.s3
+function	stat	(p:path; var s:statbuf):ok;
+.s3
+function	seek	(f:fd; offset:integer; r:seekreq):ok;
+.s3
+function	getpid	:pid;
+.s3
+function	mount	(dev,dir:path; readonly:boolean):ok;
+.s3
+function	umount	(special:device):ok;
+.s3
+function	setuid	(b:byte):ok;
+.s3
+function	getuid	:byte;
+.s3
+function	stime	(var t:long):ok;
+.s3
+function	ptrace	(r:tracereq; p:pid; var a:integer;
+		    d:integer):integer;
+.s3
+procedure	alarm	(seconds:integer);
+.s3
+function	fstat	(f:fd; var s:statbuf):ok;
+.s3
+procedure	pause	;
+.s3
+function	stty	(f:fd; var t:ttybuf):ok;
+.s3
+function	gtty	(f:fd; var t:ttybuf):ok;
+.s3
+function	access	(p:path; m:set of XHIM..RHIM):ok;
+.s3
+function	nice	(n:nicerange):ok;
+.s3
+procedure	sleep	(seconds:integer);
+.s3
+procedure	sync	;
+.s3
+function	kill	(p:pid; s:signals):ok;
+.s3
+function	getcsw	:integer;
+.s3
+function	tell	(f:fd; var o:long):ok;
+.s3
+function	dup	(f:fd):fdok;
+.s3
+function	pipe	(var p:pipebuf):ok;
+.s3
+procedure	times	(var t:timesbuf);
+.s3
+procedure	profil	(b:buf; s:bsize; offset,scale:integer);
+.s3
+function	setgid	(b:byte):ok;
+.s3
+function	getgid	:byte;
+.s3
+function	acct	(p:path):ok;	{path may be nil}
+.sh DESCRIPTION
+The modules in this library contain the system calls with EM1 calling sequence.
+There are two versions: one written in EM1 assembly language intended
+for interpreted programs, and another version written in 'as'.
+This last version is to be used by programs translated into PDP-11 code by pc:pdp(VI).
+For the interpreted version a special EM1 instruction MON is used to
+pass the system call requests to the interpreter.
+The interpreter em1(I) contains a smart routine to pop and push
+all the arguments and results from and to the stack.
+.s3
+The synopsis describes how these system calls may be used by pascal programs.
+For C programs the calling sequence is identical to the normal routines
+in libc.a(II).
+The routines represent the system calls of the original version 6 UNIX system,
+augmented with the diff-listing as distributed by Bell late 1976.
+The only original system call modified by the diff-listing is 'times'.
+.s3
+Two system calls are not available. The first is 'break', because the memory allocation
+for EM1 programs is quite different.
+New space can be allocated on the heap by manipulating the heap pointer by
+special EM1 instructions.
+The other missing system call is 'signal'.
+One of the reasons is, that the normal values, odd for 'ignore' and zero
+for 'get back to default',
+interfere with the EM1 procedure identification.
+Procedures in EM1 are numbered consecutively from zero up.
+We intend to augment the EM1 machine with some form of exception handling,
+but in the meantime you must do without signals. Sorry.
+.sh FILES
+.lp +20 20
+/usr/lib/lib2.a	the version for compiled programs
+.lp +20 20
+/usr/lib/em1:2.a	the version for interpreted programs
+.i0
+.sh "SEE ALSO"
+em1(I), pc(I), *(II)
+.sh DIAGNOSTICS
+All routines put the UNIX error code in the global variable 'errno'
+Errno is not cleared by successful system calls, so it always gives
+the error of the last failed call.
+One exception: ptrace clears errno when successful.
+.sh AUTHOR
+Johan Stevenson, Vrije Universiteit
+.sh BUGS
+There should be additional routines giving a fatal error when they fail.
+In UNIX C you are allowed to call a function without testing its result.
+In EM1 it is more serious when you circumvent the type conventions.
+In pascal you have even stronger type checking.
+In these circumstances it would be pleasant to have routines,
+which print a nice message and stop execution for unexpected errors.
+These routines, with an extra letter 'x' in front of their name,
+will be added later.

@@ -1,0 +1,175 @@
+.TH INTERACTOR 2I "15 June 1987" "InterViews" "InterViews Reference Manual"
+.SH NAME
+Interactor \- base class for interactive objects
+.SH SYNOPSIS
+.B #include <InterViews/interactor.h>
+.SH DESCRIPTION
+.B Interactor
+is the base class for all interactive objects.
+Every interactor has a \fIshape\fP member variable that defines
+the desired characteristics of screen space
+in terms of size, shrinkability, and stretchability.
+This information is used to allocate display space for the interactor
+and the interactor's \fIcanvas\fP member variable is set
+to the actual space obtained.
+The lower left corner of the canvas is addressed by (0,\ 0);
+the upper right by the member variables (\fIxmax\fP,\ \fIymax\fP).
+.PP
+The \fIinput\fP member variable is the normal sensor for reading events.
+The \fIoutput\fP member variable is the standard painter
+for performing graphics operations.
+The \fIcursor\fP member variable controls the format and interpretation
+of the input pointing device (e.g., mouse cursor)
+when it is inside the interactor's canvas.
+.PP
+An interactor may optionally define the \fIperspective\fP member variable
+to represent the portion of total area that the interactor is displaying.
+Perspectives allow interactors to coordinate with other interactors,
+such as scrollers, that want to control the display area.
+.PP
+To access the workstation, an interactor must be inserted
+into a scene, called its \fIparent\fP.
+The root scene is the instance
+of the \fBWorld\fP class that must be created at the start of your program.
+.SH PUBLIC OPERATIONS
+.TP
+.B "Interactor(Sensor*, Painter*)"
+Create an interactor with an \fIinput\fP sensor and \fIoutput\fP painter.
+If an interactor wants to define \fIinput\fP or \fIoutput\fP
+instead of using an existing sensor or painter, it should pass \fInil\fP.
+.TP
+.B "~Interactor()"
+.ns
+.TP
+.B "virtual void Delete()"
+The base destructor calls Delete().
+Subclasses should define their own Delete operation,
+but not their own destructor.
+In this way, the appropriate actions can be taken to destroy
+an interactor without knowing which subclass it is.
+The base destructor also deletes \fIinput\fP and \fIoutput\fP
+if they are not nil.
+.TP
+.B "virtual void Resize()"
+.ns
+.TP
+.B "virtual void Draw()"
+.ns
+.TP
+.B "virtual void Redraw(Coord x1, Coord y1, Coord x2, Coord y2)"
+When an interactor's canvas is created or changed,
+its \fIxmax\fP and \fIymax\fP variables are set appropriately,
+its Resize operation is called, and then its Draw operation is called.
+The Draw operation might also be called when the canvas is moved
+without changing size.
+The Draw operation should display everything in the Interactor,
+including calling Draw operations for interior interactors.
+The Redraw operation is called when some portion of the Interactor
+needs to be redrawn, presumably because it was previously obscured.
+The Redraw operation should NOT redraw interior interactors, as their
+Redraw operations will be called automatically.
+The default Draw operation calls Redraw(0,\ 0,\ \fIxmax\fP,\ \fIymax\fP);
+the default Redraw and Resize operations do nothing.
+.TP
+.B "void Read(Event&)"
+.ns
+.TP
+.B "void UnRead(Event&)"
+.ns
+.TP
+.B "void Poll(Event&)"
+.ns
+.TP
+.B "boolean Check()"
+.ns
+.TP
+.B "boolean CheckQueue()"
+.ns
+.TP
+.B "void Listen(Sensor*)"
+.ns
+.TP
+.B "virtual void Handle(Event&)"
+.ns
+Any interactor can read input events.
+Read takes the next event from the input queue.
+UnRead puts an event back on the input queue as if it had never been read.
+Poll sets an event to reflect the current input state.
+Check determines whether an event of interest has occurred.
+CheckQueue checks to see if any events have been read and are queued locally.
+Normally, whether an interactor is interested in an event
+is determined by its \fIinput\fP sensor;
+a different sensor can be specified with the Listen operation.
+To switch back to \fIinput\fP, call Listen(\fIinput\fP).
+.sp 1
+The \fItarget\fP field in the event specifies the interactor
+for which the event is intended, normally the interactor
+whose canvas is under the pointing device.
+When an interactor wishes to pass an event to another interactor,
+it calls the Handle operation of the other interactor.
+Thus, input flow control can be either procedural or event-driven.
+.TP
+.B "void Sync()"
+All input operations implicitly call the Sync operation
+to flush the buffer of pending operations, if any.
+Sync may also be called directly to cause operations
+to take effect immediately.
+.TP
+.B "Perspective* GetPerspective()"
+.ns
+.TP
+.B "virtual void Adjust(Perspective&)"
+GetPerspective returns the perspective associated with an interactor
+or nil if the interactor has not assigned one.
+Adjust suggests to an interactor that its perspective should
+change to the given perspective;
+the interactor may choose to accept any part of the new perspective and
+must ensure that the parameter matches its (new) perspective before returning.
+Adjust can be used by another interactor to scroll, pan, or zoom an interactor.
+.TP
+.B "virtual void Reshape(Shape&)"
+Suggest to an interactor that its shape should change to the given one.
+The default operation does nothing.
+.TP
+.B "virtual void Update()"
+Change the display to reflect some change in state that the interactor
+depends on.
+This operation is used in a number of contexts.
+One example is in managing perspectives.
+If an interactor changes its perspective (e.g.,
+the total of size of what it is displaying changes),
+it must notify its perspective, which in turn calls Update
+on the interactors that access the perspective (such as a scroller).
+.TP
+.B "void SetName(const char*)
+.ns
+.TP
+.B "void SetIcon(Interactor*)
+Set the name and icon associated with the interactor.
+Window managers will use the interactor or name in response
+to iconify requests.
+.TP
+.B "Scene* Parent()"
+Return the interactor's parent.
+.TP
+.B "void GetRelative(Coord& x, Coord& y, Interactor* = nil)"
+Map coordinates that are relative to this
+interactor's canvas to be relative to another interactor's canvas.
+If the other interactor is \fInil\fP, then the
+coordinates are made relative to the world.
+.TP
+.B "virtual void GetComponents(Interactor**&, int&)"
+Construct an array of pointers to the interactors contained
+within this interactor.
+The first parameter is set to the start of this array,
+the second parameter is set to the number of elements.
+If non-empty, the array is allocated from free store and must
+be explicitly deleted by the caller.
+This operation is only defined by scenes;
+the default operation sets the number of elements to zero.
+.TP
+.B "void SetCursor(Cursor*)"
+Sets the cursor that will be displayed when the pointing device
+is inside the interactor's canvas.
+.SH SEE ALSO
+Canvas(2I), Cursor(2I), Painter(2I), Perspective(2I), Scene(2I), Sensor(2I)

@@ -1,0 +1,27 @@
+######################################################################
+# SCPP -- Partial CPP for reducing the number of conditional compile
+# lines in a C source file.  Not perfect, but very simple.
+#
+# Usage:	scpp -Dsymbol1 -USymbol2 ... < input > output
+######################################################################
+
+#
+# First step is to disable all macro definitions and file inclusions.
+# Then run CPP with -C (to save comments) and -P (to eliminate line
+# control information) and the set of "-D" and "-U" arguments supplied.
+# Then restore the macro definitions and inclusions to original state.
+#
+sed	-e 's/^#[ 	]*define[ 	]/%%%saveit%%%&/' \
+	-e 's/^#[ 	]*include[ 	]/%%%saveit%%%&/'  | \
+${CPP:=/lib/cpp} -C -P $* 2>/dev/null | \
+sed -e '
+/^%%%saveit%%%#[ 	]*define[ 	]/{
+	s/^%%%saveit%%%//
+}
+' -e '
+/^%%%saveit%%%#[ 	]*include[ 	]/{
+	s/^%%%saveit%%%//
+}
+'
+#
+# EOF

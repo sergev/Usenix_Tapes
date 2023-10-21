@@ -1,0 +1,225 @@
+*** date.c.4.3	Sat Jun 21 18:14:04 1986
+--- date.c.4.3.new	Sat Jun 21 18:14:04 1986
+***************
+*** 29,35
+  #define WTMP	"/usr/adm/wtmp"
+  
+  struct	timeval tv, now;
+- struct	timezone tz;
+  char	*ap, *ep, *sp;
+  int	uflag, nflag;
+  int	retval;
+
+--- 29,34 -----
+  #define WTMP	"/usr/adm/wtmp"
+  
+  struct	timeval tv, now;
+  char	*ap, *ep, *sp;
+  int	uflag, nflag;
+  int	retval;
+***************
+*** 34,40
+  int	uflag, nflag;
+  int	retval;
+  
+- char	*timezone();
+  static	int dmsize[12] =
+      { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  static	char *usage = "usage: date [-n] [-u] [yymmddhhmm[.ss]]\n";
+
+--- 33,38 -----
+  int	uflag, nflag;
+  int	retval;
+  
+  static	int dmsize[12] =
+      { 31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31 };
+  static	char *usage = "usage: date [-n] [-u] [yymmddhhmm[.ss]]\n";
+***************
+*** 50,55
+  struct	tm *gmtime();
+  char	*strcpy(), *strncpy();
+  char	*username, *getlogin();
+  long	time();
+  uid_t	getuid();
+  
+
+--- 48,54 -----
+  struct	tm *gmtime();
+  char	*strcpy(), *strncpy();
+  char	*username, *getlogin();
++ char	*getenv();
+  long	time();
+  uid_t	getuid();
+  
+***************
+*** 53,58
+  long	time();
+  uid_t	getuid();
+  
+  main(argc, argv)
+  	int argc;
+  	char *argv[];
+
+--- 52,59 -----
+  long	time();
+  uid_t	getuid();
+  
++ extern char *tz_abbr;
++ 
+  main(argc, argv)
+  	int argc;
+  	char *argv[];
+***************
+*** 60,66
+  	register char *tzn;
+  
+  	openlog("date", LOG_ODELAY, LOG_AUTH);
+! 	(void) gettimeofday(&tv, &tz);
+  	now = tv;
+  
+  	while (argc > 1 && argv[1][0] == '-') {
+
+--- 61,67 -----
+  	register char *tzn;
+  
+  	openlog("date", LOG_ODELAY, LOG_AUTH);
+! 	(void) gettimeofday(&tv, (struct timezone *)0);
+  	now = tv;
+  
+  	while (argc > 1 && argv[1][0] == '-') {
+***************
+*** 94,99
+  		retval = 1;
+  		goto display;
+  	}
+  	username = getlogin();
+  	if (username == NULL || *username == '\0')  /* single-user or no tty */
+  		username = "root";
+
+--- 95,104 -----
+  		retval = 1;
+  		goto display;
+  	}
++ 	if (settz(tzn = getenv("TZ")) < 0) {
++ 		fprintf(stderr, "Unknown timezone \"%s\"\n", tzn ? tzn : "null");
++ 		exit(1);
++ 	}
+  	username = getlogin();
+  	if (username == NULL || *username == '\0')  /* single-user or no tty */
+  		username = "root";
+***************
+*** 107,116
+  	}
+  	/* convert to GMT assuming local time */
+  	if (uflag == 0) {
+! 		tv.tv_sec += (long)tz.tz_minuteswest*60;
+! 		/* now fix up local daylight time */
+! 		if (localtime((time_t *)&tv.tv_sec)->tm_isdst)
+! 			tv.tv_sec -= 60*60;
+  	}
+  	if (nflag || !settime(tv)) {
+  		int wf;
+
+--- 112,171 -----
+  	}
+  	/* convert to GMT assuming local time */
+  	if (uflag == 0) {
+! 		/*
+! 		 * Do this by determining what the given time
+! 		 * is when converted to local time, and when
+! 		 * converted to GMT and taking the difference.
+! 		 * This works correctly regardless of whether
+! 		 * local time is DST or not.
+! 		 * The loop usually runs twice, once to correct the
+! 		 * time, and once to check the correction was accurate.
+! 		 * An extra iteration can be caused by setting the time
+! 		 * just about when DST turns on or off.
+! 		 * If we iterate more than a couple of times, then
+! 		 * the idiot root moron has asked to set the time to
+! 		 * something in the "dead" zone where DST has just
+! 		 * turned on, and the times don't exist!
+! 		 * The ugly "if" statements are to handle wierd cases
+! 		 * that arise setting the time just about midnight on
+! 		 * Jan 1 after a year that was a leap year.
+! 		 * How close to midnight it has to be depends on how close
+! 		 * to Greenwich you are, whether before or after midnight
+! 		 * depends on whether you are East or West.
+! 		 */
+! 		struct tm gmt;
+! 		struct tm local;
+! 		register long diff;
+! 		register int iters = 0;
+! 
+! 		gmt = *gmtime((time_t *)&tv.tv_sec);
+! 		do {
+! #define	isleap(yr)	((yr) % 4 == 0 && ((yr) % 100 != 0 || (yr) % 400 == 0))
+! 			local = *localtime((time_t *)&tv.tv_sec);
+! 			diff = gmt.tm_year - local.tm_year;
+! 			diff *= 365;
+! 			if (gmt.tm_year > local.tm_year) {
+! 				if (isleap(local.tm_year))
+! 					diff++;
+! 			} else if (local.tm_year > gmt.tm_year) {
+! 				if (isleap(gmt.tm_year))
+! 					diff--;
+! 			}
+! 			diff += gmt.tm_yday - local.tm_yday;
+! 			diff *= 24;
+! 			diff += gmt.tm_hour - local.tm_hour;
+! 			diff *= 60;
+! 			diff += gmt.tm_min - local.tm_min;
+! 			diff *= 60;
+! 			diff += gmt.tm_sec - local.tm_sec;
+! 			tv.tv_sec += diff;
+! #undef	isleap
+! 		} while (diff != 0 && ++iters < 5);
+! 		if (iters >= 5) {
+! 			fprintf(stderr, "date: %.24s is in the time warp!\n",
+! 			    asctime(&gmt));
+! 			exit(1);
+! 		}
+  	}
+  	if (nflag || !settime(tv)) {
+  		int wf;
+***************
+*** 134,143
+  		ap = asctime(gmtime((time_t *)&tv.tv_sec));
+  		tzn = "GMT";
+  	} else {
+! 		struct tm *tp;
+! 		tp = localtime((time_t *)&tv.tv_sec);
+! 		ap = asctime(tp);
+! 		tzn = timezone(tz.tz_minuteswest, tp->tm_isdst);
+  	}
+  	printf("%.20s", ap);
+  	if (tzn)
+
+--- 189,196 -----
+  		ap = asctime(gmtime((time_t *)&tv.tv_sec));
+  		tzn = "GMT";
+  	} else {
+! 		ap = ctime((time_t *)&tv.tv_sec);
+! 		tzn = tz_abbr;
+  	}
+  	printf("%.20s", ap);
+  	if (tzn)
+***************
+*** 141,148
+  	}
+  	printf("%.20s", ap);
+  	if (tzn)
+! 		printf("%s", tzn);
+! 	printf("%s", ap+19);
+  	exit(retval);
+  }
+  
+
+--- 194,201 -----
+  	}
+  	printf("%.20s", ap);
+  	if (tzn)
+! 		printf("%s ", tzn);
+! 	printf("%s", ap+20);
+  	exit(retval);
+  }
+  

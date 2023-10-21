@@ -1,0 +1,172 @@
+Greetings!
+
+This version of APL is a revision of the APL distributed by Yale on
+earlier distribution tapes.  The original documentation for that
+version is contained in the subdirectory "DOC/orig_doc".
+
+Most of the changes made at Purdue were implemented by Jim Besemer,
+who has since left us for Tektronix.  I have been working on APL
+for about a year now.
+
+The best documentation available at the moment on APL is a
+beginner's manual for Unix APL\11, written for an introductory APL
+course at Purdue.  This manual gives a general description of how
+to get into and out of APL, how to edit functions, and what the
+system commands are.  Appendices contain a list of the APL character
+set and the available quad functions and i-beams, intended for the
+more experienced user.  The manual is located in the subdirectory
+"manual", and should be nroffed with the most recent "nroff" (photo7).
+The nroff/troff macro library "tmac.s" is also required.
+
+Some of the changes made by J. Besemer at Purdue were not logged
+anywhere, so I hope I the following is an accurate list of the major
+changes implemented at Purdue:
+
+    1.	APL now requires I/D space to run.  The routines "wait0.s"
+	and "wait1.s" replace the function of "wait" (since you
+	can't determine the number of arguments in a function call
+	when using I/D space).
+
+    2.	A form of "state indicator" has been implemented.  The
+	")si" system command can be used to get a traceback, and
+	APL can be reset back to the global state with ")reset"
+	(previously it was not possible to get back to the global
+	state).  A restriction was imposed -- a function may not
+	be edited if it is suspended in the state indicator -- the
+	state indicator must then be ")reset".
+
+    3.  A bunch of new shell-command arguments have been added.
+	In general, these are not very useful to the average user
+	except as noted below.
+
+    4.	APL now does label processing internally.  Labels are treated
+	as variables which cannot be reassigned values.  The label
+	processor "aplp" has been included with the other sources,
+	but APL only uses it if called with "-l".
+
+    5.	It is possible to write APL functions out of the workspace
+	with ")write" (similar to reading them in with ")read").
+
+    6.	It is also possible to create and maintain APL functions
+	in a workspace without using any external Unix files.  The
+	command ")editf fn" causes APL to write the specified
+	function into a temporary file, call up the editor, edit
+	the temporary file, and then read it back into APL.
+
+    7.  At Purdue, our main system is a PDP 11/70 with a megabyte
+	of core memory.  We normally run around 50 users at peak
+	load.  Thus, we found it necessary to add a buffering
+	scheme to APL in order to increase its efficiency in both
+	terminal I/O (our CRT's run at speeds up to 38.4KBAUD)
+	and disc I/O.  Buffering is described in more detail a
+	little later.
+
+    8.	Our user terminals are almost exclusively LSI ADM-3's and
+	ADM-3A's.  Until recently, the only character set we had
+	for running APL was the ASCII character set.  During the
+	summer of 1978 some terminals were modified and new ROM's
+	were installed which provide a close relative of the APL
+	character set (some keys are not in the right places).
+	APL was modified to support either of these characer sets.
+	When called with the "-m" flag, APL uses two table-lookup
+	mapping tables to convert the input from the terminal to
+	internal (ASCII) format and the output back to the modified
+	APL character set.  This way, workspaces are interchangable
+	regardless of the terminal used.  The mapping table as it
+	stands is probably useless, but you may be able to modify
+	it to suit your own needs (possible for use with a real
+	APL terminal).
+
+    9.	Quad functions have been added to allow APL to perform
+	Unix I/O (Lread, Lwrite, Lclose, Lopen, Lcreat, Ldup, etc.)
+	process control (Lfork, Lexex, Lexit) and interprocess
+	communication (Lpipe).  APL is smart enough to "Lwrite" out
+	4 bytes for single-precision numbers and 8 bytes for
+	double-precision numbers, but when it "Lread"s from a file
+	it always returns a character vector.  The quad function
+	"Lfloat" converts this character vector to the appropriate
+	precision values.
+
+   10.	The quad variable "Llx" has been implemented.  It can only
+	be defined as a global variable, however.
+
+   11.	Dyadic i-beam functions were defined as a "quick fix" to
+	a couple of needs we had.  Dyadic i-beam 63 performs the
+	"empty" system call (check if pipe is empty) we obtained
+	from Rand.  Dyadic i-beam 34 performs a "nice".  Dyadic
+	i-beam performs a "sleep" (we use alarm/pause for sleep).
+	The others perform functions that should be implemented
+	with quad variables, but adding a quad variable is a
+	complicated process.
+
+   12.	APL uses the editor "apled" for editing functions.  It
+	will search both /bin and /usr/bin.   The editor XED,
+	located somewhere else on this distribution tape, is
+	compatible, and we keep "/usr/bin/apled" linked to 
+	"/usr/bin/xed".  XED supports the character mapping
+	used by our funny ADM's and also numbers lines in the
+	function starting with 0, not 1, so that line 1 of the
+	function is line 1 in XED.
+
+
+One of the biggest changes that was made to APL was the addition of
+buffering.  The 11/70 which the EE dept at Purdue uses is primarily
+a student machine, and may sometimes be running between five and
+ten APL's at once.  The overhead required for 1-byte reads and writes
+was really killing response.
+
+Unfortunately, a normal buffering scheme could not be used because
+any statically-allocated buffers would detract from the size of the
+workspace in data space.   The scheme chosen was to define a small
+number of buffers which could be assigned to file descriptors as
+required.  The buffers are allocated on the stack as automatic
+variables in "main".  In this manner, the occupy space in the
+upper addressing register area which otherwise would go unused,
+and the effect on the size of the workspace is minimal.  Of course,
+the total data space required is larger.
+
+There are two "#define" statements in the header "apl.h" which control
+the compilation of APL with or without buffering:
+
+#define	NBUF	4
+
+	If "NBUF" is not defined, APL will use the old (unbuffered)
+	method of I/O.  If "NBUF" is defined, it specifies the number
+	of buffers to be used.  Experimentation has shown that a
+	normal APL session can run quite efficiently with two buffers
+	unless ")script" mode is used.  Four seems to be a reasonable
+	number.
+
+#define	BLEN	256
+
+	"BLEN" specifies how long the buffers are to be.  We have
+	found that 256-byte buffers run almost as efficiently as
+	512-byte buffers, and therefore chose 256.
+
+Buffering has improved our system time requirement by as much as 10:1
+(it usually runs about 6.5:1 better).  The output buffer for file
+descriptor 1 is flushed at every newline, which sacrificies a small
+amount of efficiency, but it allows status messages, etc. from 
+functions to be seen right away.
+
+There are two major problems with the buffering scheme:
+
+    1.	It doesn't work very well with pipes -- in particular, if
+	a read buffer for a pipe must be reassigned to another
+	file descriptor, data is lost.  I have a fix for this in
+	the works, but it isn't ready for distribution yet.
+
+    2.	If the standard input and standard output are the same
+	file, they must be "dup"s of each other.  APL makes this
+	assumption in order to squeeze more efficiency out of
+	the buffering system.  This is not a problem unless you
+	use APL from within a shell file:
+
+	apl < /dev/tty8
+
+	for instance.
+
+
+I hope you enjoy the APL.
+
+				--John Bruner

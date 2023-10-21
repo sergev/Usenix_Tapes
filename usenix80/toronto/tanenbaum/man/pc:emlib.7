@@ -1,0 +1,298 @@
+.th PC:EMLIB VII 3/21/79
+.sh NAME
+pc:emlib \*- library of routines used for translating EM1 programs into PDP-11 code
+.sh SYNOPSIS
+.ta 22 37
+r0: exit status	jmp .mon
+.s3
+r0: leveldiff+1	jsr pc,.mrk	r1: garbage
+.s3
+r0: size	jmp .ret	r1: garbage
+.s3
+	jmp .ret0
+.s3
+	jsr pc,.strlb
+.s3
+	jsr pc,.strsp	r0: garbage
+.s3
+	jsr pc,.strhp	r0,r1,r2: garbage
+.s3
+r0: descr addr	jsr pc,.aar	r0: element size
+.br
+r1: index		r2: element addr
+.br
+r2: base addr
+.s3
+r0: descr addr	jsr pc,.lar
+.br
+r1: index
+.br
+r2: base addr
+.s3
+r0: descr addr	jsr pc,.sar
+.br
+r1: index
+.br
+r2: base addr
+.s3
+r0: element size	jsr pc,.los
+.br
+r2: element addr
+.s3
+r0: element size	jsr pc,.sts
+.br
+r2: element addr
+.s3
+r0: element size	jsr pc,.and	r1: garbage
+.s3
+r0: element size	jsr pc,.com	r1: garbage
+.s3
+r0: element size	jsr pc,.dup	r1: garbage
+.s3
+r0: element size	jsr pc,.ior	r1: garbage
+.s3
+r0: element size	jsr pc,.xor	r1,r2: garbage
+.s3
+r0: set size	jsr pc,.set	r2: garbage
+.br
+r1: bit number
+.s3
+r0: element size	jsr pc,.cmu	r0: -1,0 or 1
+.br
+		r1,r2: garbage
+.s3
+r0: descr addr	jsr pc,.cse	r2: garbage
+.br
+r1: case value
+.s3
+	jsr pc,.cdi	r0,r1: garbage
+.s3
+	jsr pc,.cid	r0: garbage
+.s3
+	jsr pc,.cmd	r0: -1,0 or 1
+.br
+		r1,r2,r3: garbage
+.s3
+	jsr pc,.dad
+.s3
+	jsr pc,.dsb
+.s3
+	jsr pc,.dmu	fr0,fr1: garbage
+.s3
+	jsr pc,.ddv	fr0,fr1: garbage
+.s3
+	jsr pc,.dmd	fr0,fr1,fr2,fr3: garbage
+.sh DESCRIPTION
+This library is used by the EM1 to PDP-11 translator, called pdp.
+This translator expands most of the EM1 instructions into inline PDP-11
+code.
+For the more complicated EM1 instructions it generates calls to the
+routines in this library.
+.s3
+The routines mentioned above expect their arguments and leave their result
+on the EM1 stack, except when stated otherwise.
+Only the mentioned registers are affected.
+.s3
+Only the user part of the EM1 machine is emulated.
+The UNIX kernel is used as monitor.
+There are some differences between the emulated EM1 user machine and
+the user part of the EM1 machine as described in [1]:
+.lp +5 3
+-	the proctable is not used in the CAL instruction.
+The consequence is that the PD register is not available and therefore be changed or referenced.
+.lp +5 3
+-	The CAL and CAS instructions do not store their return address
+in the mark block.
+To clarify this a short description of the memory layout is necessary.
+The EM1 stack grows upwards.
+Register r5 is used as EM1 stackpointer SP.
+(Note the difference between EM1 registers (upper case) and PDP-11 registers
+(lower case)).
+The EM1 heap grows downwards. A global variable hp is used as heappointer HP.
+The calling stack, used by CAL and CAS to store their return address,
+is allocated below the heap, growing downwards.
+Register sp is used to point at the most recently saved return address.
+Each time the heap grows, the calling stack must be shifted down.
+To diminish shifting, there is a gap between the calling stack and the heap,
+which shrinks as the heap grows and increases if the calling stack is shifted.
+Global variable hplim points to the low word of the gap, so
+.nf
+	sp    <= calling stack <  hplim
+	hplim <=      gap      <= hp
+	hp    <=      heap     <= ml
+.fi
+Global variable ml points to the top of the user area.
+.lp +5 3
+-	The EM1 monitor instructions (MON, IOX etc) are not implemented.
+.lp +5 3
+-	the user area between r5 and sp may not be used
+.lp +5 3
+-	not the procedure with descriptor number 0, but the procedure
+with name '__main' is called when the user program is started.
+.i0
+.s3
+The following global data variables are used:
+.lp +10 8
+r4	local base pointer LB
+.lp +10 8
+r5	EM1 stack pointer SP
+.lp +10 8
+hp	heap pointer HP
+.lp +10 8
+ml	memory limit register ML
+.lp +10 8
+hplim	low bound of HP
+.lp +10 8
+spxlim	high water mark of r5
+.lp +10 8
+saver0	value of register r0 saved during interrupts
+.i0
+.s3
+The following global constants are used:
+.lp +10 8
+statd	static chain pointer relative to local base (-4)
+.lp +10 8
+statd2	-statd (4)
+.lp +10 8
+dynd	dynamic chain pointer relative to local base (-2)
+.lp +10 8
+eb	lowest address of EM1 externals
+.lp +10 8
+spxbase	position of first mark block (for __main)
+.i0
+.s3
+The following global routines are used:
+.lp +10 8
+__fatal	handle fatal errors (see below)
+.lp +10 8
+__error	handle non-fatal errors (see below)
+.lp +10 8
+oddfat	generate "odd or zero byte count" fatal error
+.i0
+.s3
+For PDP-11's without hardware floating point, there are two different
+runtime startoffs:
+.lp +10 8
+rt0.o	you are not allowed to use floating point instructions,
+because that causes an illegal instruction trap (core dump).
+Pdp generates these instructions whenever you use reals or long integers.
+.lp +10 8
+frt0.o	the floating point instructions are allowed, and are emulated
+by the UNIX software floating point package.
+.i0
+If your machine does have hardware floating point, then only rt0.o is needed.
+.sh FILES
+.lp +20 20
+/usr/lib/pc:rt0.o	runtime startoff
+.lp +20 20
+/usr/lib/pc:frt0.o	runtime startoff using software floating point package.
+.lp +20 20
+/usr/lib/pc:bss.o	top of bss, with label spxbase
+.lp +20 20
+/usr/lib/pc:emlib.a	the library itself
+.sh "SEE ALSO"
+.lp +5 5
+[1]	A.S. Tanenbaum, J.W. Stevenson & J.M. van Staveren
+"Description of an experimental machine architecture for use of
+block structured languages" Informatika rapport IR-??.
+.lp +5 5
+[2]	pc(I), pc:pdp(VI), pc:prlib(VII)
+.i0
+.sh DIAGNOSTICS
+Error handling is as follows:
+there are two classes of errors, fatal errors and errors from which recovery
+is possible.
+For the first class of errors (like 'stack overflow') the routine __fatal is
+called, with as an argument in register r0 a pointer to a null terminated
+string containing the error message.
+The first byte of this string contains an error code (0 to 255) and is not
+printed.
+For errors of the second class (like 'divide by 0'), the routine __error is called.
+.s3
+There are no routines __fatal and __error in this library, so you have to
+supply your own versions.
+However, they are present in the library pc:prlib(VII).
+.s3
+Conventions for the error codes are:
+.lp +12 10
+0  - 63	reserved for monitor errors like 'read error'.
+.lp +12 10
+64 -127	EM1 user machine errors. A list of them is given below.
+.lp +12 10
+128-191	reserved for language errors, for instance used by the pascal
+runtime routines.
+.lp +12 10
+192-255	may be used by user programs.
+.i0
+.s3
+The following error codes are assigned between 64 and 127:
+.lp +8 6
+64	stack overflow
+.lp +8 6
+65	heap error
+.lp +8 6
+66	illegal instruction
+.lp +8 6
+67	odd or zero byte count
+.lp +8 6
+68	case error
+.lp +8 6
+69	set bound error
+.lp +8 6
+70	array bound error
+.lp +8 6
+71*	range bound error
+.lp +8 6
+72	integer overflow
+.lp +8 6
+73	longint overflow
+.lp +8 6
+74*	real overflow
+.lp +8 6
+75*	real underflow
+.lp +8 6
+76	divide by 0
+.lp +8 6
+77*	divide by 0.0
+.lp +8 6
+78	undefined integer
+.lp +8 6
+79	undefined longint
+.lp +8 6
+80*	real undefined
+.lp +8 6
+81*	real->int error
+.lp +8 6
+82*	real->longint error
+.lp +8 6
+83*	longint->int error
+.lp +8 6
+84*	fpp error
+.lp +8 6
+85	str error
+.lp +8 6
+86	error in loadfile
+.lp +8 6
+87	program too large
+.lp +8 6
+88	illegal address
+.lp +8 6
+89	parameter size error
+.lp +8 6
+90	bad pointer
+.lp +8 6
+91	argument of lin too high
+.i0
+.s3
+The errors marked with an asterisk are of the second class.
+.sh "EXIT STATUS"
+.lp +8 8
+0	normal termination
+.lp +8 8
+other	see error codes above
+.i0
+.sh AUTHORS
+Johan Stevenson and Ard Verhoog, Vrije Universiteit.
+.sh BUGS
+Please report bugs to the authors.
+.i0

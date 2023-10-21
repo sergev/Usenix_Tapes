@@ -1,0 +1,4 @@
+brkcnt()
+{
+	return(0);
+}

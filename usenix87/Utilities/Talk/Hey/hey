@@ -1,0 +1,69 @@
+: Broadcast a message to all ttys that a person is logged into.
+
+# System-dependent commands (customize for your installation):
+GETHOST='hostname'	# some systems use 'uuname -l'
+MAILER='Mail'		# some systems use 'mailx'
+WHOIAM='$USER'		# some systems use '$LOGNAME'
+cmd=`basename $0`	# makes diagnostics under csh look better
+USAGE="Usage:  $cmd [-n] login  Your message here"
+
+# Are we local-only or networked?
+case "$1" in
+-n)	networked=TRUE; shift;;
+-*)	echo 1>&2 "$USAGE"; exit 1;;	# trap bad options
+esac
+
+# If we have enough args, find out who to talk at.
+if [ $# -lt 2 ]
+then	echo 1>&2 "$USAGE"; exit 1
+else	you=$1; shift
+fi
+
+# Send the message to each terminal the specified person is logged into.
+# If the person isn't logged in anywhere, mail the message to them.
+if [ -z "$networked" ]
+
+then	# not networked (local delivery only) -- speedy version
+	ttys=`who | sed -n '/^'$you' /s/^'$you'  *\(tty[^ ]*\) .*/\1/p'`
+	if [ -z "$ttys" ]
+	then	# not logged in
+		echo 1>&2 "$cmd: $you not logged in;" \
+			"sending your message via mail."
+		echo "$@" | $MAILER -s "Hey, $you!" $you
+	else	# logged in one or more times
+		for tty in $ttys
+		do
+			echo "Hey, $you:  $@" | write $you $tty
+		done
+	fi
+
+else	# networked
+	me=`eval echo $WHOIAM`
+	myhost=`$GETHOST`
+	mytty="on `basename \`tty\``"
+	if [ "$mytty" = "on not" ]	# "not a tty" from LAN or crontab
+	then mytty="in hyperspace"
+	fi
+	today=`date`
+
+	rwho -a |
+	sed -n '/^'$you' /s/^'$you' *\([^: ]*\):\(tty[^ ]*\) .*/\1 \2/p' |
+	while read system tty
+	do
+		cat >>/tmp/hey$$ <<@@@
+rsh $system -n 'cat >/dev/$tty <<\!
+Message from $myhost!$me $mytty at $today ...
+Hey, $you:  $@
+EOF
+!
+'
+@@@
+	done
+	if [ -s /tmp/hey$$ ]	# logged in anywhere?
+	then	sh /tmp/hey$$	# yup
+	else	echo 1>&2 "$cmd: $you not logged in;" \
+			"sending your message via mail."
+		echo "$@" | $MAILER -s "Hey, $you!" $you
+	fi
+	rm -f /tmp/hey$$
+fi

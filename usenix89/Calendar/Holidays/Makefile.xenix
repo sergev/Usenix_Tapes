@@ -1,0 +1,163 @@
+#                  Makefile for Date Library
+#       This maintains a Small, Medimum, and a Large Model Libaray
+#
+#      General Files
+
+MAIN    =   datelib
+LIB     =   tig
+SRC     =   easter.c holidays.c
+OBJS    =   $(MAIN).S
+OBJM    =   $(MAIN).M
+OBJL    =   $(MAIN).L
+INCL1   =   $(MAIN).h
+INCL2   =   taxc.h
+HDRS    =   $(INCL1) $(INCL2)
+MANP    =   $(MAIN).3t
+DOCS    =	README $(MANP) easter.1t holidays.1t
+LIBS    =   -lx -l$(LIB)
+MDIR3   =	/usr/man/man3
+MDIR1   =	/usr/man/man1
+IDIR    =	.
+LDIR    =	/usr/local/Lib
+BDIR    =   /usr/local
+ARLIB   =	lib$(LIB).a
+TEXT    =	$(HDRS) $(MAIN).c $(SRC)
+
+#
+#      General Flags
+
+LFLAGS  =    -F 2000
+CFLAGS  =    -O
+CFLGS   =	$(CFLAGS) -I $(IDIR) -i
+CFLGM   =	$(CFLAGS) -I $(IDIR) -Mm
+CFLGL   =	$(CFLAGS) -I $(IDIR) -Ml
+
+#
+#      General Programs
+
+LINT    =	/usr/bin/lint -hp
+PR      =	@/usr/local/print1
+SPELL   =	spell
+NROFF   =	nroff
+SHAR    =	/usr/local/cshar -a
+CC      =	/bin/cc
+AR      =	ar
+RANLIB  =   ranlib
+
+#
+#      General Rules
+
+all: S$(ARLIB) easter holidays
+
+S$(ARLIB): $(OBJS) $(OBJM) $(OBJL)
+		$(AR) rvu S$(ARLIB) $(OBJS)
+		$(AR) rvu M$(ARLIB) $(OBJM)
+		$(AR) rvu L$(ARLIB) $(OBJL)
+		$(RANLIB) S$(ARLIB) M$(ARLIB) L$(ARLIB)
+		@echo $(MAIN) made
+
+easter: easter.o S$(ARLIB)
+		$(CC) -i $(LFLAGS) -o easter easter.o S$(ARLIB) /usr/local/Lib/Slibz.a
+
+holidays: holidays.o S$(ARLIB)
+		$(CC) -i $(LFLAGS) -o holidays holidays.o S$(ARLIB) /usr/local/Lib/Slibz.a
+
+install:
+		if [ -f $(LDIR)/S$(ARLIB) ] ; \
+		then \
+			$(AR) rvu  $(LDIR)/S$(ARLIB) $(OBJS) ; \
+			$(AR) rvu  $(LDIR)/M$(ARLIB) $(OBJM) ; \
+			$(AR) rvu  $(LDIR)/L$(ARLIB) $(OBJL) ; \
+		else \
+			cp S$(ARLIB) $(LDIR)/S$(ARLIB) ; \
+			cp M$(ARLIB) $(LDIR)/M$(ARLIB) ; \
+			cp L$(ARLIB) $(LDIR)/L$(ARLIB) ; \
+			fi
+		chown bin    $(LDIR)/S$(ARLIB) $(LDIR)/M$(ARLIB) $(LDIR)/L$(ARLIB)
+		chgrp bin    $(LDIR)/S$(ARLIB) $(LDIR)/M$(ARLIB) $(LDIR)/L$(ARLIB)
+		chmod 644    $(LDIR)/S$(ARLIB) $(LDIR)/M$(ARLIB) $(LDIR)/L$(ARLIB)
+		$(RANLIB)    $(LDIR)/S$(ARLIB) $(LDIR)/M$(ARLIB) $(LDIR)/L$(ARLIB)
+		cp holidays  $(BDIR)
+		cp easter    $(BDIR)
+		chown bin    $(BDIR)/holidays $(BDIR)/easter
+		chgrp bin    $(BDIR)/holidays $(BDIR)/easter
+		chmod 755    $(BDIR)/holidays $(BDIR)/easter
+		if [ -d $(IDIR) ] ; \
+		then \
+			rm -f $(IDIR)/$(INCL) ; \
+			cp $(INCL) $(IDIR) ; \
+			chown bin  $(IDIR)/$(INCL) ; \
+			chgrp bin  $(IDIR)/$(INCL) ; \
+			chmod 644  $(IDIR)/$(INCL) ; \
+			fi
+		if [ -d $(MDIR3) ] ; \
+		then \
+			rm -f $(MDIR3)/$(MANP) ; \
+			cp $(MANP) $(MDIR3) ; \
+			chown bin  $(MDIR3)/$(MANP) ; \
+			chgrp bin  $(MDIR3)/$(MANP) ; \
+			chmod 644  $(MDIR3)/$(MANP) ; \
+			fi
+		if [ -d $(MDIR1) ] ; \
+		then \
+			rm -f $(MDIR1)/holidays.1t $(MDIR1)/easter.1t ; \
+			cp holidays.1t $(MDIR1) ; \
+			chown bin $(MDIR1)/holidays.1t ; \
+			chgrp bin $(MDIR1)/holidays.1t ; \
+			chmod 644 $(MDIR1)/holidays.1t ; \
+			cp easter.1t $(MDIR1) ; \
+			chown bin $(MDIR1)/easter.1t ; \
+			chgrp bin $(MDIR1)/easter.1t ; \
+			chmod 644 $(MDIR1)/easter.1t ; \
+			fi
+
+print:
+		$(PR) $(TEXT)
+
+lint:
+		$(LINT) $(LNTFLG) $(SRC)
+
+man:
+		$(NROFF) -man $(MANP)      | col >:$(MAIN).manpg
+		$(NROFF) -man easter.1t    | col >:easter.manpg
+		$(NROFF) -man holidays.1t  | col >:holidays.manpg
+
+spell:
+		$(SPELL) $(DOCS)
+
+archive:
+		$(SHAR) $(DOCS) Makef.bsd+sysV Makefile.xenix $(HDRS) > archive1
+		$(SHAR) $(MAIN).c $(SRC) > archive2
+
+clean:
+		rm -f *.[SMLoa] core *.out :*
+
+.PRECIOUS: $(TEXT) $(SRC) $(MAIN).c
+
+.SUFFIXES:
+.SUFFIXES: .L .M .S .c .a .o
+
+.c.o:
+		$(CC) -i $(CFLAGS) -I $(IDIR) -c $*.c
+
+.c.S .c.M .c.L .c.a:
+		@echo ".c.S"
+		$(CC) $(CFLGS) -c $*.c
+		@mv $*.o $*.S
+
+.S.M .S.L .S.a:
+		@echo ".S.M"
+		$(CC) $(CFLGM) -c $*.c
+		@mv $*.o $*.M
+
+.M.L .M.a:
+		@echo ".M.L"
+		$(CC) $(CFLGL) -c $*.c
+		@mv $*.o $*.L
+
+.L.a:
+		$(AR) rvu ../aS$(ARLIB) $*.S
+		$(AR) rvu ../aM$(ARLIB) $*.M
+		$(AR) rvu ../aL$(ARLIB) $*.L
+		$(RANLIB) ../aS$(ARLIB) ../aM$(ARLIB) ../aL$(ARLIB)
+

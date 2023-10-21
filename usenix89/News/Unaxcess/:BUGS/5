@@ -1,0 +1,87 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!cbatt!clyde!caip!seismo!umcp-cs!chris
+From: chris@umcp-cs.UUCP (Chris Torek)
+Newsgroups: net.sources.bugs
+Subject: Re: bug in UNaXcess :  MKCONF routine is BAD!
+Message-ID: <2825@umcp-cs.UUCP>
+Date: 9 Aug 86 02:58:24 GMT
+References: <1319@ncoast> <9@wjh12.HARVARD.EDU> <4@talcott.HARVARD.EDU> <3100@ncsu.UUCP>
+Reply-To: chris@umcp-cs.UUCP (Chris Torek)
+Organization: University of Maryland, Dept. of Computer Sci.
+Lines: 75
+Posted: Fri Aug  8 21:58:24 1986
+
+In article <3100@ncsu.UUCP> abc@ncsu.UUCP (Alan B. Clegg) writes:
+>...  There is a call to mkdir with only one parameter. ...
+>
+>It should be : mkdir(what-ever-it-was, 0755);
+
+Ai!  This issue again!  Clearly, it is time for a small digression
+on Unix file permissions and `umask'.
+
+As you probably know, Unix files have three sets of permissions,
+each including three options: read, write, and execute, for user,
+group, and other.  These are often represented symbolically as
+`rwxrwxrwx', with a hyphen replacing any bits that are off, thus
+denying that permission to the corresponding set of users: `rwxr-xr-x'
+is Readable and eXecutable by everyone, but Writable only by its
+owner.  These same permissions may be represented instead by an
+octal value:  0777, and 0755, for rwxrwxrwx and rwxr-xr-x,
+respectively.
+
+Now, each system call that may create a file takes one octal value
+representing the desired access to be granted to the new file.  In
+4.2BSD, these system calls include `creat', `open', and `mkdir'.
+(A directory *is* a file, albeit a rather special one.)  Thus any
+mkdir calls should indeed include an octal value.  Yet in almost
+every case, this value should be 0777, not 0755.  Why?
+
+It would seem that creating a file with permissions 0777 would
+grant write access to all users on the system, but this is not in
+fact the case---or at least, not always.  Typically this would
+create a file whose actual permissions would turn out to be rwxr-xr-x,
+or 0755.  How did write permission for group and others vanish?
+
+The answer lies in this thing called a `umask'.  The creators of
+the Unix system recognised the need for security, and also the
+(conflicting) need for file sharing.  Someone---presumably Dennis
+Ritchie---came up with a very elegant scheme for doing both at
+once.  This is the idea:  The argument to the file-creating system
+calls does not specify the *exact* permissions for the new file,
+but rather the *maximum* permissions.  Any access not granted by
+the system call will never be given to the file; but those that
+are granted may be taken away even before the file appears on disc.
+
+The umask specifies those permissions that should be taken away.
+The default umask on most Unix systems is 0022, or ----w--w-.  This
+removes write access for group and other.  If you wish to be more
+restrictive, you might set your umask to 0077: ---rwxrwx.  Any
+files you create from then on will be accessible only by yourself.
+To share files among your group, you might change your umask to
+0002, -------w-.  New files will then be group writable.
+
+`Secure' programs (e.g., a mail system) may be more restrictive by
+default than `regular' programs, simply by disabling any undesired
+permissions in file-creating system calls.  The umask will never
+increase accessibility, so these programs can be certain that the
+newly-created files are indeed secure.
+
+You might wonder, as I once did, why the umask should *remove*
+permissions rather than *add* them.  Would it not be simpler to
+have programs create files with minimal security, and allow users
+to add access if desired?  The answer is that it would not.
+Consider, for example, `regular' versus `executable' files.
+`Regular' files should have at most rw-rw-rw- permission; but
+executables should have at most rwxrwxrwx, that everyone may run
+them.  But a umask that adds permissions has no way to tell if the
+file being created is supposed to be in fact executable.  It is
+simpler to have the program doing the creating say `this file is
+executable by all', and then to have the umask say `oh, by the way,
+except to those that are neither me nor in my group'.
+
+Certainly, other schemes are possible, but umask seem to fit in
+well with the `Unix philosophy':  The system makes restrictions
+only in ways explicitly requested by its users.
+-- 
+In-Real-Life: Chris Torek, Univ of MD Comp Sci Dept (+1 301 454 1516)
+UUCP:	seismo!umcp-cs!chris
+CSNet:	chris@umcp-cs		ARPA:	chris@mimsy.umd.edu

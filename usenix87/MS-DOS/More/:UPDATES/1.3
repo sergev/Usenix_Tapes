@@ -1,0 +1,1720 @@
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!qantel!lll-crg!caip!im4u!ut-sally!ut-ngp!dlnash
+From: dlnash@ut-ngp.UUCP (Donald L. Nash)
+Newsgroups: net.sources
+Subject: PC-More Version 1.3 posting
+Message-ID: <2826@ut-ngp.UUCP>
+Date: 16 Jan 86 19:27:41 GMT
+Distribution: net
+Organization: UTexas Computation Center, Austin, Texas
+Lines: 1813
+Posted: Thu Jan 16 13:27:41 1986
+
+Here is the latest version of PC-More.  It is version 1.3.  The clear screen
+function should work well for any machine which makes a half-hearted attempt
+at replicating the IBM bios, but don't gripe if it doen't.  I KNOW it will
+work for a CGA and a Mono display because I have tried them both.  I have not
+tried it on any other PClone, so I can't say for sure if it will work.  If
+you have a PClone, try it, then let me know if it works or not.  I would like
+to get a list of machines it will work on.
+
+Read the history section of pc-more.c to find out what's new in this version.
+
+As usual, I welcome any bug reports (flames to /dev/null; if you can't say
+it nicely, I don't want to hear it).
+
+
+					Don Nash
+
+UUUU        UUUU
+ UU          UU      UUCP:  ...!{ihnp4,allegra,seismo!ut-sally}!ut-ngp!dlnash
+ UU TTTTTTTTTUUTTT   APRA:  dlnash@ngp.UTEXAS.EDU
+ UU TT    TT UU TT
+ UU       TT UU
+  UU      TTUU
+    UUUUUUUU         The University of Texas at Austin
+          TT         Hook 'em Horns!
+         TTTT
+
+#	This is a shell archive.
+#	Remove everything above and including the cut line.
+#	Then run the rest of the file through sh.
+#
+#	Pc-more.uuencode is the uuencoded executable.  Use uudecode to obtain
+#	pc-more.exe.  Use Kermit (or some other file transferring method)
+#	to upload pc-more.c, pc-more.doc, and pc-more.exe to your IBM PC.
+#	Be sure to use "set file type text [or ascii]" for the first 2 files
+#	and "set file type binary" for the executable.
+-----cut here-----cut here-----cut here-----cut here-----
+#!/bin/sh
+# shar:	Shell Archiver
+#	Run the following text with /bin/sh to create:
+#	pc-more.c
+#	pc-more.doc
+#	pc-more.uuencode
+# This archive created: Thu Jan 16 13:02:07 1986
+echo shar: extracting pc-more.c '(35944 characters)'
+cat << \SHAR_EOF > pc-more.c
+/*
+History:
+
+    Ver 1.3   New clear screen function installed, written by Harry McGavran.
+              All references to crt_cls() and crt_mode() eliminated.  This new 
+              clear screen function works on either a monochrome or color 
+              monitor.
+
+              Nextfile() rewritten to understand that "-" on the command line
+              represents stdin.  The " case 'f': " part of wait() was modified 
+              in the same way.  
+
+              New functions cpi() and opi() added to allow stdin to be 
+              reopened to the console when it is redirected to a file or a 
+              pipe.  This allows the user to execute a "!" or a "e" when a
+              pipe is present.  Of course, you still can't edit the pipe.
+              The knowledge to implement cpi() and opi() was provided by
+              Brandon S. Allbery.
+
+              Nextfile() modified to find the file's size and put it in the 
+              external variable x_fs.  Wait() also modified so that when it
+              constructs the prompt, it uses x_fs to compute what percent of
+              the file has been read.  When the prompt is printed, this 
+              percentage is included as part of the prompt.
+
+              Wait() modified to clear the screen when a file is rewound.
+
+    Ver 1.21  This version fixed a bug which prevented PC-More from working on 
+              a color monitor.  Under previous versions, only machines 
+              equipped with a monochrome monitor would run PC-More properly.  
+              The problem was a hardware-dependendent function call to 
+              crt_mode().  The problem was fixed by determining the type of 
+              monitor in use and using the correct function to clear the 
+              screen.
+
+    Ver 1.2   This was the initial release to USENET.  Other earlier versions 
+              were too buggy for a general release.
+*/
+
+#include <stdio.h>
+
+#define TRUE 1
+#define FALSE 0
+#define NCPL 79     /* Number of characters per line. */
+#define NLPS 24     /* Number of lines per screen. */
+#define NLPHS 12    /* Number of lines per half screen. */ 
+#define CMASK 0377  /* Masks high bits of an int to zero. */
+
+int x_mnl, x_srf, x_argc, x_siold;
+long x_rwp, x_fs;
+char x_file[128], *x_argv[128];
+char *x_spc = "                                                     ";
+FILE *x_fp = 0;
+
+
+/*
+x_argc and x_argv are the external copies of argc and argv.
+
+x_file is an array which holds the name of the file currently being read from.
+it is large enough to hold a very long pathname.
+
+x_fp is the file pointer from which data is read.
+
+x_fs contains the size of the current file, or 0 if reading from a pipe.
+
+x_mnl is the number of line to print before calling wait().
+
+x_rwp is the offset relative to the beginning of file which is given to fseek() 
+in the bang() function.  The fseek() will return the file to where it was left 
+before the push took place.
+
+x_siold is where the duplicate of the redirected stdin is kept.
+
+x_spc points to the string used by several functions to clear the screen.
+
+x_srf if a flag which is set to 1 if stdin is redirected, 0 if not.
+*/
+
+
+main(argc, argv)
+int argc;
+char *argv[];
+
+{
+    int ci, c, nc, nl, nlp, ts, i, isdev;
+    char *strcpy();
+    struct regval {int ax, bx, cx, dx, si, di, ds, es; } reg;
+
+/*
+c is ci with the upper 8 bits masked to zero.
+
+ci is the character read from the file.
+
+i is a working variable used in for loops, etc.
+
+nc is the number of characters on the current line.  It is used to detect lines 
+that are too long and to determine where the next tab stop is.
+
+nl is used to determine when to exit the for loop and call wait.
+
+nlp is used to determine when to clear the screen.  The screen is only cleared 
+when it is full.
+
+reg is a structure used by the sysint21() function.  It is used to set up the
+registers for a DOS function call.  Each element in the register represents
+one register.
+
+ts is a working variable for the tab expander.  It is the number of spaces to 
+the next tab stop.
+*/
+
+    x_argc = argc;              /* \   These 3 lines set up the external */
+    for (i = 0; i < argc; i++)  /*  >  copies of argc and argv.          */
+        x_argv[i] = argv[i];    /* /                                     */
+
+    reg.ax = 0x4400;            /* DOS function 0x44, subfunction 0. */
+    reg.bx = 0x0000;            /* File handle for DOS stdin. */
+    sysint21(&reg, &reg);       /* Call IOCTL on the DOS stdin file handle. */
+    isdev = reg.dx & 0x80;      /* Is stdin a device or a file? */
+
+    x_siold = -1;   /* File handles never < 0, this means x_siold not used. */
+
+    if (!isdev) {   /* If isdev is false, then stdin is redirected to file. */
+        x_srf = TRUE;       /* Since stdio is redirected, set x_srf = TRUE. */
+        if (argc == 1) {    /* If no arguments on the commant line, then */
+            x_fp = stdin;   /*  read from stdin. */
+            strcpy(x_file,"stdin");
+        }
+        else {              /* If arguments on the command line, then */
+            cpi();          /*  close pipe and reopen stdin to console, */
+            nextfile(1);    /*  and get first file on command line. */
+        }  /* else */
+    }  /* if */
+
+    else {          /* If isdev is true, then stdin is not redirected. */
+        x_srf = FALSE;      /* Stdio isn't redirected, so set x_srf = FALSE. */
+        nextfile(1);    /* Get first file from command line. */
+    }  /* else */
+
+    x_mnl = NLPS;   /* Start off by outputing one screenful. */
+    nc = 0;         /* Haven't put out any characters yet. */
+    nlp = 24;       /* This will make sure that the screen is cleared. */
+    while(TRUE) {   /* Loop forever, guts of the loop will exit the loop. */
+        if ((nlp >= NLPS) && (x_mnl != 1)) {
+
+/*
+The (x_mnl != 1) condition keeps the screen from being cleared if only one
+line is to be displayed.
+*/
+
+            cls();      /* This clears the screen. */
+            nlp = 0;    /* Reset number of lines printed. */
+        }
+        for (nl = 0; nl < x_mnl; ) { /* Put out x_mnl number of lines. */
+            if ((ci = getc(x_fp)) == EOF) {
+                wait(1);    /* Prompt for next file. */
+                nlp = 0;    /* Wait(1) will clear screen, so reset nlp */
+                nl = 0;     /*  and nl to 0 to reflect this. */
+                ci = '\0';  /* Ci will still be printed, so make it a null. */
+            }
+            c = ci & CMASK; /* Mask off upper 8 bits for safety. */
+            if (c == '\t') {  /* Tab expander */
+                if ( nc > NCPL - 6) {   /* This is part 1 (see notes below). */
+                    c = '\n';
+                }
+                else {                  /* This is part 2. */
+                    ts = 8 - (nc % 8);  /* Find spaces to next tab. */
+                    if (ts == 8)        /* If it comes out to be 8, */
+                        ts = 0;         /* then it should be 0. */
+                    for (i = 1; i < ts; i++) {
+                        nc++;           /* Increment # of chars. */
+                    }  /* for */
+                }  /* else */
+            }  /* End of tab expander */
+
+/*
+If 73 or more chars have been printed out, then part 1 of the tab expander
+will turn the tab into a newline.  In this program, tab stop 81 is the same as
+column 1 on the next line.  Since 81 is the next tab stop after 73, changing
+the tab into a newline is the correct solution.  The rest of the program does
+not even know that this has happened and simply thinks that a newline was read
+from the file.
+
+If 72 or less chars have been printed, then part 2 finds out how many spaces
+to the next stop and increments nc the proper number of times minus 1.  The tab
+is not actually expanded, the char count is just incremented.  When the tab
+prints, it is automagically expanded.  It is important that this tab expander
+should come before newline detection and the truncate-too-long-line algorithm.
+*/
+
+            if ((nc >= NCPL) && (c != '\n')) {  /* If beyond right margin, */
+                nl++;           /* increment # of lines, */
+                nlp++;          /* increment # of lines on current screen, */
+                nc = 0;         /* reset # of chars on current line to 0, */
+                putchar('\n');  /* start a new line, */
+                ungetc(c,x_fp); /* put the char back where it came from, */
+                c = '\0';       /* and make c a NULL character. */
+
+/*
+c is made a NULL so that a test can be performed before "putchar(c)" and 
+"nc++" are executed.  If c is a NULL, these operations are not performed.
+The "ungetc(c,x_fp)" is executed so that the char is the first one available
+for the next line.  This stuff is needed so that printing out one line to the
+screen will not result in the char being printed in front of the prompt.
+This does not happen when printing several lines.  A newline is not ungetced
+because it will cause a blank line to be printed when it is put on the next
+line.
+*/
+
+            }  /* if */
+            if (c != '\0') {    /* If c is not a NULL, */
+                putchar(c);     /* print the character, */
+                nc++;           /* and increment # of chars on line. */
+            }  /* if */
+            if (c == '\n') {    /* If c is a newline, */
+                nl++;           /* increment # of lines, */
+                nlp++;          /* increment # lines on current screen, */
+                nc = 0;     /* and reset # of chars on current line to 0. */
+            }
+        }  /* for */
+
+
+    wait(0); /* After max # of lines have been output, prompt user. */
+    }  /* while */
+}  /* main */
+
+
+wait(e_o_f)  /* Print prompt, then wait for and iterpret command. */
+
+/*
+If wait is called with an argument of 0, then it has been called in the middle 
+of a file.  If it is called with an argument of 1, then it has been called at 
+EOF and it will call nextfile() as necessary.  The prompt is also made
+different at EOF.
+*/
+
+int e_o_f;
+
+{
+    int w_c, i, arglen, pgf;
+    char cmd[116], prompt[128], arg[6], *editor, *envfind(), *strcat();
+    char *strcpy();
+    FILE *fopen(), *temp;
+    long fseek(), ftell();
+
+    strcpy(prompt, x_file);         /* Prompt with the filename. */
+    if (x_fs && !e_o_f) {           /* If file size != 0 and not at EOF, */
+        strcat(prompt, " ");        /* Put a space on the end of the prompt. */
+        ltoa( (long) ( (double) ftell(x_fp) / (double) x_fs * 100.0 ),\
+            prompt + strlen(prompt) );
+
+/*
+That last statement requires some clarification.  The contruction
+
+        (double) ftell(x_fp) / (double) x_fs
+
+determines the current position if the file as a fraction.  The casts are
+necessary, since integer division would have resulted in zero.  The integers
+are casted into doubles instead of floats since real arithmatic is done in
+double precision anyway.  This saves an extra conversion from float to double.
+Multiplying this quantity by 100 determines the percentage of the file already
+seen.  Finally, this value is cast back to a long, which is what ltoa expects.
+The construction
+
+        prompt + strlen(prompt)
+
+is used to pass the address of the first available space in the prompt string
+after the filename.  This address is where ltoa will put the converted number.
+See the PC-More User's Guide for more information on this function.
+*/
+
+        strcat(prompt, "%");        /* Put a % after the number. */
+    }
+
+    if (e_o_f)
+        strcat(prompt, " [EOF]");   /* If at EOF, make "EOF" part of prompt. */
+    printf("--%s--",prompt);        /* Print prompt. */
+    arg[0] = '\0';                  /* Initialize the argument string and */
+    arglen = 0;                     /*  its length. */
+    pgf = FALSE;                    /* Set the "prompt gone flag". */
+
+getcmd:
+
+/*
+Get char from keyboard and mask off upper 8 bits, which contain the scan code
+of the key pressed.  Then act on it as a command.
+*/
+
+    w_c = (key_getc() & CMASK); /* Get char and mask off scan code. */
+
+/*
+All the cases in this switch statment (except the for the default) which end 
+in a "goto getcmd;" statement contain the statments: 
+
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+
+This resets the argument back to 0.  Even commands which do not use the
+argument must reset it to 0 to avoid problems.  This also resets the
+"prompt gone flag" to false.  This flag is used to determine if the prompt
+has been erased for printing the argument.  If the prompt has not been erased,
+pgf = FALSE.  When a digit is typed, the prompt is erased, the digit printed, 
+and pgf set to TRUE.  When a command is executed, it will always cause the 
+prompt or some message to be printed, so pgf is set to FALSE again.  This is
+not needed when a case ends in "break," since wait() returns when the switch
+exits.
+
+An argument of 0 is interpreted by the function getval() to mean 1, so when
+no argument is entered, the default is 1.
+*/
+
+    switch (w_c) {
+        case ' ':               /* Space means "next screen". */
+            if (e_o_f)          /* If at end of current file, */
+                nextfile(1);    /*  go to next file. */
+            x_mnl = NLPS * getval(arg); /* Get # of pages to move. */
+            x_rwp = ftell(x_fp);    /* Save current position in file for !. */
+            break;              /* Break out of switch. */
+        case '\n':
+        case '\r':              /* Enter key means "next line". */
+            if (e_o_f)          /* Everything else is similar to above. */
+                nextfile(1);
+            x_mnl = getval(arg);
+            x_rwp = ftell(x_fp);
+            break;
+        case 'h':
+        case 'H':               /* 'H' means "next half screen". */
+            if (e_o_f)
+                nextfile(1);
+            x_mnl = NLPHS * getval(arg);
+            x_rwp = ftell(x_fp);
+            break;
+        case 'r':
+        case 'R':               /* 'R' Means "rewind current file". */
+            rewind(x_fp);
+            x_mnl = NLPS;       /* Print out full screen next time. */
+            x_rwp = 0L;         /* Current position in file is beginning. */
+            cls();              /* Clear the screen for the next file. */
+            break;
+        case 'n':
+        case 'N':               /* 'N' means "go to next file". */
+            nextfile(1);    /* Nextfile(1) goes to next file. */
+            x_mnl = NLPS;       /* Put out a full screen next time. */
+            break;
+        case 'p':
+        case 'P':               /* 'P' means "go to previous file". */
+            x_mnl = NLPS;       /* Put out a full screen next time. */
+            if (nextfile(0)) {  /* Nextfile(0) goes to prev. file. */
+                arg[0] = '\0';
+                arglen = 0;
+                pgf = FALSE;
+                goto getcmd;    /* If you tried to go before 1st file, */
+            }  /* if */         /*  a message is printed and you try a diff. */
+            else
+                break;          /*  command, otherwise, exit "switch". */
+        case 'f':
+        case 'F':
+            printf("\r%s\rNew file:  ",x_spc);
+            i = key_gets(cmd, 13, "New file:  Aborted.");   /* Get filename. */
+            if (i == -1) {
+                arg[0] = '\0';
+                arglen = 0;
+                pgf = FALSE;
+                goto getcmd;
+            }  /* if */
+            if ( !(strcmp(cmd, "-")) ) {    /* If cmd is a hyphen, then */
+                if (x_srf) {                /*  if stdin is redirected, */
+                    opi();                  /*   reattach pipe to stdin, */
+                    temp = stdin;           /*   and assign stdin to temp; */
+                }
+                else {                      /*  if stdin isn't redirected, */
+                    printf("\r%s\rCannot read from console.",x_spc);
+                    arg[0] = '\0';          /*   then abort 'f' command. */
+                    arglen = 0;
+                    pgf = FALSE;
+                    goto getcmd;
+                }
+            }  /* if */
+            else                            /* If cmd is not a hyphen, then */
+                temp = fopen(cmd,"r");      /*  attempt to open file. */
+            if (temp == 0) {                /* If couldn't open file, then */
+                printf("\r%s\rCould not open %s.", x_spc, cmd); /*  say so. */
+                arg[0] = '\0';
+                arglen = 0;
+                pgf = FALSE;
+                goto getcmd;
+            }  /* if */
+            if ( !(strcmp(x_file, "stdin")) )   /* If current file is stdin, */
+                cpi();              /*  then disconnect pipe from console. */
+            else                    /* Otherwise, */
+                fclose(x_fp);       /*  close the file. */
+            x_fp = temp;            /* Set x_fp to the new file. */
+            x_mnl = NLPS;           /* Set x_mnl to its default. */
+            x_rwp = 0L;             /* Find current read/write position. */
+            if ( !(strcmp(cmd, "-")) ) {    /* If cmd is a hyphen, then */
+                strcpy(x_file, "stdin");    /*  set x_file to "stdin", */
+                x_fs = 0;                   /*  and set file size to zero. */
+            }
+            else {                          /* Otherwise, */
+                strcpy(x_file, cmd);        /*  set x_file to cmd, */
+                x_fs = fseek(x_fp, 0L, 2);  /*  get file size, */
+                fseek(x_fp, 0L, 0);         /*  and fseek back to beginning. */
+            }
+            break;
+
+/*
+Note that x_srf is not reset to 0.  Even if you quit reading from stdin, it is
+still redirected because of the < or | on the command line.  This means that
+all of the restrictions still apply; i.e. you still cannot push to an inferior
+shell after you change files, etc.  You will also not be able to edit if you 
+change files after reading from a pipe.  This should not be too much of an 
+annoyance, since reading from a pipe and reading from a file are usually not 
+done in the same invokation of More.
+*/
+        case 'q':
+        case 'Q':               /* 'Q' means "quit". */
+            printf("\r%s\r",x_spc); /* Erase prompt or message on last line. */
+            exit(0);
+        case 'e':
+        case 'E':               /* 'E' means "edit current file". */
+            if ( !(strcmp(x_file,"stdin")) ) {  /* If reading from pipe, */
+                printf("\r%s\rCannot edit stdin.", x_spc);
+                arg[0] = '\0';
+                arglen = 0;
+                pgf = FALSE;
+                goto getcmd;    /* Go get another command. */
+            }  /* if */
+            editor = envfind("EDITOR"); /* Get editor name from environ var. */
+            if (editor == 0)            /* If there is no such environ var., */
+                editor = "edlin";       /* then use EDLIN. */
+            strcpy(cmd, editor);        /* Start command string with editor. */
+            strcat(cmd, " ");           /* Now put a space. */
+            strcat(cmd, x_file);        /* Now end command with filename. */
+            if (strcmp(editor,"edlin")) /* If editor != "edlin", string was */
+                free(editor);           /*  obtained with malloc, free it. */
+            bang(strlen(cmd),cmd,prompt);   /* Execute the command. */
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+            goto getcmd;                /* Get next command. */
+        case '!':                       /* '!' means "execute DOS command". */
+
+            printf("\r%s\r!",x_spc);    /* Erase last line, print '!'. */
+            i = key_gets(cmd, 115, "Push aborted.");  /* Get command string. */
+            if (i == -1) {
+                arg[0] = '\0';
+                arglen = 0;
+                pgf = FALSE;
+                goto getcmd;
+            }  /* if */
+
+/*
+A command string passed to DOS must not be more than 127 characters long.  DOS 
+will ignore the rest.  Since the system() command must always pass the string
+"command /c" to DOS (see DOS 2.0 manual), that leaves 117 characters.  I
+rounded to 115 to give myself a bit of headroom.
+
+See definition of key_gets() to see what it expects for arguments.  It returns 
+the number of characters read from the keyboard or -1 if it was aborted.
+*/
+
+            if ( !(strcmp(x_file,"stdin")) ) {  /* If reading from stdin, */
+                cpi();          /*  close the pipe, attach stdin to CON: */
+            }
+
+            bang(i,cmd,prompt); /* Bang pushes to an inferior command.com. */
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+
+            if ( !(strcmp(x_file,"stdin")) ) {  /* If reading from stdin, */
+                opi();                          /*  reattach stdin to pipe. */
+            }
+
+            goto getcmd;
+
+        case '?':           /* '?' means "help". */
+            printf("\r%s",x_spc);   /* Erase prompt or message. */
+            help(prompt);   /* Help prints out the prompt, so it needs it, */
+            fseek(x_fp, x_rwp, 0);  /* and reposition read/write pointer. */
+/*
+The read/write pointer is backed up so that the screen which was erased by
+help is reprinted.
+*/
+
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+            goto getcmd;
+        case 'v':
+        case 'V':               /* 'V' means "print version number." */
+            printf("\r%s\rPC-More v1.3",x_spc);
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+            goto getcmd;
+        case '\007':            /* ^G means abort current argument. */
+            arg[0] = '\0';
+            arglen = 0;
+            pgf = FALSE;
+            printf("\r%s\r--%s--", x_spc, prompt);  /* Erase argument. */
+            goto getcmd;
+        default:
+            if (w_c >= '0' && w_c <= '9') { /* If w_c is a digit, */
+                if (!pgf) {                     /* If prompt is not gone, */
+                    printf("\r%s\r",x_spc);     /* erase it, */
+                    pgf = 1;                    /* and set flag. */
+                }
+                arg[arglen++] = w_c;        /*  add w_c to string, */
+                arg[arglen] = '\0';         /*  terminate string properly, */
+                putchar(w_c);               /*  and put w_c on screen. */
+                if (arglen > 3) {           /* If more than 3 digits long, */
+                    printf("\r%s\rArgument too long.",x_spc);   /* say so, */
+                    arg[0] = '\0';          /*  and start over. */
+                    arglen = 0;
+                    pgf = FALSE;
+                }  /* if */
+                goto getcmd;
+            }  /* if */
+
+/*
+Arg[] is limited to 3 digits because the largest integer which can be held in
+a int is 32767.  Arg[] is multiplied by a number which can be as large as 24.
+24 * 999 (the largest 3 digit number) = 23976, which is within the range of an
+int.  24 * 9999 (the largest 4 digit number) = 239976, which is too big to fit
+in an int.  Therefore, it is a safety precaution not to allow any number larger
+than 3 digits to be entered as an argument.
+*/
+
+            if (w_c == '\b' && arglen >= 1) {    /* If w_c is a backspace, */
+                arg[--arglen] = '\0';   /* then delete the last char in */
+                fputs("\b \b",stdout);  /* arg[] if there is one there */
+                goto getcmd;            /* and erase it from the screen. */
+            }  /* if */
+            putchar('\007');    /* If the above tests fail, then beep. */
+            goto getcmd;
+    }  /* switch */
+    printf("\r%s\r",x_spc);         /* Erase prompt or message. */
+}  /* wait */                       /* Now return to main(). */
+
+
+help(prompt)    /* Prints out help text and the prompt. */
+
+char *prompt;
+
+{
+    char *ht;
+
+    ht = "\nPC-More Help:\n\n    <sp>    next screen\n    <cr>    next line\n\
+    h       next half page\n    r       rewind current file\n\
+    e       edit current file\n    n       go to next file\n\
+    p       go to previous file \n    f       choose a new file\n\
+    !       push to shell\n    ?       print this text\n\
+    v       print version\n    ^G      abort a command while entering text\n\
+    q       quit\n\n";
+
+    cls();
+    printf("%s--%s--",ht,prompt);
+}
+
+
+cpi()   /* Close stdin handle and reopen it to the console. */
+
+{
+    struct regval { int ax,bx,cx,dx,si,di,ds,es; } reg;
+    int fr;
+
+/*
+fr contains the contents of the 8088 flag register, which sysint21() returns.
+*/
+
+    /* Make duplicate of redirected stdin file handle. */
+    reg.ax = 0x4500;            /* Call DOS function 0x45 (DUP) */
+    reg.bx = 0x0000;            /*  on file handle 0. */
+    fr = sysint21(&reg, &reg);  /* Issue the interrupt, get flags. */
+    if (fr & 0x001)             /* If carry is set, error occured. */
+        abort("DOS Error %d occured on DOS function call 0x45.\n", reg.ax);
+    x_siold = reg.ax;           /* Store duplicate. */
+
+    /* Close the original stdin.  The copy remains open. */
+    reg.ax = 0x3E00;    /* Call DOS function 0x3E (Close file handle) */
+    reg.bx = 0x0000;    /*  on file handle 0. */
+    fr = sysint21(&reg, &reg);  /* Issue the interrupt, get flags. */
+    if (fr & 0x001)             /* If carry is set, error occured. */
+        abort("DOS Error %d occured on DOS function call 0x3E.\n", reg.ax);
+
+    /* Reopen the console.  It is automagically assigned file handle 0. */
+    reg.ax = 0x3D00;    /* Call DOS function 0x3D (Open file) */
+    reg.dx = "CON";     /*  on the console.  Must be uppercase, no ":". */
+    segread(&reg.si);   /* Find the current value of DS. */
+/*
+The above line is somewhat cryptic.  segread() expects the address of a struct 
+containing 4 ints.  The structure reg can be used if setread() is passed the 
+address of its last 4 elements, which start with reg.si.  The purpose of this 
+is to get the current value of DS into the reg structure before calling 
+sysint21().  In the structure that segread() expects, DS is the third item.  
+When &reg.si is passed to segread(), DS is also the third item, so the proper 
+assignment is made.
+*/ 
+    fr = sysint21(&reg, &reg);  /* Issue the interrupt, get flags. */
+    if (fr & 0x001)             /* If carry is set, error occured. */
+        abort("DOS Error %d occured on DOS function call 0x3D\n", reg.ax);
+
+}  /* cpi */
+
+
+opi()   /* Reattach stdin file handle to pipe. */
+{
+    struct regval { int ax,bx,cx,dx,si,di,ds,es; } reg;
+    int fr;
+
+    /* Copy the file handle for the pipe back to the stdin file handle. */
+    reg.ax = 0x4600;            /* Call DOS function 0x46 (DUP2) */
+    reg.bx = x_siold;           /*  on file handle x_siold. */
+    reg.cx = 0x0000;            /* File handle 0 is the target. */
+    fr = sysint21(&reg, &reg);  /* Issue the interrupt and get flags. */
+    if (fr & 0x001)             /* If carry is set, error occured. */
+        abort("DOS Error %d occured on DOS function call 0x46.\n", reg.ax);
+
+    /* Close the duplicate pipe file handle. */
+    reg.ax = 0x3E00;    /* Call DOS function 0x3E, (Close file handle) */
+    reg.bx = x_siold;   /*  on x_siold. */
+    fr = sysint21(&reg, &reg);  /* Issue the interrupt and get flags. */
+    if (fr & 0x001)             /* If carry is set, error occured. */
+        abort("DOS Error %d occured on DOS function call 0x3E.\n", reg.ax);
+
+}  /* opi */
+
+
+bang(i,cmd,prompt)
+
+/*
+Bang() will push to an inferior shell if i == 0 or it will execute the 
+command pointed to by cmd if i != 0.  The command can be an internal DOS
+command or it can be a program to run.
+*/
+
+int i;          /* Length of command to execute. */
+char *cmd;      /* Pointer to command to execute. */
+char *prompt;   /* Pointer to prompt to print when done. */
+
+{
+    int retrn;
+    FILE *fopen();
+    long fseek();
+
+    if (!x_srf)                     /* If reading from a file, then */
+        fclose(x_fp);               /* close file before push. */
+
+    if (!i)                         /* If no command was entered, */
+        retrn = system("command");  /* push to DOS. */
+
+    else                            /* If a command was entered, */
+        retrn = system(cmd);        /* give DOS the command in cmd[]. */
+
+    if (retrn)
+        printf("Push not successful, DOS error code = %d.", retrn);
+
+    if (!x_srf) {                   /* If reading from a file, */
+        x_fp = fopen(x_file,"r");   /* reopen file, */
+        if (x_fp == 0)              /* check to see if it was reopened, */
+            abort("Unable to reopen file after push to DOS.\n");
+
+        fseek(x_fp, x_rwp, 0);      /* and reposition read/write pointer. */
+    }
+
+    fputs("\n\nReturning to more...\n\n",stdout);
+    printf("--%s--",prompt);
+
+}
+
+key_gets(string, len, msg)
+
+/*
+Key_gets() gets a string by reading one character at a time from the keyboard, 
+not from stdin.  It reads up to len-1 characters and puts them in string[].  
+If the user tries to backspace too far, then this is interpreted to mean "I 
+really didn't want to do this after all," and key_gets() aborts, returning -1 
+to signal error.  Key_gets() will read up until it receives a carriage return, 
+a linefeed, or an end of file indication.  It returns the number of characters 
+actually read, or -1 if it was aborted.  
+I can't use gets() to collect the string since it reads from stdin.  If stdin 
+is redirected, strange things will happen.  That's why I wrote key_gets() to 
+read from the keyboard.  
+
+*/
+
+int len;        /* How much to get. */
+char string[];  /* Where to put it. */
+char *msg;      /* What to say when aborting. */
+
+{
+
+    int i, k_c;
+
+    for (i = 0; i < len; i++) { /* Get len-1 characters for the string. */
+        k_c = (key_getc() & CMASK);     /* Get char, mask scan code. */ 
+
+        if (k_c == '\r' || k_c == '\n' || k_c == EOF) {
+            break;  /* If 'Enter' or EOF found, quit getting characters. */
+        }  /* if */
+
+        if (k_c == '\b') {  /* If 'backspace', */
+            if (i > 0) {    /* don't erase before start of command. */
+                string[--i] = '\0'; /* remove last char in string[], */
+                fputs("\b \b",stdout);  /* erase it from screen. */
+            }  /* if */
+            else {  /* If user tries to erase too far, then abort. */
+                printf("\r%s",msg); /* Print aborting message. */
+                return (-1);        /* Return with error. */
+            }  /* else */
+            i--;    /* Dec. i again since 'for' will increment it, */
+            continue;               /* and go to end of for loop. */
+        }  /* if */
+
+        if (k_c == '\007') {                /* If 'bell', then abort: */
+            printf("\r%s\r%s", x_spc, msg); /* Erase anything, print msg, */
+            return (-1);                    /* and return with error. */
+        }  /* if */
+
+        putchar(k_c);   /* If not 'enter' or 'bs', then echo it, */
+        string[i] = k_c;   /* and add it to the command string. */
+    }  /* for */
+    string[i] = '\0';  /* Terminate the command string. */
+    return (i);
+}  /* key_gets() */
+
+
+nextfile(next)
+
+int next;
+
+/*
+Nextfile steps through the argument list on the command line, trying to open 
+each argument as a file.  If it succeeds, then x_fp points to the file and 
+x_file points to a string which is the name of the file.  If it fails, abort is 
+called.  Since where is a static variable, this function "remembers" where it 
+was the last time it was called and moves on to the next argument on the
+command line each time it is called.  Nextfile also sets x_rwp to point 
+to the top of the file.  Nextfile will return a value of 1 only if you try to 
+go to the file which is before the first file on the command line.  If no 
+error occurs, then it returns 0.  If any other error occurs, then it is fatal 
+and execution is aborted.  The only place where the return value is checked is 
+"case 'p':" segment of the wait() subroutine.  
+*/
+
+{
+    long fseek();
+    static int where;
+    FILE *fopen();
+
+next:
+    if (next) {                 /* If going to next file do this: */
+        if (++where == x_argc)  /* Go to next file.  Gone too far? */
+            exit(0);            /* If so, exit. */
+    }  /* if */
+    else {                      /* If going to previous file, do this: */
+        if (--where < 1) {      /* Go to prev file.  Gone too far? */
+            printf("\r%s\rAt first file.",x_spc);   /* If so, say so, */
+            where++;            /* put where back where it belongs, */
+            return(1);          /* and return with an error code. */
+        }  /* if */
+    }  /* else */
+
+
+    if (x_fp != 0) {    /* If x_fp != 0, then a file is open, so close it. */
+
+        /* The following if{} is the closing sequence for stdin. */
+        if ( !(strcmp(x_file, "stdin")) ) { /* If just-finish file is stdin: */
+            cpi();          /*  then call cpi to reattach stdin to console. */
+        }
+
+        /* The following else{} is the closing sequence for a file. */
+        else {                      /* If just-finished file isn't stdin: */
+            fclose(x_fp);           /*  then close it as a normal file. */
+        }
+    }  /* if */
+
+    /* The following if{} is the opening sequence for stdin. */
+    if ( !(strcmp(x_argv[where], "-")) ) {  /* If upcoming file is "-" : */
+        if (x_srf) {            /* If stdio is redirected: */
+            opi();              /*  Reattach stdin to pipe. */
+            x_fp = stdin;       /*  Set file pointer to stdin. */
+            x_fs = 0L;          /*  Don't know the size of a pipe. */
+            strcpy(x_file,"stdin"); /*  Set x_file to "stdin". */
+        }  /* if */
+        else                    /* If stdio isn't redirected: */
+            goto next;          /*  Just go to next file. */
+    }  /* if */
+
+    /* The following else{} is the opening sequence for a file. */
+    else {                      /* If upcoming file is not "-" then: */
+        x_fp = fopen(x_argv[where], "r");   /* Open next or (prev) file. */
+        if (x_fp == 0)          /* If file pointer is bad, abort. */
+            abort("Could not open file %s.\n",x_argv[where]);
+        x_fs = fseek(x_fp, 0L, 2);          /* Get file size. */
+        fseek(x_fp, 0L, 0);     /* Put file pointer back to start of file. */
+        strcpy(x_file, x_argv[where]);      /* Set x_file to new filename. */
+        x_rwp = 0L;                         /* Reset !'s copy of rwp. */
+    }  /* else */
+
+    cls();          /* Clear screen before going to the next file. */
+    return(0);      /* For consistancy, return with an OK code. */
+}  /* nextfile */
+
+
+getval(string)
+char *string;
+
+{
+    int i;                          /* This function gets the number entered */
+
+    i = atoi(string);               /* as an argument in wait().  If atoi() */
+    if (i == 0)                     /* returns 0, then it is assumed that no */
+        i = 1;                      /* argument was entered and that the */
+                                    /* default of 1 should be used. */
+    return(i);
+}
+
+
+cls()   /* Clear the screen and set the curser to home */
+
+/*
+This function was written by Harry McGavran at Los Alamos National
+Laboratory, hgm@lanl.
+*/
+
+{
+
+    unsigned char cur_mode;
+
+    struct regval {int ax, bx, cx, dx, si, di, ds, es; } reg;
+
+    /* get current active display mode into al */
+    reg.ax = 0x0f00;
+    sysint(0x10, &reg, &reg);
+    cur_mode = reg.ax & 0xff;
+
+    /* set blank line attribute bh, based on current display mode */
+    if ((cur_mode > 3) && (cur_mode != 7))
+        reg.bx = 0;
+    else
+        reg.bx = 0x0700;
+
+    /* scroll active page up, bh = blank line attribute */
+    reg.ax = 0x0600;
+    reg.cx = 0;
+    reg.dx = 0x184f;
+    sysint(0x10, &reg, &reg);
+
+    /* put the cursor at home */
+    reg.ax = 0x0200;
+    reg.bx = 0;
+    reg.dx = 0;
+    sysint(0x10, &reg, &reg);
+
+    /* reset the display mode, if not done characters don't print */
+    reg.ax = cur_mode;
+    sysint(0x10, &reg, &reg);
+
+}
+
+SHAR_EOF
+if test 35944 -ne "`wc -c pc-more.c`"
+then
+echo shar: error transmitting pc-more.c '(should have been 35944 characters)'
+fi
+echo shar: extracting pc-more.doc '(17867 characters)'
+cat << \SHAR_EOF > pc-more.doc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   PC-Write
+                              by Donald L. Nash
+
+                                December, 1985
+                                 Version 1.3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                            Section 1:  Introduction
+
+    PC-More is a pager program similar to the UNIX* more program.  It is
+designed to work on the IBM Personal Computer, PC XT, and PC AT, as well as
+compatibles.  The purpose of PC-More is to display a file one screenful at a
+time for easy viewing.  The PC-DOS "type" command can do this, but the text
+scrolls too fast for most people to read.  Beginning with version 2.0, PC-DOS
+supplied its own version of a more filter, but it is extremely limited in its
+usefulness, since it can only display one screenful at a time.  People who are
+used to the UNIX version of more expect to be able to move through the file in
+any increment they choose, not just a screenful at a time.  PC-More corrects
+this problem.
+
+
+                          Section 2:  Invoking PC-More
+
+    PC-More can be used to read from a file or to read from a pipe.  To invoke
+PC-More to read from a file, simple type the following in responce to the PC-
+DOS prompt:
+
+        A>more file1.ext [file2.ext ... ]
+
+    The part in brackets is optional.  It simply means that you can type any
+number of filenames after the word "more."  When PC-More reaches the end of one
+file, it will automatically go on to the next one on the command line.  Moving
+between files is explained below.
+
+    If you want PC-More to read from a pipe, where it will read the output of
+some other command as its input, then you would invoke it like this:
+
+        A>command | more [file1.exe - [file2.exe ... ] ]
+
+where "command" is some program or PC-DOS command which writes to the PC-DOS
+stdout device (usually the console screen).  The hyphen is used to indicate
+"read from stdin."  It is listed on the command line just as if it were a
+filename, and need not be the second item in the list, as indicated above.  In
+fact, the hyphen doesn't need to be there at all if there are no other files
+on the command line.  If there are other files on the command line, and you
+want PC-More to read from the pipe, then the hyphen is necessary.
+
+    *UNIX is a trademark of ATT Bell Laboratories.
+
+                                    - 1 -    
+
+
+
+
+
+
+
+
+The command set for PC-More is the same regardless of whether it is reading
+from a pipe or from a file, with one exception:  You cannot call up an editor
+to edit the pipe.
+
+
+                          Section 3:  PC-More Commands
+
+Part 1:  Motion Commands
+
+    If you have used programs like PC-More before, then you should skip the
+first four parts of this section, since they are something of a tutorial
+description of the PC-More commands.  Part 5 has a summary of all the commands
+which will probably be enough for you.
+
+    Once PC-More has been invoked, it will clear the screen and display the
+first screenful of data.  When the screen fills, the following message appears
+on the bottom line of the screen:
+
+--filename.ext--
+
+where "filename.ext" is the name of the file from which PC-More is reading.  If
+it is reading from a pipe, then "filename.ext" will be "stdin."  You may now
+type any of the PC-More commands.
+
+    To see the next screenful of data, simply type a space.  The screen will
+clear and the next screenful will appear.  PC-More will clear the screen every
+time it reaches the bottom with the following exceptions:
+
+    1.  Advancing one line at a time will never clear the screen, even if it is
+        full.  This is a feature which allows you to display two lines which
+        may be on different (but consecutive) screens.
+
+    2.  If the screen is not full when the prompt appears and command is given
+        which will fill the screen and cause scrolling, then PC-More will not
+        clear the screen when it fills.  An example of this would be the
+        following situation:  The screen is currently full.  The user types 'h'
+        to request the next half screen of data.  The screen is cleared and the
+        next half screen appears at the top of the screen.  The user then types
+        a space to see the next full screen.  The text will scroll down until
+        it hits the bottom of the screen.  PC-More will not clear the screen to
+        display the rest of the data.  Instead, it will scroll up the text
+        already on the screen.
+
+                                    - 2 -    
+
+
+
+
+
+
+
+
+    Now that the issue of screen clearing is out of the way, the other two
+motion commands can be described.  To advance only one line, hit the return
+key.  The next line will appear and the prompt will reappear.  To advance half
+a screen, which would be the next 12 lines, hit the 'h' key in responce to the
+prompt.  The screen will be cleared if necessary and the next 12 lines will
+appear, followed by the prompt.
+
+    These three commands can be preceded by a numeric argument up to three
+digits long.  This argument will tell the following motion command to repeat
+itself the specified number of times.  Note that when the "advance one line"
+command is given an argument, it will clear the screen when necessary.  As an
+example of using arguments, the following command will show the next five
+screenfuls of data without pausing or clearing the screen when given to the
+prompt:
+
+        5<sp>
+
+Here, <sp> means "hit the space bar."  Similarly, <cr> would mean "hit the
+enter key."  Only the three motion commands will use the argument.  The other
+commands will simply ignore the argument and clear it when they finish.
+
+    The final motion command is 'r', for "rewind file."  This will reset the
+read/write pointer to the beginning of the file.  This is handy if you
+accidently pass up what you are looking for.  You can rewind the file and start
+over at the beginning.  While this is not as handy as backward paging commands
+would be, it is all that is available at the moment.  Backward paging commands
+may come out in future versions of PC-More.  Important Note:  "rewind file"
+will not work if you are reading from a pipe!  There is no way to tell PC-DOS
+to rewind the pipe.
+
+Part 2:  File commands
+
+    If you listed more than one filename on the command line which invoked PC-
+More, then you can move between them with the 'n' "next file" and 'p' "previous
+file" commands.  When PC-More reaches the end of a file, it pauses and prints
+out the following prompt:
+
+--filename.ext [EOF]--
+
+This means that there is no more data in the current file.  Any of the forward
+motion commands described above will automatically move to the next file on the
+command line.  You can go on to the next file at any time by simply typing 'n'
+
+                                    - 3 -    
+
+
+
+
+
+
+
+in responce to the prompt.  The current file is closed and the next file is
+opened.  If you are on the last file (or if you are reading from a pipe), then
+typing 'n' will cause PC-More to exit, since there is no next file.
+
+    If you wish to go to the previous file on the command line, then simply
+type a 'p'.  The current file is closed and the previous file is opened.  If
+you are reading from the first file on the command line (or from a pipe), then
+'p' will have no effect other than printing a message on the last line which
+says that you are already on the first file.
+
+    If you wish to read from some file that is not listed on the command line,
+type 'f'.  The prompt is replaced with the message:
+
+New file:
+
+You may now type the name of the file you wish to read from.  You can also
+type a hyphen if you wish to read from stdin, but if stdin is not redirected,
+then this will have no effect.  If you make a typo, use the backspace key to
+fix it.  If you try to backspace over the prompt, then the command is aborted.
+Likewise, if you type a control-G at any time while entering the new filename,
+the command will be aborted.  Control-G can be used at any time to erase
+either the numeric argument or any text arguments that some of the commands
+prompt for.
+
+    You may use "open new file" at any time, even when you are reading from a
+pipe.  The rest of the pipe is ignored.  However, you will not be able to edit
+the new file or push to an inferior command interpreter.  These commands and
+their restrictions are explained below in Part 3 of this section.
+
+Part 3:  Running Other Programs Under PC-More
+
+    If you wish to execute a PC-DOS command, run a program, or load in inferior
+command interpreter, then use the '!' "push to DOS" command.  '!' may be
+followed by an optional command which PC-DOS is to execute.  This command may
+an internal PC-DOS command or a program on disk.  If the '!' is not followed
+by any text, then the DOS command interpreter is loaded.  When a DOS command
+finishes, or when a program exits, or when you type "exit" to the inferior
+shell, control returns to PC-More and the last screen of data is redisplayed.
+
+    As a special case of the above command, you can call up an editor on the
+current file by typing 'e', for "edit current file."  The name of the editor
+to use is obtained by translating the environment variable EDITOR.  If EDITOR
+is not set, then the PC-DOS line editor "edlin" is used.  To set the environ-
+
+                                    - 4 -    
+
+
+
+
+
+
+
+ment variable EDITOR, type the following to PC-DOS before invoking PC-More:
+
+        A>set editor=whatever
+
+The word "editor" does not need to be capitalized.  However, there must be no
+spaces to the left of the = sign.  Spaces are significant and will be part of
+the variable name.  PC-More will NOT recognize the following:
+
+        A>set editor = whatever
+
+If you type something like this, you will get "edlin" when you type 'e'.
+
+If you should type 'e' when the current file is a pipe, then you will be told
+that you may not edit stdin.
+
+Part 4:  Other commands
+
+    If you forget what the PC-More commands are, type '?', which is the help
+command.  It will print a summary of the commands known to PC-More.
+
+    Typing a 'v' will print the version number of your copy of PC-More.
+
+    If you are entering a numeric argument for the motion commands or a text
+argument for the '!' or 'f' commands, then you can cancel the argument by
+typing control-G.  This will also abort the '!' and 'f' commands and return
+you to the PC-More command level.
+
+    Of course, there is a quit command for PC-More as well.  Type 'q' and you
+will be returned to the process which called PC-More (usually PC-DOS).
+
+Part 5:  Command Summary
+
+    Here is a summary of all PC-More commands.  If you have used programs like
+PC-More before (which most of you probably have), then this is probably all
+you will need to be able to use PC-More:
+
+        <sp>    next screen
+        <cr>    next line
+        h       next half screen
+        r       rewind the current file
+        e       edit the current file
+        n       go to the next file
+        p       go to the previous file
+
+                                    - 5 -    
+
+
+
+
+
+
+
+        f       open a new file
+        !       push do DOS
+        ^G      clear argument or abort '!' or 'f'
+        ?       help
+        v       print the version number
+        q       quit to DOS
+
+
+               Section 4:  Source Notes and Portability Concerns
+
+    PC-More is written in Computer Innovations C86 version 2.20G.  The code is
+pretty straight-forward and heavily commented.  It should not be very hard to
+determine what a piece of code does.
+
+    I made extensive use of external variables in PC-More.  There are 10
+external variables in the program.  This is necessary because they are used by
+several functions.  Some of the external variables are used by only two
+functions, but one function does not always call the other one directly.
+Instead, funtion a() and funtion c() may both use a variable, but a() does not
+call c().  Rather, a() calls b() which then calls c().  This isn't the best
+style of programming, but PC-More is small and not very complicated.  Besides,
+all external variables start with the characters "x_", to they are easy to
+spot.
+
+    There are only four functions used in PC-More which may not be supplied
+with other C compilers.  These are:
+
+    key_getc()  This function reads a character directly from the keyboard
+                rather than from stdin.  It returns an int with the ASCII
+                code of the character typed in the lower byte and the scan
+                code of the key struck in the upper byte.  In PC-More, the
+                scan code is masked off to zero.  This function will wait
+                for a key to be struck and the return key is not needed to
+                make it return.
+
+    sysint21()  This function allows you to make calls to PC-DOS directly
+                through the INT 21H instruction.  The syntax of sysint21() is:
+
+                    int fr, sysint21();
+                    struct regval {int ax,bx,cx,dx,si,di,ds,es; } sreg,rreg;
+
+                    fr = sysint21(&sreg, &rreg);
+
+
+                                    - 6 -    
+
+
+
+
+
+
+
+                The regval structure contains elements for each of the 8088
+                registers except cs, ss, and bp.  You set up the registers
+                in sreg the way you want them before the call.  The state of
+                the registers after the call is returned in rreg.  Note the
+                '&' "address of" operator before the name of each structure in
+                the sysint21() call.  It is necessary to pass the address of
+                the structures, since you cannot actually pass a structure as
+                an argument.  Note that the structures can overlap or even be
+                the same structure entirely.  The value of the 8088 flag
+                register is returned by sysint21().
+
+    sysint()    This function is exactly like sysint21(), except that you can
+                specify which interrupt you want to use.  The syntax is:
+
+                    int fr, intno, sysint();
+                    struct regval {same struct as above} ssreg, rreg;
+
+                    fr = sysint(intno, &sreg, &rreg);
+
+                where intno is the interrupt number to use.  Note that
+                sysint21() could be written as sysint(0x21, &sreg, &rreg),
+                but using sysint21 is slightly more efficient.
+
+    ltoa()      This function takes a long integer and converts it into an
+                ASCII string of equivalent digits.  The syntax is:
+
+                    int ltoa();
+                    long n, lenbuf;
+                    char *buffer;
+
+                    lenbuf = ltoa(n, buffer);
+
+                where n is the number to be converted and buffer is a pointer
+                to a place to put the resulting string.  The number n is
+                assumed to be signed.  ltoa() returns the length of the string
+                in buffer after the conversion takes place.  This number is
+                equivalent to:
+
+                    lenbuf = strlen(buffer);
+
+
+All the other functions I used in PC-More are available in the standard UNIX
+C libraries under 4.2 BSD.  If your compiler does not come with some of these
+
+                                    - 7 -    
+
+
+
+
+
+
+
+functions, look them up in section 3 of the UNIX manual to find out what they
+do.
+
+History:
+
+    Ver 1.3   New clear screen function installed, written by Harry McGavran.
+              All references to crt_cls() and crt_mode() eliminated.  This new
+              clear screen function works on either a monochrome or color
+              monitor.
+
+              Nextfile() rewritten to understand that "-" on the command line
+              represents stdin.  The " case 'f': " part of wait() was modified
+              in the same way.
+
+              New functions cpi() and opi() added to allow stdin to be
+              reopened to the console when it is redirected to a file or a
+              pipe.  This allows the user to execute a "!" or a "e" when a
+              pipe is present.  Of course, you still can't edit the pipe.
+              The knowledge to implement cpi() and opi() was provided by
+              Brandon S. Allbery.
+
+              Nextfile() modified to find the file's size and put it in the
+              external variable x_fs.  Wait() also modified so that when it
+              constructs the prompt, it uses x_fs to compute what percent of
+              the file has been read.  When the prompt is printed, this
+              percentage is included as part of the prompt.
+
+              Wait() modified to clear the screen when a file is rewound.
+
+    Ver 1.21  This version fixed a bug which prevented PC-More from working on
+              a color monitor.  Under previous versions, only machines
+              equipped with a monochrome monitor would run PC-More properly.
+              The problem was a hardware-dependendent function call to
+              crt_mode().  The problem was fixed by determining the type of
+              monitor in use and using the correct function to clear the
+              screen.
+
+    Ver 1.2   This was the initial release to USENET.  Other earlier versions
+              were too buggy for a general release.
+
+
+                            Section 5:  Conclusion
+
+
+                                    - 8 -    
+
+
+
+
+
+
+
+As a final note to add to the end of this manual, I'd like to say that PC-More
+is a public domain program.  You can copy it, modify it chop it up, whatever
+you want to do, but please don't sell it.  I welcome any comments, bug fixes,
+new features (searches and backward paging would be nice), etc.  My e-mail
+address is:
+
+    UUCP:   ...!{ihnp4 | allegra | seismo!ut-sally}!ut-ngp!dlnash
+
+    ARPA:   dlnash@ngp.UTEXAS.EDU
+
+Enjoy!
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                    - 9 -    
+
+SHAR_EOF
+if test 17867 -ne "`wc -c pc-more.doc`"
+then
+echo shar: error transmitting pc-more.doc '(should have been 17867 characters)'
+fi
+echo shar: extracting pc-more.uuencode '(22292 characters)'
+cat << \SHAR_EOF > pc-more.uuencode
+begin 666 pc-more.exe
+M35H< 2   P @ "\ ___P P !ND;_(   '@    $ $R$  #8A  #U*P      
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                                                            
+M                      !5B^R#[""+1@2)!@ &,\")1NR+1NP[1@1]'HMV
+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
+MP'D4,\"Y! "+V?GW$1$!0T/B^+2 ,057Z'#^7HU^&NA._OZ+=@2+1 Z)1O#_=@3H)?*#Q *-=NY6C7;N5NC8](/$
+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
+MBU0".]!R-HMV^(LTBT;^ _BW;^
+MB 3_=@SH$N"#Q *+Y5W#58OL@^P:,\")1N:+=@16Z!3<C4;P4.@_Y8T&U 50
+MZ 7<Z,KD6 O =!R-1O!0Z/;;Z&?AC4;P4.@>Y8/$"+@! (E&Z.L%,\")1NB-
+M1O!0Z-7;C0;4!5#HS=OH@N18"\!T NL'@7X&  !]!C/ B^5=PXM&!@O =%R!
+M?@80 'X&N!  B48&C0;L!5#HFMN-1OA0Z,7D@\0(_TX&BT8&"\!T&XT&] 50
+MZ'[;C4;X4.AWV^BUXE#HHN2#Q CKVXU&^%#H9-N-1O!0Z%W;Z'?A4.B(Y(/$
+M"(U&\%#H3-N-!N0%4.A$V^@AY%@+P'1KN D B4;JBT;J_T[J"\!T6+@! (M6
+MYHO(T^*)5N:+-H@%BT;JT>#1X-'@ _!6Z S;C4;P4.@%V^C2XU@+P'0GBS;2
+M!8M&ZM'@T>#1X /P5NCJVHU&\%#HX]KH(>)0Z [D@\0(_T;FZY[IM0"-1O!0
+MZ,K:C0;<!5#HPMKHA^-8"\!U ^F; +@) (E&ZHM&ZO].Z@O =%BX 0"+5N:+
+MR-/BB5;FBS;2!8M&ZM'@T>#1X /P5NB'VHU&\%#H@-KH5>-8"\!T)XLVB 6+
+M1NK1X-'@T> #\%;H9=J-1O!0Z%[:Z)SA4.B)XX/$"/].YNN>C4;P4.A(VHT&
+MW 50Z$#:Z 7C6 O =!R-!N0%4.@PVHU&\%#H*=KH9^%0Z%3C@\0(_T[F,\"9
+M4E#H"N&-1OA0Z#_C@\0(C4;XB4;NC4;PB4;LBW;L@\8&BP0E\'^!Z$ #BW;N
+M@\8&B02-1OA0Z.#9C4;P4.C9V>CSWU#H!..#Q B-1O!0Z,C9C0;D!5#HP-GH
+MG>)8"\!T NL7C4;P4.BOV8T&W 50Z*?9Z&SB6 O =!4SP%"-=O!6Z&_]@\0$
+MBU;F ]")5N:+1N@+P'0,C4;P4.A\V>CMWNL'C4;P4.APV8MV!%;HF^*#Q B+
+M1N:+Y5W#58OL@^P$BT8,B4;\C48$4.A,V8T&U 50Z$39Z GB6 O =!^-1@10
+MZ#79Z*;>C48$4.A=XH/$"+@M (MV_/]&_(@$@7X. 0!]2+@P (MV_/]&_(@$
+MN"X BW;\_T;\B 2+1@X!1A"!?A   'T+BT80*48.,\")1A"+1@[_1@Z#^ !]
+M#;@P (MV_/]&_(@$Z^CK8XU&!%#HQ]CHAMY86HE&_HM&_H/ ,(MV_/]&_(@$
+MC0;D!5#HJ=B-1@10Z*+8BT;^F5)0Z(_?Z*K>Z-3?C48$4.B^X8/$"/].#HM&
+M#@O = +KKXM&$ O = NX+@"+=OS_1OR(!(M&$/].$ O =$>-1@10Z%K8Z!G>
+M6%J)1OZ+1OZ#P#"+=OS_1OR(!(T&Y 50Z#S8C48$4.@UV(M&_IE24.@BW^@]
+MWNAGWXU&!%#H4>&#Q CKKS/ BW;\B 2+1OPK1@PSTHOE7<-5B^R*1@0E_P"#
+M^#"X 0!S O_("\!T [@!  O =""*1@0E_P"#^#FX 0!V O_("\!T [@!  O 
+M= 6X 0#K [@  (OE7<-5B^R*1@28@_A!?!>*1@28@_A:?PZX( !06HI&!)@#
+MPHA&!(I&!)B+Y5W#58OLBD8$F(/X87P7BD8$F(/X>G\.N.#_4%J*1@28 \*(
+M1@2*1@28B^5=PU6+[(S8CL"+=@2+?@:+3@@[]W(#_.L' _%. _E/_?.D7?S#
+M58OLC-B.P(M^!(M.!HI&"/SSJEW#58OL@^P0BT8$B4;VN !!B4;PC7;X5NA5
+MVH/$ HUV\%:-=O!6Z'?;@\0$)0$ "\!T![C__XOE7<,SP(OE7<-5B^RT0+L"
+M (M.!HM6!,TA<@@[P74$B^5=P[C__^OW53+DS19=PP                  
+M                    (" @(" @(" @(" @(" @(" @(" @(" @(" @(" @
+M(" @(" @(" @(" @(" @(" @(" @("  <W1D:6X (  E "!;14]&70 M+25S
+M+2T #25S#4YE=R!F:6QE.B @ $YE=R!F:6QE.B @06)O<G1E9"X +0 -)7,-
+M0V%N;F]T(')E860@9G)O;2!C;VYS;VQE+@!R  TE<PU#;W5L9"!N;W0@;W!E
+M;B E<RX <W1D:6X +0!S=&1I;@ -)7,- '-T9&EN  TE<PU#86YN;W0@961I
+M="!S=&1I;BX 141)5$]2 &5D;&EN "  961L:6X #25S#2$ 4'5S:"!A8F]R
+M=&5D+@!S=&1I;@!S=&1I;@ -)7, #25S#5!#+4UO<F4@=C$N,P -)7,-+2TE
+M<RTM  TE<PT #25S#4%R9W5M96YT('1O;R!L;VYG+@ (( @ #25S#0 *4$,M
+M36]R92!(96QP.@H*(" @(#QS<#X@(" @;F5X="!S8W)E96X*(" @(#QC<CX@
+M(" @;F5X="!L:6YE"B @("!H(" @(" @(&YE>'0@:&%L9B!P86=E"B @("!R
+M(" @(" @(')E=VEN9"!C=7)R96YT(&9I;&4*(" @(&4@(" @(" @961I="!C
+M=7)R96YT(&9I;&4*(" @(&X@(" @(" @9V\@=&\@;F5X="!F:6QE"B @("!P
+M(" @(" @(&=O('1O('!R979I;W5S(&9I;&4@"B @("!F(" @(" @(&-H;V]S
+M92!A(&YE=R!F:6QE"B @(" A(" @(" @('!U<V@@=&\@<VAE;&P*(" @(#\@
+M(" @(" @<')I;G0@=&AI<R!T97AT"B @("!V(" @(" @('!R:6YT('9E<G-I
+M;VX*(" @(%Y'(" @(" @86)O<G0@82!C;VUM86YD('=H:6QE(&5N=&5R:6YG
+M('1E>'0*(" @('$@(" @(" @<75I= H* "5S+2TE<RTM $1/4R!%<G)O<B E
+M9"!O8V-U<F5D(&]N($1/4R!F=6YC=&EO;B!C86QL(#!X-#4N"@!$3U,@17)R
+M;W(@)60@;V-C=7)E9"!O;B!$3U,@9G5N8W1I;VX@8V%L;" P>#-%+@H 0T].
+M $1/4R!%<G)O<B E9"!O8V-U<F5D(&]N($1/4R!F=6YC=&EO;B!C86QL(#!X
+M,T0* $1/4R!%<G)O<B E9"!O8V-U<F5D(&]N($1/4R!F=6YC=&EO;B!C86QL
+M(#!X-#8N"@!$3U,@17)R;W(@)60@;V-C=7)E9"!O;B!$3U,@9G5N8W1I;VX@
+M8V%L;" P>#-%+@H 8V]M;6%N9 !0=7-H(&YO="!S=6-C97-S9G5L+"!$3U,@
+M97)R;W(@8V]D92 ]("5D+@!R %5N86)L92!T;R!R96]P96X@9FEL92!A9G1E
+M<B!P=7-H('1O($1/4RX*  H*4F5T=7)N:6YG('1O(&UO<F4N+BX*"@ M+25S
+M+2T "" (  TE<P -)7,-)7, #25S#4%T(&9I<G-T(&9I;&4N '-T9&EN "T 
+M<W1D:6X <@!#;W5L9"!N;W0@;W!E;B!F:6QE("5S+@H "D%"3U)4.BT@  H 
+M1E)%120 0R  #0!#3TU34$5# $Y%1413($1/4R R+C D  I43T\@34%.62!!
+M4D=3 &,  0      W <*#4Y/($-/4D4D      H-     "174DE411      
+M      !90  0  0  @$   (P,3(S-#4V-S@Y04)#1$5&               D
+M0        %E       "(PT      A->700" X#=YPT%#%VX%M;6XDT;V^3_I
+M T\X33,=,/E(=X):/[]S?]U/%75 !9J9F9F9F;D_>Q2N1^%ZA#\M0QSKXC8:
+M/SJ,,.*.>44^O(G8E[+2G#PRIZC5(_9).3RG]$3]#Z4RFI>,SPBZ6R5 ;ZQD
+M* ;("HH%                  #P/P       "1         %$"8F9F9F9FY
+!/P;(
+ 
+end
+SHAR_EOF
+if test 22292 -ne "`wc -c pc-more.uuenco

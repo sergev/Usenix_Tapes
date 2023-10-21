@@ -1,0 +1,166 @@
+!<arch>
+bitnetm.m4      483046164   217   10    100644  1384      `
+###############################################################################
+###############################################################################
+#####
+#####		Bitnet Mailer specification
+#####
+#####	@(#)bitnetm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Mbitnet,	P=/usr/bin/vmcopy, F=SnsFDMR, S=22, R=22,
+	A=vmcopy $u@$h class=M fname=MAILER ftype=MAIL width=80 device=PUNCH
+
+S22
+
+#
+#  Bitnet can only cope with user@host.bitnet i.e. no subdomains
+#  therefore strip off any that exist
+#
+
+R$+@$=A.$j		$@$1@$j			strip off any local hostname
+R$+@$+			$@$1@$2			return user@domain
+R$+			$@$1@$j			add local domain name
+
+
+##################################################################
+#####
+#####	Arpa Mail Via Batched Simple Mail Transfer Protocol
+#####
+##################################################################
+
+Mbarpa,	P=/usr/lib/rscs/bsmtp, F=SnsFDMRX, S=22, R=22,
+	A=bsmtp%mail $j $g $u $h
+
+
+##################################################################
+#####
+#####	Uucp Mail Via Batched Simple Mail Transfer Protocol
+#####
+##################################################################
+
+Mbuucp,	P=/usr/lib/rscs/bsmtp, F=SnsFDMRuhX, S=22, R=22, M=100000,
+	A=bsmtp%mail $j $g $u $h
+etherm.m4       483046164   217   10    100644  557       `
+###############################################################################
+###############################################################################
+#####
+#####		Ethernet Mailer specification
+#####
+#####	@(#)etherm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Mether,	P=[IPC], F=nsmFDMRuXC, S=17, R=15, A=IPC $h
+
+S17
+R$+@$+			$@$1@$2			address ok
+R$+			$@$1@$w			add local hostname
+
+hhcpm.m4        483046164   217   10    100644  703       `
+###############################################################################
+###############################################################################
+#####
+#####		Janet Mailer specification
+#####
+#####	@(#)hhcpm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Mhhcp, P=/usr/lib/x25/hhsend, F=nsmFDMxVh, S=21, R=21, M=100000,
+	A=hhsend $h $u
+
+S21
+ifdef(`MULTIHOST',
+`R$+@$=A.$j		$1@$j			strip local hostname')
+R$+@$+			$@$>14$1@$2		RFC822 -> NRS style
+
+R$+			$:$1@$j			user -> user@mydomain
+R$+@$+			$@$>14$1@$2		RFC822 -> NRS style
+
+localm.m4       483046164   217   10    100644  1155      `
+###############################################################################
+###############################################################################
+#####
+#####		Local and Program Mailer specification
+#####
+#####	@(#)localm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Mlocal,	  P=/bin/mail, F=rnlsmFDMR, S=16, R=16, A=mail -d $u
+Mbinmail, P=/bin/mail, F=rnlsmFDMR, S=16, R=16, A=mail -d $u
+Mprog,	  P=/bin/sh,   F=nlsFDMR,   S=16, R=16, A=sh -c $u
+
+#
+#  The important thing here is to keep a valid reply path!
+#  Apparent uucp addresses are converted back to old style so that
+#  ucb-mail can cope with replies. Otherwise the domain is just stripped.
+#
+S16
+
+R@			MAILER-DAEMON		errors to mailer-daemon
+R~$+			$1			remove '~' in To: line
+
+R$+@$+			$:$>7$1@$2		strip domain addresses
+
+# we assume an address is a uucp address if it contains more than two
+# hostnames (as opposed to domain names).  This is not always right..
+R$+%$-%$-@$+		$@$>13$1%$2%$3@$4	convert to uucp address
+
+luucpm.m4       483046164   217   10    100644  588       `
+###############################################################################
+###############################################################################
+#####
+#####		Local UUCP Mailer specification
+#####
+#####	@(#)luucpm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Mluucp,	P=/usr/bin/uux, F=smFDMRuh, S=18, R=18, M=100000,
+	A=uux - $h!rmail ($u)
+
+S18
+R$+@$+			$@$1@$2			address ok
+R$+			$@$1@$w			add local hostname
+uucpm.m4        483046164   217   10    100644  1057      `
+###############################################################################
+###############################################################################
+#####
+#####		UUCP Mailer specification
+#####
+#####	@(#)uucpm.m4	UK-1.1 sendmail configuration		22/4/85
+#####
+###############################################################################
+###############################################################################
+
+Muucp,	P=/usr/bin/uux, F=sFDMRuh, S=19, R=20, M=100000,
+	A=uux - -r -gA $h!rmail ($u)
+
+#
+#  Addresses are converted back to uucp style.
+#  We need to do this to generate a valid Unix From line.
+#  However this invalidates the From: line in the header, which should be
+#  in 822 format - strictly speaking.  Sendmail won't let you do this!
+#
+S19
+R$+@$+			$:$>13$1@$2		convert to uucp style
+ifdef(`MULTIHOST',
+`R$=A.$j!$+		$2			strip local hostnames')
+R$+!$+			$@$1!$2			address ok
+R$+			$@$j!$1			add local domain name
+
+#
+#  To: line is handled normally
+#
+S20
+R$+@$+			$@$1@$2			address ok
+R$+			$@$1@$j			add local domain name
+

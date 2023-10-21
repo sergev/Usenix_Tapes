@@ -1,0 +1,697 @@
+.NH 1
+.ce 10
+M7:
+A general pattern matching facility
+
+Software Internals Manual
+by
+
+G. Skillman
+S. Salazar
+A. Marriott
+W. T. Hardgrave
+.bp
+.1H"INTRODUCTION"
+
+M7 is a general pattern matching filter designed and implemented at the
+National Bureau of Standards as a basis for a Query Processor.
+The material covered in this document will explain the logic used to 
+develop the "C" language source code which is M7. 
+Before reading this document, the reader should familiarize himself with the
+material covered in the
+.ul
+M7 User's Manual,
+which describes how to use M7, and the chapter on text patterns in
+B. Kernighan and P. Plaugher's book
+.ul
+Software Tools.
+The later reference served as the ground work from which M7 was developed.
+In examining M7's source code, the reader will recognize many of the 
+routine names as being identical to ones found in 
+.ul
+Software Tools.
+
+.1H"GENERAL STRUCTURE OF M7"
+
+The following is a basic description of the highest level of M7,
+written in pseudo code:
+
+.nf
+   Main Program: M7
+  
+   process calling options;
+   while not at the end of the user's macro definition file
+   	preprocess the pattern and replacement definition;
+   	put preprocessed definition on a temporary file;
+   while there is more text on standard input
+   	while the input line matches a pattern
+   		rewrite the line according to
+  	the replacement definition;
+   	output the altered line;
+   return to unix shell level;
+.fi
+
+.P
+The appendix shows how the functions and subroutines of M7 can be divided
+into six levels (not including the utility routines.) The numbers
+below the names of the routines in the chart correspond with 
+the numbering of the list of utility routines at the end of the appendix.
+The only recursive routine is "amatch"
+which is an extension of the recursive "amatch" written in 
+pseudo code in 
+.ul
+Software Tools.
+
+.P
+There are two phases in the execution of M7:
+.nf
+	1) Preprocessing of the macro definition file.
+	2) Matching and replacement of the user's input strings.
+.fi
+
+.1H"PREPROCESSING OF THE MACRO DEFINITIONS"
+
+.2H"OVERVIEW"
+The goal of the preprocessing stage is to encode the macro to facilitate
+matching input text segments.
+The original file of macros supplied by the user is converted into the
+.ul
+preprocessed macro file.
+The preprocessing algorithm closely follows that described in
+.ul
+Software Tools.
+
+.P
+The top level routine
+.ul
+m7
+processes the program call options which includes adding the macros 
+defined by the -a option to the preprocessed macro file.
+Preprocessing is then initiated by a call to the subroutine "procmac".
+
+.P
+As each macro, delimited by a semicolon, is read from the input macro file
+into a buffer, a preprocessed version of the input macro is created in a
+second buffer and written to the preprocessed macro file.
+The file descriptors used in M7 are "fd1" for the input macro file
+and "fd2" for the preprocessed file.
+
+.P
+Preprocessing is divided into three stages: pattern
+preprocessing, replacement symbol preprocessing and replacement preprocessing.
+These stages will be the topics of the following three sections.
+
+.2H"PATTERN PREPROCESSING"
+When an input macro is read into the buffer, "procmac" calls "proccalls"
+to preprocess what lies before the pattern. Any stack or counter calls
+which it finds will be preprocessed by "procstck" and
+"proccntr" respectively. When "proccalls" returns, "procmac" will call "makpat" to
+preprocess the pattern.
+
+.P
+"Makpat" performs a left-to-right scan of the pattern, examining each character and
+either omitting, altering, or copying it when writing the preprocessed pattern.
+The pattern definition is taken to be the characters between the first pair
+of single quotes (both of which are written to the buffer.)
+
+.P
+Non-special characters and escaped special characters which are to be matched
+with the input are marked in the preprocessed pattern. That is, a byte
+with the "CHAR" code, "_", is written before the actual character.
+Later, when processing the input text, M7 will recognize that the character
+following "CHAR" in the pattern must match the current text character. 
+The encoding of special characters and constructions is described below.
+
+.3H"TAGS"
+Each left or right brace encountered in the original pattern is written to 
+the preprocessed buffer followed by an integer identifying which tag that
+particular brace belongs to. A stack is used to distinguish which right brace
+belongs to which left brace. When a left brace is encountered, a variable
+containing the current tag number is pushed onto the stack and then 
+incremented. Then, when a right brace is encountered, the stack is popped to
+identify which tag the right brace terminates.
+
+.3H"STACK CALLS"
+An ampersand, "&", denotes one of four types of stack calls which are
+described in the User's Manual.
+Throughout M7, preprocessing of stack and counter calls are handled by "procstck"
+and "proccntr" respectively. Since stack and counter calls can appear anywhere
+in the macro definition, various routines call these two but the results are
+the same. Note that type 1 calls are legal anywhere in the macro although
+their use does not serve any purpose except in a pattern or replacement 
+definition.
+
+.P
+In the preprocessed pattern, the ampersand is written to the buffer followed 
+by the integer which stands for the type of stack call. 
+The different types of calls are distinguished by a unique embedded symbol
+("<", "=", ":"). For example, a type 2 stack call has a comma and a type 
+4 stack call has a collon.
+Note that type 1 calls are identified by the abscence of any special symbol.
+After the type of stack call is written, a byte is reserved and later filled
+with the number of characters in the preprocessed stack call. This count
+will be used by "patsiz" during the matching stage
+to continue processing the pattern after the call
+has been processed.
+The character after the "&" in the original pattern is assumed to be a left parenthesis
+and is not placed in the buffer. 
+The stack name is copied, followed by the increment character (if present)
+and a code of -2 or -3 to indicate 
+whether to change the stack pointer before or after the stack is accessed.
+The last character written to the buffer is the right parenthesis.
+What other characters are written to the buffer depend on the type of stack
+call involved. The string of integers found in types 2 and 3 are converted
+to a single byte integer and placed on the buffer. The colons found in type
+4 stack calls are also written to the buffer along with a count of the number
+of characters in the text followed by the text itself.
+
+.3H"COUNTERS"
+Preprocessing of counter calls and stack calls are very similar.
+The characters put in the buffer include the pound character, "#", 
+the type of counter call,
+the number of characters in the call,
+the name of the counter (also a lower case letter), and the same 
+pairing of the optional increment symbol with its "before or after" code.
+The string of character digits in type 2 and 3 calls are converted to a two
+byte integer and then followed by the 
+closing parenthesis that marks the end of all stack and counter calls.
+Note that a stack pointer can only be incremented or decremented by one
+whereas a counter is always incremented or decremented by the current
+value of the counter's increment. 
+This value defaults to +1 unless set by the user and is only permitted to 
+be positive.
+
+.3H"CHARACTER CLASSES"
+When the left bracket of a character class is encountered, the string 
+of routines beginning with "getccl" is executed.
+Unlike stack and counter calls which write their right parenthesis to 
+the buffer and not the left, left brackets of character classes are
+written but the right ones are discarded. 
+Since the right bracket is not written to the buffer, a means of telling
+where the character class ends is needed. To accomplish this, a byte
+is set aside for the count of the characters in the character class.
+Following the character count are all the characters in the 
+class including the implied characters that are left out in constructs
+such as "a-z" or "0-9".
+
+.P
+Constructions such as "[~a-z]" are handled by substituting the left
+bracket with "`" as a code to indicate that the characters in the
+class would not constitute a match if found in the input.
+
+.P
+.3H"CLOSURES"
+When the closure character, '*', is encountered, it is written to the
+buffer followed by an integer code of +1 or -1 depending on whether
+the following character is "-". +1 will tell M7 to shrink closures
+down to a size of zero if the remainder of the pattern fails to match, 
+-1, which is written instead of an intended zero, is used to indicate
+that the pattern-closure construction must match at least one segment of
+the input in order for the pattern to match.
+
+.3H"OTHER SPECIAL SYMBOLS"
+The remaining special symbols for "beginning of line" (^),
+"end of line" ($), "special character classes" (beginning with "?") and line continuation (/)
+are not coded in any special way. With the
+exception of line continuation, the special symbols are simply written to the 
+preprocessed
+pattern buffer. When the line continuation symbol is encountered, all the
+characters following it are skipped until the next line continuation 
+symbol is found.
+
+.P
+With all these special symbols it becomes confusing as to when a character
+must be escaped and even when the escape character must be escaped.
+The utility routine "esc" is generally used to handle this situation
+especially during the preprocessing stage. The reader should
+see the code for this routine to see how it works since it will explain
+many questions about escaping better than any description can. However,
+it should be noted that the escape character itself is always a special
+character. This gives the user the ability to escape any character if in 
+doubt as to whether or not it should be escaped. For information on when
+special characters are not special anymore (such as when they are in
+a character class), the reader should consult the User's Manual.
+
+.2H"REPLACEMENT SYMBOL PREPROCESSING"
+The routine "procmac"
+calls "makpat" and "maksub" to preprocess the
+pattern and replacement definitions respectively. In between calling
+these two routines, "procmac" calls "proccalls" to process
+whatever is found between the pattern and the replacement symbol just as
+it did before the pattern was preprocessed.
+
+.P
+"Procmac" preprocesses the replacement symbol found in each macro.
+With the finding of an equals sign as the replacement symbol, "procmac" 
+has only to call "maksub", check for stack and counter calls 
+found after the replacement symbol (by calling "proccalls" again),
+add the number of characters in the preprocessed
+macro and the end of string character to the buffer, and then return to 
+the calling routine, m7.
+If on the other hand, the character "<" was found as the replacement symbol,
+procmac must add the number of the macro to the
+.ul
+non-rescanable macro list
+which is discussed in greater detail in section 5.
+
+.2H"REPLACEMENT PREPROCESSING"
+Preprocessing of the replacement part of the macro definition is much less
+complicated than that of the pattern part because very few 
+changes are made in writing the original replacement definition to the 
+preprocessed pattern buffer.
+The line continuation feature is 
+handled the same way as before and
+normal characters
+are simply written to the buffer without any preceding code character.
+The main alteration to the original replacement definition before writing
+to the buffer is in the handling of tags.
+
+.P
+.3H"TAGS"
+References to tagged portions of input text in the replacement definition
+are of the following form:
+
+.nf
+	{n}
+.fi
+
+where "n" is a positive integer between 1 and 99. The treatment
+of a tag reference is similar to a stack or counter reference; the
+left brace is written to the buffer, "n" is converted to an integer
+and written to the buffer, and the right brace is ignored.
+
+.3H"STACK AND COUNTER CALLS"
+Replacement definition preprocessing terminates as the fourth quote
+is written to the buffer. 
+Between the last quote and the macro terminator, the semicolon, are
+the last stack and counter calls which are preprocessed by the same
+routines used during the pattern preprocessing stage.
+Besides the stack and counter calls, any other characters between the last
+quote and the terminating semicolon are ignored. 
+The characters "&" and "#" are taken as the beginning of a stack or counter call
+unless they occur between two line continuation characters. The escape character
+is meaningless unless used in a pattern or replacement definition.
+
+.P
+Once "maksub"
+has found the semicolon (or the end-of-string character if there was an
+error in the input macro,) it is written to the buffer and control returns
+to "procmac" which writes the length of the macro and
+the end of string character, "\\0",  to the buffer.
+
+.2H"SAMPLE PREPROCESSED MACROS"
+This section shows how a few macros look before and after preprocessing.
+The macros in this list have nothing in common and would therefore be
+meaningless if they were to actually be grouped together.
+Notice that in the second list, the numerals do not all represent characters
+as some of them have been written to the buffer as integers.
+
+.nf
+Original versions:
+
+   'changed' = 'to this';
+
+   '{[a-d]} {abcd}' < '{1}' &(1,a);
+
+   '&(a)* {[a-d]*}'='&(a-)', &(1,b), &(2,a);
+
+   '^#(a+)#(b+)#(c+)$' = '#(a)#(b)#(c)', #(a=1);
+
+   '{[0-9]}* ?1*' wipe out everything after the number < '{1}';
+
+   'a' &(a=1) #(a=1) #(a,1) < 'b' &(a:a to b:);
+
+   'a to b?' < '\\'&(a) #(a)\\'\\;';
+
+   '[~1-3Q-R\\&\\#\\{]' = '/skip this/\\&\\#\\{';
+
+   '\\#define,{[a-b]*},{[c-d]*}' = /
+   / '%MACRO \\'{1}\\'=\\'{2}\\'\\;';
+
+
+Preprocessed versions:
+
+   '_c_h_a_n_g_e_d'='to this';
+
+   '{1[4abcd}1_ {2_a_b_c_d}2'<'{1'&21a);
+
+   '&1a)*-1_ {1[4abcd*-1}1'='&1a--3)'&21b)&22a);
+
+   '^#1a+-3)#1b+-3)#1c+-3)$'='#1a)#1b)#1c)'#2a1);
+
+   '{1[100123456789}1*-1_ ?1*-1'<'{1';
+
+   '_a'&3a1)#2a1)#3a1)<'b'&4a:6a to b:);
+
+   '_a_ _t_o_ _b_?'<'\\'&1a) #1a)\\'\\;';
+
+   '`8123QR&#{'='\\&\\#\\{';
+
+   '_#_d_e_f_i_n_e_,{1[2ab*-1}1_,{2[2cd*-1}2'=
+   '%MACRO \\'{1\\'=\\'{2\\'\\;';
+.fi
+
+.1H"PATTERN MATCHING AND REPLACEMENT"
+After the preprocessing stage has been completed, the routine "m7" initiates
+the pattern matching and replacement stages by reading the first input string
+and invoking the routine "smatch". "Smatch" will traverse the preprocessed
+macro file looking for macros that match some portion of the input string.
+The pattern matching operation is continued in the routine "amatch"
+while the task of substituting text for what was matched is accomplished
+through "rewrite". Both of these routines are called by "smatch" so that
+"smatch" can attend to superficial tasks which include getting the macros,
+checking to see if they are in the non-rescanable macro list and deciding when
+to print the newly altered input line.
+
+.P
+"Smatch" calls "amatch" to answer the question "starting at this input
+position, does the pattern match?".
+Thus, the first time "amatch" is called, it attempts to match the pattern
+starting at the first position of the input string. If "amatch" succeeds,
+then it returns the position after the match.
+On the other hand, if "amatch" fails, then "smatch" 
+invokes "amatch" a second time to try to match the pattern beginning at
+position two of the input. This will continue until either "amatch" succeeds
+or ultimately fails while trying to match the pattern at the last position
+of the input string.
+
+.P
+Whenever "amatch" succeeds, "smatch" calls "rewrite" which replaces the
+entire matched string with the text defined in the replacement definition.
+After replacement has taken place, "smatch"
+decides if the line is to be printed and then continues to call "amatch"
+to see if there are any other occurences of the pattern in the input.
+This is done with the position on the input line, returned by "rewrite",
+of where the character after the substitution lies.
+
+.P
+Each time "smatch" calls "amatch" to go through the input string and change
+all the occurences of the pattern it finds, it first checks to see if "amatch"
+has already done so successfully. If at least one change has taken place
+and the macro is listed in the 
+.ul
+non-rescanable macro list,
+which will be discussed in greater detail later, then "smatch" will not
+call "amatch" any further to change the input with this macro.
+
+.2H"PATTERN MATCHING STAGE"
+The big question to answer at this point is whether the pattern matches the
+input string at the current postion. If it does, the first postion on the input
+string that is 
+.ul
+not
+to be replaced is returned. Everything between the character before this postion  
+and the initial position will be replaced with the replacement text.
+
+.P
+"Amatch" is assigned the task of looking at both the pattern and the input 
+one character at a time to see if they match up. Basically, "amatch" gets 
+a character from the pattern and a character from the input and asks "omatch"
+"are they the same?". 
+If a segment of the input string does not match a segment of the pattern,
+(i.e. "omatch" replied "no"), "amatch" must still check to see if the next 
+pattern construction is "*-". This is because "*-" does not require that
+the previous pattern construction appear in the input string at all.
+If the input does not match and the "*-" construction does follow, a flag is set
+to indicate that the size of the closure is zero.
+
+.P
+Since "amatch" controls what "omatch" is going to compare, closure 
+implementation becomes more simplistic. Closure implies "match as many things
+of the previous type in the input as possible".
+To do this, "amatch" simply remembers where the previous pattern was so that
+when a closure comes along, it repetitively gives "omatch" the previous pattern
+but a new input character until "omatch" says "no, they aren't the same".
+Now "amatch" has the first character that couldn't be part of the closure.
+The question now is, "does the rest of the input match the rest of the
+of the pattern?".
+This is basically the same question that "smatch" asked "amatch" to begin
+with, so "amatch" calls itself with a subset of the pattern and asks itself
+the question that "smatch" did before.
+
+.P
+Note that if the rest of the pattern does not match the rest of the input
+there still could be a match if the number of characters matched by the
+closure (or the previous closure) is reduced.
+The tricky part is that the closure can only be reduced to one for '*' type
+closures, and zero for '*-' type closures.
+If '*-' is the case and "omatch" never found the first occurence of the pattern
+to begin with, then we have no first occurence to back up over. The above
+mentioned flag is therefore used to control how far back the closure can be
+shrinked.
+
+.P
+Omatch returns "YES" if a character from the input string matches the 
+specifications of the pattern. When the specification is that the character
+must be one of the characters listed in a character class, "omatch" calls
+the utility routine "locate" to linearly search the characters listed in the 
+character class. "Locate" returns "YES" if the character was found there.
+
+.P
+In addition to matching a single character from the input, "omatch" must also 
+test to see if the input string matches the contents of a stack entry or 
+counter when a stack or counter call appears in the pattern. When this occurs,
+the buck gets passed to "dostck" or "docntr" both of which return a pointer
+to a specific stack entry or counter. "Omatch" then simply compares the input
+with the characters on the stack or counter one character at a time until either
+they all match or one pair doesn't and "omatch" returns "no".
+Finally, "omatch" handles tags by storing the position of the input
+string being tagged in a two dimensional array.
+"Omatch" gets the tag number from the byte after the brace in the pattern
+and stores the input string position in the corresponding row of the array.
+
+.2H"REPLACEMENT STAGE"
+After a match has been found and the boundaries 
+of what is to be replaced have been identified, "rewrite" is called
+by "smatch" to process the remainder of the macro, that is, the replacement
+section and the final stack and counter calls.
+The new segment of text created from the replacement definition will be
+formed in a buffer which is the same size as the input line's buffer.
+The buffer will then be pasted over the input line by the routine "stuffit".
+"Stuffit" handles all cases of the replacement text being smaller, 
+larger or the same size as what's being replaced in the original input string.
+
+.P
+"Rewrite" uses the two dimensional tag array to process tag references.
+When the replacement definition indicates tagged input text is to be
+substituted, "rewrite" calls "movec" to move the characters between
+the positions that were stored in the tag array.
+
+.P
+Counter and stack calls found in the replacement definition incur calls to 
+"dostck" and "docntr". These routines perform in the same manner as when
+called by "omatch"; 
+they return a pointer to the stack entry or counter whose value is to be added
+to the buffer.
+"Rewrite" then simply calls the utility routine "movec" to move 
+characters from the stack onto the buffer.
+
+.P
+After the final quote in the macro is encountered signifying the end of the 
+replacement definition, "rewrite" is still left to process any remaining stack
+and counter calls that occur before the terminating semicolon.
+"Rewrite" will simply scan the region between the last quote and the semicolon
+and call "dostck" or "docntr" whenever it encounters the characters "&"
+or "#" respectively. All other characters besides those in stack or counter calls 
+were ignored during the preprocessing stage.
+
+.P
+When an input string is first read in, and anytime thereafter the string has
+had a portion of itself replaced, the first six characters ar checked for
+a posible '%' command. If '%' is the first character in the string,
+'docomand' will be called to check for a command. If such a 
+command does exist, then 'docomand' will process the command and return 'YES' 
+to prevent the input string
+from being processed any further.
+
+.1H"INTERNAL TABLES"
+This section discusses the internal data structures used in M7. 
+These structures include stacks and counters and their increments, pointers to 
+tag locations, a list of non-rescanable macros, and the file containing the
+preprocessed macros.
+
+.3H"STACK AND COUNTER STORAGE"
+M7 reserves 26,000 bytes to support the 26 stacks consisting of 20
+elements each with an element being 50 characters in length. To access
+this pool of memory, 520 bytes are reserved as pointers to the 520
+elements in the 26 stacks. Thus, every 20th element of this 520 byte
+array points to the beginning of a new stack. Stack pointers are
+stored in 26 integers which are initialized to +1 and are never permitted to
+go below that point.
+The 26 counters and the 26 counter increments are stored in two arrays
+of 26 integers apiece.
+Counters and their increments are also restricted to positive values.
+
+.3H"TAG STORAGE"
+During processing, the tagged positins of the input string are stored in a
+2 by 100 dimensioned array. Each tag, numbered from 1 to 99, has a beginning
+and ending position stored in its corresponding entry in the array.
+
+.3H"NON RESCANABLE MACRO LIST"
+Macros which are to be matched successfully only once across an per input line 
+are referenced via the 
+.ul
+nonrescanable macro list.
+This is done by associating a number with every macro in the file. Thus, the 
+first macro to be preprocessed is numbered "one", the second is numbered "two",
+etc. During preprocessing, the number of each macro having "<" as the 
+replacement symbol is added to the nonrescanable macro list. This list
+is represented by a 2 by 100 array, the first column of which holds the
+macro number while the second column has the success flag. When
+the macro has been matched successfully, the flag is set to indicate
+that the macro should not be reapplied to the current input line.
+After the final version of the input line has been written, all flags
+in the list are reset.
+The list is a sequential list and as the macros are being examined sequentially,
+no searching of the list for the macro number being examined is necessary.
+
+.3H"PREPROCESSED MACRO FILE"
+Although the form of preprocessed macros was described in the above section,
+certain characteristics of inter-macro boundaries must be described in
+greater detail.
+Three items appear after each macro in the file.
+The first
+is simply the macro delimeter, the semicolon, the second is the number of 
+bytes in the preceding macro, and the third is the end of string character,
+"\\0".
+An important observation to make is that the length of the preceeding
+macro is stored in integer form in TWO bytes of the file. This means
+that the integer is actually in two halves, the first half being in the
+first byte, the second in the second byte. 
+Two special utility routines are required to 
+translate the integer into two characters and back again because
+these bytes must be read in as characters.
+The same process is used to store and retrieve the integer embedded
+in types 2 and 3 counter calls.
+
+.P
+One final note must be made about writing to the preprocessed macro file.
+Recall that M7 processes macros at the end of the file before it processes
+macros at the beginning of the file. 
+The procedure to get the next macro is to read
+the size of the macro, move back
+in the file the specified number of bytes, and read the file until
+an end of string character is encountered.
+Because the end of string character
+is zero, everytime a zero must be written to the file a
+negative number is stored there instead so as not to be confused as being
+the end of the macro definition.
+
+.1H"APPENDIX - LIST OF M7'S SUBROUTINES"
+The following is a list of the routines contained in M7 and a brief discription
+of what each routine does. The chart after the list shows the hierarchy of the 
+routines. Under the routine name is a list of numbers which corresponds to the
+numbered list of utility routines at the end of the appendix.
+
+.LI 1
+
+.P
+m7 - main routine; handles all input, writes macros to the preprocessed macro
+file and initializes the t, n and p options.
+
+
+.P
+procmac - performs the preprocessing of macro definitions.
+
+.P
+smatch - performs the pattern matching and replacement process.
+
+
+.P
+makpat - performs the preprocessing of the pattern.
+
+.P
+maksub - performs the preprocessing of the replacement definition.
+Preprocesses stack and counter calls after the replacement definition.
+
+.P
+proccalls - preprocesses stack and counter calls outside of patterns and
+replacement definitions.
+
+.P
+docalls - processes stack and counter calls found outside of patterns and
+replacement definitions.
+
+.P
+docomand - processes '%' commands.
+
+.P
+rewrite - substitutes matched text with replacement text.
+Processes stack and counter calls after the replacement definition.
+
+.P
+getprocpat - gets macros from the preprocessed macro file.
+
+.P
+amatch - performs the matching processes; performs closure operations.
+
+
+.P
+procstck - preprocesses stack calls.
+
+.P
+getccl - preprocesses character classes.
+
+.P
+proccntr - preprocesses counter calls.
+
+.P
+docntr - performs counter operations.
+
+.P
+dostck - performs stack operations.
+
+.P
+omatch - tests for a match between an item on the input line and an item
+in the pattern
+
+
+.P
+filset - adds character class characters to the preprocessed macro.
+
+.P
+stuffit - substitutes the replacement text for the matched text.
+
+.P
+specclass - checks for a match of one of the special character classes
+which begin with the symbol '?'.
+
+.P
+dodash - expands constructions like 'a-d' into 'abcd'.
+
+.so chart
+.nf
+UTILITY ROUTINES:
+
+
+1. inistck - initializes stacks and stack pointers.
+2. inicntr - initializes counters and their increments.
+3. inivartbl - initializes table of legal '%' commands.
+4. putline - output routine.
+5. reinitlist - reinitializes list of non-rescanable macros.
+6. fatal_error - abort routine.
+7. getline - input routine; gets macros from macro file.
+8. addnode - adds a macro's # to non-rescanable macro list.
+9. addset - adds characters to preprocessed macro buffer.
+10. size - returns the number of characters in an array of
+           characters.
+11. itoc - converts a 2 byte integer into 2 character bytes.
+12. skip - moves a pointer through an array until a certain
+           character is found.
+13. esc - performs the excape operation.
+14. streq - tests to see if one string matches the beginning
+            of another.
+15. ctoi - converts 2 character bytes to a 2 byte integer.
+16. movec - moves n characters from one array to another.
+17. patsiz - returns the # of characters in the current
+             pattern construction.
+18. atoi - converts a string of character digits to an 
+           integer.
+19. itoa - converts an integer into a string of character
+           digits.
+20. locate - tests to see if a character occurs in a portion
+             of a character array.
+21. index - returns the position of a character in a 
+            character array.
+.fi
+.TC

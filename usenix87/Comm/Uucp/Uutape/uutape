@@ -1,0 +1,76 @@
+#! /bin/sh
+if [ $# = 0 -o $# -gt 2 ]
+then
+	echo	Usage: $0 sysname [grade]
+	exit 1
+fi
+
+uuname | grep -s $1 
+if [ $? -ne 0 ]
+then
+	echo "Unknown system $1" 
+	exit 2
+fi
+
+if [ $# = 2 ]
+then
+	grade=${2}
+else
+	grade=
+fi
+
+spool=/usr/spool/uucp
+host=`uuname -l`
+
+if [ -d ${spool}/C.${1} ]
+then
+	work=${spool}/C.${1}
+else
+	work=${spool}/C.
+fi
+
+cd $work
+
+mkdir /tmp/D. /tmp/X.
+
+if [ $? -ne 0 ]
+then
+	echo "can't create temporary directories"
+	exit 2
+fi
+
+for cmdf in `ls | grep "${1}${grade}"`
+do
+	if [ `grep "^S D" $cmdf | wc -l` = 2 ]
+	then
+		sed -e "s;S \(D.${host}X*\)\([^ ]*\) \([DX]\.\)\([^ ]*\).*;mv ${spool}/\1/\1\2 /tmp/\3/\3\4 ;" $cmdf >> /tmp/cmd$$
+		echo $work/$cmdf >> /tmp/rm$$
+	fi
+done
+
+sh /tmp/cmd$$
+
+cd /tmp
+
+chmod 666 D./* X./*
+
+ans="n"
+while [ "${ans}" -ne "y" ]
+do
+	echo -n "Please mount tape then type y"
+	read ans
+	if [ "${ans}" = "y" ]
+	then
+		tar co0 D. X.
+		if [ $? -ne 0 ]
+		then
+			ans="n"
+			echo "Tape failed - retry"
+			mt rew
+		fi
+	fi
+done
+
+rm -rf /tmp/D. /tmp/X.
+rm `cat /tmp/rm$$` /tmp/rm$$ /tmp/cmd$$
+exit 0

@@ -1,0 +1,637 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!allegra!mit-eddie!necntc!adelie!barry
+From: barry@adelie.UUCP
+Newsgroups: net.sources.games
+Subject: SYSV Patches to pd-rogue (again!)
+Message-ID: <3599@adelie.Adelie.COM>
+Date: 4 Mar 87 13:48:53 GMT
+Reply-To: barry@adelie.Adelie.COM (Barry A. Burke)
+Distribution: world
+Organization: Adelie Corporation, Cambridge MA
+Lines: 625
+Posted: Wed Mar  4 08:48:53 1987
+
+The recently posted "rogue" sources are an apparent re-post of the sources
+posted last November. Back then, I quickly hacked up those sources to run on
+my 3B2/400 (SYSV R2.0/2.1/3.0), and posted the following diffs to the net. I
+guess the same folk who didn't see the original posting of the sources also
+didn't see these diffs.
+
+Apply via "patch", at your own risk.  They worked for me on the original
+posted version- I didn't bother to check them against the current version,
+other than to verify that the two postings ``looked'' the same. See the new
+makefile for info on what was changed...
+
+*** Makefile.orig	Thu Nov 27 23:40:53 1986
+--- Makefile	Thu Nov 27 23:44:20 1986
+***************
+*** 3,10
+      room.o save.o score.o special_hit.o throw.o trap.o use.o zap.o
+  
+  CC = cc
+! 
+! CFLAGS = -c
+  
+  rogue: $(ROGUE_OBJS)
+  	$(CC) $(ROGUE_OBJS) -lcurses -ltermlib -o rogue
+
+--- 3,16 -----
+      room.o save.o score.o special_hit.o throw.o trap.o use.o zap.o
+  
+  CC = cc
+! # add -DSYSV for SYSV ioctl(), time(), str[r]chr instead of [r]index,
+! # and uses short instead of char for key attributes (eg. armor enchantment)
+! #
+! # Files modified for SYSV by Barry Burke (barry%adelie@harvard.Harvard.EDU):
+! #
+! #	Makefile, init.c, message.c, object.[ch], room.c, save.c, score.c
+! #
+! CFLAGS = -c -O -DSYSV
+  
+  rogue: $(ROGUE_OBJS)
+  	$(CC) $(ROGUE_OBJS) -lcurses -ltermlib -o rogue
+
+*** init.c.orig	Thu Nov 27 23:41:00 1986
+--- init.c	Thu Nov 27 23:50:12 1986
+***************
+*** 13,18
+  #include <curses.h>
+  #include "object.h"
+  #include "room.h"
+  #include <sgtty.h>
+  #include <signal.h>
+  
+
+--- 13,19 -----
+  #include <curses.h>
+  #include "object.h"
+  #include "room.h"
++ #ifndef SYSV
+  #include <sgtty.h>
+  #endif
+  #include <signal.h>
+***************
+*** 14,19
+  #include "object.h"
+  #include "room.h"
+  #include <sgtty.h>
+  #include <signal.h>
+  
+  char login_name[30];
+
+--- 15,21 -----
+  #include "room.h"
+  #ifndef SYSV
+  #include <sgtty.h>
++ #endif
+  #include <signal.h>
+  
+  char login_name[30];
+***************
+*** 186,191
+  edchars(mode)
+  short mode;
+  {
+  	static boolean called_before = 0;
+  	static struct ltchars ltc_orig;
+  	static struct tchars tc_orig;
+
+--- 188,194 -----
+  edchars(mode)
+  short mode;
+  {
++ #ifndef SYSV
+  	static boolean called_before = 0;
+  	static struct ltchars ltc_orig;
+  	static struct tchars tc_orig;
+***************
+*** 207,212
+  	}
+  	ioctl(0, TIOCSETC, &tc_temp);
+  	ioctl(0, TIOCSLTC, &ltc_temp);
+  }
+  
+  process_args(argc, argv)
+
+--- 210,216 -----
+  	}
+  	ioctl(0, TIOCSETC, &tc_temp);
+  	ioctl(0, TIOCSLTC, &ltc_temp);
++ #endif
+  }
+  
+  process_args(argc, argv)
+
+*** message.c.orig	Thu Nov 27 23:41:23 1986
+--- message.c	Thu Nov 27 23:44:30 1986
+***************
+*** 135,140
+  slurp()
+  {
+  	long ln;
+  	short i, n;
+  
+  	ioctl(0, FIONREAD, &ln);
+
+--- 135,141 -----
+  slurp()
+  {
+  	long ln;
++ #ifndef SYSV
+  	short i, n;
+  
+  	ioctl(0, FIONREAD, &ln);
+***************
+*** 143,148
+  	for (i = 0; i < n; i++) {
+  		getchar();
+  	}
+  }
+  
+  rgetchar()
+
+--- 144,153 -----
+  	for (i = 0; i < n; i++) {
+  		getchar();
+  	}
++ #else
++ 	ioctl(0,TCFLSH,&ln);
++ #endif
++ 
+  }
+  
+  rgetchar()
+***************
+*** 156,161
+  		case '\022':
+  			wrefresh(curscr);
+  			break;
+  		case '\032':
+  			printf(CL);
+  			fflush(stdout);
+
+--- 161,167 -----
+  		case '\022':
+  			wrefresh(curscr);
+  			break;
++ #ifndef SYSV
+  		case '\032':
+  			printf(CL);
+  			fflush(stdout);
+***************
+*** 160,165
+  			printf(CL);
+  			fflush(stdout);
+  			tstp();
+  			break;
+  		case 'X':
+  			save_screen();
+
+--- 166,173 -----
+  			printf(CL);
+  			fflush(stdout);
+  			tstp();
++ 			printf("message.c");
++ 			fflush(stdout);
+  			break;
+  #endif			
+  		case 'X':
+***************
+*** 161,166
+  			fflush(stdout);
+  			tstp();
+  			break;
+  		case 'X':
+  			save_screen();
+  			break;
+
+--- 169,175 -----
+  			printf("message.c");
+  			fflush(stdout);
+  			break;
++ #endif			
+  		case 'X':
+  			save_screen();
+  			break;
+
+*** object.c.orig	Thu Nov 27 23:41:59 1986
+--- object.c	Thu Nov 27 23:44:40 1986
+***************
+*** 14,19
+  #include "object.h"
+  #include "monster.h"
+  #include "room.h"
+  
+  object level_objects;
+  unsigned short dungeon[DROWS][DCOLS];
+
+--- 14,23 -----
+  #include "object.h"
+  #include "monster.h"
+  #include "room.h"
++ #ifdef SYSV
++ #define index strchr
++ #define rindex strrchr
++ #endif
+  
+  object level_objects;
+  unsigned short dungeon[DROWS][DCOLS];
+
+*** object.h.orig	Thu Nov 27 23:42:02 1986
+--- object.h	Thu Nov 27 23:44:45 1986
+***************
+*** 185,190
+  	short kill_exp;			/* exp for killing it */
+  	boolean is_protected;	/* level starts */
+  	boolean is_cursed;		/* level ends */
+  	char class;				/* chance of hitting you */
+  	short identified;		/* 'F' damage, 1,2,3... */
+  	unsigned char which_kind; /* item carry/drop % */
+
+--- 185,191 -----
+  	short kill_exp;			/* exp for killing it */
+  	boolean is_protected;	/* level starts */
+  	boolean is_cursed;		/* level ends */
++ #ifndef SYSV
+  	char class;				/* chance of hitting you */
+  #else
+  	short class;
+***************
+*** 186,191
+  	boolean is_protected;	/* level starts */
+  	boolean is_cursed;		/* level ends */
+  	char class;				/* chance of hitting you */
+  	short identified;		/* 'F' damage, 1,2,3... */
+  	unsigned char which_kind; /* item carry/drop % */
+  	char o_row, o_col, o;	/* o is how many times stuck at o_row, o_col */
+
+--- 187,195 -----
+  	boolean is_cursed;		/* level ends */
+  #ifndef SYSV
+  	char class;				/* chance of hitting you */
++ #else
++ 	short class;
++ #endif
+  	short identified;		/* 'F' damage, 1,2,3... */
+  	unsigned char which_kind; /* item carry/drop % */
+  #ifndef SYSV
+***************
+*** 188,193
+  	char class;				/* chance of hitting you */
+  	short identified;		/* 'F' damage, 1,2,3... */
+  	unsigned char which_kind; /* item carry/drop % */
+  	char o_row, o_col, o;	/* o is how many times stuck at o_row, o_col */
+  	char row, col;			/* current row, col */
+  	char damage_enchantment;/* room char when detect_monster */
+
+--- 192,198 -----
+  #endif
+  	short identified;		/* 'F' damage, 1,2,3... */
+  	unsigned char which_kind; /* item carry/drop % */
++ #ifndef SYSV
+  	char o_row, o_col, o;	/* o is how many times stuck at o_row, o_col */
+  	char row, col;			/* current row, col */
+  	char damage_enchantment;/* room char when detect_monster */
+***************
+*** 194,199
+  	char quiver;			/* monster slowed toggle */
+  	char trow, tcol;		/* target row, col */
+  	char to_hit_enchantment;/* how many moves is confused */
+  	unsigned short what_is;	/* imitator's charactor (?!%: */
+  	boolean picked_up;		/* sleep from wand of sleep */
+  	unsigned short in_use_flags;
+
+--- 199,212 -----
+  	char quiver;			/* monster slowed toggle */
+  	char trow, tcol;		/* target row, col */
+  	char to_hit_enchantment;/* how many moves is confused */
++ #else
++ 	short o_row, o_col, o;
++ 	short row, col;
++ 	short damage_enchantment;
++ 	short quiver;
++ 	short trow, tcol;
++ 	short to_hit_enchantment;
++ #endif
+  	unsigned short what_is;	/* imitator's charactor (?!%: */
+  	boolean picked_up;		/* sleep from wand of sleep */
+  	unsigned short in_use_flags;
+
+*** room.c.orig	Thu Nov 27 23:42:30 1986
+--- room.c	Thu Nov 27 23:44:52 1986
+***************
+*** 15,20
+  #include "object.h"
+  #include "move.h"
+  #include "monster.h"
+  
+  short current_room;
+  room rooms[MAXROOMS];
+
+--- 15,24 -----
+  #include "object.h"
+  #include "move.h"
+  #include "monster.h"
++ #ifdef SYSV
++ #define index strchr
++ #define rindex strrchr
++ #endif
+  
+  
+  short current_room;
+***************
+*** 16,21
+  #include "move.h"
+  #include "monster.h"
+  
+  short current_room;
+  room rooms[MAXROOMS];
+  boolean rooms_visited[MAXROOMS];
+
+--- 20,26 -----
+  #define rindex strrchr
+  #endif
+  
++ 
+  short current_room;
+  room rooms[MAXROOMS];
+  boolean rooms_visited[MAXROOMS];
+***************
+*** 256,261
+  	}
+  
+  	if (!fork()) {
+  		if (setreuid(-1, getuid()) < 0) exit(1);
+  		execl(sh, rindex(sh, '/') + 1, 0);
+  		exit(0);
+
+--- 261,267 -----
+  	}
+  
+  	if (!fork()) {
++ #ifndef SYSV
+  		if (setreuid(-1, getuid()) < 0) exit(1);
+  #endif
+  		execl(sh, rindex(sh, '/') + 1, 0);
+***************
+*** 257,262
+  
+  	if (!fork()) {
+  		if (setreuid(-1, getuid()) < 0) exit(1);
+  		execl(sh, rindex(sh, '/') + 1, 0);
+  		exit(0);
+  	}
+
+--- 263,269 -----
+  	if (!fork()) {
+  #ifndef SYSV
+  		if (setreuid(-1, getuid()) < 0) exit(1);
++ #endif
+  		execl(sh, rindex(sh, '/') + 1, 0);
+  		exit(0);
+  	}
+
+*** save.c.orig	Thu Nov 27 23:42:34 1986
+--- save.c	Thu Nov 27 23:44:58 1986
+***************
+*** 11,17
+   */
+  
+  #include <curses.h>
+- #include <sys/file.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+
+--- 11,16 -----
+   */
+  
+  #include <curses.h>
+  #include <sys/types.h>
+  #include <sys/file.h>
+  #include <sys/stat.h>
+***************
+*** 13,18
+  #include <curses.h>
+  #include <sys/file.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+  #include "object.h"
+
+--- 12,18 -----
+  
+  #include <curses.h>
+  #include <sys/types.h>
++ #include <sys/file.h>
+  #include <sys/stat.h>
+  #ifndef SYSV
+  #include <sys/time.h>
+***************
+*** 14,19
+  #include <sys/file.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+  #include "object.h"
+  #include "room.h"
+
+--- 14,20 -----
+  #include <sys/types.h>
+  #include <sys/file.h>
+  #include <sys/stat.h>
++ #ifndef SYSV
+  #include <sys/time.h>
+  #endif
+  #include "object.h"
+***************
+*** 15,20
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #include <sys/time.h>
+  #include "object.h"
+  #include "room.h"
+  
+
+--- 16,22 -----
+  #include <sys/stat.h>
+  #ifndef SYSV
+  #include <sys/time.h>
++ #endif
+  #include "object.h"
+  #include "room.h"
+  
+***************
+*** 64,70
+  	FILE *fp;
+  	int i;
+  	struct stat sbuf;
+! 	struct timeval tv;
+  	struct timezone tzp;
+  	char name_buffer[80];
+  	char *getenv(), *hptr;
+
+--- 66,73 -----
+  	FILE *fp;
+  	int i;
+  	struct stat sbuf;
+! #ifndef SYSV
+! 	struct timeal tv;
+  	struct timezone tzp;
+  #else
+  	time_t	seconds;
+***************
+*** 66,71
+  	struct stat sbuf;
+  	struct timeval tv;
+  	struct timezone tzp;
+  	char name_buffer[80];
+  	char *getenv(), *hptr;
+  
+
+--- 69,77 -----
+  #ifndef SYSV
+  	struct timeal tv;
+  	struct timezone tzp;
++ #else
++ 	time_t	seconds;
++ #endif
+  	char name_buffer[80];
+  	char *getenv(), *hptr;
+  
+***************
+*** 117,122
+  	r_write(fp, &wizard, sizeof(wizard));
+  	r_write(fp, &score_only, sizeof(score_only));
+  	r_write(fp, &m_moves, sizeof(m_moves));
+  	gettimeofday(&tv, &tzp); tv.tv_sec += 10;
+  	r_write(fp, &tv.tv_sec, sizeof(long));
+  	fclose(fp);
+
+--- 123,129 -----
+  	r_write(fp, &wizard, sizeof(wizard));
+  	r_write(fp, &score_only, sizeof(score_only));
+  	r_write(fp, &m_moves, sizeof(m_moves));
++ #ifndef SYSV
+  	gettimeofday(&tv, &tzp); tv.tv_sec += 10;
+  	r_write(fp, &tv.tv_sec, sizeof(long));
+  #else
+***************
+*** 119,124
+  	r_write(fp, &m_moves, sizeof(m_moves));
+  	gettimeofday(&tv, &tzp); tv.tv_sec += 10;
+  	r_write(fp, &tv.tv_sec, sizeof(long));
+  	fclose(fp);
+  
+  	if (write_failed) {
+
+--- 126,135 -----
+  #ifndef SYSV
+  	gettimeofday(&tv, &tzp); tv.tv_sec += 10;
+  	r_write(fp, &tv.tv_sec, sizeof(long));
++ #else
++ 	time(&seconds); seconds +=10;
++ 	r_write(fp, &seconds, sizeof(time_t));
++ #endif
+  	fclose(fp);
+  
+  	if (write_failed) {
+***************
+*** 135,140
+  	short i;
+  	struct stat sbuf;
+  	ino_t inode;
+  	long seconds;
+  	char buf[4];
+  
+
+--- 146,154 -----
+  	short i;
+  	struct stat sbuf;
+  	ino_t inode;
++ #ifdef SYSV
++ 	time_t seconds;
++ #else
+  	long seconds;
+  #endif
+  	char buf[4];
+***************
+*** 136,141
+  	struct stat sbuf;
+  	ino_t inode;
+  	long seconds;
+  	char buf[4];
+  
+  	if (stat(fname, &sbuf) || ((fp = fopen(fname, "r")) == NULL)) {
+
+--- 150,156 -----
+  	time_t seconds;
+  #else
+  	long seconds;
++ #endif
+  	char buf[4];
+  
+  	if (stat(fname, &sbuf) || ((fp = fopen(fname, "r")) == NULL)) {
+***************
+*** 190,195
+  	r_read(fp, &wizard, sizeof(wizard));
+  	r_read(fp, &score_only, sizeof(score_only));
+  	r_read(fp, &m_moves, sizeof(m_moves));
+  	r_read(fp, &seconds, sizeof(long));
+  
+  	if (fread(buf, 1, 1, fp) > 0) {
+
+--- 205,211 -----
+  	r_read(fp, &wizard, sizeof(wizard));
+  	r_read(fp, &score_only, sizeof(score_only));
+  	r_read(fp, &m_moves, sizeof(m_moves));
++ #ifndef SYSV
+  	r_read(fp, &seconds, sizeof(long));
+  #else
+  	r_read(fp, &seconds, sizeof(time_t));
+***************
+*** 191,196
+  	r_read(fp, &score_only, sizeof(score_only));
+  	r_read(fp, &m_moves, sizeof(m_moves));
+  	r_read(fp, &seconds, sizeof(long));
+  
+  	if (fread(buf, 1, 1, fp) > 0) {
+  		clear();
+
+--- 207,215 -----
+  	r_read(fp, &m_moves, sizeof(m_moves));
+  #ifndef SYSV
+  	r_read(fp, &seconds, sizeof(long));
++ #else
++ 	r_read(fp, &seconds, sizeof(time_t));
++ #endif
+  
+  	if (fread(buf, 1, 1, fp) > 0) {
+  		clear();
+
+*** score.c.orig	Thu Nov 27 23:42:40 1986
+--- score.c	Thu Nov 27 23:45:12 1986
+***************
+*** 15,20
+  #include "object.h"
+  #include "monster.h"
+  #include "room.h"
+  #include <sys/file.h>
+  
+  char *score_file = SCORE_FILE;
+
+--- 15,23 -----
+  #include "object.h"
+  #include "monster.h"
+  #include "room.h"
++ #ifdef SYSV
++ #include <sys/types.h>
++ #endif
+  #include <sys/file.h>
+  
+  char *score_file = SCORE_FILE;
+
+-- 
+LIVE:	Barry A. Burke, (617) 499-6370
+USPS:	Adelie Corporation, 125 CambridgePark Drive Cambridge, MA  02140
+UUCP:	barry@adelie.Adelie.COM / ..!{harvard,ll-xn,necntc,mirror}!adelie!barry
+ARPA:	barry@adelie.Adelie.COM (via MX) / barry%adelie@harvard.Harvard.EDU

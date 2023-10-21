@@ -1,0 +1,55 @@
+#! SHELL
+PATH=$PATH:/usr/local:
+export PATH
+archivedir=/usr/lib/news/archive
+cd ARCHDIR
+
+tozap=MYHOME/tozap
+
+if [ $# -ne 2 ]
+then
+    echo "Usage: move-current-to month prev_month" 1>&2
+    exit 1
+fi
+
+if [ -d $1 ]
+then
+    echo "$1 exists, check usage" 1>&2
+    echo "Usage: move-current-to month prev_month" 1>&2
+    exit 1
+fi
+
+if [ ! -d $2 ]
+then
+    echo "$2 does not exist, check usage" 1>&2
+    echo "Usage: move-current-to month prev_month" 1>&2
+    exit 1
+fi
+
+if [ -f ${tozap} ]
+then
+    echo "Running '${tozap}' ... " 1>&2
+    ${tozap}
+fi
+echo "Done with '${tozap}'" 1>&2
+
+echo -n "Cleaning up $2," 1>&2
+cd $2 ; ./clean ; cd ..
+mkdir $1
+chmod 700 $1
+/bin/rm Current
+ln -s $1 Current
+
+cp /dev/null $1/SAVELOG
+
+echo "Deleting 'cancel' messages"
+${archivedir}/rm-cancel $2
+
+find $2 -type f -perm 755 -exec mv {} Current ';'
+echo " Done"
+
+echo "Compressing data and Logfile"
+${archivedir}/squish $2
+echo -n "Build new complete table of contents "
+${archivedir}/toc-all > TOCFROMSOURCEARCHIVE
+echo "done"

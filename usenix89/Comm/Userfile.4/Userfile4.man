@@ -1,0 +1,172 @@
+
+.TH USERFILE 4
+.SH NAME
+USERFILE \- \s-1UUCP\s0 pathname permissions file
+.SH ORIGIN
+System V
+.SH DESCRIPTION
+.I USERFILE
+specifies the file system directory trees that are accessible to
+local users and to remote systems via \s-1UUCP\s0.
+.PP
+Each line in
+.I USERFILE
+is of the form:
+.PP
+.nf
+[loginname]\fB,\fP[system] [ \fBc\fP ] pathname pathname pathname ...
+.fi
+.PP
+The first two items are separated by a comma; any number of spaces or
+tabs may separate the remaining items.
+Lines beginning with a `#' character are comments.
+.PP
+.I Loginname
+is a login (from
+.IR /etc/passwd )
+on the local machine.
+Every login name that is used by remote systems to connect for \s-1UUCP\s0
+transfers must be listed.
+.PP
+.I System
+is the name of a remote machine, the same name used in
+.IR L.sys (4).
+.PP
+.I c
+denotes the optional
+.I callback
+field.
+If a \fBc\fP appears here, a remote machine that calls in will be told
+that callback is requested, and the conversation will be terminated.
+The local system will then immediately call the remote host back.
+.PP
+.I Pathname
+is a pathname prefix that is permissible for this
+.I login
+and/or
+.IR system .
+.PP
+When
+.IR uucico (1M)
+runs in master role or
+.IR uucp (1C)
+or
+.IR uux (1C)
+are run by local users, the permitted pathnames are those on the
+first line with a
+.I loginname
+that matches the name of the user who executed the command.
+If no such line exists, then the first line with a null (missing)
+.I loginname
+field is used.
+(Beware:
+.I uucico
+is often run by the superuser or the \s-1UUCP\s0 administrator through
+.IR cron (1M).)
+.PP
+When
+.I uucico
+runs in slave role, the permitted pathnames are those on the
+first line with a
+.I system
+field that matches the hostname of the remote machine.
+If no such line exists, then the first line with a null (missing)
+.I system
+field is used.
+.PP
+.IR Uuxqt (1M)
+works differently; it knows neither a login name nor a hostname.
+It accepts the pathnames on the first line that has a null
+.I system 
+field.
+(This is the same line that is used by
+.I uucico
+when it cannot match the remote machine's hostname.)
+.PP
+A line with both
+.I loginname
+and
+.I system
+null, for example
+.IP
+.B ,	/usr/spool/uucppublic
+.PP	
+is termed a "null line."
+It specifies the paths for whichever of the "unknown login name" 
+or the "unknown hostname" cases was not defined earlier in the file.
+If neither has been defined, then only the "unknown login name" case
+will be defined.
+Note that it is unacceptable to have a
+.I USERFILE
+consisting of nothing but a "null line";
+this will leave the "unknown hostname" case undefined and will cause
+.I uuxqt
+to reject all requests.
+.SH FILES
+.ta \w'/usr/lib/uucp/UUAIDS/USERFILE   'u
+.nf
+/usr/lib/uucp/USERFILE
+.fi
+.SH SEE ALSO
+uucp(1C), uux(1C), L.cmds(4), L.sys(4), uucico(1M), uuxqt(1M)
+.SH NOTES
+The \s-1UUCP\s0 utilities
+.RI ( uucico ,
+.IR uucp ,
+.IR uux ,
+and
+.IR uuxqt )
+always have access to the \s-1UUCP\s0 spool files in
+.IR /usr/spool/uucp ,
+regardless of pathnames in
+.IR USERFILE .
+.PP
+If
+.B uucp
+is listed in
+.IR L.cmds (4),
+then a remote system will execute
+.I uucp 
+on the local system with the
+.I USERFILE
+privileges for its
+.IR login ,
+not its hostname.
+.PP
+.I Uucico
+freely switches between master and slave roles during the course of a
+conversation, regardless of the role with which it was started.
+This affects how
+.I USERFILE
+is interpreted.
+.SH WARNING
+.I USERFILE
+restricts access only on strings that the \s-1UUCP\s0 utilities identify
+as being pathnames.
+If the wrong holes are left in other \s-1UUCP\s0 control files (notably
+.IR L.cmds ),
+it can be easy for an intruder to open files anywhere in the file system.
+Arguments to
+.IR uucp (1C)
+are safe, since it assumes all of its non-option arguments are file names.
+.IR Uux (1C)
+cannot make such assumptions; hence, it is more dangerous.
+.SH BUGS
+The current user's name is determined via the
+.IR getpwent (3C)
+function call; hence, if several names are assigned to a single UID,
+the first name encountered in
+.I /etc/passwd
+will be used.
+.PP
+Older versions of
+.IR uuxqt (1M)
+erroneously check \s-1UUCP\s0 spool files against the USERFILE pathname
+permissions.
+Hence, on these systems it is necessary to specify
+.I /usr/spool/uucp
+as a valid path on the USERFILE line used by
+.IR uuxqt .
+Otherwise, all
+.IR uux (1C)
+requests are rejected with a "PERMISSION DENIED" message.

@@ -1,0 +1,68 @@
+:
+# install files on existing paths
+USAGE="Usage: `basename $0` [-mrsx] [-d dir] [-f file] filename"
+ACT=cp
+REMOVE=:
+STRIP=:
+
+# parse options, -s for strip, -m for move, -r for remove, -x for chmod +x
+# -d forces installation in directory, -f gives new file name
+set -- `getopt mrsxd:f: $*`
+if [ $? != 0 ]
+then echo $USAGE; exit 2
+fi
+for i
+do	case $i in
+	-m)	ACT=mv; shift;;
+	-r)	REMOVE=rm; shift;;
+	-s)	STRIP=strip; shift;;
+	-x)	STRIP='chmod +x'; shift;;
+	-d)	DIR=$2; shift 2;;
+	-f)	OLD=$2; shift 2;;
+	--)	shift; break;;
+	esac
+done
+
+for i
+do
+	if [ -f $i ]
+	then
+		$STRIP $i
+
+		if [ $DIR ]
+		then
+			if [ -d $DIR ]
+			then
+				OLD=$DIR/`basename $i`
+			else
+				echo "$DIR is not a directory"
+				exit 2
+			fi
+		else
+			if [ $OLD ]
+			then
+				if [ $# -ne 1 ]
+				then
+					echo "-f option only installs one file"
+					exit 2
+				fi
+			else
+				OLD=`which -oq $i`
+				if [ $OLD ]
+				then
+					:
+				else
+					echo "old version of $i not found"
+					exit 3
+				fi
+			fi
+		fi
+
+		$ACT $i $OLD
+		$REMOVE $i
+		echo "$i installed as $OLD"
+	else
+		echo "file $i not found"
+		exit 4
+	fi
+done

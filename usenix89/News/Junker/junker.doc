@@ -1,0 +1,125 @@
+.TH JUNKER 1 "16 June 1986"
+.SH NAME
+junker - cut down volume in newsgroups
+.SH SYNOPSIS
+junker
+.I newsdir
+.SH DESCRIPTION
+.I Junker
+is a program used to reduce the volume of news arti-
+cles in newsgroups in the top-level news directory
+.I newsdir.
+Sites that can't carry all of certain newsgroups due to
+unjustifiable volume can run
+.I junker
+on those newsgroups,
+instead of refusing to carry them.
+.I Junker
+should be run
+automatically with the use of
+.I cron
+(8).  These runs should
+be synchronized with calls to other sites so as to minimize
+the volume of news going over those calls.
+.PP
+.I Junker
+reads its standard input to determine what newsgroups
+to consider for junking and how it should junk them.  A line
+beginning with a hash (#) is treated as a comment line.
+Newsgroup data is in lines of the form
+.PP
+     \fInewsgroup window byteshr\fP
+.PP
+where
+.I newsgroup
+is the name of the newsgroup to be affected,
+.I window
+is an integer giving the length of the "article window" in hours, and
+.I byteshr
+is an integer giving the desired
+newsgroup bandwidth, in bytes per hour.  Every line of this
+form defines a "vulnerable directory", constructed from the
+runtime
+.I newsdir
+parameter and the newsgroup name.  (E.g. \fInewsdir\fP/net/politics
+for newsgroup net.politics;
+.I junker
+must
+have write access to the directory.) Within that directory,
+the line defines a group of "vulnerable articles": those
+articles whose "Date-Received" line indicates they have been
+received on the system within the "article window", i.e.
+within the last
+.I window
+hours.
+.PP
+With this information,
+.I junker
+enforces a limit of \fIwindow * byteshr\fP
+bytes on the sum of the sizes of all the vulnerable
+articles.  It does this by slicing out the middles of large
+articles and replacing them by a block of text of the fol-
+lowing form:
+.PP
+\\ /
+.br
+ X [\fIsitename\fP: junked \fIn\fP lines]
+.br
+O O
+.PP
+where
+.I sitename
+is the name of the site
+.I junker
+is running on, and
+.I n
+is the number of lines sliced out.  Relatively small
+articles are left untouched.  For a full description of how
+to decide on the parameters for individual newsgroups, see
+the document "Installing Junker", which should come with the
+distribution of the software.
+.PP
+.I Junker
+takes pains to preserve the integrity of the article
+file structure.  It preserves article headers as much as
+possible, and if a junked article file had "Xref" links to
+it,
+.I junker
+relinks them to the new version of the file.
+.SH EXAMPLE
+Say the file junker.in contains the lines
+.PP
+     # This'll fix em good
+.br
+     net.legal.wombats 336 500
+.br
+     net.sport.steamhockey 5 1000
+.PP
+and
+.I junker
+has been run with the command
+.PP
+     junker /usr/spool/news <junker.in
+.PP
+Then the run will take all the articles in the directory
+/usr/spool/news/net/legal/wombats that have come in in the
+last two weeks (336 hours) and cut them down to a total of
+at most 16800 (336 * 500) bytes.  It will then cut down all
+the article files in /usr/spool/news/net/sport/steamhockey
+from the last 5 hours to a total of 5000 bytes.
+.SH AUTHOR
+Jamie Andrews (whose name will probably live in infamy for
+this), Dept. of Computer Science, University of British
+Columbia.  Helpful comments from Barry Brachman.
+.SH FILES
+No file dependencies, except that Junker must have write
+access to the specified
+.I newsdir.
+.SH SEE ALSO
+cron(1), rn(1)
+.SH BUGS
+.I Junker
+is not quite as fair as it should be to big articles
+which have come into the system earlier than smaller arti-
+cles.
+

@@ -1,0 +1,1334 @@
+:	Bcsh -- A Simple Cshell-Like Command Pre-Processor For The Bourne Shell
+:
+:	"Copyright (c) Chris Robertson, December 1985"
+:
+:	This software may be used for any purpose provided the original
+:	copyright notice and this notice are affixed thereto.  No warranties of
+:	any kind whatsoever are provided with this software, and it is hereby
+:	understood that the author is not liable for any damagages arising
+:	from the use of this software.
+:
+:	Features Which the Cshell Does Not Have:
+:	----------------------------------------
+:
+:	+  command history persists across bcsh sessions
+: 	+  global last-command editing via 'g^string1^string2^' syntax
+:	+  edit any command via $EDITOR or $VISUAL editors
+:	+  history file name, .bcshrc file name, alias file name, and number
+:	   of commands saved on termination can be set by environment variables
+:	+  prompt may evaluate commands, such as `pwd`, `date`, etc.
+:	+  the whole text of interactive 'for' and 'while' loops and 'if'
+:	   statements goes into the history list and may be re-run or edited
+:	+  multiple copies of commands and requests to see command history
+:	   are not added to the history list
+:	+  the history mechanism actually stores all commands entered in a
+:	   current session, not just $history of them.  This means that you
+:	   can increase $history on the fly and at once have a larger history.
+:
+:
+:	Synonyms:
+:	---------
+:
+:	logout, exit, bye	write out history file and exit
+:	h, history		show current history list
+:	
+:	
+:	Aliases:
+:	--------
+:
+:	alias NAME CMND		create an alias called NAME to run CMND
+:	unalias NAME		remove the alias NAME
+:
+:	There are no 'current-session only' aliases -- all alias and unalias
+:	commands are permanent, and stored in the $aliasfile.
+:
+:	If an alias contains positional variables -- $1, $2, $*, etc. -- any
+:	arguments following the alias name are considered to be values for
+:	those variables, and the alias is turned into a command of the form
+:	'set - arguments;alias'.  Otherwise, a simple substitution is performed
+:	for the alias and the rest of the command preserved.  The cshell
+:	convention of using '\!:n' in an alias to get bits of the current
+:	command is mercifully abandoned.
+:
+:	Quotes are not necessary around the commands comprising an alias;
+:	in fact, any enclosing quotes are stripped when the alias is added
+:	to the file.
+:
+:	A couple of typical aliases might be:
+:
+:		goto	cd $1;pwd
+:		l	ls -F
+:
+:	Note that aliasing something to "commands;logout" will not work -- if
+:	you want something to happen routinely on logout put it in the file
+:	specified by $logoutfile, default = $HOME/.blogout.
+:
+:
+:	Command Substitutions:
+:	----------------------
+:
+:	!!			substitute last command from history list
+:	!!:N			substitute Nth element of last command from
+:				history list -- 0 = command name, 1 = 1st arg
+: 	!!:$			substitute last element of last command from
+:				history list
+: 	!!:*			substitute all arguments to last command
+:				from history list
+:	!NUMBER			substitute command NUMBER from the history list
+:	!NUMBER:N		as above, but substitute Nth element, where
+:				0 = command name, 1 = 1st arg, etc.
+: 	!NUMBER:$		as above, but substitute last element
+: 	!NUMBER:*		as above, but substitute all arguments
+:	!?STRING		substitute most-recent command from history list
+:				containing STRING -- STRING must be enclosed in
+:				braces if followed by any other characters
+:	!?STRING:N		as above, but substitute Nth element, where
+:				0 = command name, 1 = 1st arg, etc.
+: 	!?STRING:$		as above, but substitute last element	
+: 	!?STRING:*		as above, but substitute all arguments
+:
+:
+:	Command Editing:
+:	----------------
+:
+:	CMND~e			edit CMND using $EDITOR, where CMND may be found
+:				using a history substitution
+:	CMND~v			edit CMND using $VISUAL, where CMND may be found
+:				using a history substitution
+: "	^string1^string2^	substitute string2 for string1 in last command"
+:				command and run it
+: "	g^string1^string2^	globally substitute string2 for string1 in  "
+:				last command and run it
+: 	!NUMBER:s/string1/string2/
+:				substitute string2 for string1 in
+:				command NUMBER and run it
+: 	!NUMBER:gs/string1/string2/
+:				globally substitute string2 for string1 in
+:				command NUMBER and run it
+: 	!?STRING:s/string1/string2/
+:				substitute string2 for string1 in last command
+:				containing STRING and run it
+: 	!?STRING:gs/string1/string2/
+:				globally substitute string2 for string1 in last
+:				command containing STRING and run it
+:	
+:	Any command which ends in the string ":p" is treated as a normal
+:	command until all substitutions have been completed.  The trailing
+:	":p" is then stripped, and the command is simply echoed and added to
+:	the history list instead of being executed.
+:
+:	None of the other colon extensions of the cshell are supported.
+:
+:
+:	Shell Environment Variables:
+:	----------------------------
+:
+:	EDITOR		editor used by ~e command, default = "ed"
+:	VISUAL		editor used by ~v command, default = "vi"
+:	MAIL		your system mailbox
+:	PAGER		paging program used by history command, default = "more"
+:	PS1		primary prompt
+:	PS2		secondary prompt
+:	history		number of commands in history list, default = 22
+:	histfile	file history list is saved in, default = $HOME/.bhistory
+:	savehist	number of commands remembered from last bcsh session
+:	aliasfile	file of aliased commands, default = $HOME/.baliases
+:	logoutfile	file of commands to be executed before termination
+:
+:
+:	Regular Shell Variables:
+:	------------------------
+:
+:	Shell variables may be set via Bourne or cshell syntax, e.g., both
+:	"set foo=bar" and "foo=bar" set a variable called "foo" with the value
+:	"bar".  However, all variables are automatically set as environment
+:	variables, so there is no need to export them.  Conversely, there
+:	are NO local variables.  Sorry, folks.
+:
+:	A cshell-style "setenv" command is turned into a regular "set" command.
+:
+:
+:	The Prompt:
+:	----------
+:
+:	You may, if you wish, have a command executed in your prompt.  If
+:	the variable PS1 contains a dollar sign or a backquote, it is
+:	evaluated and the result used as the prompt, provided the evaluation
+:	did not produce a "not found" error message.  The two special cases
+:	of PS1 consisting solely of "$" or "$ " are handled correctly.  For
+:	example, to have the prompt contain the current directory followed
+:	by a space, enter:
+:
+:		PS1=\'echo "`pwd` "\'
+:
+:	You need the backslashed single quotes to prevent the command being
+:	evaluated by the variable-setting mechanism and the shell before it
+:	is assigned to PS1.
+:
+:
+:	Shell Control-Flow Syntax:
+:	--------------------------
+:
+:	'While', 'for', 'case', and 'if' commands entered in Bourne shell
+:	syntax are executed as normal.
+:
+:	A valiant attempt is made to convert 'foreach' loops into 'for' loops,
+:	cshell-syntax 'while' loops into Bourne shell syntax, and 'switch'
+:	statements into 'case' statements.  I cannot guarantee to always get it
+:	right.  If you forget the 'do' in a 'while' or 'for' loop, or finish
+:	them with 'end' instead of 'done', this will be corrected.
+:
+:	The simple-case cshell "if (condition) command" is turned into Bourne
+:	syntax.  Other 'if' statements are left alone apart from making the
+:	'then' a separate statement, because constructing a valid interactive
+:	cshell 'if' statement is essentially an exercise in frustration anyway.
+:	The cshell and Bourne shell have sufficiently different ideas about
+:	conditions that if is probably best to resign yourself to learning
+:	the Bourne shell conventions.
+:
+:	Note that since most of the testing built-ins of the cshell are
+:	not available in the Bourne shell, a complex condition in a 'while'
+:	loop or an 'if' statement will probably fail.
+:	
+:
+:	Bugs, Caveats, etc.:
+:	--------------------
+:
+:	This is not a super-speedy program.  Be patient, especially on startup.
+:
+:	To the best of my knowledge this program should work on ANY Bourne
+:	shell -- except that if your shell does not understand 'echo -n' you
+:	will have to change the 10 or so places where this occurs.
+:
+:	This program may run out of stack space on a 16-bit machine where
+:	/bin/sh is not split-space.
+:
+:	Mail checking is done every 10 commands if $MAIL is set in your
+:	environment.  For anything fancier, you will have to hack the code.
+:
+:	Because commands are stuffed in a file before sh is invoked on them,
+:	error messages from failed commands are ugly.
+:
+:	Failed history substitutions either give nothing at all, or a
+:	"not found" style of error message.
+:
+:	A command history is kept whether you want it or not.  This may be
+:	perceived as a bug or a feature, depending on which side of bed you
+:	got out on.
+:
+:	If you want a real backslash in a command, you will have to type two
+: 	of them  because the shell swallows the first backslash in the initial
+: 	command pickup.  This means that to include a non-history '!' in a
+:	command you need '\\!' -- a real wart, especially for net mail,
+:	but unavoidable.
+:
+:	Commands containing an '@' will break all sorts of things.
+:
+:	Very complex history substitutions may fail.
+:
+:	File names containing numbers may break numeric history sustitutions.
+:
+:	Commands containing bizzare sequences of characters may conflict
+:	with internal kludges.
+:
+:	Aliasing something to "commands;logout" will not work -- if you
+:	want something to happen routinely on logout, put it in the file
+:	specified by $logoutfile, default = $HOME/.blogout.
+:
+:	This current version is excessively verbose because it was written to
+:	run on a vanilla V7 Bourne shell if necessary.  A much more pleasing
+:	version using shell functions will appear soon, but it will of course
+:	only work on V8 or System V.2 shells.
+:	
+:	Please send all bug reports to ihnp4!utzoo!globetek!chris.
+:	Flames will be posted to net.general with 'Reply-to' set to your
+: '	mail path...  :-)						'
+:
+:
+:
+:		************* VERY IMPORTANT NOTICE *************
+:
+: If your shell supports # comments, then REPLACE all the colon 'comments'
+: with # comments.  If it does not, then REMOVE all the 'comment' lines from the
+: working copy of the file, as it will run MUCH faster -- the shell evaluates
+: lines starting with a colon but does not actually execute them, so you will
+: save the read-and-evaluate time by removing them.
+
+
+history=${history-22}
+savehist=${savehist-22}
+histfile=${histfile-$HOME/.bhistory}
+EDITOR=${EDITOR-ed}
+VISUAL=${VISUAL-vi}
+PAGER=${PAGER-more}
+
+aliasfile=${aliasfile-$HOME/.baliases}
+
+: the alias file may contain 1 blank line, so a test -s will not work
+
+case "`cat $aliasfile 2> /dev/null`" in
+	"")
+		doalias=no
+		;;
+	*)
+		doalias=yes
+		;;
+esac
+
+if test -s "${sourcefile-$HOME/.bcshrc}"
+	then
+	. ${sourcefile-$HOME/.bcshrc}
+fi
+
+if test -s "$histfile"
+	then
+	cmdno="`set - \`wc -l $histfile\`;echo $1`"
+	cmdno="`expr \"$cmdno\" + 1`"
+	lastcmd="`tail -1 $histfile`"
+else
+	cat /dev/null > $histfile
+	cmdno=1
+	lastcmd=
+fi
+
+: default prompts -- PS1 and PS2 may be SET but EMPTY, so '${PS1-% }' syntax
+: is not used here
+
+case "$PS1" in
+	"")					
+		PS1="% "
+		;;				
+esac
+case "$PS2" in
+	"")					
+		PS2="> "
+		;;				
+esac
+
+export histfile savehist history aliasfile EDITOR VISUAL PAGER cmdno PS1 PS2
+
+case "$MAIL" in
+	"")
+		;;
+	*)
+		mailsize=`set - \`wc -c $MAIL\`;echo $1`
+		;;
+esac
+
+trap ':' 2 3
+trap "tail -$savehist $histfile>/tmp/hist$$;uniq /tmp/hist$$ > $histfile;\
+rm -f /tmp/*$$;exit 0" 15
+
+getcmd=yes
+mailcheck=
+while :
+	do
+	run=yes
+	case "$mailprompt" in
+		"")
+			;;
+		*)
+			echo "$mailprompt"
+			;;
+	esac
+	case "$getcmd" in
+		yes)
+			: guess if the prompt should be evaluated or not
+
+			case "$PS1" in
+				\$|\$\ )
+					echo -n "$PS1"
+					;;
+				*\`*|*\$*)
+					tmp="`eval $PS1 2>&1`"
+					case "$tmp" in
+						*not\ found)			
+							echo -n "$PS1"
+							;;			
+						*)				
+							echo -n "$tmp"
+							;;			
+					esac
+					;;
+				*)
+					echo -n "$PS1"
+					;;
+			esac
+
+			read cmd
+			;;
+	esac
+	case "$MAIL" in
+		"")
+			;;
+		*)
+			: check for mail every 10 commands
+
+			case "$mailcheck" in
+				1111111111)
+					mailcheck=
+					newsize="`set - \`wc -c $MAIL\`;echo $1`"
+					if test "$newsize" -gt "$mailsize"
+						then
+						mailprompt="You have new mail"
+					else
+						mailprompt=
+					fi
+					mailsize=$newsize
+					;;
+				*)
+					mailcheck=1$mailcheck
+					;;
+			esac
+			;;
+	esac
+	case "$cmd" in
+		"")
+			continue
+			;;
+		sh)
+			sh
+			run=no
+			;;
+		!!)
+			cmd=$lastcmd
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*:p)
+			cmd="`expr \"$cmd\" : '\(.*\):p'` +~+p"
+			getcmd=no
+			continue
+			;;
+		foreach[\ \	]*)
+			while test "$line" != "end"
+				do
+				echo -n "$PS2"
+				read line
+				cmd="${cmd};$line"
+			done
+			echo "$cmd" > /tmp/doit$$
+			ed - /tmp/doit$$ << ++++
+			s/end/done/
+			s/foreach[ 	]\(.*\)(/for \1 in /
+			s/)//
+			s/;/;do /
+			w
+++++
+			;;
+		for[\ \	]*|while[\ \	]*)
+
+			: try to catch the most common cshell-to-Bourne-shell mistakes
+
+			echo -n "$PS2"
+			read line
+			case "$line" in
+				*do)
+					line="do :"
+					;;
+				*do*)
+					;;
+				*)
+					line="do $line"
+					;;
+			esac
+			cmd="${cmd};$line"
+			while test "$line" != "done" -a "$line" != "end"
+				do
+				echo -n "$PS2"
+				read line
+				case "$line" in
+					end)
+						line=done
+						;;
+				esac
+				cmd="${cmd};$line"
+			done
+			echo "$cmd" > /tmp/doit$$
+			;;
+		if[\ \	]*)
+			while test "$line" != "fi" -a "$line" != "endif"
+				do
+				echo -n "$PS2"
+				read line
+				case "$line" in
+					*[a-z]*then)
+						line="`expr \"$line\" : '\(.*\)then'`;then"
+						;;
+					endif)
+						line=fi
+						;;
+				esac
+				cmd="${cmd};$line"
+			done
+			echo "$cmd" > /tmp/doit$$
+			case "`grep then /tmp/doit$$`" in
+				"")
+					: fix 'if foo bar' cases
+
+					ed - /tmp/doit$$ << ++++
+					s/)/);then/
+					s/.*/;fi/
+					w
+++++
+					;;
+			esac
+			;;
+		case[\ \	]*)
+			while test "$line" != "esac"
+				do
+				echo -n "$PS2"
+				read line
+				cmd="${cmd}@$line"
+			done
+			cmd="`echo \"$cmd\" | tr '@' ' '`"
+			echo "$cmd" > /tmp/doit$$
+			;;
+		switch[\ \	]*)
+			while test "$line" != "endsw"
+				do
+				echo -n "$PS2"
+				read line
+				cmd="${cmd}@$line"
+			done
+			echo "$cmd" > /tmp/doit$$
+			ed - /tmp/doit$$ << '++++'
+			1,$s/@/\
+/g
+			g/switch.*(/s//case "/
+			s/)/" in/
+			1,$s/case[	 ]\(.*\):$/;;\
+	\1)/
+			2d
+			1,$s/endsw/;;\
+esac/
+			g/breaksw/s///
+			1,$s/default.*/;;\
+	*)/
+			w
+++++
+			cmd="`cat /tmp/doit$$`"
+			;;
+		*![0-9]*:s*|*![0-9]*:gs*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*![0-9]*:gs/*/*/*|*![0-9]*:s/*/*/*)
+						;;
+					*![0-9]*:gs/*/*|*![0-9]*:s/*/*)
+						i="${i}/"
+						;;
+				esac
+				case "$i" in
+					*![0-9]*:gs/*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:gs\/.*'`"
+						wanted="`expr \"$i\" : '.*!\(.*\):gs\/.*'`"
+						rest="`expr \"$i\" : '.*!.*:gs.*\/\(.*\)'`"
+						cmd="`grep -n . $histfile | grep \"^$wanted\"`"
+						cmd="`expr \"$cmd\" : \"${wanted}.\(.*\)\"`"
+
+						: find what substitution is wanted
+
+						tmp2="`expr \"$i\" : '.*:gs\/\(.*\)\/.*\/.*'`"
+						wanted="`expr \"$i\" : '.*:gs/.*/\(.*\)/.*'`"
+						tmp3="$frontstuff`echo \"$cmd\" | sed -e \"s@$tmp2@$wanted@g\"`$rest"
+						;;
+					*![0-9]*:s/*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:s\/.*'`"
+						wanted="`expr \"$i\" : '.*!\(.*\):s\/.*'`"
+						rest="`expr \"$i\" : '.*!.*:s.*\/\(.*\)'`"
+						cmd="`grep -n . $histfile | grep \"^$wanted\"`"
+						cmd="`expr \"$cmd\" : \"${wanted}.\(.*\)\"`"
+
+						: find what substitution is wanted
+
+						tmp2="`expr \"$i\" : '.*:s\/\(.*\)\/.*\/.*'`"
+						wanted="`expr \"$i\" : '.*:s/.*/\(.*\)/.*'`"
+						tmp3="$frontstuff`echo \"$cmd\" | sed -e \"s@$tmp2@$wanted@\"`$rest"
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*![0-9]*:*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*![0-9]*:*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:.*'`"
+						wanted="`expr \"$i\" : '.*!\(.*\):.*'`"
+						tmp3="`grep -n . $histfile | grep \"^$wanted\"`"
+						tmp3="`expr \"$tmp3\" : \"${wanted}.\(.*\)\"`"
+
+						: get right part of the command
+
+						wanted="`expr \"$i\" : '.*!.*:\(.*\)'`"
+						case "$wanted" in
+							[0-9]*)
+								rest="`expr \"$wanted\" : '.*[0-9]\(.*\)'`"
+								case "$rest" in
+									"")
+										;;
+									*)
+										wanted="`expr \"$wanted\" : '\(.*[0-9]\).*'`"
+										;;
+								esac
+								wanted="`expr \"$wanted\" + 1`"
+								tmp2=1
+								for j in $tmp3
+									do
+									case "$wanted" in
+										$tmp2)
+											tmp3="$frontstuff$j$rest"
+											break
+											;;
+										*)
+											tmp2="`expr \"$tmp2\" + 1`"
+											;;
+									esac
+								done
+								;;
+							\$*)
+								rest="`expr \"$wanted\" : '\$\(.*\)'`"
+								for j in $tmp3
+									do
+									:
+								done
+								tmp3="$frontstuff$j$rest"
+								;;
+							\**)
+								rest="`expr \"$i\" : '.*:\*\(.*\)'`"
+								set - $tmp3
+								shift
+								tmp3="$frontstuff$*$rest"
+								set -
+								;;
+						esac
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*![0-9]*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*![0-9]*)
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:.*'`"
+						wanted="`expr \"$i\" : '.*!\([0-9].*\)'`"
+						rest="`expr \"$wanted\" : '.*[0-9]\(.*\)'`"
+						case "$rest" in
+							"")
+								;;
+							*)
+								wanted="`expr \"$wanted\" : '\(.*[0-9]\).*'`"
+								;;
+						esac
+						tmp3="`grep -n . $histfile | grep \"^$wanted\"`"
+						tmp3="$frontstuff`expr \"$tmp3\" : \"${wanted}.\(.*\)\"`$rest"
+						;;
+					*)
+						tmp3="$frontstuff$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!!:*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!!:*)
+						frontstuff="`expr \"$i\" : '\(.*\)!!:.*'`"
+						wanted="`expr \"$i\" : '.*!!:\(.*\)'`"
+						case "$wanted" in
+							[0-9]*)
+								rest="`expr \"$wanted\" : '.*[0-9]\(.*\)'`"
+								case "$rest" in
+									"")
+										;;
+									*)
+										wanted="`expr \"$wanted\" : '\(.*[0-9]\).*'`"
+										;;
+								esac
+								wanted="`expr \"$wanted\" + 1`"
+								tmp2=1
+								for j in $lastcmd
+									do
+									case "$tmp2" in
+										$wanted)
+											tmp3="$frontstuff$j$rest"
+											break
+											;;
+										*)
+											tmp2="`expr \"$tmp2\" + 1`"
+											;;
+									esac
+								done
+								;;
+							\$*)
+								rest="`expr \"$wanted\" : '\$\(.*\)'`"
+								for j in $lastcmd
+									do
+									:
+								done
+								tmp3="$frontstuff$j$rest"
+								;;
+							\**)
+								rest="`expr \"$i\" : '.*:\*\(.*\)'`"
+								set - $lastcmd
+								shift
+								tmp3="$frontstuff$*rest"
+								set -
+								;;
+						esac
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!!*)
+			cmd="`echo \"$cmd\" | sed -e \"s@!!@$lastcmd@g\"`"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!\?*:s/*|*!\?*:gs/*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!\?*:gs/*/*/*|*!?*:s/*/*/*)
+						;;
+					*!\?*:gs/*/*|*!?*:s/*/*)
+						i="${i}/"
+						;;
+				esac
+				case "$i" in
+					*!\?*:gs/*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!?.*:gs\/.*'`"
+						wanted="`expr \"$i\" : '.*!?\(.*\):gs\/.*'`"
+						rest="`expr \"$i\" : '.*!?.*:gs.*\/\(.*\)'`"
+						cmd="`ed - $histfile << ++++
+						1,\\$-${history}d
+						a
+
+.
+						?$wanted?
+++++
+`"
+
+						: find what substitution is wanted
+
+						tmp2="`expr \"$i\" : '.*:gs\/\(.*\)\/.*\/.*'`"
+						wanted="`expr \"$i\" : '.*:gs/.*/\(.*\)/.*'`"
+						tmp3="$frontstuff`echo \"$cmd\" | sed -e \"s@$tmp2@$wanted@g\"`$rest"
+						;;
+					*!\?*:s/*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!?.*:s\/.*'`"
+						wanted="`expr \"$i\" : '.*!?\(.*\):s\/.*'`"
+						rest="`expr \"$i\" : '.*!?.*:s.*\/\(.*\)'`"
+						cmd="`ed - $histfile << ++++
+						1,\\$-${history}d
+						a
+
+.
+						?$wanted?
+++++
+`"
+
+						: find what substitution is wanted
+
+						tmp2="`expr \"$i\" : '.*:s\/\(.*\)\/.*\/.*'`"
+						wanted="`expr \"$i\" : '.*:s/.*/\(.*\)/.*'`"
+						tmp3="$frontstuff`echo \"$cmd\" | sed -e \"s@$tmp2@$wanted@\"`$rest"
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done;
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!\?*:*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!\?*:*)
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!?.*:.*'`"
+						wanted="`expr \"$i\" : '.*!?\(.*\):.*'`"
+						cmd="`ed - $histfile << ++++
+						1,\\$-${history}d
+						a
+
+.
+						?$wanted?
+++++
+`"
+						: get right part of the command
+
+						wanted="`expr \"$i\" : '.*!?.*:\(.*\)'`"
+						case "$wanted" in
+							[0-9]*)
+								rest="`expr \"$wanted\" : '.*[0-9]\(.*\)'`"
+								case "$rest" in
+									"")
+										;;
+									*)
+										wanted="`expr \"$wanted\" : '\(.*[0-9]\).*'`"
+										;;
+								esac
+								wanted="`expr \"$wanted\" + 1`"
+								tmp2=1
+								for j in $cmd
+									do
+									case "$tmp2" in
+										$wanted)
+											tmp3="$frontstuff$j$rest"
+											break
+											;;
+										*)
+											tmp2="`expr \"$tmp2\" + 1`"
+											;;
+									esac
+								done
+								;;
+							\$*)
+								rest="`expr \"$wanted\" : '\$\(.*\)'`"
+								for j in $cmd
+									do
+									:
+								done
+								tmp3="$frontstuff$j$rest"
+								;;
+							\**)
+								rest="`expr \"$i\" : '.*:\*\(.*\)'`"
+								set - $cmd
+								shift
+								tmp3="$frontstuff$*$rest"
+								set -
+								;;
+						esac
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!\?*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!\?{*}*)
+						frontstuff="`expr \"$i\" : '\(.*\)!?.*:.*'`"
+						wanted="`expr \"$i\" : '.*!?{\(.*\)}.*'`"
+						rest="`expr \"$i\" : '.*!?{.*}\(.*\)'`"
+						tmp3="`ed - $histfile << ++++
+						1,\\$-${history}d
+						a
+
+.
+						?$wanted?
+++++
+`"
+						tmp3="$frontstuff$tmp3$rest"
+						;;
+					*!\?*)
+						wanted="`expr \"$i\" : '.*!?\(.*\)'`"
+						tmp3="$frontstuff`ed - $histfile << ++++
+						1,\\$-${history}d
+						a
+
+.
+						?$wanted?
+++++
+`"
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*!*:*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!*:*)
+
+						: get right command to parse
+
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:.*'`"
+						wanted="`expr \"$i\" : '.*!\(.*\):.*'`"
+						cmd="`grep \"^$wanted\" $histfile | tail -1`"
+
+						: get right part of the command
+
+						wanted="`expr \"$i\" : '.*!.*:\(.*\)'`"
+						case "$wanted" in
+							[0-9]*)
+								rest="`expr \"$wanted\" : '.*[0-9]\(.*\)'`"
+								case "$rest" in
+									"")
+										;;
+									*)
+										wanted="`expr \"$wanted\" : '\(.*[0-9]\).*'`"
+										;;
+								esac
+								wanted="`expr \"$wanted\" + 1`"
+								tmp2=1
+								for j in $cmd
+									do
+									case "$tmp2" in
+										$wanted)
+											tmp3="$frontstuff$j$rest"
+											break
+											;;
+										*)
+											tmp2="`expr \"$tmp2\" + 1`"
+											;;
+									esac
+								done
+								;;
+							\$*)
+								rest="`expr \"$wanted\" : '\$\(.*\)'`"
+								for j in $cmd
+									do
+									:
+								done
+								tmp3="$frontstuff$j$rest"
+								;;
+							\**)
+								rest="`expr \"$i\" : '.*:\*\(.*\)'`"
+								set - $cmd
+								shift
+								tmp3="$frontstuff$*$rest"
+								set -
+								;;
+						esac
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*\\!*)
+			cmd="`echo \"$cmd\" | sed -e 's@\\!@REAL EXCLAMATION MARK@g'`"
+			exclaim=yes
+			getcmd=no
+			continue
+			;;
+		*!*)
+			tmp=
+			for i in $cmd
+				do
+				case "$i" in
+					*!{*}*)
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:.*'`"
+						wanted="`expr \"$i\" : '.*!{\(.*\)}.*'`"
+						rest="`expr \"$i\" : '!{.*}\(.*\)'`"
+						tmp3="$frontstuff`grep \"^$wanted\" $histfile | tail -1`$rest"
+						;;
+					*!*)
+						frontstuff="`expr \"$i\" : '\(.*\)!.*:.*'`"
+						wanted="`expr \"$i\" : '.*!\(.*\)'`"
+						tmp3="$frontstuff`grep \"^$wanted\" $histfile | tail -1`"
+						;;
+					*)
+						tmp3="$i"
+						;;
+				esac
+				tmp="$tmp $tmp3"
+			done
+			cmd="$tmp"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		g\^*\^*\^*)
+			tmp="`expr \"$cmd\" : 'g\^\(.*\)\^.*\^.*'`"
+			wanted="`expr \"$cmd\" : 'g\^.*\^\(.*\)\^.*'`"
+			rest="`expr \"$cmd\" : 'g\^.*\^.*\^\(.*\)'`"
+			cmd="`echo \"$lastcmd\" | sed -e \"s@$tmp@$wanted@g\"`\"$rest\""
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		\^*\^*\^*)
+			tmp="`expr \"$cmd\" : '\^\(.*\)\^.*\^.*'`"
+			wanted="`expr \"$cmd\" : '\^.*\^\(.*\)\^.*'`"
+			rest="`expr \"$cmd\" : '\^.*\^.*\^\(.*\)'`"
+			cmd="`echo \"$lastcmd\" | sed -e \"s@$tmp@$wanted@\"`$rest"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		g\^*\^*)
+			tmp="`expr \"$cmd\" : 'g\^\(.*\)\^.*'`"
+			wanted="`expr \"$cmd\" : 'g\^.*\^\(.*\)'`"
+			cmd="`echo \"$lastcmd\" | sed -e \"s@$tmp@$wanted@g\"`"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		\^*\^*)
+			tmp="`expr \"$cmd\" : '\^\(.*\)\^.*'`"
+			wanted="`expr \"$cmd\" : '\^.*\^\(.*\)'`"
+			cmd="`echo \"$lastcmd\" | sed -e \"s@$tmp@$wanted@\"`"
+			echoit=yes
+			getcmd=no
+			continue
+			;;
+		*~e)
+			echo "$cmd" | sed -e "s@~e@@" > /tmp/doit$$
+			$EDITOR /tmp/doit$$
+			cmd="`cat /tmp/doit$$`"
+			getcmd=no
+			continue
+			;;
+		*~v)
+			echo "$cmd" | sed -e "s@~v@@" > /tmp/doit$$
+			echo "$lastcmd" > /tmp/doit$$
+			$VISUAL /tmp/doit$$
+			cmd="`cat /tmp/doit$$`"
+			getcmd=no
+			continue
+			;;
+		wait)
+			$cms
+			;;
+		exec[\ \	]*)
+			tail -$savehist $histfile>/tmp/hist$$
+			uniq /tmp/hist$$ > $histfile
+			rm -f /tmp/*$$
+			$cmd
+			;;
+		umask[\ \	]*|login[\ \	]*|newgrp[\ \	]*)
+			tail -$savehist $histfile>/tmp/hist$$
+			uniq /tmp/hist$$ > $histfile
+			rm -f /tmp/*$$
+			exec $cmd
+			;;
+		logout|exit|bye)
+			if test -s "${logoutfile-$HOME/.blogout}"
+				then
+				sh $logoutfile
+			fi
+			tail -$savehist $histfile > /tmp/hist$$
+			uniq /tmp/hist$$ > $histfile
+			rm -f /tmp/*$$
+			exit 0
+			;;
+		h|history)
+			grep -n . $histfile | tail -$history | sed -e 's@:@	@' | $PAGER
+			continue
+			;;
+		h\ \|*|h\ \>*|h\|*|h\>*)
+			cmd="`echo \"$cmd\" | sed -e \"s@h@grep -n . $histfile | tail -$history | sed -e 's@:@	@'@\"`"
+			getcmd=no
+			continue
+			;;
+		history*\|*|history*\>*)
+			cmd="`echo \"$cmd\" | sed -e \"s@history@grep -n . $histfile | tail -$history | sed -e 's@:@ @'@\"`"
+			getcmd=no
+			continue
+			;;
+		.[\ \	]*)
+			$cmd
+			;;
+		cd|cd[\ \	]*)
+			
+			: check if it will work first, or else this shell will terminate
+			: if the cd dies.  If you have a built-in test, you might want
+			: to replace the try-it-and-see below with a couple of tests,
+			: but it is probably just as fast like this.
+
+			if ($cmd)
+				then
+				$cmd
+			fi
+			run=no
+			;;
+		awk[\ \	]*|dd[\ \	]*|cc[\ \	]*|make[\ \	]*)
+			: these are the only commands I can think of whose syntax
+			: includes an equals sign.  Add others as you find them.
+
+			echo "$cmd" > /tmp/doit$$
+			;;
+		setenv*|*=*)
+
+			: handle setting shell variables, turning cshell syntax to Bourne
+			: syntax -- note all variables must be exported or they will not
+			: be usable in other commands
+
+			echo "$cmd" > /tmp/cmd$$
+			ed - /tmp/cmd$$ << ++++
+			g/^setenv[ 	]/s/[ 	]/@/
+			g/^setenv@/s/[ 	]/=/
+			g/^setenv@/s///
+			g/^set/s///
+			.t.
+			\$s/=.*//
+			s/^/export /
+			w
+++++
+			. /tmp/cmd$$
+			rm -f /tmp/cmd$$
+			run=no
+			;;
+		export[\ \	]*|set[\ \	]*)
+
+			: handle commands which twiddle current environment
+
+			$cmd
+			run=no
+			;;
+		alias)
+			$PAGER $aliasfile
+			lastcmd=$cmd
+			run=no
+			continue
+			;;
+		alias[\ \	]*)
+			case "$cmd" in
+				alias[\ \	]\|*|alias[\ \	]\>*)
+					cmd="`echo \"$cmd\" | sed -e \"s@alias@cat $aliasfile@\"`"
+					getcmd=no
+					continue
+					;;
+				alias[\ \	]*)
+					;;
+				*)
+					echo "Syntax: alias name command"
+					cmd=
+					continue
+					;;
+			esac
+			set - $cmd
+			shift
+			cmd=$*
+
+			: make sure there is always 1 blank line in file so
+			: unaliasing will always work -- ed normally refuses
+			: to write an empty file
+
+			echo "" >> $aliasfile
+			cat << ++++ >> $aliasfile
+$cmd
+++++
+			ed - $aliasfile << '++++'
+			g/alias[ 	]/s///
+			g/^['"]\(.*\)['"]$/s//\1/
+			g/^/s//alias	/
+			w
+++++
+			sort -u -o $aliasfile $aliasfile
+			doalias=yes
+			cmd="alias $cmd"
+			run=no
+			;;
+		unalias*)
+			set - $cmd
+			case "$#" in
+				2)
+					cmd=$2
+					;;
+				*)
+					echo "Syntax: unalias alias_name"
+					continue
+					;;
+			esac
+			ed - $aliasfile << ++++
+			/^$cmd[ 	]/d
+			w
+++++
+			case "`set - \`wc -l $aliasfile\`;echo $1``" in
+				1)
+					: just removed last alias
+
+					doalias=no
+					;;
+			esac
+			run=no
+			;;
+		*)
+			case "$doalias" in
+				yes)
+					set - $cmd
+					tmp="`grep \"^$1 \" $aliasfile`"
+					case "$tmp" in
+						$1[\ \	]*)
+							shift
+							cmd=$*
+							set - $tmp
+							shift
+							tmp=$*
+							case "$tmp" in
+								*\$*)
+									: uses positional variables
+
+									cmd="set - $cmd ; $tmp"
+									getcmd=no
+									continue
+									;;
+								*)
+									cmd="$tmp $cmd"
+									getcmd=no
+									continue
+									;;
+							esac
+							;;
+						*)
+							echo "$cmd" > /tmp/doit$$
+							;;
+					esac
+					;;
+				no)
+					echo "$cmd" > /tmp/doit$$
+					;;
+			esac
+			;;
+	esac
+	case "$cmd" in
+		*+~+p)
+			cmd="`expr \"$cmd\" : '\(.*\)+~+p'`"
+			echoit=yes
+			run=no
+			;;
+	esac
+	case "$cmd" in
+		"")
+			continue
+			;;
+		*)
+			case "$exclaim" in
+				yes)
+					cmd="`echo \"$cmd\" | sed -e 's@REAL EXCLAMATION MARK@!@g'`"
+					echo "$cmd" > /tmp/doit$$
+					;;
+			esac
+			case "$echoit" in
+				yes)
+					echo $cmd
+					;;
+			esac
+			case "$run" in
+				yes)
+					echo "trap 'exit 1' 2 3" > /tmp/bcsh$$
+					cat /tmp/doit$$ >> /tmp/bcsh$$
+					sh /tmp/bcsh$$
+					;;
+			esac
+			case "$cmd" in
+				$lastcmd)
+					;;
+				*)
+					case "$exclaim" in
+						yes)
+							cmd="`echo \"$cmd\" | sed -e 's@!@\\\\!@g'`"
+							;;
+					esac
+					cat << ++++ >> $histfile
+$cmd
+++++
+					lastcmd=$cmd
+
+					cmdno="`expr \"$cmdno\" + 1`"
+					;;
+			esac
+			;;
+	esac
+
+	: The next commented-out line sets the prompt to include the command
+	: number -- you should only un-comment this if it is the ONLY thing
+	: you ever want as your prompt, because it will override attempts
+	: to set PS1 from the command level.  If you want the command number
+	: in your prompt without sacrificing the ability to change the prompt
+	: later, replace the default setting for PS1 before the beginning of
+	: the main loop with the following:  PS1='echo -n "${cmdno}% "'
+	: Doing it this way is, however, slower than the simple version below.
+	 
+	# PS1="${cmdno}% "
+
+	getcmd=yes
+	echoit=no
+	exclaim=no
+	set -
+done
+exit 0
+-- 
+
+Christine Robertson  {linus, ihnp4, decvax}!utzoo!globetek!chris
+
+Money may not buy happiness, but misery in luxury has its compensations...

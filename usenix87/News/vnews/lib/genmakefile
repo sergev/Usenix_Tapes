@@ -1,0 +1,80 @@
+. makedefs
+exec > makefile
+cat <<\!
+# makefile for rlib	1/4/85
+
+!
+cat makedefs
+cat <<\!
+
+CFLAGS = $(DEBUG)
+DEBUG = -O
+MAKE = make
+
+RLIB = aflock.o afopen.o cancel.o cgtdate.o dir.o dirname.o\
+genafopen.o getadate.o getdate.o ftime.o gethead.o getopt.o\
+getuser.o hfgets.o hfree.o hxchg.o isadmin.o isre.o launder.o\
+lookup.o ngchain.o ngmatch.o openrc.o pgetuser.o read.o\
+replyname.o rewinddir.o rmnf.o readinrc.o roptions.o titmat.o\
+write.o setupgrp.o addrc.o allgroups.o findgroup.o gfopen.o\
+makehimask.o nextgrp.o prevgrp.o bfr.o bcopy.o bzero.o ckfopen.o\
+getaddr.o hash.o lcase.o nsavestr.o nstrip.o prefix.o process.o\
+rename.o savestr.o ckmalloc.o scopyn.o strpbrk.o strcspn.o\
+strspn.o strtok.o tomsgid.o
+
+
+all: setuptime makefile rlib.a cgtdate rpathinit.o newer
+
+install: all
+	/bin/cp cgtdate $(LIBDIR)/cgtdate
+
+setuptime: setup config
+	sh setup
+
+makefile: genmakefile makedefs
+	genmakefile	
+	@echo 'Makefile changed.  Restart make program.'
+	@sh -c 'exit 22'
+
+rlib.a: $(RLIB)
+	rm -f $@
+	ar rc $@ $(RLIB)
+!
+if test $BSDREL -gt 7
+then	echo "	ranlib \$@"
+fi
+: Add more assembly language routines when they have been tested.
+case $CPU in
+pdp11)	files="" suffix=pdp ;;
+vax)	files="scopyn" suffix=vax ;;
+u3b)	files="bcopy bzero scopyn strpbrk" suffix=u3b ;;
+*)	files=
+esac
+for x in $files
+do	cat <<!
+
+$x.o: $x.$suffix
+	\$(AS) -o $x.o $x.$suffix
+!
+done
+cat <<\!
+
+rpathinit.o: mypathinit.c defs.h newsdefs.h $(FRC)
+	$(CC) -c $(CFLAGS) mypathinit.c
+	mv mypathinit.o rpathinit.o
+
+genafopen.o lock.o lookup.o ngchain.o read.o: af.h artfile.h
+readinrc.o setupgrp.o: artfile.h
+addrc.o nextgrp.o prevgrp.o readinrc.o setupgrp.o: newsrc.h
+allgroups.o readinrc.o: ng.h
+cancel.o gethead.o hfree.o hxchg.o: arthead.h
+$(RLIB): $(FRC)
+
+cgtdate: cgtdatecmd.o cgtdate.o getadate.o getdate.o
+	$(CC) $(LFLAGS) -o $@ cgtdatecmd.o rlib.a
+
+newer: newer.c
+	$(CC) -o $@ newer.c
+
+FRC:
+!

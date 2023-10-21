@@ -1,0 +1,112 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!umcp-cs!chris
+From: chris@umcp-cs.UUCP (Chris Torek)
+Newsgroups: net.sources.bugs
+Subject: Re: scandir() function
+Message-ID: <1489@umcp-cs.UUCP>
+Date: 13 May 86 18:57:09 GMT
+References: <218@transys.UUCP>
+Organization: Computer Sci. Dept, U of Maryland, College Park, MD
+Lines: 101
+Posted: Tue May 13 13:57:09 1986
+
+In article <218@transys.UUCP>, root@transys.UUCP (The Super User)
+supplies a public-domain scandir().  The routine looks workable,
+but is sensitive to `active' directories: if the number of directory
+entries increases between the two scans, it will probably crash.
+
+The following routines are *not* equivalent, but (assuming readdir()
+is properly written) do not suffer from this problem.  In addition,
+I think this version is generally more convenient.  It drops the
+inode number and the other redundant information in a 4.2 style
+directory, and it generates various error messages (both fatal and
+non-fatal), but it does what I wanted at the time....
+
+/*
+ * Save a string in managed memory.
+ */
+char *
+savestr(s)
+	char *s;
+{
+	char *t, *malloc(), *strcpy();
+
+	if ((t = malloc((unsigned) (strlen(s) + 1))) == 0)
+		error(1, errno, "out of memory");
+	return (strcpy(t, s));
+}
+
+/*
+ * For qsort: perform a machine-collating-sequence sort.
+ */
+machinesort(s1, s2)
+	char **s1, **s2;
+{
+	int i;
+
+	return ((i = **s1 - **s2) ? i : strcmp(*s1, *s2));
+}
+
+/*
+ * Scan a directory.  Return a sorted list of the names contained therein.
+ * The list is dynamically allocated, and can be freed with freeit().
+ */
+char **
+scanit(dname)
+	char *dname;
+{
+	register DIR *d;
+	register struct direct *dp;
+	register char **names, **np;
+	register int nleft;
+	int nnames;
+	char *malloc(), *realloc();
+
+	if ((d = opendir(dname)) == 0) {
+		error(0, errno, "can't read %s", dname);
+		return (0);
+	}
+	nnames = 10;
+	names = (char **) malloc((unsigned) (10 * sizeof *names));
+	if (names == 0)
+		error(1, errno, "out of memory");
+	nleft = nnames - 1;	/* start off-by-one for terminator */
+	np = names;
+	while ((dp = readdir(d)) != 0) {
+		if (dp->d_namlen == 1 && dp->d_name[0] == '.')
+			continue;
+		if (dp->d_namlen == 2 && dp->d_name[0] == '.' &&
+		    dp->d_name[1] == '.')
+			continue;
+		if (--nleft < 0) {
+			nleft = nnames - 1;	/* we're about to use one */
+			nnames <<= 1;
+			names = (char **) realloc((char *) names,
+					(unsigned) (nnames * sizeof *names));
+			if (names == 0)
+				error(1, errno, "out of memory");
+			np = names + nleft;
+		}
+		*np++ = savestr(dp->d_name);
+	}
+	qsort((char *) names, np - names, sizeof *names, machinesort);
+	*np = 0;
+	closedir(d);
+	return (names);
+}
+
+/*
+ * Free a directory as returned by scanit().
+ */
+freeit(p)
+	char **p;
+{
+	register char **q = p;
+
+	while (*q)
+		free(*q++);
+	free((char *) p);
+}
+-- 
+In-Real-Life: Chris Torek, Univ of MD Comp Sci Dept (+1 301 454 1415)
+UUCP:	seismo!umcp-cs!chris
+CSNet:	chris@umcp-cs		ARPA:	chris@mimsy.umd.edu

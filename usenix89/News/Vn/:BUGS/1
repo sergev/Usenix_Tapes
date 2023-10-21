@@ -1,0 +1,504 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!icom!andy
+From: andy@icom.UUCP (Andrew H. Marrinson)
+Newsgroups: net.sources
+Subject: Bug fixes, improvements to vn
+Message-ID: <689@icom.UUCP>
+Date: 6 Sep 86 19:20:50 GMT
+Distribution: net
+Organization: ICOM Sys., Arlington Hts, IL
+Lines: 493
+Posted: Sat Sep  6 14:20:50 1986
+
+Well, it seems vn needed yet more work.  I just tried posting a followup for
+the first time and found a few problems.  Further exploration revealed a few
+more.  The bugs/misfeatures these context diffs resolve are:
+
+	1. Unlike vnews/readnews/postnews, vn doesn't save a copy of
+	   a followup article in ~/author_copy.  I liked having a copy
+	   of what I have posted, so I added this.
+
+	2. When replying via mail, vnews put a line indicating who the
+	   original article was from above the quoted contents.  For
+	   followups it does not.  I changed it so it did this.
+
+	3. Even if the subject begins with "Re: ", vn will put another
+	   Re: in front of it.  If lots of people start using vn, we
+	   will soon have Re's all over the place.  It is fixed.
+
+	4. Vn did not place a newline between the last header and
+	   the body of the article in followups.  This too has
+	   been fixed.
+
+The context diffs below should be applied after the previously posted diffs
+for using the From/Reply field for sending mail.  If you haven't installed
+those, and don't want to, patch should (may?) be able to figure out what to
+do anyway.  If you don't have patch you are on your own.  The line numbers
+in the reader.c diffs won't match the original.  I also changed the man page
+a bit to reflect the changes.  It may well have been better to simply use
+postnews to post followups, but then you are using an entirely different set
+of environment variables for things like the editor.
+
+If the original author (R. L. McQueeg?) reads this, I would love to hear
+from you about integrating these changes, and the previously posted ones
+into a single version.  Unfortunately I seem to have lost your email
+address.  If you are interested send me mail (andy@icom.UUCP, or
+ihnp4!icom!andy).
+
+------------------------- cut here, run through sh -------------------------
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	config.h.diff
+#	envir_set.diff
+#	reader.c.diff
+#	vn.h.diff
+#	vn.man.diff
+#	vnglob.c.diff
+# This archive created: Sat Sep  6 14:03:47 1986
+export PATH; PATH=/bin:$PATH
+echo shar: extracting "'config.h.diff'" '(556 characters)'
+if test -f 'config.h.diff'
+then
+	echo shar: will not over-write existing file "'config.h.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'config.h.diff'
+	X*** config.h.old	Sat Sep  6 13:23:38 1986
+	X--- config.h	Sat Sep  6 13:27:24 1986
+	X***************
+	X*** 17,22
+	X  #define DEF_POST "/usr/netnews/lib/inews -h"	/* followup posting command */
+	X  
+	X  #define DEF_NEWSRC ".newsrc"
+	X  
+	X  #define SPOOLDIR "/usr/netnews/spool"
+	X  #define ACTFILE "/usr/netnews/lib/active"
+	X
+	X--- 17,23 -----
+	X  #define DEF_POST "/usr/netnews/lib/inews -h"	/* followup posting command */
+	X  
+	X  #define DEF_NEWSRC ".newsrc"
+	X+ #define DEF_CCFILE "author_copy"
+	X  
+	X  #define SPOOLDIR "/usr/netnews/spool"
+	X  #define ACTFILE "/usr/netnews/lib/active"
+SHAR_EOF
+if test 556 -ne "`wc -c < 'config.h.diff'`"
+then
+	echo shar: error transmitting "'config.h.diff'" '(should have been 556 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'envir_set.diff'" '(1870 characters)'
+if test -f 'envir_set.diff'
+then
+	echo shar: will not over-write existing file "'envir_set.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'envir_set.diff'
+	X*** envir_set.c.old	Sat Sep  6 13:20:01 1986
+	X--- envir_set.c	Sat Sep  6 13:54:59 1986
+	X***************
+	X*** 4,10
+	X  #include "config.h"
+	X  
+	X  extern char *Editor,*Ps1,*Mailer,*Printer,*Poster;
+	X! extern char *Onews,*Newsrc,*Orgdir,*Savedir;	/* path names */
+	X  
+	X  /*
+	X  	environment variable, original directory string setup.
+	X
+	X--- 4,10 -----
+	X  #include "config.h"
+	X  
+	X  extern char *Editor,*Ps1,*Mailer,*Printer,*Poster;
+	X! extern char *Onews,*Newsrc,*Orgdir,*Savedir, *Ccfile;	/* path names */
+	X  
+	X  /*
+	X  	environment variable, original directory string setup.
+	X***************
+	X*** 12,18
+	X  
+	X  envir_set ()
+	X  {
+	X! 	char dbuf [128], *rcname, *getenv(), *getcwd(), *str_store();
+	X  	struct passwd *ptr, *getpwuid();
+	X  
+	X  	if ((Ps1 = getenv("PS1")) == NULL)
+	X
+	X--- 12,18 -----
+	X  
+	X  envir_set ()
+	X  {
+	X! 	char dbuf [128], *rcname, *ccname, *getenv(), *getcwd(), *str_store();
+	X  	struct passwd *ptr, *getpwuid();
+	X  
+	X  	if ((Ps1 = getenv("PS1")) == NULL)
+	X***************
+	X*** 27,32
+	X  		Printer=DEF_PRINT;
+	X  	if ((rcname = getenv("NEWSRC")) == NULL)
+	X  		rcname=DEF_NEWSRC;
+	X  	Savedir = getenv("VNSAVE");
+	X  
+	X  	/*
+	X
+	X--- 27,34 -----
+	X  		Printer=DEF_PRINT;
+	X  	if ((rcname = getenv("NEWSRC")) == NULL)
+	X  		rcname=DEF_NEWSRC;
+	X+ 	if ((ccname = getenv("CCFILE")) == NULL)
+	X+ 		ccname=DEF_CCFILE;
+	X  	Savedir = getenv("VNSAVE");
+	X  
+	X  	/*
+	X***************
+	X*** 41,46
+	X  		Savedir = Orgdir;
+	X  	sprintf (dbuf, "%s/%s",ptr->pw_dir,rcname);
+	X  	Newsrc = str_store (dbuf);
+	X  	sprintf (dbuf, "%s/%s%s",ptr->pw_dir,".vn","XXXXXX");
+	X  	Onews = str_store (mktemp(dbuf));
+	X  	if (access (Newsrc,0) != 0)
+	X
+	X--- 43,50 -----
+	X  		Savedir = Orgdir;
+	X  	sprintf (dbuf, "%s/%s",ptr->pw_dir,rcname);
+	X  	Newsrc = str_store (dbuf);
+	X+ 	sprintf (dbuf, "%s/%s",ptr->pw_dir,ccname);
+	X+ 	Ccfile = str_store (dbuf);
+	X  	sprintf (dbuf, "%s/%s%s",ptr->pw_dir,".vn","XXXXXX");
+	X  	Onews = str_store (mktemp(dbuf));
+	X  	if (access (Newsrc,0) != 0)
+SHAR_EOF
+if test 1870 -ne "`wc -c < 'envir_set.diff'`"
+then
+	echo shar: error transmitting "'envir_set.diff'" '(should have been 1870 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'reader.c.diff'" '(4064 characters)'
+if test -f 'reader.c.diff'
+then
+	echo shar: will not over-write existing file "'reader.c.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'reader.c.diff'
+	X*** reader.c.old	Sat Sep  6 13:20:55 1986
+	X--- reader.c	Sat Sep  6 13:46:49 1986
+	X***************
+	X*** 1,4
+	X  #include <stdio.h>
+	X  #include "tty.h"
+	X  #include "vn.h"
+	X  #include "head.h"
+	X
+	X--- 1,5 -----
+	X  #include <stdio.h>
+	X+ #include <sys/types.h>
+	X  #include "tty.h"
+	X  #include "vn.h"
+	X  #include "head.h"
+	X***************
+	X*** 7,13
+	X  #define PERTAB 8	/* tab expansion factor */
+	X  #define BACKTRACK 24
+	X  
+	X! extern char *Editor,*Mailer,*Poster,*Orgdir,*Savefile,*Savedir;
+	X  extern int L_allow;
+	X  extern int C_allow;
+	X  extern int Rot;
+	X
+	X--- 8,14 -----
+	X  #define PERTAB 8	/* tab expansion factor */
+	X  #define BACKTRACK 24
+	X  
+	X! extern char *Editor,*Mailer,*Poster,*Orgdir,*Savefile,*Savedir, *Ccfile;
+	X  extern int L_allow;
+	X  extern int C_allow;
+	X  extern int Rot;
+	X***************
+	X*** 371,377
+	X  			mail (*reply ? reply : from,title,from);
+	X  			break;
+	X  		case PG_FOLLOW:
+	X! 			followup (mid,title,ngrp,flto);
+	X  			break;
+	X  		case SAVE:
+	X  			saver ();
+	X
+	X--- 372,378 -----
+	X  			mail (*reply ? reply : from,title,from);
+	X  			break;
+	X  		case PG_FOLLOW:
+	X! 			followup (mid,title,ngrp,flto,from);
+	X  			break;
+	X  		case SAVE:
+	X  			saver ();
+	X***************
+	X*** 424,429
+	X  	tmpnam (fn);
+	X  	if ((fp = fopen(fn,"w")) == NULL)
+	X  		printex ("can't open %s\n",fn);
+	X  	fprintf (fp,"%s%s\n%s%s%s\n\n%s:\n", TO_head, p, T_head, FPFIX, t, f);
+	X  	edcopy (fp);
+	X  	fclose (fp);
+	X
+	X--- 425,432 -----
+	X  	tmpnam (fn);
+	X  	if ((fp = fopen(fn,"w")) == NULL)
+	X  		printex ("can't open %s\n",fn);
+	X+ 	if (strncmp(t, FPFIX, FPFLEN) == 0)
+	X+ 		t += FPFLEN;	/* don't add multiple Re:s */
+	X  	fprintf (fp,"%s%s\n%s%s%s\n\n%s:\n", TO_head, p, T_head, FPFIX, t, f);
+	X  	edcopy (fp);
+	X  	fclose (fp);
+	X***************
+	X*** 457,464
+	X  	should really be more thorough and parse the whole string.
+	X  	User can change, anyway.
+	X  */
+	X! static followup (m,t,n,ft)
+	X! char *m, *t, *n, *ft;
+	X  {
+	X  	char fn[L_tmpnam], *new, cmd [RECLEN], *rprompt();
+	X  	FILE *f, *fopen();
+	X
+	X--- 460,467 -----
+	X  	should really be more thorough and parse the whole string.
+	X  	User can change, anyway.
+	X  */
+	X! static followup (m,t,n,ft,oa)
+	X! char *m, *t, *n, *ft, *oa;
+	X  {
+	X  	char fn[L_tmpnam], *new, cmd [RECLEN], *rprompt();
+	X  	FILE *f, *fopen();
+	X***************
+	X*** 472,478
+	X  		strcpy (cmd,n);
+	X  	if ((new = rindex(cmd,'.')) != NULL && strcmp(new,".general") == 0)
+	X  		strcpy (new,".followup");
+	X! 	fprintf (f,"%s%s%s\n%s%s\n%s%s\n",T_head,FPFIX,t,N_head,cmd,R_head,m);
+	X  	edcopy (f);
+	X  	fclose (f);
+	X  	tty_set (SAVEMODE);
+	X
+	X--- 475,484 -----
+	X  		strcpy (cmd,n);
+	X  	if ((new = rindex(cmd,'.')) != NULL && strcmp(new,".general") == 0)
+	X  		strcpy (new,".followup");
+	X! 	if (strncmp(t, FPFIX, FPFLEN) == 0)
+	X! 		t += FPFLEN;	/* don't add multiple Re:s */
+	X! 	fprintf (f,"%s%s%s\n%s%s\n%s%s\n\n%s:\n",T_head,FPFIX,t,N_head,cmd,
+	X! 			R_head,m,oa);
+	X  	edcopy (f);
+	X  	fclose (f);
+	X  	tty_set (SAVEMODE);
+	X***************
+	X*** 486,491
+	X  		sprintf (cmd,"%s <%s", Poster, fn);
+	X  		system (cmd);
+	X  		printf ("given to posting program\n");
+	X  	}
+	X  	else
+	X  		printf ("not posted\n");
+	X
+	X--- 492,498 -----
+	X  		sprintf (cmd,"%s <%s", Poster, fn);
+	X  		system (cmd);
+	X  		printf ("given to posting program\n");
+	X+ 		save_article (fn);
+	X  	}
+	X  	else
+	X  		printf ("not posted\n");
+	X***************
+	X*** 678,681
+	X  	}
+	X  	*rest = start;
+	X  	return(lim);
+	X  }
+	X
+	X--- 685,720 -----
+	X  	}
+	X  	*rest = start;
+	X  	return(lim);
+	X+ }
+	X+ 
+	X+ /* This save_article function is basically identical to the one in postnews.
+	X+    I would have used postnews to do followups, but it has a different default
+	X+    editor from vn at our site, and I wanted it to be consistent with mail */
+	X+ 
+	X+ save_article(tempfname)
+	X+ 
+	X+ char *tempfname;
+	X+ 
+	X+ {
+	X+ 	FILE *in, *out;
+	X+ 	int c;
+	X+ 	time_t timenow, time();
+	X+ 	char *today, *ctime();
+	X+ 
+	X+ 
+	X+ 	if ((in = fopen(tempfname, "r")) == NULL)
+	X+ 		return;
+	X+ 	if ((out = fopen(Ccfile, "a")) == NULL) {
+	X+ 	    fclose(in);
+	X+ 	    return;
+	X+ 	}
+	X+ 	timenow = time((time_t)0);
+	X+ 	today = ctime(&timenow);
+	X+ 	fprintf(out,"From vn %s",today);
+	X+ 	while ((c=getc(in)) != EOF)
+	X+ 		putc(c, out);
+	X+ 	putc('\n', out);
+	X+ 	fclose(in);
+	X+ 	fclose(out);
+	X+ 	printf ("a copy has been saved in %s\n", Ccfile);
+	X  }
+SHAR_EOF
+if test 4064 -ne "`wc -c < 'reader.c.diff'`"
+then
+	echo shar: error transmitting "'reader.c.diff'" '(should have been 4064 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'vn.h.diff'" '(370 characters)'
+if test -f 'vn.h.diff'
+then
+	echo shar: will not over-write existing file "'vn.h.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'vn.h.diff'
+	X*** vn.h.old	Sat Sep  6 13:11:53 1986
+	X--- vn.h	Sat Sep  6 13:27:25 1986
+	X***************
+	X*** 28,33
+	X  #define ART_UNWRITTEN ' '
+	X  
+	X  #define FPFIX "Re: "
+	X  
+	X  #define ANFORM ":%s - ? for help:\n"
+	X  #define ANFLINES 1
+	X
+	X--- 28,34 -----
+	X  #define ART_UNWRITTEN ' '
+	X  
+	X  #define FPFIX "Re: "
+	X+ #define FPFLEN 4
+	X  
+	X  #define ANFORM ":%s - ? for help:\n"
+	X  #define ANFLINES 1
+SHAR_EOF
+if test 370 -ne "`wc -c < 'vn.h.diff'`"
+then
+	echo shar: error transmitting "'vn.h.diff'" '(should have been 370 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'vn.man.diff'" '(1866 characters)'
+if test -f 'vn.man.diff'
+then
+	echo shar: will not over-write existing file "'vn.man.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'vn.man.diff'
+	X*** vn.man.old	Sat Sep  6 13:33:18 1986
+	X--- vn.man	Sat Sep  6 13:41:34 1986
+	X***************
+	X*** 247,252
+	X  (login directory)/.newsrc
+	X  news status file.  Updated following session.  See NEWSRC environment variable.
+	X  .TP 24
+	X  (login directory)/*.vn
+	X  One temporary file created by
+	X  .I tmpnam
+	X
+	X--- 247,256 -----
+	X  (login directory)/.newsrc
+	X  news status file.  Updated following session.  See NEWSRC environment variable.
+	X  .TP 24
+	X+ (login directory)/author_copy
+	X+ A copy of all articles posted using the followup command will be appended
+	X+ to this file in /bin/mail format.  See CCFILE environment variable.
+	X+ .TP 24
+	X  (login directory)/*.vn
+	X  One temporary file created by
+	X  .I tmpnam
+	X***************
+	X*** 277,283
+	X  .TP 24
+	X  PRINTER
+	X  program used with the print commands for sending articles to
+	X! the printer.  defaults to "lpr -p".
+	X  .TP 24
+	X  NEWSRC
+	X  if set, can be used to override the choice of ".newsrc" as the
+	X
+	X--- 281,287 -----
+	X  .TP 24
+	X  PRINTER
+	X  program used with the print commands for sending articles to
+	X! the printer.  defaults to "lpr -p", or "lp -s" on System V.
+	X  .TP 24
+	X  NEWSRC
+	X  if set, can be used to override the choice of ".newsrc" as the
+	X***************
+	X*** 283,288
+	X  if set, can be used to override the choice of ".newsrc" as the
+	X  name for the status file.  Name will still be used relative to
+	X  the login directory.
+	X  .SH DIAGNOSTICS
+	X  user error messages.  self explanatory.
+	X  .SH AUTHOR
+	X
+	X--- 287,297 -----
+	X  if set, can be used to override the choice of ".newsrc" as the
+	X  name for the status file.  Name will still be used relative to
+	X  the login directory.
+	X+ .TP 24
+	X+ CCFILE
+	X+ if set, overrides the choice of "author_copy as the name of the
+	X+ file to CC all articles posted with the followup command.  Name
+	X+ will still be used relative to the login directory.
+	X  .SH DIAGNOSTICS
+	X  user error messages.  self explanatory.
+	X  .SH AUTHOR
+SHAR_EOF
+if test 1866 -ne "`wc -c < 'vn.man.diff'`"
+then
+	echo shar: error transmitting "'vn.man.diff'" '(should have been 1866 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'vnglob.c.diff'" '(700 characters)'
+if test -f 'vnglob.c.diff'
+then
+	echo shar: will not over-write existing file "'vnglob.c.diff'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'vnglob.c.diff'
+	X*** vnglob.c.old	Sat Sep  6 13:25:21 1986
+	X--- vnglob.c	Sat Sep  6 13:27:24 1986
+	X***************
+	X*** 13,18
+	X  char *Onews;			/* temp. file for backing up .newsrc */
+	X  char *Savefile = DEF_SAVE;	/* file in which to save articles */
+	X  char *Savedir;			/* default directory for saved articles */
+	X  
+	X  int Rot;	/* rotation */
+	X  int Headflag;	/* header printing flag */
+	X
+	X--- 13,19 -----
+	X  char *Onews;			/* temp. file for backing up .newsrc */
+	X  char *Savefile = DEF_SAVE;	/* file in which to save articles */
+	X  char *Savedir;			/* default directory for saved articles */
+	X+ char *Ccfile;			/* author_copy file, stored /bin/mail fmt */
+	X  
+	X  int Rot;	/* rotation */
+	X  int Headflag;	/* header printing flag */
+SHAR_EOF
+if test 700 -ne "`wc -c < 'vnglob.c.diff'`"
+then
+	echo shar: error transmitting "'vnglob.c.diff'" '(should have been 700 characters)'
+fi
+fi # end of overwriting check
+#	End of shell archive
+exit 0
+-- 
+
+	andy@icom.UUCP
+	Or for those of		Andrew H. Marrinson
+	you who wish to		ICOM Systems, Inc.
+	play it the hard	Arlington Heights, IL 60005
+	way: ihnp4!icom!andy

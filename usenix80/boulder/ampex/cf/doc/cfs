@@ -1,0 +1,133 @@
+.th "CONTIGUOUS FILE SYSTEM" V 6/79
+.sh NAME
+cfs - format of contiguous file system volume
+.sh DESCRIPTION
+	A contiguous file system (cfs) may be added to a normal
+mountable Unix file system (Ufs) to combine the capabilities for fast
+large-scale i/o to or from a contiguous region of a peripheral device 
+with the conveniences (such as directories, protection, and use of
+available software) of a normal Ufs.  The standard Unix convenience that
+is lacking in a contiguous file is dynamic changability of file size.
+A cfs file has its storage allocated at creation time, and the amount of 
+storage is then unchangeable until the file is deleted.
+.s2
+	Each cfs has a "parent" Ufs, and each Ufs has at most one "child"
+cfs.  The format of the superblock of a parent Ufs is
+.s3
+.nf
+struct {
+	...			/* same as normal Ufs superblock */
+	int devc,
+	    cfb0,		/* in 512-byte blocks */
+	    cfsiz,		/* in chunks */
+	    chunksize,		/* in blocks */
+	    boundsize,		/* in chunks */
+	    flsize,
+	    infl,
+	    rootlbn;
+} ;
+.s3
+.fi
+Everything up to
+.it devc
+is the same as on the old superblock
+structure.  As stored on disk and in core, the old superblock had about
+the last 50 words of information unused, the new version uses 8 of 
+those words.
+.s2
+	A cfs has three types of internal logical units:  chunks, boundaries
+and files.  Files on a cfs have all of their storage allocated at creation
+time.  Allocation is in units of chunks of storage, each of size 
+.it chunksize
+A specified number of files, each of a specified size, may
+be allocated at once.  A single creation of 
+nfiles, each of size nchunks,
+yields nfiles new directory entries and inodes on the parent Ufs,  and
+a contiguous region of size at least nfiles*nchunks*512 bytes on the
+cfs.  In addition, boundaries exist so that if nchunks >=
+.it boundsize
+, the region allocated for each file is guaranteed to obey
+.s2
+	(address of start of file) mod boundsize = 0.
+.s2
+For example, in an Ampex application, chunk size = 1 disk cylinder and
+boundsize = 2 chunks, so any file of size >= 2 chunks is guaranteed to 
+start at the beginning of an even-numbered cylinder.  The "boundary" option
+can waste space, but can be disabled by setting its value to 1 chunk.
+.s2
+	A free list of space available for allocation is kept in a file
+on the parent Ufs in the form of a B-tree.  The i-number of this file is
+.it infl
+the logical block number inside the file of the root b-node is
+.it rootlbn
+and the number of active bnodes is
+.it flsize
+.  The Unix major
+and minor device where the cfs is stored are
+.it devc
+; the cfs spans the
+region from block
+.it cfb0
+to block cfb0 + (
+.it cfsize
+* chunksize)
+on that device.
+.s2
+	The division between a parent Ufs and its child cfs is the
+obvious one:  the superblock and all directories and inodes reside on
+the Ufs, while the data region of each contiguous file resides on the cfs. 
+The changes to the superblock have been explained.  (Formerly junk was
+written on the bottom part of the superblock by mkfs(VIII).  To correct
+this, see zerosb(VIII).)  The directory structure is unchanged.  The
+inode of a contiguous file has been modified so that the "flags" field
+indicates character-type special file (the 020000 bit is on) and the
+.s3
+.nf
+int addr[8];
+array has been changed to
+struct {
+	int cflag,	/* contiguous file flag, == -1 */
+	    cdev;	/* cfs device number */
+	long base,	/* block # of start of file on cfs */
+	     last;	/* ...end... */
+	int pad[2];
+};
+.s3
+.fi
+	Logical block number b in a contiguous file is physical block
+b + base
+on device devc.  For b to be part of the given file, 
+.s3
+.nf
+b >= 0   and   b + base < last
+.s3
+.fi
+must be satisfied.  If block b exists, then it was allocated at the time
+the file was created.
+.s2
+	De-allocation of a contiguous file occurrs when the parent inode
+goes away, as in rm(I) and unlink(II).
+.sh FILES
+<Parent mountable Ufs root directory>/.flist
+.sh "SEE ALSO"
+c_creat(II), stat(II), fs(V), df(VIII),
+icheck(VIII), mkcfs(VIII), mount(VIII), zerosb(VIII).
+.sh AUTHOR
+Mitchell Gart, University of California, Berkeley and Ampex Corporation,
+Redwood City
+.sh BUGS
+	Since the previous version of mkfs(VIII) wrote junk on the bottom
+part of the superblock, zerosb(VIII) must be run on all mountable file
+systems to remove this junk.
+.s2
+	Since addr[0] was previously sometimes used to store a device
+number, -1 (0177777) becomes an illegal major-minor device number.
+.s2
+	Chunk sizes not an integral multiple of 512 bytes, chunk
+sizes > 2**15 blocks, and file sizes > 2**15 chunks are not supported.
+.s2
+	There should be a single-user utility program to do compression
+of a fragmented cfs.
+.s2
+	Unaware or unscrupulous users can tie up huge amounts of disk
+space.

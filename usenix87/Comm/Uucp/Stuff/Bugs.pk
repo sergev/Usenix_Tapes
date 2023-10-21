@@ -1,0 +1,175 @@
+From wuphys!wucs!busch!we53!mgnetp!ihnp4!nsc!pyramid!csg Sat Nov  2 17:03:50 CST 1985
+
+Alright all you UUCP hackers out there, tell me if this one is reasonable. The
+patch is quick and dirty; I want to hear if the concept is reasonable, not the
+specific fix. (The fix differs considerably on different versions of UUCP.)
+This was originally posted in a plea for help by Jeffrey Mattox at Heurikon.
+
+Description:
+
+	If a packet is received that is short a character or two (due to line
+	noise, or whatever), uucico loses synch with the transmitting host,
+	makes the usual ten or so retries, and finally gives up.
+
+Reproduce By:
+
+	Difficult to reproduce consistently, unless you can deliberately
+	introduce protocol errors. Easily observed with a data monitor on
+	noisy lines, through.
+
+Fix:
+
+	The pkgetpack() function reads the six-byte packet header and data
+	using three calls to pkcget, one for the leading SYN character, the
+	second for the rest of the header, and the third to read the data.
+	The stripped down pseudo code for this is:
+
+		if (pkcget (ifn, buffer, 1) == FAIL)	  /* To read SYN char */
+			start over;
+		if (pkcget (ifn, buffer+1, 5) == FAIL)	  /* For rest of header */
+			start over;
+		if (pkcget (ifn, buffer, data_size) != FAIL)
+			move (buffer, packet_buffer);
+
+	If the data read fails (i.e. an alarm timeout occurs), then the data
+	is discarded and pkgetpack() returns. However, previous data in the
+	packet buffer can fool the calling routine into believing that no
+	error occurred.
+
+	The following quick-and-dirty patch can be applied to the Berkeley 5.1
+	version of pk1.c to retry the entire packet when a read fails on the
+	data portion. A better patch (which I am using in the 4.3bsd UUCP) is
+	to pull the third pkcget inside the error/retry loop that is used to
+	read the header.
+
+	In addition, to help deal with hosts that don't have this bug fix, I
+	made a mod to pkxstart to append null characters to each packet. This
+	appears so far to markedly improved transmission on noisy lines, since
+	we avoid timeout errors entirely; the normal checksum detection finds
+	error instead.
+
+	So -- can anyone tell me about any hidden surprises in this?
+
+*** pk1.c.old	Fri Nov  1 17:07:26 1985
+--- pk1.c	Fri Nov  1 17:06:43 1985
+***************
+*** 130,135
+  		pkfail();
+  	ifn = pk->p_ifn;
+  
+  	/* find HEADER */
+  	for (tries = 0; tries < GETRIES; ) {
+  		p = (caddr_t) &pk->p_ihbuf;
+
+--- 130,136 -----
+  		pkfail();
+  	ifn = pk->p_ifn;
+  
++ pkg_start:
+  	/* find HEADER */
+  	for (tries = 0; tries < GETRIES; ) {
+  		p = (caddr_t) &pk->p_ihbuf;
+***************
+*** 200,207
+  		return;
+  	}
+  	ret = pkcget(pk->p_ifn, (char *) bp, pk->p_rsize);
+! 	if (ret == 0)
+! 		pkdata(h->cntl, h->sum, pk, (char **) bp);
+  	return;
+  }
+  
+
+--- 201,209 -----
+  		return;
+  	}
+  	ret = pkcget(pk->p_ifn, (char *) bp, pk->p_rsize);
+! 	if (ret != 0)
+! 		goto pkg_start;
+! 	pkdata(h->cntl, h->sum, pk, (char **) bp);
+  	return;
+  }
+  
+***************
+*** 295,301
+  		PKASSERT(ret == HDRSIZ, "PKXSTART ret", "", ret);
+  	}
+  	else {
+! 		char buf[PKMAXBUF + HDRSIZ], *b;
+  		int i;
+  		for (i = 0, b = buf; i < HDRSIZ; i++) 
+  			*b++ = *p++;
+
+--- 297,304 -----
+  		PKASSERT(ret == HDRSIZ, "PKXSTART ret", "", ret);
+  	}
+  	else {
+! #define TAILSIZE 2
+! 		char buf[PKMAXBUF + HDRSIZ + TAILSIZE], *b;
+  		int i;
+  		for (i = 0, b = buf; i < HDRSIZ; i++) 
+  			*b++ = *p++;
+***************
+*** 301,306
+  			*b++ = *p++;
+  		for (i = 0, p = pk->p_ob[x]; i < pk->p_xsize; i++)
+  			*b++ = *p++;
+  #ifdef PROTODEBUG
+  		GENERROR(buf, pk->p_xsize + HDRSIZ);
+  #endif
+
+--- 304,312 -----
+  			*b++ = *p++;
+  		for (i = 0, p = pk->p_ob[x]; i < pk->p_xsize; i++)
+  			*b++ = *p++;
++ 		for (i = 0; i < TAILSIZE; i++) 
++ 			*b++ = '\0';
++ 
+  #ifdef PROTODEBUG
+  		GENERROR(buf, pk->p_xsize + HDRSIZ + TAILSIZE);
+  #endif
+***************
+*** 302,308
+  		for (i = 0, p = pk->p_ob[x]; i < pk->p_xsize; i++)
+  			*b++ = *p++;
+  #ifdef PROTODEBUG
+! 		GENERROR(buf, pk->p_xsize + HDRSIZ);
+  #endif
+  		ret = write(pk->p_ofn, buf, pk->p_xsize + HDRSIZ);
+  		PKASSERT(ret == pk->p_xsize + HDRSIZ,
+
+--- 308,314 -----
+  			*b++ = '\0';
+  
+  #ifdef PROTODEBUG
+! 		GENERROR(buf, pk->p_xsize + HDRSIZ + TAILSIZE);
+  #endif
+  		ret = write(pk->p_ofn, buf, pk->p_xsize + HDRSIZ + TAILSIZE);
+  		PKASSERT(ret == pk->p_xsize + HDRSIZ + TAILSIZE,
+***************
+*** 304,311
+  #ifdef PROTODEBUG
+  		GENERROR(buf, pk->p_xsize + HDRSIZ);
+  #endif
+! 		ret = write(pk->p_ofn, buf, pk->p_xsize + HDRSIZ);
+! 		PKASSERT(ret == pk->p_xsize + HDRSIZ,
+  		  "PKXSTART ret", "", ret);
+  		Connodata = 0;
+  	}
+
+--- 310,317 -----
+  #ifdef PROTODEBUG
+  		GENERROR(buf, pk->p_xsize + HDRSIZ + TAILSIZE);
+  #endif
+! 		ret = write(pk->p_ofn, buf, pk->p_xsize + HDRSIZ + TAILSIZE);
+! 		PKASSERT(ret == pk->p_xsize + HDRSIZ + TAILSIZE,
+  		  "PKXSTART ret", "", ret);
+  		Connodata = 0;
+  	}
+-- 
+      -m-------   Pyramid Technology       Carl S. Gutekunst, Software R&D
+    ---mmm-----   1295 Charleston Rd         {cmcl2,topaz}!pyrnj!
+  -----mmmmm---   Mt. View, CA 94039        {ihnp4,uwvax}!pyrchi!pyramid!csg
+-------mmmmmmm-   +1 415 965 7200      {allegra,decwrl,dual,sun}!
+
+

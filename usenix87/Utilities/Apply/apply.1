@@ -1,0 +1,155 @@
+.TH APPLY 1V VMB
+'\"	last edit:	85/10/20	D A Gwyn
+'\"	SCCS ID:	@(#)apply.1	1.1
+.SH NAME
+apply \- apply a command to a set of arguments
+.SH SYNOPSIS
+.B apply
+[
+.BR \-a c
+] [ \-n ] [
+.B \-v
+] [
+.B \-w
+] command args ...
+.SH DESCRIPTION
+.I Apply\^
+runs the named
+.I command\^
+on successive batches of arguments
+taken from
+.I args\^
+until they are all consumed.
+The optional number
+.I n\^
+specifies the number of arguments per batch
+(default 1);
+this many arguments
+(separated by spaces)
+are appended to
+.I command\^
+each time it is run.
+In the special case that
+.I n\^
+is zero,
+.I command\^
+is run without arguments
+once for each
+.IR arg\^ .
+.P
+However, if
+.I command\^
+contains any character sequence
+consisting of the character
+.I c\^
+(default
+.BR % )
+followed by a digit
+.I d\^
+from 1 through 9,
+.I n\^
+is ignored and each such
+.I cd\^
+pair is replaced by the
+.IR d\^ th
+following unconsumed
+.IR arg\^ .
+In this case, the maximum such digit
+.I d\^
+in
+.I command\^
+specifies the number of
+.I args\^
+consumed per batch.
+.P
+The
+.B \-v
+(``verbose'') option
+causes
+.I apply\^
+to print each constructed command
+before it is run.
+The
+.B \-w
+option causes
+a warning to be printed for any command that
+returns a non-zero exit status.
+.SH CAVEATS
+The constructed command
+is executed by
+.IR system\^ (3S),
+so watch out for shell metacharacters in
+.I command\^
+or
+.IR args\^ .
+It is best to enclose complicated commands in single quotes \'\ \',
+to prevent immediate interpretation by the current shell process.
+.P
+It is necessary to choose an alternate
+substitution prefix character
+.IR c\^ ,
+if the default
+.B %
+character must appear literally
+followed by a positive digit
+in the constructed command.
+.SH EXAMPLES
+The following shell command
+inefficiently emulates the behavior of `ls':
+.RS
+$ \|\fIapply \|echo \|*\fP
+.RE
+.P
+The following shell command
+compares the `a' files against the corresponding `b' files:
+.RS
+$ \|\fIapply \|\-2 \|cmp \|a1 \|b1 \|a2 \|b2 \|...\fP
+.RE
+.P
+The following shell command
+runs
+.IR date\^ (1)
+20 times; like
+`for i in \`seq 20\`; do date; done':
+.RS
+$ \|\fIapply \|\-0 \|date \|\`seq \|20\`\fP
+.RE
+.P
+The following shell command
+exchanges the names of the `a' files with the corresponding `b' files:
+.RS
+$ \|\fIapply \|\'mv \|%1 \|t; mv \|%2 \|%1; mv \|t \|%2\' \|a1 \|b1 \|a2 \|b2 \|...\fP
+.RE
+.SH "SEE ALSO"
+find(1), pick(1V), sh(1).
+.SH DIAGNOSTICS
+Error messages,
+as well as requested
+verbose or warning messages,
+are printed on the standard error output
+and are meant to be self-explanatory.
+``Command too long''
+indicates that the result of adding arguments to the
+.I command\^
+would exceed some system limit
+on the total length of a command line.
+.RI `` N\^
+args left over''
+indicates that the number of
+arguments per batch
+did not exactly divide
+the number of supplied
+.IR args\^ .
+.SH "EXIT CODES"
+If all applications of
+.I command\^
+return zero exit status,
+then so will
+.IR apply\^ .
+An exit status of
+1 is returned if any
+.I command\^
+execution errors occur;
+2 is returned for usage errors.
+.SH AUTHOR
+Douglas A. Gwyn, BRL/VLD-VMB (inspired by 8th Edition UNIX)

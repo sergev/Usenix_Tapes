@@ -1,0 +1,788 @@
+  100 ;
+  110 ; term.plus.64.2
+  120 ;
+  130 ; last date 870102
+  140 ;
+  150 ; subroutine - map vic into appropriate bank and set up addresses
+  160 ;
+  170 revic lda ddrpa2 ; ensure bank select bits are outputs
+  180 ora #$03
+  190 sta ddrpa2
+  200 lda flag80 ; 80 column modeprint
+  210 beq re40 ; no
+  220 ;
+  230 lda dpa2 ; set vic bank to 1
+  240 and #$fc
+  250 ora #$02
+  260 sta dpa2
+  270 lda #$78 ; set vic screen to $5c00, hires to $6000
+  280 sta vmcr
+  290 lda vcr ; turn on hires mode
+  300 ora #$20
+  310 sta vcr
+  320 rts
+  330 ;
+  340 re40 lda dpa2 ; set vic bank to 2
+  350 and #$fc
+  360 ora #$01
+  370 sta dpa2
+  380 lda vmcr ; set vic screen to $b400
+  390 and #$0f
+  400 ora #$d0
+  410 sta vmcr
+  420 lda #$b4 ; tell kernel screen is at $b400
+  430 sta hibase
+  440 rts
+  450 ;
+  460 ; subroutine - restore everything and terminate program
+  470 ;
+  480 end jsr restore ; restore everything to default state
+  490 pla ; fix up stack pointer
+  500 pla
+  510 pla
+  520 pla
+  530 ldx #16 ; move 16 byte term/reentry code to $2a7
+  540 eloop lda term-1,x
+  550 sta unused-1,x
+  560 dex
+  570 bne eloop
+  580 jmp unused ; exit now through term code at $2a7
+  590 ;
+  600 ; subroutine - restore everything to default state
+  610 ;
+  620 restore lda #5 ; close rs-232 channel
+  630 jsr close
+  640 lda vcr ; turn off hires mode if on
+  650 and #$df
+  660 sta vcr
+  670 lda #$14 ; set vic memory control reg to default
+  680 sta vmcr
+  690 lda dpa2 ; map vic back to bank 0
+  700 ora #$03
+  710 sta dpa2
+  720 lda #$04 ; tell kernel screen is at $0400
+  730 sta hibase
+  740 lda #$93 ; clear the screen
+  750 jsr chrouth
+  760 ldx #0
+  770 stx flag79 ; restore flags to their initial state
+  780 stx suspend
+  790 stx fxoff
+  800 dex
+  810 stx cflag
+  820 rts
+  830 ;
+  840 ; subroutine - process escape sequences
+  850 ;
+  860 escseq sec ; get cursor coordinates
+  870 jsr ploth
+  880 sty xcoord
+  890 stx ycoord
+  900 lda escflag ; if escflag still esc, char is
+  910 cmp #$1b ; a function code
+  920 beq fcode
+  930 ;
+  940 ; process cursor coordinates following ^[y
+  950 ;
+  960 lda char ; put char-$20 into y coordinate if
+  970 sec ; escflag=2, x coordinate if
+  980 sbc #$20 ; escflag=1
+  990 dec escflag
+ 1000 ldy escflag
+ 1010 sta xcoord,y
+ 1020 ldy xcoord ; move cursor to new position
+ 1030 ldx ycoord
+ 1040 clc
+ 1050 jsr ploth
+ 1060 rts
+ 1070 ;
+ 1080 ; process ^[a (cursor up)
+ 1090 ;
+ 1100 fcode lda char ; process escape function codes
+ 1110 cmp #"a" ;"cursor up ?
+ 1120 bne notup ; no
+ 1130 up lda #$91 ; yes - print cursor up
+ 1140 print jsr chrouth
+ 1150 return lda #0 ; reset escape flag
+ 1160 sta escflag
+ 1170 rts
+ 1180 ;
+ 1190 ; process ^[b (cursor down)
+ 1200 ;
+ 1210 notup cmp #"b" ;"cursor down ?
+ 1220 bne notdn ; no
+ 1230 cpx #24 ; at bottom marginprint
+ 1240 beq return ; yes
+ 1250 lda #$11 ; print cursor down
+ 1260 bne print
+ 1270 ;
+ 1280 ; process ^[c (cursor right)
+ 1290 ;
+ 1300 notdn cmp #"c" ;"cursor right ?
+ 1310 bne notrt ; no
+ 1320 lda flag80 ; 80 column mode
+ 1330 bne rt80 ; yes, skip next check
+ 1340 cpy #39 ; at right margin
+ 1350 beq return ; yes
+ 1360 rt80 cpy #79 ; at right marginprint
+ 1370 beq return ; yes
+ 1380 lda #$1d ; print cursor right
+ 1390 bne print
+ 1400 ;
+ 1410 ; process ^[d (cursor left)
+ 1420 ;
+ 1430 notrt cmp #"d" ;"cursor left ?
+ 1440 bne notlft ; no
+ 1450 cpy #0 ;"at left margin ?
+ 1460 beq return ; yes
+ 1470 lf80 lda #$9d ; print cursor left
+ 1480 bne print
+ 1490 ;
+ 1500 ; process ^[h (cursor home)
+ 1510 ;
+ 1520 notlft cmp #"h" ;"cursor home ?
+ 1530 bne nothome ; no
+ 1540 lda #$13 ; print cursor home
+ 1550 bne print
+ 1560 ;
+ 1570 ; process ^[o (reverse video)
+ 1580 ;
+ 1590 nothome cmp #"o"+$20 ;"reverse video ?
+ 1600 bne notrev ; no
+ 1610 lda #$12 ; print reverse on
+ 1620 bne print
+ 1630 ;
+ 1640 ; process ^[n (normal video)
+ 1650 ;
+ 1660 notrev cmp #"n"+$20 ;"normal video ?
+ 1670 bne notnorm ; no
+ 1680 lda #$92 ; print reverse off
+ 1690 bne print
+ 1700 ;
+ 1710 ; process ^[i (reverse line feed)
+ 1720 ;
+ 1730 notnorm cmp #"i" ;"reverse line feed ?
+ 1740 beq yesrlf ; yes
+ 1750 jmp notrlf ; no
+ 1760 yesrlf cpx #0 ; at top marginprint
+ 1770 bne up ; no - use normal cursor up
+ 1780 lda flag80 ; 80 column modeprint
+ 1790 beq rlf40 ; no
+ 1800 ;
+ 1810 lda #<(hires+$1e00-$100) ; source pointer
+ 1820 sta source
+ 1830 lda #>(hires+$1e00-$100)
+ 1840 sta source+1
+ 1850 lda #<(hires+$1f40-$100) ; destination pointer
+ 1860 sta dest
+ 1870 lda #>(hires+$1f40-$100)
+ 1880 sta dest+1
+ 1890 ldx #$1e ; 1e00 bytes must be moved
+ 1900 ldy #0
+ 1910 rfloop1 lda (source),y ; begin both outer and inner move loops
+ 1920 sta (dest),y
+ 1930 iny
+ 1940 lda (source),y ; this is replicated to gain speed
+ 1950 sta (dest),y
+ 1960 iny
+ 1970 lda (source),y ; this is replicated to gain speed
+ 1980 sta (dest),y
+ 1990 iny
+ 2000 lda (source),y ; this is replicated to gain speed
+ 2010 sta (dest),y
+ 2020 iny
+ 2030 bne rfloop1 ; end inner loop to move $100 bytes
+ 2040 dec source+1
+ 2050 dec dest+1
+ 2060 dex
+ 2070 bne rfloop1 ; end outer loop to do inner loop $1e times
+ 2080 tya
+ 2090 rfloop2 sta (dest),y ; now clear next 256 bytes back
+ 2100 iny
+ 2110 bne rfloop2
+ 2120 dec dest+1
+ 2130 ldy #$c0 ; last, clear first 64 hires bytes
+ 2140 rfloop3 sta (dest),y
+ 2150 iny
+ 2160 bne rfloop3
+ 2170 jmp retesc
+ 2180 ;
+ 2190 rlf40 lda #<(vidmat4+999-40)
+ 2200 sta source ; source = address of last byte to move
+ 2210 sta dest ; dest = corresponding color ram address
+ 2220 lda #>(vidmat4+999-40)
+ 2230 sta source+1
+ 2240 lda #>(colram+999-40)
+ 2250 sta dest+1
+ 2260 ldy #40 ; distance to be moved
+ 2270 ldx #0 ; inhibit x indexing
+ 2280 rlfloop lda (source,x) ; move a character to next line
+ 2290 sta (source),y
+ 2300 lda #$01 ; color code for white
+ 2310 sta (dest),y ; into corresponding color ram addr
+ 2320 dec source ; decrement source addresses
+ 2330 dec dest
+ 2340 lda source
+ 2350 cmp #$ff
+ 2360 bne rlf1
+ 2370 dec source+1
+ 2380 dec dest+1
+ 2390 rlf1 lda source ; screen all movedprint
+ 2400 cmp #<(vidmat4-1)
+ 2410 bne rlfloop ; no
+ 2420 lda source+1 ; screen all movedprint
+ 2430 cmp #>(vidmat4-1)
+ 2440 bne rlfloop ; no
+ 2450 lda #$20 ; screen code for space
+ 2460 bfloop sta vidmat4-1,y ; set first line to all spaces
+ 2470 dey
+ 2480 bne bfloop
+ 2490 jmp retesc
+ 2500 ;
+ 2510 ; process ^[k (clear to end of line)
+ 2520 ;
+ 2530 notrlf cmp #"k" ;"clear to end of line ?
+ 2540 bne noteol ; no
+ 2550 lda flag80 ;"80 column mode ?
+ 2560 beq eol40 ; no
+ 2570 ;
+ 2580 jsr hceol ; do the clear
+ 2590 jmp retesc
+ 2600 ;
+ 2610 eol40 lda #$20 ; screen code for space
+ 2620 ldy pntr ; get displacement from pnt
+ 2630 eoloop sta (pnt),y ; store a space
+ 2640 iny ; next logical column
+ 2650 cpy #40 ; end of physical lineprint
+ 2660 beq retesc ; yes
+ 2670 cpy #80 ; end of physical lineprint
+ 2680 beq retesc ; yes
+ 2690 bne eoloop ; no, keep clearing
+ 2700 ;
+ 2710 ; process ^[j (clear to end of screen)
+ 2720 ;
+ 2730 noteol cmp #"j" ;"clear to end of screen ?
+ 2740 bne noteos ; no
+ 2750 lda flag80 ;"80 column mode ?
+ 2760 beq eos40 ; no
+ 2770 ;
+ 2780 jsr hclear ; clear to end of screen
+ 2790 jmp retesc
+ 2800 ;
+ 2810 eos40 lda pntr ; put cursor screen memory address
+ 2820 clc ; (pnt+pntr) into dest
+ 2830 adc pnt
+ 2840 sta dest
+ 2850 lda #0
+ 2860 adc pnt+1
+ 2870 sta dest+1
+ 2880 lda #$20 ; screen code for space
+ 2890 ldy #0 ; inhibit indexing
+ 2900 eosloop sta (dest),y ; store a space
+ 2910 inc dest ; increment screen address
+ 2920 bne eos1
+ 2930 inc dest+1
+ 2940 eos1 ldx dest ; end of screenprint
+ 2950 cpx #<(vidmat4+1000)
+ 2960 bne eosloop ; no
+ 2970 ldx dest+1 ; end of screenprint
+ 2980 cpx #>(vidmat4+1000)
+ 2990 bne eosloop ; no
+ 3000 beq retesc
+ 3010 ;
+ 3020 ; process ^[y (cursor motion initiate)
+ 3030 ;
+ 3040 noteos cmp #"y" ;"cursor motion ?
+ 3050 bne notcm ; no
+ 3060 lda #2 ; set escflag to 2 so next 2
+ 3070 sta escflag ; chars will be processed as
+ 3080 rts ; coordinates
+ 3090 ;
+ 3100 ; process ^[z (identify <vt-52> terminal)
+ 3110 ;
+ 3120 notcm cmp #"z" ;"identify terminal ?
+ 3130 bne notid ; no
+ 3140 ldx #5 ; change kernel output
+ 3150 jsr chkout ; to rs-232
+ 3160 lda #$1b ; output esc
+ 3170 jsr chrout
+ 3180 lda #"/" ; output /
+ 3190 jsr chrout
+ 3200 lda #"z" ; output z
+ 3210 jsr chrout
+ 3220 ldx #0 ; restore kernel output
+ 3230 jsr chkout ; to screen
+ 3240 clc
+ 3250 bcc retesc
+ 3260 ;
+ 3270 ; process ^[^\ (initiate downline load)
+ 3280 ;
+ 3290 notid cmp #$1c ; downline loadprint
+ 3300 bne retesc ; no
+ 3310 jsr dload ; do download
+ 3320 retesc lda #0 ; no other functions
+ 3330 sta escflag ; clear escape flag
+ 3340 rts
+ 3350 ;
+ 3360 ; subroutine - hires screen print (but use chrout if 40 column mode)
+ 3370 ;
+ 3380 chrouth ldx flag80 ;"80 column mode ?
+ 3390 bne cho80 ; yes
+ 3400 jsr chrout
+ 3410 rts
+ 3420 cho80 cmp #$00 ; no-ops (0,1) are ignored
+ 3430 beq hret4
+ 3440 cmp #$01
+ 3450 beq hret4
+ 3460 ldy flag79 ; copy special column 79 flag to one-shot
+ 3470 sty flag79t
+ 3480 ldy #0 ; then clear the main flag
+ 3490 sty flag79
+ 3500 cmp #$13 ; cursor homeprint
+ 3510 bne hnhome ; no
+ 3520 ;
+ 3530 ; process home code
+ 3540 ;
+ 3550 hhome lda #<hires ; reset cursor variables to home position
+ 3560 sta pnth
+ 3570 lda #>hires
+ 3580 sta pnth+1
+ 3590 lda #$f0
+ 3600 sta hilo
+ 3610 lda #0
+ 3620 sta lineh
+ 3630 sta colh
+ 3640 hret4 rts
+ 3650 ;
+ 3660 ; process clear code
+ 3670 ;
+ 3680 hnhome cmp #$93 ; clear screenprint
+ 3690 bne hnclear ; no
+ 3700 jsr hhome ; first home the cursor
+ 3710 jsr hclear ; then clear to end of screen
+ 3720 rts
+ 3730 ;
+ 3740 ; process cursor left code
+ 3750 ;
+ 3760 hnclear cmp #$9d ; cursor leftprint
+ 3770 bne hnleft ; no
+ 3780 lda colh ; get column
+ 3790 bne hncol0 ; column zero check
+ 3800 lda lineh ; column zero case, get line
+ 3810 beq hret1 ; line zero also so it's a no-op
+ 3820 dec lineh ; decrement line
+ 3830 lda #79 ; column=79
+ 3840 sta colh
+ 3850 bne hcom1
+ 3860 hncol0 dec colh ; not column zero, just decrement column
+ 3870 hcom1 lda hilo ; get hilo mask
+ 3880 eor #$ff ; reverse it
+ 3890 sta hilo
+ 3900 cmp #$0f ; previous hires byteprint
+ 3910 bne hret1 ; no
+ 3920 lda pnth ; decrement hires pointer by 8
+ 3930 sec
+ 3940 sbc #8
+ 3950 sta pnth
+ 3960 lda pnth+1
+ 3970 sbc #0
+ 3980 sta pnth+1
+ 3990 hret1 rts
+ 4000 ;
+ 4010 ; process cursor up code
+ 4020 ;
+ 4030 hnleft cmp #$91 ; cursor upprint
+ 4040 bne hnup ; no
+ 4050 lda lineh ; get line
+ 4060 beq hret2 ; line zero is no-op
+ 4070 dec lineh ; decrement line
+ 4080 lda pnth ; decrement hires pointer by 320
+ 4090 sec
+ 4100 sbc #$40
+ 4110 sta pnth
+ 4120 lda pnth+1
+ 4130 sbc #$01
+ 4140 sta pnth+1
+ 4150 hret2 rts
+ 4160 ;
+ 4170 ; process cursor down code
+ 4180 ;
+ 4190 hnup cmp #$11 ; cursor downprint
+ 4200 bne hndown ; no
+ 4210 lda lineh ; get line
+ 4220 cmp #24 ; bottom lineprint
+ 4230 beq hrollup ; yes, rollup required
+ 4240 inc lineh ; increment line
+ 4250 lda pnth ; increment hires pointer by 320
+ 4260 clc
+ 4270 adc #$40
+ 4280 sta pnth
+ 4290 lda pnth+1
+ 4300 adc #$01
+ 4310 sta pnth+1
+ 4320 rts
+ 4330 hrollup lda #<(hires+$140) ; source points to hires line 1
+ 4340 sta source
+ 4350 lda #>(hires+$140)
+ 4360 sta source+1
+ 4370 lda #<hires ; dest points to hires line 0
+ 4380 sta dest
+ 4390 lda #>hires
+ 4400 sta dest+1
+ 4410 ldx #$1e ; 1e0 bytes must be moved
+ 4420 ldy #0
+ 4430 hloop1 lda (source),y ; begin both outer and inner move loops
+ 4440 sta (dest),y
+ 4450 iny
+ 4460 lda (source),y
+ 4470 sta (dest),y
+ 4480 iny
+ 4490 lda (source),y
+ 4500 sta (dest),y
+ 4510 iny
+ 4520 lda (source),y
+ 4530 sta (dest),y
+ 4540 iny
+ 4550 bne hloop1 ; end inner loop to move $100 bytes
+ 4560 inc source+1
+ 4570 inc dest+1
+ 4580 dex
+ 4590 bne hloop1 ; end outer loop to do inner loop $1e times
+ 4600 tya ; now clear next 256 hires bytes
+ 4610 hloop2 sta (dest),y
+ 4620 iny
+ 4630 bne hloop2
+ 4640 inc dest+1
+ 4650 hloop3 sta (dest),y ; then the last 64 bytes
+ 4660 iny
+ 4670 cpy #$41
+ 4680 bne hloop3
+ 4690 rts
+ 4700 ;
+ 4710 ; process cursor right code
+ 4720 ;
+ 4730 hndown cmp #$1d ; cursor rightprint
+ 4740 bne hnrt ; no
+ 4750 hright lda colh ; get column
+ 4760 cmp #79 ; at column 79print
+ 4770 bne hncol79 ; no
+ 4780 lda lineh ; get line
+ 4790 cmp #24 ; at line 24print
+ 4800 beq heos ; yes, treat end of screen special
+ 4810 inc lineh ; increment line
+ 4820 lda #0 ; column=0
+ 4830 sta colh
+ 4840 beq hcom2
+ 4850 hncol79 inc colh ; not column 79, just increment column
+ 4860 hcom2 lda hilo ; get hilo mask
+ 4870 eor #$ff ; reverse it
+ 4880 sta hilo
+ 4890 cmp #$f0 ; next hires byteprint
+ 4900 bne hret3 ; no
+ 4910 lda pnth ; increment hires pointer by 8
+ 4920 clc
+ 4930 adc #8
+ 4940 sta pnth
+ 4950 lda pnth+1
+ 4960 adc #0
+ 4970 sta pnth+1
+ 4980 hret3 rts
+ 4990 heos lda #0 ; set column to zero
+ 5000 sta colh
+ 5010 lda #$f0 ; set hilo mask to upper nibble
+ 5020 sta hilo
+ 5030 lda pnth ; decrement hires pointer by $138
+ 5040 sec
+ 5050 sbc #$38
+ 5060 sta pnth
+ 5070 lda pnth+1
+ 5080 sbc #$01
+ 5090 sta pnth+1
+ 5100 jmp hrollup ; complete by rolling up
+ 5110 ;
+ 5120 ; process reverse on code
+ 5130 ;
+ 5140 hnrt cmp #$12 ; reverse videoprint
+ 5150 bne hnrev ; no
+ 5160 lda #$0f ; set reverse mask
+ 5170 sta revmask
+ 5180 rts
+ 5190 ;
+ 5200 ; process reverse off code
+ 5210 ;
+ 5220 hnrev cmp #$92 ; normal videoprint
+ 5230 bne hnnorm ; no
+ 5240 lda #0 ; clear reverse mask
+ 5250 sta revmask
+ 5260 rts
+ 5270 ;
+ 5280 ; process printing character codes
+ 5290 ;
+ 5300 hnnorm sta ccode ; stash character code for later
+ 5310 lda colh ; special column 79 treatment
+ 5320 cmp #79 ; at column 79print
+ 5330 bne not79 ; no
+ 5340 lda flag79t ; was previous char printed at col 79print
+ 5350 beq notf79 ; no
+ 5360 jsr hright ; move cursor right to col 0 of next line
+ 5370 clc
+ 5380 bcc not79
+ 5390 notf79 inc flag79 ; set flag, this char will print at 79
+ 5400 not79 lda ccode ; get character code previously saved
+ 5410 sec ; subtract $20 from character code
+ 5420 sbc #$20
+ 5430 sta source ; temporarily save code
+ 5440 lsr a ; high of (code*8)
+ 5450 lsr a
+ 5460 lsr a
+ 5470 lsr a
+ 5480 lsr a
+ 5490 sta source+1 ; source+1=high font displacement
+ 5500 lda source ; low of (code*8)
+ 5510 asl a
+ 5520 asl a
+ 5530 asl a
+ 5540 clc
+ 5550 adc #<font ; set source=desired font address
+ 5560 sta source
+ 5570 lda source+1
+ 5580 adc #>font
+ 5590 sta source+1
+ 5600 ldy #8-1 ; move the font into a hires nibble
+ 5610 hxloop lda (source),y
+ 5620 eor revmask ; reverse font pattern if necessary
+ 5630 tax
+ 5640 lda hilo ; test to see which nibble
+ 5650 cmp #$f0 ; upper nibbleprint
+ 5660 bne hnoshft ; no
+ 5670 txa
+ 5680 asl a ; shift font byte into high nibble
+ 5690 asl a
+ 5700 asl a
+ 5710 asl a
+ 5720 tax
+ 5730 hnoshft lda hilo ; change hilo mask
+ 5740 eor #$ff ; into a mask to preserve other nibble
+ 5750 and (pnth),y ; now preserve that nibble
+ 5760 sta dest ; and temporarily save
+ 5770 txa ; get new font nibble
+ 5780 ora dest ; combine with other nibble
+ 5790 sta (pnth),y ; replace hires screen byte
+ 5800 dey
+ 5810 bpl hxloop ; repeat for 8 bytes
+ 5820 lda flag79 ; should cursor be moved right 1print
+ 5830 bne skiprt ; no, column 79 just printed
+ 5840 jmp hright ; finish by moving right 1 column
+ 5850 skiprt rts
+ 5860 ;
+ 5870 ; subroutine - clear from cursor to end of hires screen
+ 5880 ;
+ 5890 hclear jsr hclunc ; first clear under cursor if necessary
+ 5900 lda #<(hires+$1f40) ; compute number of bytes to clear
+ 5910 sec
+ 5920 sbc dest
+ 5930 sta source ; temp save low byte of count
+ 5940 lda #>(hires+$1f40)
+ 5950 sbc dest+1 ; high byte of count=0print
+ 5960 hclr2 beq lastfew ; yes
+ 5970 tax ; x*$100 bytes need to be cleared first
+ 5980 lda #0
+ 5990 tay
+ 6000 hcloop2 sta (dest),y ; begin both outer and inner clear loops
+ 6010 iny
+ 6020 bne hcloop2 ; end inner loop to clear $100 bytes
+ 6030 inc dest+1
+ 6040 dex
+ 6050 bne hcloop2 ; end outer loop to do inner loop x times
+ 6060 lastfew ldy source ; lastly, clear "low count byte" bytes
+ 6070 beq hclret ; really nothing more to clear!
+ 6080 dey
+ 6090 hcloop3 sta (dest),y ; begin clear loop for all but 1 byte
+ 6100 dey
+ 6110 bne hcloop3 ; end clear loop for all but 1 byte
+ 6120 sta (dest),y ; clear the remaining byte
+ 6130 hclret rts
+ 6140 ;
+ 6150 ; subroutine - hires clear from cursor to end of line
+ 6160 ;
+ 6170 hceol jsr hclunc ; clear under cursor if necessary
+ 6180 ldx colh ; compute 40-((colh+1)/2)
+ 6190 inx
+ 6200 txa
+ 6210 lsr a
+ 6220 sta source ; temp save
+ 6230 lda #40
+ 6240 sec
+ 6250 sbc source
+ 6260 sta source+1 ; temp save result of calculation
+ 6270 asl a
+ 6280 asl a
+ 6290 asl a
+ 6300 sta source ; source=low byte of count to be cleared
+ 6310 lda source+1
+ 6320 lsr a ; compute high byte of count to be cleared
+ 6330 lsr a
+ 6340 lsr a
+ 6350 lsr a
+ 6360 lsr a
+ 6370 clc
+ 6380 bcc hclr2 ; share code in hclear from here on
+ 6390 ;
+ 6400 ; subroutine - hires clear under cursor if cursor in odd column
+ 6410 ;
+ 6420 hclunc lda pnth ; make dest point to current byte
+ 6430 sta dest
+ 6440 lda pnth+1
+ 6450 sta dest+1
+ 6460 lda colh ; is the column number
+ 6470 and #1 ; evenprint
+ 6480 beq evencol ; yes
+ 6490 ldx #8 ; clear low nibble of 8 bytes under cursor
+ 6500 ldy #0 ; while incrementing dest by 8
+ 6510 hcloop1 lda (dest),y ; begin 8 byte clear loop
+ 6520 and #$f0
+ 6530 sta (dest),y
+ 6540 inc dest
+ 6550 bne hc1
+ 6560 inc dest+1
+ 6570 hc1 dex
+ 6580 bne hcloop1 ; end of 8 byte clear loop
+ 6590 evencol rts
+ 6600 ;
+ 6610 ; subroutine - hires plot (but use plot if 40 column mode)
+ 6620 ;
+ 6630 ploth bcc pset ; carry clear means go set coordinates
+ 6640 lda flag80 ; 80 column modeprint
+ 6650 bne fetch80 ; yes
+ 6660 jsr plot ; use commodore plot function
+ 6670 tya
+ 6680 cmp #40 ; is column >= 40print
+ 6690 bmi plret ; no
+ 6700 sec ; subtract 40
+ 6710 sbc #40
+ 6720 plret tay ; return the 40 column coordinates
+ 6730 rts
+ 6740 fetch80 ldx lineh ; fetch 80 column coordinates
+ 6750 ldy colh
+ 6760 rts
+ 6770 pset cpx #0 ; line < 0print
+ 6780 bpl ps1 ; no
+ 6790 ldx #0 ; set line to 0
+ 6800 ps1 cpx #25 ; line >= 25print
+ 6810 bmi ps2 ; no
+ 6820 ldx #24 ; set line to 24
+ 6830 ps2 cpy #0 ; column < 0print
+ 6840 bpl ps3 ; no
+ 6850 ldy #0 ; set column to 0
+ 6860 ps3 lda flag80 ; 80 column modeprint
+ 6870 bne test80 ; yes
+ 6880 cpy #40 ; column >= 40print
+ 6890 bmi ps4 ; no
+ 6900 ldy #39 ; set column to 39
+ 6910 ps4 clc ; set cursor coordinates
+ 6920 jsr plot ; using commodore plot
+ 6930 rts
+ 6940 test80 cpy #80 ; column >= 80print
+ 6950 bmi hset ; no
+ 6960 ldy #79 ; set column to 79
+ 6970 hset stx lineh ; set cursor position
+ 6980 sty colh
+ 6990 tya ; derive new hilo mask
+ 7000 ldy #$f0 ; hilo mask for upper nibble
+ 7010 and #1 ; check low column bit
+ 7020 beq hupper ; even columns use high nibble
+ 7030 ldy #$0f ; hilo mask for lower nibble
+ 7040 hupper sty hilo ; set up hilo
+ 7050 lda #<hires ; compute new hires screen pointer
+ 7060 sta pnth ; assume home position
+ 7070 lda #>hires
+ 7080 sta pnth+1
+ 7090 cpx #0 ; line zeroprint
+ 7100 beq hatline ; yes
+ 7110 hploop lda pnth ; add $140 to pointer once for each line
+ 7120 clc
+ 7130 adc #$40
+ 7140 sta pnth
+ 7150 lda pnth+1
+ 7160 adc #$01
+ 7170 sta pnth+1
+ 7180 dex
+ 7190 bne hploop ; loop for all lines
+ 7200 hatline lda colh ; get column
+ 7210 lsr a ; divide by 2
+ 7220 asl a ; multiply by 8
+ 7230 asl a
+ 7240 asl a
+ 7250 bcc nocarry ; carry from shiftsprint
+ 7260 inc pnth+1 ; yes, propogate the carry
+ 7270 nocarry clc ; add rest of col/2*8 to pointer
+ 7280 adc pnth
+ 7290 sta pnth
+ 7300 lda pnth+1
+ 7310 adc #0
+ 7320 sta pnth+1
+ 7330 lda #0 ; clear column 79 flag
+ 7340 sta flag79
+ 7350 rts
+ 7360 ;
+ 7370 ; subroutine - send out ^s (xoff) to remote host
+ 7380 ;
+ 7390 xoff ldx #5 ; switch kernel to rs-232 output
+ 7400 stx fxoff ; set xoff flag
+ 7410 jsr chkout
+ 7420 jsr optimum ; wait until optimum time
+ 7430 lda #$13 ; then, transmit ^s
+ 7440 xcom jsr chrout
+ 7450 ldx #0 ; restore kernel output to screen
+ 7460 jsr chkout
+ 7470 rts
+ 7480 ;
+ 7490 ; subroutine - send out ^q (xon) to remote host
+ 7500 ;
+ 7510 xon lda #0 ; clear xoff flag
+ 7520 sta fxoff
+ 7530 ldx #5 ; switch kernel to rs-232 output
+ 7540 jsr chkout
+ 7550 lda #$11 ; transmit ^q
+ 7560 bne xcom
+ 7570 ;
+ 7580 ; subroutine - wait for optimum time to transmit an rs-232 character
+ 7590 ;
+ 7600 optimum lda bitci ; rs-232 input bit count
+ 7610 cmp #7 ; wait until count is not 7
+ 7620 beq optimum
+ 7630 ldx time+2 ; set x to 2 jiffys in the future
+ 7640 inx
+ 7650 inx
+ 7660 opti2 lda bitci ; wait until rs-232 bit count
+ 7670 cmp #7 ; equals 7
+ 7680 beq optiret
+ 7690 cpx time+2 ; or until 2 jiffys have expired
+ 7700 bne opti2
+ 7710 optiret rts
+ 7720 ;
+ 7730 ; subroutine - write initial message to screen
+ 7740 ;
+ 7750 welcome lda flag80 ; 80 column modeprint
+ 7760 beq welprnt ; no
+ 7770 ldy #20 ; write 20 extra spaces to screen
+ 7780 sty welcnt
+ 7790 padloop lda #" " ; this padding will center message
+ 7800 jsr chrouth
+ 7810 dec welcnt
+ 7820 bne padloop
+ 7830 welprnt ldy #0 ; initial message index
+ 7840 weloop sty welcnt ; save message counter
+ 7850 lda welmsg,y ; get message character
+ 7860 beq welret ; done when 0 character found
+ 7870 jsr chrouth ; output the character
+ 7880 ldy welcnt ; retrieve counter
+ 7890 iny ; increment to get next char index
+ 7900 bne weloop ; loop for more characters
+ 7910 welret clc ; now move cursor to line 3, col 0
+ 7920 ldy #0
+ 7930 ldx #3
+ 7940 jsr ploth
+ 7950 rts ; all done
+ 7960 ;
+ 7970 .file 08,"0:term.font"

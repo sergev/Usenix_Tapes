@@ -1,0 +1,285 @@
+                ==[ All the bugs that fit, we print ]==
+
+Version 1.2 Old Empire (Empire Classic!) - circa 1978, decompiled from 
+                        optimized 11/70 object 1982-3 (honest!).
+
+Bugs should be reported to ihnp4!druxn!tsf  -  Tom Fisher
+Credit for the game belongs to Peter Langston.  I take credit for
+any bugs remaining in this version.  If you are using a version
+that was modified (in addition to the parametric goodies in empglb.c)
+since distribution, try to locate the bug and fix it before reporting it.
+
+The only things considered bugs are those that appear to change the
+original intent of the code.  Core dumps, meaningless or inaccurate
+messages, and obvious cheating opportunities are considered UN-
+intentional, and therefore, bugs.  Enhancements, (such as adding a
+coastwatch command) are not listed here.
+
+Items containing "Fix:" are fixed in this release.  The others will be 
+fixed later.
+
+
+1) Production sometimes goes negative.  Results in negative civilians,
+    gold bars, etc.  Very elusive.  Suspect max127() or update().
+
+	Fix:  In update.c, right where the miners dig up some more ore
+	      in a gold mine, no check was made to see if all the new ore
+	      would fit in the sector.  On machines with negative characters,
+	      this results in negative ore, negative production, and possibly
+	      negative gold bars.  What fun!  Spoil the fun by adding a check
+	      to make sure all the new ore will fit.
+
+2) Signals  SIGHUP, SIGINT, SIGQUIT not handled at all.  This stuff was
+    more or less ignored during the decompilation process.  Sorry.
+
+3) Country report heading "time" should be BTU ?
+
+	Fix:  In coun.c, change it to BTU so one doesn't confuse it
+	      with accumulated session time.
+
+4) When country is joined and first two-sector allocation is diagonal,
+    the welcome message still claims you have 0,0 and 1,0.
+
+5) Mobility goes negative in sector where crash landing occurs.
+
+	No Change:  This is appropriate since the poor guys are probably
+		    unconscious for a while.
+
+6) World of size other than 64,64 never tested after decompilation.
+   At least one problem is that in a 128x128 world, empcre sets the
+   gold to 127 for almost every sector.
+   There are probably hardcoded 2**6 or 64 references somewhere.  Sorry.
+
+	Fix: Change the algorithm for determining gold mineral content
+	     so that there are similar distributions for 32x32, 64x64,
+	     and 128x128 worlds.  Changes are in empcre.c.
+	     Also in empcre.c, change the arrays sizes for gold[], river[],
+	     and volc[] from 50 to 200.  This reduces the total world
+	     gold content in the 64x64 world, but the result is (my guess)
+	     more what was intended: localized gold strikes and mineral
+	     content, rather than worldwide gold veins as it is now.
+	     This means that some countries will find themselves in a
+	     gold-poor region.  They will have to trade with other countries,
+	     or follow the gold veins (expand in the direction of increasing
+	     gold content) to get enough gold bars to survive.  The change
+	     is noticeable to anyone who expects every sector to have a
+	     gmin of 80 or better.
+
+7) Telegrams get screwed up.  It appears to be placing data from initial-
+   data section in the telegram buffer.  Suspect this happens when more
+   than 511 characters are in the message or when there is concurrent
+   activity in the telegram file.
+
+	No Change: Hasn't been seen in a long while.  Probably got
+	   fixed when the other printf related bugs were fixed.
+
+8) You get a core dump if you enter numbers that are greater than +127
+   or -128 when doing a spy command.  E.g.  spy -156:-14,-25:-23 dumps
+   memory.  This is because sargs doesn't check for reasonable values
+   on return from atoip().  Suspect that a lot of other commands will
+   also behave this way.
+
+9)  One recipient of Version 1.0 would like all the ^G characters
+    changed to \007 so that his printer prints out the listings without
+    going crazy.  Also, he would prefer all the printfs to fit within
+    80 columns so that the listings can be printed portrait mode.
+
+10) You can use civilians more than once - (the "rolling civilians" bug).
+    If you place 1 military in a sector, then three days later force
+    a delivery of civilians into that sector, you will get three days
+    worth of production out of the civilians.  This is great for getting
+    as many civilians as you want in the beginning of the game.
+    Similarily, military can be reused to increase efficiency in a long
+    chain of sectors.
+
+	Fix: In update.c, when delivering civ or mil, get the destination
+	     sector with a special UP_WFDEL flag set.  In getsect.c,
+	     call update if UP_WFDEL is set.  Back in update, if an
+	     update is being done with UP_WFDEL set, inhibit delivery
+	     of civ or mil (recursion stopper), and update sector to
+	     within 4 time units of curup.  This also requires a new
+	     flag, UP_WFDEL, in empdef.h.  The result is that whenever
+	     civ or mil are delivered into a sector that hasn't been
+	     updated lately, a sector update is forced (to within 4
+	     time units), and all normal updating functions are performed
+	     except for civ or mil delivery.  By leaving the sector
+	     4 units behind the current time, the civ or mil delivery will
+	     take place when the sector is updated by a census.
+
+11) In empdis.c, main(argc, argv) is called recursively after "shell",
+    "fixup", etc.  There's a better way to do this.  This way, the stack
+    grows on every shell command until a switch is made to a new module.
+
+12) The sigsave function has a signal(-1, 1) call.  The -1 causes the
+    3b2 to core dump on the next exec.
+
+	Fix:  In sigsave.c, change the -1's to 1's.
+
+13) The 3b2 final load needs to use the -f option to get floating point.
+    Otherwise, it will core dump on the first floating point operation.
+
+	Fix: Put a note in the README for 3b2 users.  Set CC="cc -f"
+	     and export it.  Then do a make -e all.
+
+14) There should be a way of combining the 6 modules into one so that
+    the smaller machines like the 3b2 will run faster and use less disk
+    space.
+
+15) The makefiles should compensate for missing _unix.O directories.
+
+	Fix: Put a dependency on _unix.O in all the appropriate
+	     Makefiles.
+
+16) The MAN.CCL command in the INFO directory doesn't work anymore. And
+    some of the manual pages have typos, misaligned text, etc.
+
+	Fix: Update to use the Bourne shell.  Fix typos in sector-types,
+	     innards, ship-types, designate, collect, and ship.
+
+17) You can log in using two terminals and keep the time from accumulating.
+    You can also save BTU's, build more than one battleship with 127
+    production units, etc.  Anywhere there is a prompt, there is a potential
+    cheating opportunity with two or more terminals.
+
+18) Crash landing on a 100% fort gives you 47% chance of making it.
+    The "fly" manual page says it should be 10%.
+
+	Fix: In fly.c, right before X3612, the sector efficiency gets
+	     right shifted 2.  It should have been left shifted (i.e.
+	     multiplied by 4).   Use (500 - (sect.sct_effic*4))/10  to
+	     specify the chances of landing successfully.
+	     This makes kamikazi attacks on 100% sectors more effective
+	     since more planes crash and blow up.  More planes are lost.
+
+19) Empfix doesn't handle loans quite right.
+
+	Fix: In loans.c, change the wordfix for loner and lonee to
+             bytefix.
+
+20) Tried to nav all ships at -13,-11 with mobility greater than 100.
+      nav -13,-11 ?mob>100 lle
+    This command didn't work.  It didn't seem to understand the mobility.
+    Upon further invstigation, a mobility condition on sectors isn't
+    understood either.
+
+	Fix: This broke when the mobility of sectors and ships was made
+	     a short instead of a character to port the game to machines
+	     with unsigned characters.
+	     In empglb.c (sysglb.c and myglb.c), change the i_shp member
+	     of the ichr[6] element ("mobility") from 0 to
+	     (char *)&(((struct shpstr *)0)->shp_mbl). (Hard to believe, isn't
+	     it?).  Also, in nxtsct.c in the decode function, check to see if
+	     the cp pointer is pointing to sect.sct_mobil.  If it is, set
+	     code directly (code = sect.sct_mobil).  Similarly, in nxtshp.c
+	     in the bdecode function, check to see if the cp pointer is
+	     pointing to the shp_mbl member.  If it is, set code directly
+	     (code = sp->shp_mbl).
+
+21) If the make is interrupted during the empsub.a make, empsub.a is
+    removed.
+
+	Fix: Make both libraries the target of .PRECIOUS in both the local
+	     and top-level makefiles.
+
+22) On a 3b2, empcre reports screwy statistics right after making the
+    world, random sectors have the plague right after creation, the census
+    command shows strange values for commodities in brand new sectors,
+    and the power command dumps memory.
+
+	Fix: In empcre.c the scts, elcnts, type, and powbuf arrays were
+	     on the stack and uninitialized.  This caused garbage to be
+	     written to the sector file (empsect).  Initialize the arrays
+	     with zeros.
+
+23) Various cheating opportunities exist because of no mutual exclusion
+    enforcement on database.
+
+24) Spelling error in designate command: "You are now without a capitol"
+
+	Fix: In desi.c, change to "... capital".
+
+25) Compiler warning on line 397 of empdis.c.
+
+	Fix: Cast comaddr to int in switch statement.
+
+26) After updating a sector with the "update" command that wasn't owned,
+    cen #0 produced output with coordinates greater than the max world
+    dimensions.
+
+	Fix: In upda.c, instead of changing realm 0 to 127:-127,127:-127,
+	     and then leaving it that way when no sectors are found,
+	     only change realm 0 if sectors are found.  In addition, if
+	     no sectors are found, print "No sectors".
+
+27) You can buy a ship from the Deity.  When a country puts ships up for
+    sale, then dissolves its government, some of the ships become owned
+    by the Deity, and they're still for sale.  This could also be used to
+    buy back your ship after it sinks.  When you know your ship's about to
+    be sunk, put it up for sale.  After it sinks and then regains enough
+    efficiency to stay afloat, and before anyone builds another ship, buy
+    it back.
+
+	Fix: In trad.c add a check to disallow buying ships from the Deity.
+
+28) You can make gold dust out of ordinary ore by changing a sector
+    containing ordinary ore to a bridge head, and then into a gold mine.
+    A message claims that ore has been lost, but in fact, it's still
+    there.  It becomes gold dust by its presence in the gold mine.
+    It turns out that ore in a warehouse, bank, or urban area can also
+    become gold dust.
+
+	Fix:  When the new designation is a gold mine, the ore gets
+	      set to zero.  Add a putsect to make the change permanent,
+	      and also set goods[5] = 0 to make sure ore in a warehouse
+	      doesn't also become gold dust.
+
+29) The power formula in the manual page doesn't match the code in powe.c
+
+	Fix:  The manual page says each gold bar should be worth 5 points.
+	      Change powe.c to match the manual page (used to be 3 points
+	      per bar).
+
+30) If a grant is in an exec script, the Rep's name isn't obtained
+    properly.  The message "Eek, an imposter.." is printed.
+
+31) You can board a ship owned by the Deity.
+
+	Fix:  Add check in boar.c to make Deity-owned ships invisible.
+
+32) If there is a empdown file, it prints out the empdown message
+    twice, asks for the rep's name twice, then says that there is no
+    'empire' in the records, please see "privname".  Also, when a player
+    is bounced out because the empdown file shows up, the nation status
+    still shows that country logged in.
+
+	Fix: This happens when the privuid logs in as any country other
+	     than the Deity and the empdown file exists.  In empdis.c, rework
+	     the section right after the check for the empdown file.  Instead
+	     of exec'ing emprog[0] just to get the empdown file printed out,
+	     read the file in empdis.c, close it, then call bye() to clean
+	     up properly.
+
+33) The empup or empdown messages can be up to 512 characters long, but
+    the files are read into a buffer (junk[80]) only 80 characters long.
+
+	Fix: In empdis.c and empire.c where the empup and/or empdown files
+	     are read, use an automatic buf[514] to hold the contents.
+	     The code should use a symbolic constant (MAXTELSZ) to hold
+	     the maximum telegram size, but for now minimize the number of
+	     files hit.
+
+34) The census and route commands don't show the civilian and military
+    delivery routes through an exchange sector.
+
+	Fix: In cens.c and rout.c, take out the check for S_XCHNG and
+	     subsequent clearing of the delivery bytes.
+
+35) The innards manual page states that iwork * efficiency units of
+    ore are turned into production units.  That's 100 times more than
+    the program actually does.
+
+	Fix: Change the manual page.
+
+36) If a player uses the "shell" command, he/she can then execute empire
+    from the shell to enter the game a second time.  This might cause a
+    problem.

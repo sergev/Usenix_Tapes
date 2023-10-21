@@ -1,0 +1,38 @@
+SPOOL=/usr/spool/news
+NEWSBIN=$SPOOL/bin
+LIB=/usr/local/lib/news
+ACTIVE=$LIB/active
+LOG=$LIB/log
+JUNK=$SPOOL/junk
+LOCALGP=ibm
+STATE=ny
+PATH=/bin
+
+newsgrp=$1
+count=$2
+
+case $count in
+[1-9])		count=0000$count ;;
+[1-9]?)		count=000$count ;;
+[1-9]??)	count=00$count ;;
+[1-9]???)	count=0$count ;;
+[1-9]????)	;;
+*)		
+		date_field=`date '+%h %d %H:%M'`
+		echo "$date_field	local.modact	Problem in $newsgrp, count=$count." >> $LOG
+		continue
+esac
+
+therenow=`grep "^$newsgrp " $ACTIVE`
+case "$therenow" in	# if empty, it's a new newsgroup.
+"")	parent=`expr "$newsgrp" : "\([^.]*\)."`
+	case "$parent" in
+	mod|fa|ba)		postable=n ;;
+	$LOCALGP|$STATE|net|na)	postable=y ;;
+	*)			echo "Problem with $newsgrp; parent=$parent..."
+				continue
+	esac
+	echo "$newsgrp $count 00001 $postable" >> $ACTIVE ;;
+*)	sed "/^$newsgrp /s/ [0-9]*/ $count/" $ACTIVE > /tmp/junkactive$$
+	mv /tmp/junkactive$$ $ACTIVE
+esac

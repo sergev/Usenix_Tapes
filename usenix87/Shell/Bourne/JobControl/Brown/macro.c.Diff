@@ -1,0 +1,117 @@
+*** macro.c	Mon Nov 24 17:49:25 1986
+--- /cs/simon/c/shdiff-sources/macro.c	Wed Feb 18 18:13:05 1987
+***************
+*** 253,258
+  	return(fixstak());
+  }
+  
+  static
+  comsubst()
+  {
+
+--- 253,262 -----
+  	return(fixstak());
+  }
+  
++ #ifdef JOB
++ #include "job.h"
++ #endif
++ 
+  static
+  comsubst()
+  {
+***************
+*** 262,267
+  	struct fileblk	cb;
+  	register char	d;
+  	register char *savptr = fixstak();
+  
+  	usestak();
+  	while ((d = readc()) != SQUOTE && d)
+
+--- 266,274 -----
+  	struct fileblk	cb;
+  	register char	d;
+  	register char *savptr = fixstak();
++ #ifdef JOBSXT
++ 	BOOL chsxt = FALSE;
++ #endif JOBSXT
+  
+  	usestak();
+  	while ((d = readc()) != SQUOTE && d)
+***************
+*** 283,288
+  		 */
+  		chkpipe(pv);
+  		initf(pv[INPIPE]);
+  		execute(t, 0, (int)(flags & errflg), 0, pv);
+  		close(pv[OTPIPE]);
+  	}
+
+--- 290,298 -----
+  		 */
+  		chkpipe(pv);
+  		initf(pv[INPIPE]);
++ #ifdef JOBSXT
++ 	   	chsxt = hide_sxt();
++ #endif JOBSXT
+  		execute(t, 0, (int)(flags & errflg), 0, pv);
+  		close(pv[OTPIPE]);
+  	}
+***************
+*** 290,295
+  	staktop = movstr(savptr, stakbot);
+  	while (d = readc())
+  		pushstak(d | quote);
+  	await(0, 0);
+  	while (stakbot != staktop)
+  	{
+
+--- 300,312 -----
+  	staktop = movstr(savptr, stakbot);
+  	while (d = readc())
+  		pushstak(d | quote);
++ #ifdef JOB
++ 	await(0,WAIT_FG);	/* a process, in the forground */
++ # ifdef JOBSXT
++ 	if (chsxt)
++ 		restore_sxt();
++ # endif JOBSXT
++ #else !JOB
+  	await(0, 0);
+  #endif JOB
+  	while (stakbot != staktop)
+***************
+*** 291,296
+  	while (d = readc())
+  		pushstak(d | quote);
+  	await(0, 0);
+  	while (stakbot != staktop)
+  	{
+  		if ((*--staktop & STRIP) != NL)
+
+--- 308,314 -----
+  # endif JOBSXT
+  #else !JOB
+  	await(0, 0);
++ #endif JOB
+  	while (stakbot != staktop)
+  	{
+  		if ((*--staktop & STRIP) != NL)
+***************
+*** 301,306
+  	}
+  	pop();
+  }
+  
+  #define CPYSIZ	512
+  
+
+--- 319,325 -----
+  	}
+  	pop();
+  }
++ 
+  
+  #define CPYSIZ	512
+  

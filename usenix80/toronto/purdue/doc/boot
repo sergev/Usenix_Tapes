@@ -1,0 +1,64 @@
+NAME
+boot - boot up UNIX
+
+SYNOPSIS
+boot [ -s ]
+
+DESCRIPTION
+Boot attempts to gracefully take down the currently running copy of UNIX
+and jumps to the hardware bootstrap.  Boot raises its priority to lock
+out other processes from running, does several sync's and jumps to the
+system hardware bootstrap.  Boot writes a small program into low core
+via /dev/kmem and enters it via a trap 4 (Bus error).  If "-s" is present,
+no sync is performed (useful for fixing root filesystem).  If "-s" is not
+specified, boot will attempt to create a file "/down" with 512 bytes
+of garbage in it.  This forces the root superblock modified flag to be
+set which causes it to get written out on the following sync which
+tends to preserve the time/date.  In addition, system startup "/etc/rc"
+checks for the presence of /down and assumes the system went down gracefully
+if it is present and skips the icheck/dcheck.  Normally /etc/rc removes
+/down.
+
+In addition, the following applies to PDP-11/70's at Purdue with M9301-YC
+Bootstraps running on RP04's:
+
+System action for console switches = 0:
+
+System comes up running after booting up default file.  Init starts multi
+user, all with no operator intervention.  If "/down" is not present /etc/rc
+will not let system come up multiuser and issues filesystem recovery needed
+message.
+
+System action for console swithces = 70:
+
+System bootstrap prints "@" on console and waits for a bootup filename.
+Once UNIX is loaded and started, Init brings up single-user shell for
+filesystem recovery, etc.  After single-user shell terminates, /etc/rc
+runs and system goes multiuser.  If switches are set to 0173030 before
+terminating single-user shell, system stays single-user.
+
+DIAGNOSTICS
+Boot: Not super-user
+
+Requires super-user permission if not on system console (tty8).
+
+FILES
+/dev/kmem - used to write jump-to-boot program in low core.
+/down     - to signify graceful shutdown and preserve time/date
+
+SOURCE LANGUAGE
+C (/src/new/boot.c)
+
+SEE ALSO
+shutdown(VIII) - same as boot, except system is not restarted.
+bootdf(VIII)   - display/set default system bootup file in boot block.
+/src/mdec/fsboot2.s - system boot block program.
+
+BUGS
+Boot/shutdown should probably kill off all proc's before taking system
+down.  Pipes, etc get left open and orphan small amounts of disk space
+plus causing non-fatal dcheck errors (link=count=0).
+
+AUTHOR
+--ghg
+

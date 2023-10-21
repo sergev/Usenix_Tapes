@@ -1,0 +1,145 @@
+The majority of the text of this file was written by:  
+
+                Jeffrey Spidle
+                Systems Analyst
+                Office of Continuing Education
+                Iowa State University
+                Ames,   IA 50011
+
+Since there is a similarity in operation between his program and this one,  I
+saw no reason to "re-invent the wheel".
+
+        This a utility called 'MAKE' and is a much simplified version of the 
+MAKE utility on UNIX (a trademark or something of AT&T).  This program was ori-
+ginally written by Larry Campbell of DEC using the CI-C86 compiler.  I have re-
+written it using the Lattice C compiler Ver. 2.14 running under MS/PC-DOS 2.1x. 
+Added features include macro capability, command line parsing of macros, silent
+operation (-s option), ignore/obey errors (-i option), faster operation, and 
+the ability to run any DOS-level command.       --      March 31,  1985
+
+                                Mike Hickey
+                                Systems Programmer
+                                Computer Center
+                                University of DC
+                                Washington, DC
+
+
+/* modifications made June, 1985 by Dan Grayson, 2409 S. Vine St. , Urbana, 
+        IL 61801 */
+
+
+
+        'MAKE' takes a file of dependencies (a  'makefile') and decides what
+commands have to be executed to bring the  files up to  date.  These commands 
+are either executed directly from 'MAKE' or written to the standard output with-
+out executing them.
+
+'MAKEFILE' format:
+
+        -       The first makefile read is MAKE.INI, which can be located
+                anywhere along the PATH.
+
+        -       The default name of the makefile is MAKEFILE on the default
+                disk.  An alternate makefile can be specified using the '-f' 
+                option on the command  line.
+
+        -       Any line starting with a "#" is considered to be a
+                comment line and is ignored by MAKE.  So is a line which is
+                completely blank.
+
+        -       A line in a 'makefile' that starts with a tab or space is a 
+                'howto' line and consists of a command name followed by arg-
+                uments.  When
+                commands are executed, the PATH environment variable is used to
+                find the command, in the same manner as DOS does. 
+                'Howto' lines apply to the most recently preceding 'dependency'
+                line.  It is an error for a 'howto' line  to precede the first 
+                'dependency' line.  Howto lines may have any combination of the
+                following characters to the left of the command:
+
+                        @               will not echo the command line
+
+                        -               MAKE will ignore the exit code of the
+                                        command, i.e. the ERRORLEVEL of MSDOS.
+                                        Without this, make terminates when a
+                                        nonzero exit code is returned.
+
+                        +               MAKE will use command.com to execute
+                                        the command - you must use this if the
+                                        command is non resident and you use
+                                        io redirection with < or > or | .
+
+        -       A line of the form
+
+                FOOBAR = THIS AND THAT AND MORE OF THOSE
+
+                is a symbol definition line.  Later in the makefile, any line
+                containing $FOOBAR or $(FOOBAR) will have that bit replaced by
+                ' THIS AND THAT AND MORE OF THOSE'.
+
+        -       Any other non-blank line is a 'dependency' line.  Dependency
+                lines consist of a filenames, then ':', then the filenames on
+                which the previous ones depend.  If one of the files (call this
+                one the target) to the
+                left of the ':' needs to be made, first all the files to right
+                will be made.  Then if any of the dates on the right is more
+                recent than the target, the howto lines (if any) following this
+                dependency line will be executed.  If there weren't any howto
+                lines, then we try to make the target according to any
+                existing wildcard dependency lines - see the next item.
+         
+        -       Special allowance is made on MSDOS for the colons which are
+                needed to specify files on other drives, so for example:
+                        c:foo.bar : a:fee.ber
+                ought to work as intended.
+
+        -       There is a special sort of dependency line which allows for
+                wildcards in the file names.  It looks like this (along with
+                an example howto line) :
+
+                *.obj : *.c
+                        msc $*.c ;
+
+                This says that whenever a file of the form *.obj needs to be
+                made, say it's called foo.obj, then provided foo.c can
+                be made, we will make foo.obj by means of the command
+
+                        msc foo.c ;
+
+                which on my system, is the way I run the C compiler.
+
+
+                        Operation
+Syntax:
+        make [filename]  [-f makefilename] [-i] [-n] [-s]
+
+        -i      means continue even if an error is encountered while executing 
+                a command.
+
+        -n      means don't execute the commands, just write the ones that
+                should be executed to the standard output.  This is useful
+                for creating batch files, for  example.
+
+        -f      specifies that the following argument is the name of a makefile
+                to be used instead of the default (MAKEFILE).
+
+        -s      suppress MAKE echoing commands.  Only text echoed from an
+                invoked program will appear on the screen.
+
+        First, MAKE reads all of the makefiles.  It then proceeds through all of
+the filename arguments,  'making' each one in turn, unless there are none, in
+which case it makes the first item in the makefile.  A file is remade if it is 
+out of date with respect to the files it depends on or is non-existent.  Depen-
+dencies are processed in a 'tree' fashion,  so that the lowest-order files are 
+remade first.
+
+        
+
+
+remarks:
+
+    1    MAKE REQUIRES DOS 2.0 OR HIGHER
+
+    2    With a moderate size makefile, the programs executed by MAKE will
+         notice that available RAM has decreased by about 40K.
+

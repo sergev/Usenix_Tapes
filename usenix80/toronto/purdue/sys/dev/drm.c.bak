@@ -1,0 +1,387 @@
+#
+#include "../param.h"
+#include "../conf.h"
+#include "../buf.h"
+#include "../user.h"
+
+
+/*
+ * drm.c - DR11-B/DR11-C multiplexor driver for Fu's 11/45
+ * "homebrew" devices.  Minor dev is mux "port" select.
+ * DR11-C is used to select which device gets connected to DR11-B.
+ * Both of these devices have been pretty well butchered up and
+ * do not resemble the DEC versions anymore.  The DR11-B should
+ * now be able to cross 32KW boundries ok.  Almost nothing checks
+ * for errors (or even generates them!).  If anything goes wrong,
+ * (like wrong word count), this dev will probably hang and must
+ * boot system, since only reset or init pulse will clear it.
+ * Loading DRBA reg latches xmem bits, so xmem bits in drst must
+ * be set before loading drba reg. This allows xfers to cross 32KW
+ * bank boundry.
+ *
+ * The Perceptronics +I/O device is a real can of worms. It won't work
+ * with interrupts and only does 1-word DMA transfers!! All kinds of
+ * special code for that wretched device.
+ * --ghg 3/6/79
+ */
+
+#define DRBaddr 0172410
+#define DRCaddr 0167770
+#define NMUX    8       /* max number of multiplexor devices */
+#define PERCEPTRONICS   3       /* Perceptronics +I/O on mux port 3 */
+
+struct  DRBregs {
+	int     drwc;   /* word count */
+	int     drba;   /* bus addr */
+	int     drst;   /* control and status */
+	int     drdb;   /* data buffer */
+};
+
+struct  DRCregs {
+	int     drcsr;  /* control and status */
+	int     droub;  /* output buffer */
+	int     drin;   /* input buffer */
+};
+
+int     drdebug   0;
+
+/*
+ * Definations
+ */
+
+#define ERROR   0100000 /* DR11-B error */
+#define CYCLE   0400    /* force DMA cycle */
+#define READY   0200    /* DR11-B ready for next DMA */
+#define IENB    0100    /* interrupt enable */
+#define GO      01      /* start transfer */
+
+#define	SIO	01
+
+/*
+ * Most other function bits are very minor device dependent
+ * and are set via the stty call from the user program.
+ */
+
+/*
+ * Internal device states
+ */
+
+#define OPEN    01      /* this minor dev open */
+#define NOINT   02      /* running without interrutps */
+#define ABORT   04      /* fatal error on this dev */
+
+struct  drm {
+	int     d_state;        /* device state */
+	int     d_func;         /* stty function word (not used yet) */
+	int     d_drst;         /* stty function bits for drst */
+	int     d_drdb;         /* value stuffed into drdb in drmstart */
+} drm[NMUX];
+
+struct  devtab  drmtab;
+struct  buf     rdrmbuf;
+
+
+drmstrategy(abp)
+struct buf *abp;
+{
+	register struct buf *bp;
+
+xprintf("strat: bp=0%o\n", abp);
+	bp = abp;
+	bp->av_forw = 0;
+	spl5();
+	if (drmtab.d_actf == 0)
+		drmtab.d_actf = bp;
+	else
+		drmtab.d_actl->av_forw = bp;
+	drmtab.d_actl = bp;
+	if (drmtab.d_active == 0)
+		drmstart();
+	spl0();
+}
+
+drmsgtty(dev,av)
+int dev, *av;
+{
+	register struct drm *dp;
+	register int *v;
+
+	dp = &drm[dev.d_minor];
+	if (v = av) {   /* gtty */
+xprintf("dr gtty\n");
+		*v++ = dp->d_func;
+		*v++ = DRBaddr->drst;
+		*v++ = DRBaddr->drdb;
+		return;
+	}
+
+	/* stty - no func processing yet, just set func bits */
+
+xprintf("dr stty\n");
+	v = u.u_arg;
+	dp->d_func = *v++;
+	dp->d_drst = *v++;
+	dp->d_drdb = *v++;
+	if (dev.d_minor == PERCEPTRONICS && (dp->d_func & 0377))
+		drmstty(dev, dp);
+}
+
+drmstart()
+{
+	register struct buf *bp;
+	register struct drm *dp;
+	register int *csr;
+
+loop:
+	if ((bp = drmtab.d_actf) == 0)
+		return;
+	dp = &drm[bp->b_dev.d_minor];
+	csr = &DRBaddr->drst;
+	DRCaddr->drcsr = 0;     /* don't ask why */
+	DRCaddr->droub = bp->b_dev.d_minor | 010; /* sel port */
+	if ((*csr & READY) == 0) {
+		printf("DR-11B not ready 0%o\n", *csr);
+		bp->b_flags =| B_ERROR;
+		iodone(bp);
+		goto loop;
+	}
+	drmtab.d_active = SIO;
+	DRBaddr->drwc = bp->b_wcount;
+	*csr = 0;
+	*csr =| dp->d_drst | (bp->b_xmem & 03) << 4; /* set xmem before ba */
+	DRBaddr->drba = bp->b_addr;
+	DRBaddr->drdb = dp->d_drdb;
+xprintf("HERE WE GO!\n");
+	*csr =| IENB | GO; /* pray */
+xprintf("dr strt: cs:0%o wc:0%o ba:0%o db:0%o\n", *csr, DRBaddr->drwc, DRBaddr->drba, DRBaddr->drdb);
+}
+
+drmopen(dev,flag)
+{
+	register struct drm *dp;
+	register port;
+
+	port = dev.d_minor;
+xprintf("drmopen port=0%o\n", port);
+	if (port >= NMUX) {
+		u.u_error = ENXIO;
+		return;
+	}
+	dp = &drm[port];
+	if (dp->d_state & OPEN) {
+		u.u_error = ENXIO;
+		return;
+	}
+	dp->d_state = OPEN;
+}
+
+drmread(dev)
+{
+xprintf("dr read\n");
+	if (dev.d_minor == PERCEPTRONICS) {
+		robot(dev, B_READ);
+		return;
+	}
+	physio(drmstrategy, &rdrmbuf, dev, B_READ);
+}
+
+drmwrite(dev)
+{
+xprintf("dr write\n");
+	if (dev.d_minor == PERCEPTRONICS) {
+		robot(dev, B_WRITE);
+		return;
+	}
+	physio(drmstrategy, &rdrmbuf, dev, B_WRITE);
+}
+drmintr()
+{
+	register struct buf *bp;
+	register struct drm *dp;
+	register int *csr;
+
+	csr = &DRBaddr->drst;
+xprintf("dr int: cs:0%o wc:0%o ba:0%o db:0%o\n", *csr, DRBaddr->drwc, DRBaddr->drba, DRBaddr->drdb);
+	if ((bp = drmtab.d_actf) == 0) {
+		printf("Spurious MUX int - ignored 0%o\n", *csr);
+		return;
+	}
+	if (*csr & ERROR)
+		printf("Mux ERR: 0%o\n", *csr);
+	drmtab.d_actf = bp->av_forw;
+	drmtab.d_active = 0;
+	bp->b_resid = DRBaddr->drwc;
+	iodone(bp);
+	drmstart();
+}
+
+drmclose(dev,flag)
+{
+	register struct drm *dp;
+
+xprintf("dr close\n");
+	dp = &drm[dev.d_minor];
+	dp->d_state = 0;
+}
+
+xprintf(fmt,x1,x2,x3,x4,x5,x6,x7,x8,x9)
+{
+
+	if (drdebug)
+		printf(fmt,x1,x2,x3,x4,x5,x6,x7,x8,x9);
+}
+
+
+/*
+ * Special code to handle Perceptronics device.  This device doesn't
+ * know about real DMA transfers and interrupts.  It also needs good
+ * service since various arms, legs, microphones, speakers, etc, are
+ * hung onto it requiring very high sampling rates.  When this code
+ * is active, system activities are pretty much suspended.  The code
+ * here is pretty much a translation from the DOS Macro-11 routines
+ * of ROBOT, CLEAR, and CLOCK.  May God save ye from whatever perils
+ * lurk past this point.  It is full if spin loops, weird constants,
+ * and weird timing problems.  I am not sure how or why any of this
+ * code works (if it does).  Questions should be directed to George
+ * Lee and Phil Crane if they are connected with hardware oddities.
+ *
+ * If ye become entrapped in a spin loop from a hung device or
+ * programming error, ye can try toggling a front panel switch
+ * to restore life to the rest of the system.
+ * --ghg 03/11/79.
+ */
+
+/*
+ * robot - read/write to/from Perceptronics device.
+ *
+ * The +I/O function words to be used have been set up by the
+ * user program via a previous stty call on this device.
+ * special function for reads lives in d_drst.
+ * special function for writes lives in d_drdb.
+ */
+
+int     drminst 02307;  /* more magic */
+#define ADcard  7+4   /* icard=7 */
+
+robot(dev, flag)
+{
+
+	int idata;
+	register struct drm *dp;
+
+	dp = &drm[dev.d_minor];
+	/*
+	 * Reserve this dev raw buffer to keep another mux device
+	 * from running while +I/O is active. Since this device
+	 * Cannot do DMA, the normal physio strategy queueing cannot
+	 * be used.
+	 */
+	drmlock();
+	DRCaddr->droub = dev.d_minor | 010;     /* select port */
+	switch (flag) {
+		case B_WRITE:   /* write to +I/O */
+			while (u.u_count) {
+				idata = fuword(u.u_base);
+				drmdo(0403, &idata);
+				drmdo(0405, &dp->d_drdb);
+				u.u_count =- 2;
+				u.u_base =+ 2;
+			}
+			break;
+
+		case B_READ:    /* read from +I/O */
+			while (u.u_count) {
+				if ((dp->d_drst&077) == ADcard)
+					drmdo(0405, &drminst);
+				drmdo(0405, &dp->d_drst);
+				drmdo(0401, &idata);
+				suword(u.u_base, idata);
+				u.u_count =- 2;
+				u.u_base =+ 2;
+			}
+		}
+		drmfree();
+}
+
+/*
+ * drmdo
+ * Spin until device is ready (DSTATA goes off in drst)
+ * Issue 1 word DMA function and spin again until done.
+ * Data is read/written to word pointed to by bptr.
+ */
+drmdo(function, bptr)
+int *bptr;
+{
+
+	if (u.u_error)
+		return;
+	drmwait(1);     /* spin until 04000 bit in drst goes off */
+	DRBaddr->drba = bptr;
+	DRBaddr->drwc = -1;
+	DRBaddr->drst = function;
+	drmwait(2);
+}
+
+/*
+ * drmwait(n)
+ * spin loop until DSTATA bit (04000) in drst goes off.
+ * arg n is displayed in front panel lights (display register)
+ * so one can track down cause of hung spin loop.
+ * Setting front panel switches to 0177777 causes spin loop to
+ * terminate and sets u.u_error.
+ */
+drmwait(n)
+{
+
+	0177570->integ = n;
+	while (DRBaddr->drst & 04000)
+		if (0177570->integ == -1) {
+			u.u_error = EFAULT;     /* rather nasty */
+			return;
+		}
+}
+
+
+/*
+ * drmstty - special function processing for +I/O
+ */
+
+#define CLEAR   1       /* clear and not sure what else */
+#define SETCLK  2       /* set perceptronics clock rate */
+
+int     drmfun1 042404; /* black magic */
+int     drmfun2 0103404;
+int     drmdata 040000;
+int     drmfunc 0140404;
+
+drmstty(dev, adp)
+struct drm *adp;
+{
+	register struct drm *dp;
+
+	dp = adp;
+	drmlock();
+	DRCaddr->droub = dev.d_minor | 010;     /* sel port */
+	switch (dp->d_func & 0377) {
+
+		case CLEAR:
+			DRBaddr->drst = 0;
+			drmwait(3);
+			DRBaddr->drst = 6;
+			drmdo(0403, &dp->d_drst);
+			drmdo(0405, &drmfun1);
+			drmdo(0403, &dp->d_drdb);
+			drmdo(0405, &drmfun2);
+			break;
+
+		case SETCLK:
+			DRBaddr->drst = 0;
+			drmwait(4);
+			DRBaddr->drst = 6;
+			drmdo(0403, &drmdata);
+			drmdo(0405, &drmfunc);
+			drmdata = 040000;
+			break;
+		}
+		drmfree();
+}

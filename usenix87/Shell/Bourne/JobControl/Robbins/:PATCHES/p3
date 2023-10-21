@@ -1,0 +1,2382 @@
+:::::::: name.c :::::::
+*** ../orig.u/name.c	Wed May 15 17:13:45 1985
+--- name.c	Tue Jun  4 14:43:24 1985
+***************
+*** 16,21
+  PROC BOOL	chkid();
+  
+  
+  NAMNOD	ps2nod	= {	NIL,		NIL,		ps2name},
+  	fngnod	= {	NIL,		NIL,		fngname},
+  	pathnod = {	NIL,		NIL,		pathname},
+
+--- 16,25 -----
+  PROC BOOL	chkid();
+  
+  
++ #if pyr
++ NAMNOD	ps2nod	= {	NIL,		&univnod,	ps2name},
++ 	univnod = {	NIL,		NIL,		univname},
++ #else
+  NAMNOD	ps2nod	= {	NIL,		NIL,		ps2name},
+  #endif
+  	fngnod	= {	NIL,		NIL,		fngname},
+***************
+*** 17,22
+  
+  
+  NAMNOD	ps2nod	= {	NIL,		NIL,		ps2name},
+  	fngnod	= {	NIL,		NIL,		fngname},
+  	pathnod = {	NIL,		NIL,		pathname},
+  	ifsnod	= {	NIL,		NIL,		ifsname},
+
+--- 21,27 -----
+  	univnod = {	NIL,		NIL,		univname},
+  #else
+  NAMNOD	ps2nod	= {	NIL,		NIL,		ps2name},
++ #endif
+  	fngnod	= {	NIL,		NIL,		fngname},
+  	pathnod = {	NIL,		NIL,		pathname},
+  	ifsnod	= {	NIL,		NIL,		ifsname},
+***************
+*** 21,28
+  	pathnod = {	NIL,		NIL,		pathname},
+  	ifsnod	= {	NIL,		NIL,		ifsname},
+  	ps1nod	= {	&pathnod,	&ps2nod,	ps1name},
+! 	homenod = {	&fngnod,	&ifsnod,	homename},
+! 	mailnod = {	&homenod,	&ps1nod,	mailname};
+  
+  NAMPTR		namep = &mailnod;
+  
+
+--- 26,34 -----
+  	pathnod = {	NIL,		NIL,		pathname},
+  	ifsnod	= {	NIL,		NIL,		ifsname},
+  	ps1nod	= {	&pathnod,	&ps2nod,	ps1name},
+! 	homenod = {	&histfnod,	&ifsnod,	homename},
+! 	mailnod = {	&homenod,	&ps1nod,	mailname},
+! 	histfnod = {	&fngnod,	NIL,		histfilename};
+  
+  NAMPTR		namep = &mailnod;
+  
+***************
+*** 38,43
+  	REG SYSPTR	syscan;
+  
+  	syscan=syswds; first = *w;
+  
+  	WHILE s=syscan->sysnam
+  	DO  IF first == *s
+
+--- 44,50 -----
+  	REG SYSPTR	syscan;
+  
+  	syscan=syswds; first = *w;
++ 	IF *w == 0 THEN return (0) FI
+  
+  	WHILE s=syscan->sysnam
+  	DO  IF first == *s
+***************
+*** 129,135
+  	THEN	f->fsiz=1;
+  	FI
+  
+! 	LOOP	c=nextc(0);
+  		IF (*names ANDF any(c, ifsnod.namval)) ORF eolchar(c)
+  		THEN	zerostak();
+  			assign(n,absstak(rel)); setstak(rel);
+
+--- 136,145 -----
+  	THEN	f->fsiz=1;
+  	FI
+  
+! 
+! 	/*	strip any leading IFS characters	*/
+! 	WHILE	(any((c=nextc(0)), ifsnod.namval)) ANDF !(eolchar(c)) DONE
+! 	LOOP
+  		IF (*names ANDF any(c, ifsnod.namval)) ORF eolchar(c)
+  		THEN	zerostak();
+  			assign(n,absstak(rel)); setstak(rel);
+***************
+*** 139,144
+  			FI
+  			IF eolchar(c)
+  			THEN	break;
+  			FI
+  		ELSE	pushstak(c);
+  		FI
+
+--- 149,157 -----
+  			FI
+  			IF eolchar(c)
+  			THEN	break;
++ 			ELSE	/* strip imbedded IFS characters */
++ 				WHILE (any((c=nextc(0)), ifsnod.namval)) ANDF
++ 					!(eolchar(c)) DONE
+  			FI
+  		ELSE	pushstak(c);
+  			c = nextc(0);
+***************
+*** 141,146
+  			THEN	break;
+  			FI
+  		ELSE	pushstak(c);
+  		FI
+  	POOL
+  	WHILE n
+
+--- 154,166 -----
+  					!(eolchar(c)) DONE
+  			FI
+  		ELSE	pushstak(c);
++ 			c = nextc(0);
++ 			IF eolchar(c)
++ 			THEN
++ 				STKPTR top = staktop;
++ 				WHILE any (*(--top), ifsnod.namval) DONE
++ 				staktop = top + 1;
++ 			FI
+  		FI
+  	POOL
+  	WHILE n
+:::::::: name.h :::::::
+No differences encountered
+:::::::: print.c :::::::
+*** ../orig.u/print.c	Wed May 15 17:13:45 1985
+--- print.c	Mon Jun  3 11:05:42 1985
+***************
+*** 15,20
+  
+  CHAR		numbuf[6];
+  
+  
+  /* printing and io conversion */
+  
+
+--- 15,27 -----
+  
+  CHAR		numbuf[6];
+  
++ #ifndef TAB
++ /* emulate buffered i/o in later versions of the shell (sigh) */
++ prc_buff(c)
++ char c;
++ {
++ 	prc(c);
++ }
+  
+  prs_buff (s)
+  char *s;
+***************
+*** 16,21
+  CHAR		numbuf[6];
+  
+  
+  /* printing and io conversion */
+  
+  newline()
+
+--- 23,45 -----
+  	prc(c);
+  }
+  
++ prs_buff (s)
++ char *s;
++ {
++ 	prs (s);
++ }
++ 
++ prn_buff (n)
++ int n;
++ {
++ 	prn (n);
++ }
++ 
++ flushb ()
++ {
++ }
++ #endif
++ 
+  /* printing and io conversion */
+  
+  newline()
+***************
+*** 99,101
+  	FI
+  }
+  
+
+--- 123,229 -----
+  	FI
+  }
+  
++ void
++ pr_prompt (str)
++ register char *str;
++ {
++ 	for (; *str; str++)
++ 	{
++ 		if (*str != '%')
++ 			prc_buff (*str);
++ #ifdef notdef
++ 		/* BSD does not have pwd built in, sorry */
++ 		else if (*(str+1) == 'd')
++ 		{
++ 			/* current directory */
++ 			str++;
++ 			prs_buff (retcwd());
++ 		}
++ #endif
++ 		else if (*(str+1) == 'e')
++ 		{
++ 			/* event count */
++ 			str++;
++ 			if ((flags & nohistflg) == 0)
++ 				prn_buff (event_count);
++ 		}
++ 		else if (*(str+1) == 'h')
++ 		{
++ 			/* hostname */
++ 			static char *cp = 0;
++ 			static int didhost = FALSE;
++ 			static int didgt = FALSE;
++ 			static char buf[257];
++ 
++ 			if (! didhost)
++ 			{
++ 				gethostname (buf, sizeof buf);
++ 				didhost = TRUE;
++ 				cp = buf;
++ 			}
++ #ifdef GATECH
++ 			/*
++ 			 * this is to get rid of the dumb gt- convention.
++ 			 * a gt w/out the - is also removed.
++ 			 */
++ 			if (! didgt)
++ 			{
++ 				didgt = TRUE;
++ 				if (cp[0] == 'g' && cp[1] == 't' && cp[2])
++ 				{
++ 					cp += 2;
++ 					if (cp[0] == '-' && cp[1])
++ 						cp++;
++ 				}
++ 			}
++ #endif
++ 			prs_buff (cp);
++ 			str++;
++ 		}
++ 		else if (*(str+1) == 'l')
++ 		{
++ 			/* login name */
++ 			static char *cp = 0;
++ 			static int didname = FALSE;
++ 
++ 			str++;
++ 			if (! didname)
++ 			{
++ 				cp = username ();
++ 				didname = TRUE;
++ 			}
++ 
++ 			if (cp)
++ 				prs_buff (cp);
++ 		}
++ 		else if (*(str+1) == 't')
++ 		{
++ 			/* current time, HH:MM */
++ 			long l;
++ 			char *cp, *ctime ();
++ 
++ 			str++;
++ 			time (& l);
++ 			cp = ctime (& l);
++ 			cp[16] = '\0';
++ 			cp += 11;
++ 			prs_buff (cp);
++ 		}
++ #if pyr
++ 		else if (*(str+1) == 'u')
++ 		{
++ 			/* current univeserse */
++ 			str++;
++ 			prs_buff (univ_name[cur_univ-1]);
++ 		}
++ #endif
++ 		else if (*(str+1) == '\0')	/* % was last char in string */
++ 		{
++ 			prc_buff (*str);
++ 			continue;
++ 		}
++ 		else
++ 			prc_buff (*(++str));
++ 	}
++ 	flushb();
++ }
+:::::::: service.c :::::::
+*** ../orig.u/service.c	Wed May 15 17:13:46 1985
+--- service.c	Tue Jun  4 15:06:44 1985
+***************
+*** 12,17
+   */
+  
+  #include	"defs.h"
+  
+  
+  PROC VOID	gsort();
+
+--- 12,20 -----
+   */
+  
+  #include	"defs.h"
++ #if JOBS
++ #include	<sys/wait.h>
++ #endif
+  
+  
+  PROC VOID	gsort();
+***************
+*** 43,50
+  		ion=mactrim(iop->ioname);
+  		IF *ion ANDF (flags&noexec)==0
+  		THEN	IF iof&IODOC
+! 			THEN	subst(chkopen(ion),(fd=tmpfil()));
+! 				close(fd); fd=chkopen(tmpout); unlink(tmpout);
+  			ELIF iof&IOMOV
+  			THEN	IF eq(minus,ion)
+  				THEN	fd = -1;
+
+--- 46,57 -----
+  		ion=mactrim(iop->ioname);
+  		IF *ion ANDF (flags&noexec)==0
+  		THEN	IF iof&IODOC
+! 			THEN	TEMPBLK	tb;
+! 				subst(chkopen(ion),(fd=tmpfil(&tb)));
+! 				poptemp();	/* pushed in tmpfil --
+! 						   bug fix for problems with
+! 						   in-line scripts */
+! 				fd=chkopen(tmpout); unlink(tmpout);
+  			ELIF iof&IOMOV
+  			THEN	IF eq(minus,ion)
+  				THEN	fd = -1;
+***************
+*** 53,58
+  				THEN	failed(ion,badfile);
+  				ELSE	fd=dup(fd);
+  				FI
+  			ELIF (iof&IOPUT)==0
+  			THEN	fd=chkopen(ion);
+  			ELIF flags&rshflg
+
+--- 60,69 -----
+  				THEN	failed(ion,badfile);
+  				ELSE	fd=dup(fd);
+  				FI
++ 			ELIF iof&IORDW
++ 			THEN	IF (fd=open(ion, 2)) < 0
++ 				THEN	failed(ion, badopen);
++ 				FI
+  			ELIF (iof&IOPUT)==0
+  			THEN	fd=chkopen(ion);
+  			ELIF flags&rshflg
+***************
+*** 69,74
+  	FI
+  }
+  
+  STRING	getpath(s)
+  	STRING		s;
+  {
+
+--- 80,96 -----
+  	FI
+  }
+  
++ STRING	simple (s)
++ 	REG STRING s;
++ {
++ 	STRING save = s;
++ 
++ 	FOR ; *s; s++
++ 	DO	IF *s == '/' THEN save = s; FI
++ 	OD
++ 	return (*save == '/' ? ++save : save);
++ }
++ 
+  STRING	getpath(s)
+  	STRING		s;
+  {
+***************
+*** 73,79
+  	STRING		s;
+  {
+  	REG STRING	path;
+! 	IF any('/',s)
+  	THEN	IF flags&rshflg
+  		THEN	failed(s, restricted);
+  		ELSE	return(nullstr);
+
+--- 95,101 -----
+  	STRING		s;
+  {
+  	REG STRING	path;
+! 	IF any('/',s) ORF any(('/'|QUOTE), s)
+  	THEN	IF flags&rshflg
+  		THEN	failed(s, restricted);
+  		ELSE	return(nullstr);
+***************
+*** 101,106
+  	/* leaves result on top of stack */
+  	REG STRING	scanp = path,
+  			argp = locstak();
+  
+  	WHILE *scanp ANDF *scanp!=COLON DO *argp++ = *scanp++ OD
+  	IF scanp!=path THEN *argp++='/' FI
+
+--- 123,129 -----
+  	/* leaves result on top of stack */
+  	REG STRING	scanp = path,
+  			argp = locstak();
++ 	STRING	save = argp, cp;
+  
+  	WHILE *scanp ANDF *scanp!=COLON DO *argp++ = *scanp++ OD
+  	*argp = '\0';
+***************
+*** 103,108
+  			argp = locstak();
+  
+  	WHILE *scanp ANDF *scanp!=COLON DO *argp++ = *scanp++ OD
+  	IF scanp!=path THEN *argp++='/' FI
+  	IF *scanp==COLON THEN scanp++ FI
+  	path=(*scanp ? scanp : 0); scanp=name;
+
+--- 126,137 -----
+  	STRING	save = argp, cp;
+  
+  	WHILE *scanp ANDF *scanp!=COLON DO *argp++ = *scanp++ OD
++ 	*argp = '\0';
++ 	/* try a tilde expansion */
++ 	IF *save == SQUIGGLE ANDF (cp = homedir(save+1)) != nullstr
++ 	THEN	movstr(cp, save);
++ 		argp = save + length (save) - 1;
++ 	FI
+  	IF scanp!=path THEN *argp++='/' FI
+  	IF *scanp==COLON THEN scanp++ FI
+  	path=(*scanp ? scanp : 0); scanp=name;
+***************
+*** 149,165
+  		close(output); output=2;
+  		input=chkopen(p);
+  
+- 		/* band aid to get csh... 2/26/79 */
+- 		{
+- 			char c;
+- 			if (!isatty(input)) {
+- 				read(input, &c, 1);
+- 				if (c == '#')
+- 					gocsh(t, p, xecenv);
+- 				lseek(input, (long) 0, 0);
+- 			}
+- 		}
+- 
+  		/* set up new args */
+  		setargs(t);
+  		longjmp(subshell,1);
+
+--- 178,183 -----
+  		close(output); output=2;
+  		input=chkopen(p);
+  
+  		/* set up new args */
+  		setargs(t);
+  		longjmp(subshell,1);
+***************
+*** 180,200
+  	ENDSW
+  }
+  
+- gocsh(t, cp, xecenv)
+- 	register char **t, *cp, **xecenv;
+- {
+- 	char **newt[1000];
+- 	register char **p;
+- 	register int i;
+- 
+- 	for (i = 0; t[i]; i++)
+- 		newt[i+1] = t[i];
+- 	newt[i+1] = 0;
+- 	newt[0] = "/bin/csh";
+- 	newt[1] = cp;
+- 	execve("/bin/csh", newt, xecenv);
+- }
+- 
+  /* for processes to be waited for */
+  #define MAXP 20
+  LOCAL INT	pwlist[MAXP];
+
+--- 198,203 -----
+  	ENDSW
+  }
+  
+  /* for processes to be waited for */
+  #define MAXP 20
+  LOCAL INT	pwlist[MAXP];
+***************
+*** 200,205
+  LOCAL INT	pwlist[MAXP];
+  LOCAL INT	pwc;
+  
+  postclr()
+  {
+  	REG INT		*pw = pwlist;
+
+--- 203,247 -----
+  LOCAL INT	pwlist[MAXP];
+  LOCAL INT	pwc;
+  
++ #if JOBS
++ LOCAL INT	*wf_pwlist;
++ LOCAL INT	wf_pwc;
++ 
++ VOID set_wfence()
++ {
++ 	wf_pwlist = &pwlist[pwc];
++ 	wf_pwc = 0;
++ }
++ 
++ BOOL unpost (pcsid)
++ 	INT pcsid;
++ {
++ 	REG INT *pw = pwlist;
++ 
++ 	IF pcsid
++ 	THEN	WHILE pw <= &pwlist[pwc]
++ 		DO	IF pcsid == *pw
++ 			THEN
++ 				IF pw >= wf_pwlist
++ 				THEN	wf_pwc--;	/* DAG -- bug fix */
++ 				ELSE	wf_pwlist--;
++ 				FI
++ 				WHILE pw <= &pwlist[pwc]
++ 				DO	*pw = pw[1];
++ 					pw++;
++ 				OD
++ 				pw[pwc] = 0;
++ 				pwc--;
++ 				return TRUE;
++ 			FI
++ 			pw++;
++ 		OD
++ 		return FALSE;
++ 	ELSE	return TRUE;
++ 	FI
++ }
++ #endif
++ 
+  postclr()
+  {
+  	REG INT		*pw = pwlist;
+***************
+*** 205,211
+  	REG INT		*pw = pwlist;
+  
+  	WHILE pw <= &pwlist[pwc]
+! 	DO *pw++ = 0 OD
+  	pwc=0;
+  }
+  
+
+--- 247,258 -----
+  	REG INT		*pw = pwlist;
+  
+  	WHILE pw <= &pwlist[pwc]
+! 	DO
+! #if JOBS
+! 		j_child_clear(*pw);
+! #endif
+! 		*pw++ = 0;
+! 	OD
+  	pwc=0;
+  }
+  
+***************
+*** 215,221
+  	REG INT		*pw = pwlist;
+  
+  	IF pcsid
+! 	THEN	WHILE *pw DO pw++ OD
+  		IF pwc >= MAXP-1
+  		THEN	pw--;
+  		ELSE	pwc++;
+
+--- 262,274 -----
+  	REG INT		*pw = pwlist;
+  
+  	IF pcsid
+! 	THEN	WHILE *pw
+! 		DO
+! #if JOBS
+! 			IF pcsid == *pw THEN return FI
+! #endif
+! 			pw++;
+! 		OD
+  		IF pwc >= MAXP-1
+  		THEN	pw--;
+  		ELSE	pwc++;
+***************
+*** 219,224
+  		IF pwc >= MAXP-1
+  		THEN	pw--;
+  		ELSE	pwc++;
+  		FI
+  		*pw = pcsid;
+  	FI
+
+--- 272,280 -----
+  		IF pwc >= MAXP-1
+  		THEN	pw--;
+  		ELSE	pwc++;
++ #if JOBS
++ 			wf_pwc++;
++ #endif
+  		FI
+  		*pw = pcsid;
+  	FI
+***************
+*** 224,231
+  	FI
+  }
+  
+! VOID	await(i)
+! 	INT		i;
+  {
+  	INT		rc=0, wx=0;
+  	INT		w;
+
+--- 280,287 -----
+  	FI
+  }
+  
+! VOID	await(i, bckg)
+! 	INT		i, bckg;
+  {
+  #if JOBS
+  #include <sys/time.h>
+***************
+*** 227,232
+  VOID	await(i)
+  	INT		i;
+  {
+  	INT		rc=0, wx=0;
+  	INT		w;
+  	INT		ipwc = pwc;
+
+--- 283,293 -----
+  VOID	await(i, bckg)
+  	INT		i, bckg;
+  {
++ #if JOBS
++ #include <sys/time.h>
++ #include <sys/resource.h>
++ 	struct rusage	ru;
++ #endif
+  	INT		rc=0, wx=0;
+  	INT		w;
+  	INT		ipwc = pwc;
+***************
+*** 230,235
+  	INT		rc=0, wx=0;
+  	INT		w;
+  	INT		ipwc = pwc;
+  
+  	post(i);
+  	WHILE pwc
+
+--- 291,298 -----
+  	INT		rc=0, wx=0;
+  	INT		w;
+  	INT		ipwc = pwc;
++ #if JOBS
++ 	BOOL		update_only = i == -2;
+  
+  	IF update_only THEN i = -1 FI
+  	IF (flags&jobflg) == 0 ORF i != -1
+***************
+*** 231,236
+  	INT		w;
+  	INT		ipwc = pwc;
+  
+  	post(i);
+  	WHILE pwc
+  	DO	REG INT		p;
+
+--- 294,303 -----
+  #if JOBS
+  	BOOL		update_only = i == -2;
+  
++ 	IF update_only THEN i = -1 FI
++ 	IF (flags&jobflg) == 0 ORF i != -1
++ 	THEN
++ #endif
+  	post(i);
+  #if JOBS
+  	FI
+***************
+*** 232,237
+  	INT		ipwc = pwc;
+  
+  	post(i);
+  	WHILE pwc
+  	DO	REG INT		p;
+  		REG INT		sig;
+
+--- 299,308 -----
+  	THEN
+  #endif
+  	post(i);
++ #if JOBS
++ 	FI
++ #endif
++ 
+  	WHILE pwc
+  #if JOBS
+  	ORF (flags&jobflg)
+***************
+*** 233,238
+  
+  	post(i);
+  	WHILE pwc
+  	DO	REG INT		p;
+  		REG INT		sig;
+  		INT		w_hi;
+
+--- 304,312 -----
+  #endif
+  
+  	WHILE pwc
++ #if JOBS
++ 	ORF (flags&jobflg)
++ #endif
+  	DO	REG INT		p;
+  		REG INT		sig;
+  		INT		w_hi;
+***************
+*** 236,241
+  	DO	REG INT		p;
+  		REG INT		sig;
+  		INT		w_hi;
+  
+  		BEGIN
+  		   REG INT	*pw=pwlist;
+
+--- 310,316 -----
+  	DO	REG INT		p;
+  		REG INT		sig;
+  		INT		w_hi;
++ 		INT	found = 0;
+  
+  		BEGIN
+  #ifndef JOBS
+***************
+*** 238,243
+  		INT		w_hi;
+  
+  		BEGIN
+  		   REG INT	*pw=pwlist;
+   		   IF setjmp(INTbuf) == 0
+   		   THEN	trapjmp[INTR] = 1; p=wait(&w);
+
+--- 313,319 -----
+  		INT	found = 0;
+  
+  		BEGIN
++ #ifndef JOBS
+  		   REG INT	*pw=pwlist;
+  #else
+  		   IF (i == 0) ANDF (flags & jobflg) ANDF wf_pwc == 0
+***************
+*** 239,249
+  
+  		BEGIN
+  		   REG INT	*pw=pwlist;
+!  		   IF setjmp(INTbuf) == 0
+!  		   THEN	trapjmp[INTR] = 1; p=wait(&w);
+!  		   ELSE	p = -1;
+!  		   FI
+!  		   trapjmp[INTR] = 0;
+  		   WHILE pw <= &pwlist[ipwc]
+  		   DO IF *pw==p
+  		      THEN *pw=0; pwc--;
+
+--- 315,346 -----
+  		BEGIN
+  #ifndef JOBS
+  		   REG INT	*pw=pwlist;
+! #else
+! 		   IF (i == 0) ANDF (flags & jobflg) ANDF wf_pwc == 0
+! 		   THEN	break;
+! 		   FI
+! 		   IF (pwc == 0 ANDF (flags&jobflg)) ORF update_only
+! 		   THEN	IF (p = wait3(&w, WUNTRACED|WNOHANG, &ru)) == 0
+! 			THEN	unpost(i);
+! 				break;
+! 			FI
+! 			IF pwc == 0 ANDF p == -1 THEN break FI
+! 		   ELSE
+! #endif
+! 			p = wait3(&w, WUNTRACED, &ru);
+! #if JOBS
+! 		   FI
+! #endif
+! 
+! 		   IF wasintr THEN
+! 			wasintr = 0;
+! 			IF bckg THEN
+! 				break;
+! 			FI
+! 		   FI
+! #if JOBS
+! 		   IF unpost(p) THEN found++ FI
+! #else
+  		   WHILE pw <= &pwlist[ipwc]
+  		   DO IF *pw==p
+  		      THEN *pw=0; pwc--;
+***************
+*** 247,252
+  		   WHILE pw <= &pwlist[ipwc]
+  		   DO IF *pw==p
+  		      THEN *pw=0; pwc--;
+  		      ELSE pw++;
+  		      FI
+  		   OD
+
+--- 344,350 -----
+  		   WHILE pw <= &pwlist[ipwc]
+  		   DO IF *pw==p
+  		      THEN *pw=0; pwc--;
++ 			found++;
+  		      ELSE pw++;
+  		      FI
+  		   OD
+***************
+*** 250,255
+  		      ELSE pw++;
+  		      FI
+  		   OD
+  		END
+  
+  		IF p == -1 THEN continue FI
+
+--- 348,354 -----
+  		      ELSE pw++;
+  		      FI
+  		   OD
++ #endif
+  		END
+  
+  		IF p == -1 THEN
+***************
+*** 252,258
+  		   OD
+  		END
+  
+! 		IF p == -1 THEN continue FI
+  
+  		w_hi = (w>>8)&LOBYTE;
+  
+
+--- 351,370 -----
+  #endif
+  		END
+  
+! 		IF p == -1 THEN
+! 			IF bckg THEN
+! #if JOBS
+! 				j_child_clear(i);
+! 				unpost(i);
+! #else
+! 				REG INT *pw=pwlist;
+! 				WHILE pw <= &pwlist[ipwc] ANDF i != *pw
+! 				DO	pw++; OD
+! 				IF i == *pw THEN *pw = 0; pwc-- FI
+! #endif
+! 			FI
+! 			continue;
+! 		FI
+  
+  		w_hi = (w>>8)&LOBYTE;
+  
+***************
+*** 258,265
+  
+  		IF sig = w&0177
+  		THEN	IF sig == 0177	/* ptrace! return */
+! 			THEN	prs("ptrace: ");
+! 				sig = w_hi;
+  			FI
+  			IF sysmsg[sig]
+  			THEN	IF i!=p ORF (flags&prompt)==0 THEN prp(); prn(p); blank() FI
+
+--- 370,384 -----
+  
+  		IF sig = w&0177
+  		THEN	IF sig == 0177	/* ptrace! return */
+! 			THEN	sig = w_hi;
+! #if JOBS
+! 				IF (flags&jobflg) ANDF
+! 				(sig==STOP ORF sig==TSTP ORF sig==TTOU ORF sig==TTIN)
+! 				THEN	j_child_stop(p, sig);
+! 					goto j_bypass;
+! 				FI
+! #endif
+! 				prs("ptrace: ");
+  			FI
+  			IF sysmsg[sig]
+  			THEN	IF i!=p ORF (flags&prompt)==0 THEN prp(); prn(p); blank() FI
+***************
+*** 269,275
+  			newline();
+  		FI
+  
+! 		IF rc==0
+  		THEN	rc = (sig ? sig|SIGFLG : w_hi);
+  		FI
+  		wx |= w;
+
+--- 388,425 -----
+  			newline();
+  		FI
+  
+! #if JOBS
+! 		IF flags&infoflg
+! 		THEN
+! 			register int	k;
+! 			long		l;
+! 
+! 			prc('[');
+! 			l = ru.ru_utime.tv_sec * 1000000L + ru.ru_utime.tv_usec
+! 			  + ru.ru_stime.tv_sec * 1000000L + ru.ru_stime.tv_usec;
+! 			prn((int)(l / 1000000));	/* integral seconds */
+! 			k = (int)(l % 1000000L) / 1000;	/* thousandths */
+! 			prc('.');
+! 			if (k < 100)
+! 				prc('0');
+! 			if (k < 10)
+! 				prc('0');
+! 			prn(k);
+! 			blank();
+! 			prn((int)ru.ru_inblock);
+! 			blank();
+! 			prn((int)ru.ru_oublock);
+! 			blank();
+! 			prn((int)ru.ru_minflt);
+! 			blank();
+! 			prn((int)ru.ru_majflt);
+! 			prc(']');
+! 			newline();
+! 		FI
+! 		j_child_die(p);
+!     j_bypass:
+! #endif
+! 		IF rc == 0 ANDF found != 0
+  		THEN	rc = (sig ? sig|SIGFLG : w_hi);
+  		FI
+  		wx |= w;
+***************
+*** 273,278
+  		THEN	rc = (sig ? sig|SIGFLG : w_hi);
+  		FI
+  		wx |= w;
+  	OD
+  
+  	IF wx ANDF flags&errflg
+
+--- 423,429 -----
+  		THEN	rc = (sig ? sig|SIGFLG : w_hi);
+  		FI
+  		wx |= w;
++ 		IF p == i THEN break FI
+  	OD
+  
+  	IF wx ANDF flags&errflg
+***************
+*** 278,283
+  	IF wx ANDF flags&errflg
+  	THEN	exitsh(rc);
+  	FI
+  	exitval=rc; exitset();
+  }
+  
+
+--- 429,435 -----
+  	IF wx ANDF flags&errflg
+  	THEN	exitsh(rc);
+  	FI
++ 	flags |= eflag;
+  	exitval=rc; exitset();
+  }
+  
+:::::::: setbrk.c :::::::
+No differences encountered
+:::::::: stak.c :::::::
+No differences encountered
+:::::::: stak.h :::::::
+No differences encountered
+:::::::: string.c :::::::
+No differences encountered
+:::::::: sym.h :::::::
+*** ../orig.u/sym.h	Wed May 15 17:13:46 1985
+--- sym.h	Mon Jun  3 12:51:24 1985
+***************
+*** 46,48
+  #define DOLLAR	'$'
+  #define ESCAPE	'\\'
+  #define BRACE	'{'
+
+--- 46,51 -----
+  #define DOLLAR	'$'
+  #define ESCAPE	'\\'
+  #define BRACE	'{'
++ #if JOBS
++ #define PERCENT	'%'
++ #endif
+:::::::: timeout.h :::::::
+No differences encountered
+:::::::: word.c :::::::
+*** ../orig.u/word.c	Wed May 15 17:13:46 1985
+--- word.c	Thu Jun  6 14:38:18 1985
+***************
+*** 23,28
+  	REG CHAR	c, d;
+  	REG CHAR	*argp=locstak()+BYTESPERWORD;
+  	INT		alpha=1;
+  
+  	wdnum=0; wdset=0;
+  
+
+--- 23,29 -----
+  	REG CHAR	c, d;
+  	REG CHAR	*argp=locstak()+BYTESPERWORD;
+  	INT		alpha=1;
++ 	STRING		save;
+  
+  	wdnum=0; wdset=0;
+  
+***************
+*** 26,32
+  
+  	wdnum=0; wdset=0;
+  
+! 	WHILE (c=nextc(0), space(c)) DONE
+  
+  	IF c=='#'
+  	THEN	WHILE (c=readc()) ANDF c!=NL DONE
+
+--- 27,43 -----
+  
+  	wdnum=0; wdset=0;
+  
+! 	catcheof = TRUE;
+! 	WHILE TRUE
+! 	DO
+! 		WHILE (c=nextc(0), space(c)) DONE
+! 		IF c=='#'
+! 		THEN	WHILE (c=nextc(0)) !=NL ANDF c != EOF DONE
+! 			peekc = c;
+! 		ELSE	break;	/* out of comment - white space loop */
+! 		FI
+! 	OD
+! 	save = argp;
+  
+  	IF !eofmeta(c)
+  	THEN	REP	IF c==LITERAL
+***************
+*** 28,37
+  
+  	WHILE (c=nextc(0), space(c)) DONE
+  
+- 	IF c=='#'
+- 	THEN	WHILE (c=readc()) ANDF c!=NL DONE
+- 	FI
+- 
+  	IF !eofmeta(c)
+  	THEN	REP	IF c==LITERAL
+  			THEN	*argp++=(DQUOTE);
+
+--- 39,44 -----
+  	OD
+  	save = argp;
+  
+  	IF !eofmeta(c)
+  	THEN	REP	IF c==LITERAL
+  			THEN	*argp++=(DQUOTE);
+***************
+*** 46,51
+  				THEN	d=c;
+  					WHILE (*argp++=(c=nextc(d))) ANDF c!=d
+  					DO chkpr(c) OD
+  				FI
+  			FI
+  		PER (c=nextc(0), !eofmeta(c)) DONE
+
+--- 53,73 -----
+  				THEN	d=c;
+  					WHILE (*argp++=(c=nextc(d))) ANDF c!=d
+  					DO chkpr(c) OD
++ 				ELIF c == SQUIGGLE
++ 				THEN	/* try ~login name */
++ 					STRING name, home;
++ 
++ 					name = argp;
++ 					WHILE (c = nextc(0)) != '/' ANDF
++ 						!eofmeta(c)
++ 					DO
++ 						*name++ = c;
++ 					OD
++ 					peekc = c;
++ 					*name = '\0';
++ 					home = homedir(argp);
++ 					IF *home THEN movstr(home, --argp) FI
++ 					argp += length(argp) - 1;
+  				FI
+  			FI
+  		PER (c=nextc(0), !eofmeta(c)) DONE
+***************
+*** 64,69
+  	ELIF dipchar(c)
+  	THEN	IF (d=nextc(0))==c
+  		THEN	wdval = c|SYMREP;
+  		ELSE	peekc = d|MARK; wdval = c;
+  		FI
+  	ELSE	IF (wdval=c)==EOF
+
+--- 86,97 -----
+  	ELIF dipchar(c)
+  	THEN	IF (d=nextc(0))==c
+  		THEN	wdval = c|SYMREP;
++ 			IF c == '<'
++ 			THEN	IF (d=nextc(0))=='-'
++ 				THEN stripflg++;
++ 				ELSE peekc = d|MARK;
++ 				FI
++ 			FI
+  		ELSE	peekc = d|MARK; wdval = c;
+  		FI
+  	ELSE	IF (wdval=c)==EOF
+***************
+*** 70,76
+  		THEN	wdval=EOFSYM;
+  		FI
+  		IF iopend ANDF eolchar(c)
+! 		THEN	copy(iopend); iopend=0;
+  		FI
+  	FI
+  	reserv=FALSE;
+
+--- 98,109 -----
+  		THEN	wdval=EOFSYM;
+  		FI
+  		IF iopend ANDF eolchar(c)
+! 		THEN	INT histon = (flags&nohistflg) == 0;
+! 
+! 			flags |= nohistflg;	/* no history for here docs */
+! 			copy(iopend);
+! 			IF histon THEN flags &= ~nohistflg FI	/* restore */
+! 			iopend=0;
+  		FI
+  	FI
+  	catcheof = FALSE;
+***************
+*** 73,78
+  		THEN	copy(iopend); iopend=0;
+  		FI
+  	FI
+  	reserv=FALSE;
+  	return(wdval);
+  }
+
+--- 106,112 -----
+  			iopend=0;
+  		FI
+  	FI
++ 	catcheof = FALSE;
+  	reserv=FALSE;
+  	return(wdval);
+  }
+***************
+*** 94,99
+  
+  readc()
+  {
+  	REG CHAR	c;
+  	REG INT		len;
+  	REG FILE	f;
+
+--- 128,134 -----
+  
+  readc()
+  {
++ 	LOCAL INT	eofcount = 0;	/* to break endless catcheof loop */
+  	REG CHAR	c;
+  	REG INT		len;
+  	REG FILE	f;
+***************
+*** 116,123
+  	ELIF f->feof ORF f->fdes<0
+  	THEN	c=EOF; f->feof++;
+  	ELIF (len=readb())<=0
+! 	THEN	close(f->fdes); f->fdes = -1; c=EOF; f->feof++;
+! 	ELSE	f->fend = (f->fnxt = f->fbuf)+len;
+  		goto retry;
+  	FI
+  	return(c);
+
+--- 151,185 -----
+  	ELIF f->feof ORF f->fdes<0
+  	THEN	c=EOF; f->feof++;
+  	ELIF (len=readb())<=0
+! 	THEN
+! 	    IF catcheof
+! #if JOBS
+! 	    ANDF (flags&(ttyflg|prompt|dotflg)) == (ttyflg|prompt)
+! 	    ANDF ( (flags&noeotflg) ORF j_finish(FALSE) )
+! #else
+! 	    ANDF (flags&(ttyflg|prompt|noeotflg|dotflg)) == (ttyflg|prompt|noeotflg)
+! #endif
+! 	    ANDF ++eofcount < 10	/* in case terminal is disconnected */
+! 	    THEN
+! #if JOBS
+! 		IF (flags&(ttyflg|prompt|noeotflg)) == (ttyflg|prompt|noeotflg)
+! 		THEN
+! #endif
+! 		    prs("use \"exit\"\n");
+! #if JOBS
+! 		/* else "there are stopped jobs" was printed */
+! 		FI
+! #endif
+! 		c = NL;
+! 	    ELSE
+! 		close(f->fdes); f->fdes = -1; c=EOF; f->feof++;
+! #if JOBS
+! 		j_finish(TRUE);
+! #endif
+! 	    FI
+! 	ELSE	f->fend = f->fnxt+len;
+! 		/* was f->fend = (f->fnxt = f->fbuf) + len */
+! 		eofcount = 0;
+  		goto retry;
+  	FI
+  	return(c);
+***************
+*** 123,129
+  	return(c);
+  }
+  
+! LOCAL	readb()
+  {
+  	REG FILE	f=standin;
+  	REG INT		len;
+
+--- 185,191 -----
+  	return(c);
+  }
+  
+! LOCAL	readblock()	/* ADR --- changed the name */
+  {
+  	REG FILE	f=standin;
+  	REG INT		len;
+***************
+*** 128,135
+  	REG FILE	f=standin;
+  	REG INT		len;
+  
+! 	IF setjmp(INTbuf) == 0 THEN trapjmp[INTR] = 1; FI
+! 	REP	IF trapnote&SIGSET THEN newline(); sigchk() FI
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+  	trapjmp[INTR] = 0;
+  	return(len);
+
+--- 190,201 -----
+  	REG FILE	f=standin;
+  	REG INT		len;
+  
+! 	REP
+! 		IF trapnote&SIGSET
+! 		THEN	newline(); sigchk();
+! 		ELIF (trapnote&TRAPSET) ANDF (rwait>0)
+! 		THEN	newline(); chktrap(); clearup();
+! 		FI
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+  	return(len);
+  }
+***************
+*** 131,136
+  	IF setjmp(INTbuf) == 0 THEN trapjmp[INTR] = 1; FI
+  	REP	IF trapnote&SIGSET THEN newline(); sigchk() FI
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+- 	trapjmp[INTR] = 0;
+  	return(len);
+  }
+
+--- 197,202 -----
+  		THEN	newline(); chktrap(); clearup();
+  		FI
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+  	return(len);
+  }
+  
+***************
+*** 133,136
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+  	trapjmp[INTR] = 0;
+  	return(len);
+  }
+
+--- 198,398 -----
+  		FI
+  	PER (len=read(f->fdes,f->fbuf,f->fsiz))<0 ANDF trapnote DONE
+  	return(len);
++ }
++ 
++ /* readb --- read a block from the outside world, and history process it */
++ 
++ /*
++  * In BSD systems, using the literal next capability of the tty driver, it
++  * is actually possible to put a newline in the middle of the input line,
++  * and then hit return, so that the shell sees two lines of input.
++  *
++  * As a design decision, if there is a \n in the middle of what we've read
++  * from a terminal, treat the commands as two separately typed commands. I.e.
++  *
++  *	echo hi ^J echo there
++  *
++  * is the same as
++  *
++  *	echo hi
++  *	echo there
++  *
++  * The major reason for doing it this way is that the history mechanism knows
++  * that a \n is the end of a line.
++  *
++  * Finally, on USG systems, we just leave this code alone, since it won't
++  * get executed anyway.
++  */
++ 
++ /*
++  * In word.c, the readc() function keeps a pointer to what standin pointed to
++  * when readc first gets called.  Therefore, where standin points to can not 
++  * not change across calls to readb().  To get around this, we change the
++  * contents of the structure pointed to by standin, saving and restoring
++  * it as necessary.
++  */
++ 
++ #define LARGEBUF	(HISTSIZE / 2)	/* size of expanded history */
++ 
++ static
++ readb()
++ {
++ 	int ilen, i, j;
++ 	char ibuf[BUFSIZ];	/* input into scratch area, pass to history */
++ 	static char expansion[LARGEBUF];
++ 	static int moreinbuf = FALSE;
++ 	static int saved_ilen = 0;
++ 	static int start_here = 0;
++ 	static struct fileblk *f = 0;
++ 	auto int gotoutofbuf = 0;
++ 
++ 	if (expanded)	/* just did a history substitution */
++ 		expanded = 0;
++ 
++ 	if ((flags & nohistflg) || (flags & prompt) == 0 || ! isatty (input)
++ 			|| standin->fstak != 0)
++ 	{
++ 		ilen = readblock ();
++ 		if (ilen > 0)
++ 			standin->fnxt = standin->fbuf;
++ 		return (ilen);
++ 		/* not doing history expansion at all */
++ 	}
++ 
++ 	if (f == 0)
++ 		f = standin;
++ 
++ 	ilen = 0;
++ 
++ 	/*
++ 	 * First, if there was more stuff in the last buffer, go and get it.
++ 	 * If not get some more from the outside world.
++ 	 *
++ 	 * Then, make sure we've read up to a newline.
++ 	 * This is basically in case someone has done something bizarre
++ 	 * like 'stty raw', and input is coming in one character at a time.
++ 	 *
++ 	 * We use a heuristic.  If amount read is just 1, keep reading till
++ 	 * we get a newline.  Else, read in a complete line from the terminal.
++ 	 * Once we're in raw mode, can't reset it until a newline is typed.
++ 	 *
++ 	 * If not reading one character at a time, then do the stuff for
++ 	 * embedded newlines.
++ 	 */
++ 
++ 	if (moreinbuf)
++ 	{
++ 		for (i = 0, j = start_here; f->fbuf[j] != NL && j < saved_ilen; i++, j++)
++ 			ibuf[i] = f->fbuf[j];
++ 
++ #ifdef notdef
++ 		if (f->fbuf[j] != NL)
++ 		{
++ 			prs ("internal i/o error C in readb\n");
++ 			return (0);
++ 		}
++ #endif
++ 
++ 		if (f->fbuf[j] == NL)
++ 			ibuf[i++] = NL;
++ 		ibuf[i] = '\0';
++ 		ilen = i;
++ 		/* embedded newline */
++ 		moreinbuf = (++j < saved_ilen - 1);
++ 		if (moreinbuf)
++ 			start_here = j;	/* where to start next time */
++ 		gotoutofbuf = 1;
++ 	}
++ 	else	/* wasn't an embedded \n last time */
++ 	{
++ 		ilen = readblock ();
++ 	
++ 		if (ilen <= 0)	/* EOF or error */
++ 			return (ilen);
++ 
++ 		if (ilen == 1)	/* either in raw mode, or an empty line */
++ 		{
++ 			i = 0;
++ 			ibuf[i++] = f->fbuf[0];
++ 			if (f->fbuf[0] == NL)
++ 			{
++ 				ibuf[i] = '\0';
++ 				goto dohist;
++ 			}
++ 
++ 			while ((ilen = readblock()) > 0)
++ 			{
++ 				if (ilen != 1)
++ 				{
++ 					prs ("internal i/o error A in readb\n");
++ 					return (0);
++ 				}
++ 				ibuf[i++] = f->fbuf[0];
++ 				if (f->fbuf[0] == NL)
++ 				{
++ 					ibuf[i] = '\0';
++ 					break;	/* while */
++ 				}
++ 			}
++ 			ilen = i;
++ 			gotoutofbuf = TRUE;
++ 			/* force code below to use collected string */
++ 		}
++ 		else
++ 		{
++ 			/* reading bunches of characters at once */
++ 			for (i = 0; f->fbuf[i] != NL && i < ilen; i++)
++ 				ibuf[i] = f->fbuf[i];
++ 
++ #ifdef notdef
++ 			if (f->fbuf[i] != NL)
++ 			{
++ 				prs ("internal i/o error B in readb\n");
++ 				return (0);
++ 			}
++ #endif
++ 
++ 			ibuf[i++] = NL;
++ 			ibuf[i] = '\0';
++ 			/* ilen was set by readblock() */
++ 			/* embedded newline */
++ 			moreinbuf = (i < ilen - 1);
++ 			if (moreinbuf)
++ 			{
++ 				saved_ilen = ilen;
++ 				start_here = i;
++ 				/* where to start next time */
++ 				gotoutofbuf = 1;
++ 			}
++ 		}
++ 	}
++ 
++ dohist:
++ 	/* quick heuristic */
++ 	if (! gotoutofbuf && ilen == 1 && f->fbuf[0] == NL)
++ 	{
++ 		f->fnxt = f->fbuf;
++ 		return (ilen);
++ 	}
++ 
++ 	if (histsub (ibuf, expansion, sizeof expansion))
++ 	{
++ 		int olen = length (expansion) - 1;
++ 		if (! expanded && ! gotoutofbuf)
++ 		{
++ 			standin->fnxt = standin->fbuf;
++ 			return (ilen);
++ 		}
++ 		/* else
++ 			expanded == TRUE or from buffer */
++ 		standin->fnxt = expansion;
++ 		return (olen);
++ 	}
++ 	else
++ 	{
++ 		/* hist expansion failed, return an empty line */
++ 		standin->fnxt = standin->fbuf;
++ 		standin->fbuf[0] = NL;
++ 		return (1);
++ 	}
+  }
+:::::::: xec.c :::::::
+*** ../orig.u/xec.c	Wed May 15 17:13:46 1985
+--- xec.c	Tue Jun  4 17:58:16 1985
+***************
+*** 12,17
+   */
+  
+  #include	"defs.h"
+  #include	"sym.h"
+  
+  LOCAL INT	parent;
+
+--- 12,18 -----
+   */
+  
+  #include	"defs.h"
++ #include	<errno.h>
+  #include	"sym.h"
+  
+  LOCAL INT	parent;
+***************
+*** 23,29
+  /* ========	command execution	========*/
+  
+  
+! execute(argt, execflg, pf1, pf2)
+  	TREPTR		argt;
+  	INT		*pf1, *pf2;
+  {
+
+--- 24,30 -----
+  /* ========	command execution	========*/
+  
+  
+! execute(argt, execflg, errorflg, pf1, pf2)
+  	TREPTR		argt;
+  	INT		*pf1, *pf2;
+  {
+***************
+*** 30,35
+  	/* `stakbot' is preserved by this routine */
+  	REG TREPTR	t;
+  	STKPTR		sav=savstak();
+  
+  	sigchk();
+  
+
+--- 31,46 -----
+  	/* `stakbot' is preserved by this routine */
+  	REG TREPTR	t;
+  	STKPTR		sav=savstak();
++ #if pyr
++ 	auto INT	change_univ = FALSE;
++ 	auto INT	new_univ = 0;
++ 	/*
++ 	 * universes run from 1 to NUMUNIV: We start out at 0
++ 	 * and increment new_univ in the swtich for internal
++ 	 * commands, below. new_univ nust *not* be assigned to, directly
++ 	 * or via side effects, any place else
++ 	 */
++ #endif
+  
+  	sigchk();
+  
+***************
+*** 33,38
+  
+  	sigchk();
+  
+  	IF (t=argt) ANDF execbrk==0
+  	THEN	REG INT		treeflgs;
+  		INT		oldexit, type;
+
+--- 44,50 -----
+  
+  	sigchk();
+  
++ 	IF ! errorflg THEN flags &= ~errflg FI
+  	IF (t=argt) ANDF execbrk==0
+  	THEN	REG INT		treeflgs;
+  		INT		oldexit, type;
+***************
+*** 54,60
+  			com=scan(argn);
+  			a1=com[1]; gchain=schain;
+  
+! 			IF argn==0 ORF (internal=syslook(com[0],commands))
+  			THEN	setlist(t->comset, 0);
+  			FI
+  
+
+--- 66,72 -----
+  			com=scan(argn);
+  			a1=com[1]; gchain=schain;
+  
+! 			IF (internal=syslook(com[0],commands)) ORF argn==0
+  			THEN	setlist(t->comset, 0);
+  			FI
+  
+***************
+*** 75,81
+  	
+  						IF (f=pathopen(getpath(a1), a1)) < 0
+  						THEN failed(a1,notfound);
+! 						ELSE execexp(0,f);
+  						FI
+  					FI
+  					break;
+
+--- 87,99 -----
+  	
+  						IF (f=pathopen(getpath(a1), a1)) < 0
+  						THEN failed(a1,notfound);
+! 						ELSE
+! 							INT savedot = flags&dotflg;
+! 
+! 							flags |= dotflg;
+! 							execexp(0,f);
+! 							flags &= ~dotflg;
+! 							flags |= savedot;
+  						FI
+  					FI
+  					break;
+***************
+*** 88,93
+  					break;
+  	
+  				case SYSEXIT:
+  					exitsh(a1?stoi(a1):oldexit);
+  	
+  				case SYSNULL:
+
+--- 106,116 -----
+  					break;
+  	
+  				case SYSEXIT:
++ #if JOBS
++ 					IF j_finish(FALSE) THEN break; FI
++ #endif
++ 					histsave (histfnod.namval);
++ 					flags |= forked;	/* force exit */
+  					exitsh(a1?stoi(a1):oldexit);
+  	
+  				case SYSNULL:
+***************
+*** 95,101
+  					break;
+  	
+  				case SYSCONT:
+! 					execbrk = -loopcnt; break;
+  	
+  				case SYSBREAK:
+  					IF (execbrk=loopcnt) ANDF a1
+
+--- 118,127 -----
+  					break;
+  	
+  				case SYSCONT:
+! 					IF (execbrk = -loopcnt) ANDF a1
+! 					THEN	breakcnt = stoi (a1); 
+! 					FI
+! 					break;
+  	
+  				case SYSBREAK:
+  					IF (execbrk=loopcnt) ANDF a1
+***************
+*** 139,144
+  					IF a1==0 THEN break FI
+  	
+  				case SYSLOGIN:
+  					flags |= forked;
+  					oldsigs(); execa(com); done();
+  	
+
+--- 165,171 -----
+  					IF a1==0 THEN break FI
+  	
+  				case SYSLOGIN:
++ 					histsave (histfnod.namval);
+  					flags |= forked;
+  					oldsigs(); execa(com); done();
+  	
+***************
+*** 151,160
+  					break;
+  	
+  				case SYSSHFT:
+! 					IF dolc<1
+! 					THEN	error(badshift);
+! 					ELSE	dolv++; dolc--;
+! 					FI
+  					assnum(&dolladr, dolc);
+  					break;
+  	
+
+--- 178,193 -----
+  					break;
+  	
+  				case SYSSHFT:
+! 					BEGIN
+! 						INT places;
+! 						places = a1 ? stoi(a1) : 1;
+! 						FOR ; places--;
+! 						DO	IF dolc<1
+! 							THEN	error(badshift);
+! 							ELSE	dolv++; dolc--;
+! 							FI
+! 						OD
+! 					END
+  					assnum(&dolladr, dolc);
+  					break;
+  	
+***************
+*** 159,164
+  					break;
+  	
+  				case SYSWAIT:
+  					await(-1);
+  					break;
+  	
+
+--- 192,198 -----
+  					break;
+  	
+  				case SYSWAIT:
++ 					/*
+  					await(-1);
+  					*/
+  					await(a1?stoi(a1):-1,1);
+***************
+*** 160,165
+  	
+  				case SYSWAIT:
+  					await(-1);
+  					break;
+  	
+  				case SYSREAD:
+
+--- 194,201 -----
+  				case SYSWAIT:
+  					/*
+  					await(-1);
++ 					*/
++ 					await(a1?stoi(a1):-1,1);
+  					break;
+  	
+  				case SYSREAD:
+***************
+*** 163,168
+  					break;
+  	
+  				case SYSREAD:
+  					exitval=readvar(&com[1]);
+  					break;
+  
+
+--- 199,205 -----
+  					break;
+  	
+  				case SYSREAD:
++ 					rwait=1;
+  					exitval=readvar(&com[1]);
+  					break;
+  
+***************
+*** 222,227
+                                          }
+                                          break;
+  	
+  				default:
+  					internal=builtin(argn,com);
+  	
+
+--- 259,327 -----
+                                          }
+                                          break;
+  	
++ #if JOBS
++ 				case SYSJOBS:
++ 
++ 					j_print();
++ 					break;
++ 
++ 				case SYSFG:
++ 
++ 					j_resume(a1, FALSE);
++ 					break;
++ 
++ 				case SYSBG:
++ 
++ 					j_resume(a1, TRUE);
++ 					break;
++ 
++ 				case SYSSUSPEND:
++ 					exitval = 1;
++ 					IF getppid() == 1
++ 					THEN	prs (nosusp);
++ 					ELSE	exitval = 0;
++ 						kill (getpid(), STOP);
++ 					FI
++ 					break;
++ #endif
++ 
++ #if pyr
++ 				/*
++ 				 * UCB is Universe 2
++ 				 * ATT is Universe 1
++ 				 * new_univ == 0
++ 				 */
++ 				case SYSUCB:
++ 					new_univ++;
++ 					/* fall thru */
++ 				case SYSATT:
++ 					new_univ++;
++ 					IF argn > 1
++ 					THEN
++ 						change_univ = TRUE;
++ 						com++;
++ 						goto doit;
++ 					ELSE
++ 						setuniverse (cur_univ = new_univ);
++ 						univnod.namflg &= ~N_RDONLY;
++ 						assign (& univnod, univ_name[cur_univ - 1]);
++ 						attrib ((& univnod), N_RDONLY);
++ 						break;
++ 					FI
++ 
++ 				case SYSUNIVERSE:
++ 					IF eq(com[1], dashl)
++ 					THEN	prs_buff (univ_longname[cur_univ - 1]);
++ 					ELSE	prs_buff (univ_name[cur_univ - 1]);
++ 					FI
++ 					prc_buff (NL);
++ 					break;
++ #endif
++ 
++ 				case SYSHISTORY:
++ 					exitval = history (argn, com);
++ 					break;
++ 
+  				default:
+  					internal=builtin(argn,com);
+  	
+***************
+*** 233,239
+  					break;
+  				FI
+  			ELIF t->treio==0
+! 			THEN	break;
+  			FI
+  			END
+  	
+
+--- 333,340 -----
+  					break;
+  				FI
+  			ELIF t->treio==0
+! 			THEN	chktrap();
+! 				break;
+  			FI
+  			END
+  	
+***************
+*** 238,243
+  			END
+  	
+  		case TFORK:
+  			IF execflg ANDF (treeflgs&(FAMP|FPOU))==0
+  			THEN	parent=0;
+  			ELSE	WHILE (parent=fork()) == -1
+
+--- 339,347 -----
+  			END
+  	
+  		case TFORK:
++ #if pyr
++ 		doit:
++ #endif
+  			IF execflg ANDF (treeflgs&(FAMP|FPOU))==0
+  			THEN	parent=0;
+  			ELSE	WHILE (parent=fork()) == -1
+***************
+*** 242,247
+  			THEN	parent=0;
+  			ELSE	WHILE (parent=fork()) == -1
+  				DO sigchk(); alarm(10); pause() OD
+  			FI
+  
+  			IF parent
+
+--- 346,354 -----
+  			THEN	parent=0;
+  			ELSE	WHILE (parent=fork()) == -1
+  				DO sigchk(); alarm(10); pause() OD
++ #if JOBS
++ 				IF parent == 0 THEN j_top_level = FALSE; FI
++ #endif
+  			FI
+  
+  			IF parent
+***************
+*** 248,253
+  			THEN	/* This is the parent branch of fork;    */
+  				/* it may or may not wait for the child. */
+  				IF treeflgs&FPRS ANDF flags&ttyflg
+  				THEN	prn(parent); newline();
+  				FI
+  				IF treeflgs&FPCL THEN closepipe(pf1) FI
+
+--- 355,363 -----
+  			THEN	/* This is the parent branch of fork;    */
+  				/* it may or may not wait for the child. */
+  				IF treeflgs&FPRS ANDF flags&ttyflg
++ #if JOBS
++ 				ANDF (flags&jobflg) == 0
++ #endif
+  				THEN	prn(parent); newline();
+  				FI
+  				IF treeflgs&FPCL THEN closepipe(pf1) FI
+***************
+*** 251,256
+  				THEN	prn(parent); newline();
+  				FI
+  				IF treeflgs&FPCL THEN closepipe(pf1) FI
+  				IF (treeflgs&(FAMP|FPOU))==0
+  				THEN	await(parent);
+  				ELIF (treeflgs&FAMP)==0
+
+--- 361,369 -----
+  				THEN	prn(parent); newline();
+  				FI
+  				IF treeflgs&FPCL THEN closepipe(pf1) FI
++ #if JOBS
++ 				j_child_post(parent, treeflgs&FAMP, treeflgs&FPIN, t);
++ #endif
+  				IF (treeflgs&(FAMP|FPOU))==0
+  				THEN	await(parent, 0);
+  #if JOBS
+***************
+*** 252,258
+  				FI
+  				IF treeflgs&FPCL THEN closepipe(pf1) FI
+  				IF (treeflgs&(FAMP|FPOU))==0
+! 				THEN	await(parent);
+  				ELIF (treeflgs&FAMP)==0
+  				THEN	post(parent);
+  				ELSE	assnum(&pcsadr, parent);
+
+--- 365,374 -----
+  				j_child_post(parent, treeflgs&FAMP, treeflgs&FPIN, t);
+  #endif
+  				IF (treeflgs&(FAMP|FPOU))==0
+! 				THEN	await(parent, 0);
+! #if JOBS
+! 					j_reset_pg();
+! #endif
+  				ELIF (treeflgs&FAMP)==0
+  				THEN	post(parent);
+  				ELSE	assnum(&pcsadr, parent);
+***************
+*** 263,268
+  
+  
+  			ELSE	/* this is the forked branch (child) of execute */
+  				flags |= forked; iotemp=0;
+  				postclr();
+  				settmp();
+
+--- 379,393 -----
+  
+  
+  			ELSE	/* this is the forked branch (child) of execute */
++ #if pyr
++ 				IF change_univ
++ 				THEN	setuniverse (new_univ);
++ 					univnod.namflg &= ~N_RDONLY;
++ 					assign (&univnod, univ_name[cur_univ - 1]);
++ 					attrib ((&univnod), N_RDONLY);
++ 				FI
++ #endif
++ 
+  				flags |= forked; iotemp=0;
+  				postclr();
+  				settmp();
+***************
+*** 268,274
+  				settmp();
+  
+  				/* Turn off INTR and QUIT if `FINT'  */
+! 				/* Reset ramaining signals to parent */
+  				/* except for those `lost' by trap   */
+  				oldsigs();
+  				IF treeflgs&FINT
+
+--- 393,399 -----
+  				settmp();
+  
+  				/* Turn off INTR and QUIT if `FINT'  */
+! 				/* Reset remaining signals to parent */
+  				/* except for those `lost' by trap   */
+  				oldsigs();
+  				IF treeflgs&FINT
+***************
+*** 272,277
+  				/* except for those `lost' by trap   */
+  				oldsigs();
+  				IF treeflgs&FINT
+  				THEN	signal(INTR,1); signal(QUIT,1);
+  				FI
+  
+
+--- 397,405 -----
+  				/* except for those `lost' by trap   */
+  				oldsigs();
+  				IF treeflgs&FINT
++ #if JOBS
++ 				ANDF (flags&jobflg) == 0
++ #endif
+  				THEN	signal(INTR,1); signal(QUIT,1);
+  				FI
+  
+***************
+*** 287,292
+  
+  				/* default std input for & */
+  				IF treeflgs&FINT ANDF ioset==0
+  				THEN	rename(chkopen(devnull),0);
+  				FI
+  
+
+--- 415,423 -----
+  
+  				/* default std input for & */
+  				IF treeflgs&FINT ANDF ioset==0
++ #if JOBS
++ 				ANDF (flags&jobflg) == 0
++ #endif
+  				THEN	rename(chkopen(devnull),0);
+  				FI
+  
+***************
+*** 293,299
+  				/* io redirection */
+  				initio(t->treio);
+  				IF type!=TCOM
+! 				THEN	execute(t->forktre,1);
+  				ELIF com[0]!=ENDARGS
+  				THEN	setlist(t->comset,N_EXPORT);
+  					execa(com);
+
+--- 424,430 -----
+  				/* io redirection */
+  				initio(t->treio);
+  				IF type!=TCOM
+! 				THEN	execute(t->forktre,1, errorflg);
+  				ELIF com[0]!=ENDARGS
+  				THEN
+  					eflag = 0;
+***************
+*** 295,301
+  				IF type!=TCOM
+  				THEN	execute(t->forktre,1);
+  				ELIF com[0]!=ENDARGS
+! 				THEN	setlist(t->comset,N_EXPORT);
+  					execa(com);
+  				FI
+  				done();
+
+--- 426,438 -----
+  				IF type!=TCOM
+  				THEN	execute(t->forktre,1, errorflg);
+  				ELIF com[0]!=ENDARGS
+! 				THEN
+! 					eflag = 0;
+! 					/* eflag must be set to zero so commands
+! 					   implemented as shell scripts do not
+! 					   exit if set -e and some command in
+! 					   the script returns non zero */
+! 					setlist(t->comset,N_EXPORT);
+  					execa(com);
+  				FI
+  				done();
+***************
+*** 303,309
+  
+  		case TPAR:
+  			rename(dup(2),output);
+! 			execute(t->partre,execflg);
+  			done();
+  
+  		case TFIL:
+
+--- 440,446 -----
+  
+  		case TPAR:
+  			rename(dup(2),output);
+! 			execute(t->partre,execflg, errorflg);
+  			done();
+  
+  		case TFIL:
+***************
+*** 309,316
+  		case TFIL:
+  			BEGIN
+  			   INT pv[2]; chkpipe(pv);
+! 			   IF execute(t->lstlef, 0, pf1, pv)==0
+! 			   THEN	execute(t->lstrit, execflg, pv, pf2);
+  			   ELSE	closepipe(pv);
+  			   FI
+  			END
+
+--- 446,453 -----
+  		case TFIL:
+  			BEGIN
+  			   INT pv[2]; chkpipe(pv);
+! 			   IF execute(t->lstlef, 0, errorflg, pf1, pv)==0
+! 			   THEN	execute(t->lstrit, execflg, errorflg, pv, pf2);
+  			   ELSE	closepipe(pv);
+  			   FI
+  			END
+***************
+*** 317,324
+  			break;
+  
+  		case TLST:
+! 			execute(t->lstlef,0);
+! 			execute(t->lstrit,execflg);
+  			break;
+  
+  		case TAND:
+
+--- 454,461 -----
+  			break;
+  
+  		case TLST:
+! 			execute(t->lstlef,0, errorflg);
+! 			execute(t->lstrit,execflg, errorflg);
+  			break;
+  
+  		case TAND:
+***************
+*** 322,329
+  			break;
+  
+  		case TAND:
+! 			IF execute(t->lstlef,0)==0
+! 			THEN	execute(t->lstrit,execflg);
+  			FI
+  			break;
+  
+
+--- 459,466 -----
+  			break;
+  
+  		case TAND:
+! 			IF execute(t->lstlef,0, 0)==0
+! 			THEN	execute(t->lstrit,execflg, errorflg);
+  			FI
+  			break;
+  
+***************
+*** 328,335
+  			break;
+  
+  		case TORF:
+! 			IF execute(t->lstlef,0)!=0
+! 			THEN	execute(t->lstrit,execflg);
+  			FI
+  			break;
+  
+
+--- 465,472 -----
+  			break;
+  
+  		case TORF:
+! 			IF execute(t->lstlef,0, 0)!=0
+! 			THEN	execute(t->lstrit,execflg, errorflg);
+  			FI
+  			break;
+  
+***************
+*** 350,357
+  			   loopcnt++;
+  			   WHILE *args!=ENDARGS ANDF execbrk==0
+  			   DO	assign(n,*args++);
+! 				execute(t->fortre,0);
+! 				IF execbrk<0 THEN execbrk=0 FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+  			   execbrk=breakcnt; loopcnt--;
+
+--- 487,499 -----
+  			   loopcnt++;
+  			   WHILE *args!=ENDARGS ANDF execbrk==0
+  			   DO	assign(n,*args++);
+! 				execute(t->fortre,0, errorflg);
+! 				IF execbrk
+! 				THEN	IF breakcnt > 1 ORF execbrk > 0
+! 					THEN break;
+! 					ELSE execbrk = breakcnt = 0;
+! 					FI
+! 				FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+  			   execbrk = (execbrk < 0 ? -breakcnt : breakcnt);
+***************
+*** 354,360
+  				IF execbrk<0 THEN execbrk=0 FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+! 			   execbrk=breakcnt; loopcnt--;
+  			   argfor=freeargs(argsav);
+  			END
+  			break;
+
+--- 496,503 -----
+  				FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+! 			   execbrk = (execbrk < 0 ? -breakcnt : breakcnt);
+! 			   loopcnt--;
+  			   argfor=freeargs(argsav);
+  			END
+  			break;
+***************
+*** 365,373
+  			   INT		i=0;
+  
+  			   loopcnt++;
+! 			   WHILE execbrk==0 ANDF (execute(t->whtre,0)==0)==(type==TWH)
+! 			   DO i=execute(t->dotre,0);
+! 			      IF execbrk<0 THEN execbrk=0 FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+  			   execbrk=breakcnt; loopcnt--; exitval=i;
+
+--- 508,521 -----
+  			   INT		i=0;
+  
+  			   loopcnt++;
+! 			   WHILE execbrk<=0 ANDF (execute(t->whtre,0,0)==0)==(type==TWH)
+! 			   DO i=execute(t->dotre,0, errorflg);
+! 			      IF execbrk
+! 			      THEN	IF breakcnt > 1 ORF execbrk > 0
+! 					THEN break;
+! 					ELSE execbrk = breakcnt = 0;
+! 					FI
+! 			      FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+  			   execbrk=(execbrk < 0 ? -breakcnt : breakcnt);
+***************
+*** 370,376
+  			      IF execbrk<0 THEN execbrk=0 FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+! 			   execbrk=breakcnt; loopcnt--; exitval=i;
+  			END
+  			break;
+  
+
+--- 518,525 -----
+  			      FI
+  			   OD
+  			   IF breakcnt THEN breakcnt-- FI
+! 			   execbrk=(execbrk < 0 ? -breakcnt : breakcnt);
+! 			   loopcnt--; exitval=i;
+  			END
+  			break;
+  
+***************
+*** 375,383
+  			break;
+  
+  		case TIF:
+! 			IF execute(t->iftre,0)==0
+! 			THEN	execute(t->thtre,execflg);
+! 			ELSE	execute(t->eltre,execflg);
+  			FI
+  			break;
+  
+
+--- 524,534 -----
+  			break;
+  
+  		case TIF:
+! 			IF execute(t->iftre,0,0)==0
+! 			THEN	execute(t->thtre,execflg, errorflg);
+! 			ELIF	t->eltre
+! 			THEN	execute(t->eltre,execflg, errorflg);
+! 			ELSE	exitval = 0; /* force zero exit for if-then-fi */
+  			FI
+  			break;
+  
+***************
+*** 390,396
+  				WHILE rex
+  				DO	REG STRING	s;
+  					IF gmatch(r,s=macro(rex->argval)) ORF (trim(s), eq(r,s))
+! 					THEN	execute(t->regcom,0);
+  						t=0; break;
+  					ELSE	rex=rex->argnxt;
+  					FI
+
+--- 541,547 -----
+  				WHILE rex
+  				DO	REG STRING	s;
+  					IF gmatch(r,s=macro(rex->argval)) ORF (trim(s), eq(r,s))
+! 					THEN	execute(t->regcom,0,errorflg);
+  						t=0; break;
+  					ELSE	rex=rex->argnxt;
+  					FI
+***************
+*** 405,410
+  
+  	sigchk();
+  	tdystak(sav);
+  	return(exitval);
+  }
+  
+
+--- 556,562 -----
+  
+  	sigchk();
+  	tdystak(sav);
++ 	flags |= eflag;
+  	return(exitval);
+  }
+  
+***************
+*** 420,425
+  	ELIF f>=0
+  	THEN	initf(f);
+  	FI
+! 	execute(cmd(NL, NLFLG|MTFLG),0);
+  	pop();
+  }
+
+--- 572,577 -----
+  	ELIF f>=0
+  	THEN	initf(f);
+  	FI
+! 	execute(cmd(NL, NLFLG|MTFLG),0, flags&errflg);
+  	pop();
+  }

@@ -1,0 +1,284 @@
+*** fault.c	Mon Nov 24 17:49:21 1986
+--- /cs/simon/c/shdiff-sources/fault.c	Thu Feb 19 18:21:00 1987
+***************
+*** 38,43
+  int 	(*(sigval[]))() = 
+  {
+  	0,
+  	done,
+  	fault,
+  	fault,
+
+--- 38,46 -----
+  int 	(*(sigval[]))() = 
+  {
+  	0,
++ #ifdef JOBSXT_HUP
++ 	fault,
++ #else
+  	done,
+  #endif
+  	fault,
+***************
+*** 39,44
+  {
+  	0,
+  	done,
+  	fault,
+  	fault,
+  	done,
+
+--- 42,48 -----
+  	fault,
+  #else
+  	done,
++ #endif
+  	fault,
+  	fault,
+  	done,
+***************
+*** 54,59
+  	fault,
+  	fault,
+  	done,
+  	done,
+  	done,
+  	done
+
+--- 58,67 -----
+  	fault,
+  	fault,
+  	done,
++ #ifdef JOB
++ # ifdef ERCC_SIGCONT
++ 	fault,		/* SIGUSR2 == SIGCONT? */
++ # else
+  	done,
+  # endif
+  	fault,		/* SIGCLD */
+***************
+*** 55,60
+  	fault,
+  	done,
+  	done,
+  	done,
+  	done
+  };
+
+--- 63,71 -----
+  	fault,		/* SIGUSR2 == SIGCONT? */
+  # else
+  	done,
++ # endif
++ 	fault,		/* SIGCLD */
++ #else !JOB
+  	done,
+  	done,
+  #endif
+***************
+*** 56,61
+  	done,
+  	done,
+  	done,
+  	done
+  };
+  
+
+--- 67,74 -----
+  	fault,		/* SIGCLD */
+  #else !JOB
+  	done,
++ 	done,
++ #endif
+  	done
+  };
+  
+***************
+*** 67,73
+  {
+  	register int	flag;
+  
+! 	signal(sig, fault);
+  	if (sig == SIGSEGV)
+  	{
+  		if (setbrk(brkincr) == -1)
+
+--- 80,90 -----
+  {
+  	register int	flag;
+  
+! #ifdef JOB
+! 	if (sig!=SIGCLD)
+! #endif JOB
+! 		signal(sig,fault);
+! 
+  	if (sig == SIGSEGV)
+  	{
+  		if (setbrk(brkincr) == -1)
+***************
+*** 78,83
+  		if (flags & waiting)
+  			done();
+  	}
+  	else
+  	{
+  		flag = (trapcom[sig] ? TRAPSET : SIGSET);
+
+--- 95,119 -----
+  		if (flags & waiting)
+  			done();
+  	}
++ #ifdef JOB
++ 	else if (sig==SIGCLD){
++ 		job_fault();
++ 		trapnote |= DEVINTERRUPT;
++ 		signal(SIGCLD,fault);	/* do this AFTER waiting */
++ 	}
++ # ifdef JOBSXT_HUP
++ 	else if (sig==SIGHUP){
++ 		if (flags&ttyflg) hupmail();
++ 		done();
++ 	}
++ # endif JOBSXT_HUP
++ # ifdef ERCC_SIGCONT
++ 	else if (sig==SIGCONT){
++ 		trapnote |= DEVINTERRUPT;
++ 	}
++ # endif ERCC_SIGCONT
++ #endif JOB
++ 
+  	else
+  	{
+  		flag = (trapcom[sig] ? TRAPSET : SIGSET);
+***************
+*** 106,111
+  	setsig(SIGTERM);
+  	setsig(SIGUSR1);
+  	setsig(SIGUSR2);
+  }
+  
+  ignsig(n)
+
+--- 142,150 -----
+  	setsig(SIGTERM);
+  	setsig(SIGUSR1);
+  	setsig(SIGUSR2);
++ #ifdef JOB
++ 	setsig(SIGCLD);
++ #endif JOB
+  }
+  
+  #ifdef JOB
+***************
+*** 108,113
+  	setsig(SIGUSR2);
+  }
+  
+  ignsig(n)
+  {
+  	register int	s, i;
+
+--- 147,171 -----
+  #endif JOB
+  }
+  
++ #ifdef JOB
++ /*
++  *	mask of signals that MUST be caught
++  */
++ #define X_CHILD 0
++ #define X_CONT 0
++ #define X_SEG (1L<<SIGSEGV)
++ #define X_ALRM (1L<<SIGALRM)
++ #ifdef JOB
++ # undef X_CHILD
++ # define X_CHILD (1L<<SIGCLD)
++ #endif JOB
++ #if defined(JOBSXT) && defined(ERCC_SIGCONT)
++ # undef X_CONT
++ # define X_CONT (1L<<SIGCONT)
++ #endif (JOBSXT and ERCC_SIGCONT)
++ long realsigs = X_CHILD | X_SEG | X_CONT | X_ALRM;
++ 
++ 
+  ignsig(n)
+  {
+          register int    i;
+***************
+*** 110,115
+  
+  ignsig(n)
+  {
+  	register int	s, i;
+  
+  	if ((i = n) == SIGSEGV)
+
+--- 168,188 -----
+  
+  ignsig(n)
+  {
++         register int    i;
++ 
++         if (signal(i=n,SIG_IGN) != SIG_IGN){
++ 		trapflg[i] |= SIGMOD;
++ 		return(0);
++ 	} else if (realsigs&(1L<<n)){
++ 		trapflg[i] |= SIGMOD;
++ 		return(0);
++ 	} else return(1);
++ }
++ 
++ #else !JOB
++ 
++ ignsig(n)
++ {
+  	register int	s, i;
+  
+  	if ((i = n) == SIGSEGV)
+***************
+*** 123,128
+  	}
+  	return(s);
+  }
+  
+  getsig(n)
+  {
+
+--- 196,202 -----
+  	}
+  	return(s);
+  }
++ #endif JOB
+  
+  getsig(n)
+  {
+***************
+*** 194,196
+  		}
+  	}
+  }
+
+--- 268,290 -----
+  		}
+  	}
+  }
++ 
++ 
++ 
++ #ifdef JOB
++ /*
++  *	fix up signals in child.
++  *	this is pretty kludgy, I suppose.
++  */
++ fixsigs()
++ {
++ 	signal(SIGTERM,SIG_DFL);
++ 	signal(SIGQUIT,SIG_DFL);
++ #ifdef ERCC_SIGCONT
++ 	signal(SIGCONT, SIG_IGN);	/* in case kid is stupid */
++ #endif ERCC_SIGCONT
++ 	trapflg[SIGTERM] &= ~SIGMOD;
++ 	trapflg[SIGQUIT] &= ~SIGMOD;
++ 	trapflg[SIGCONT] &= ~SIGMOD;
++ }
++ #endif JOB

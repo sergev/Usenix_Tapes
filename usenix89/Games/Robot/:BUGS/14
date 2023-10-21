@@ -1,0 +1,84 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site mnetor.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!clyde!watmath!utzoo!utcs!mnetor!clewis
+From: clewis@mnetor.UUCP (Chris Lewis)
+Newsgroups: net.sources.games
+Subject: Patch to make robots work on Pyramids.
+Message-ID: <1108@mnetor.UUCP>
+Date: 28 Jun 85 03:10:56 GMT
+Date-Received: 30 Jun 85 14:58:40 GMT
+Organization: Computer X (CANADA) Ltd., Toronto, Ontario, Canada
+Lines: 72
+
+There is a problem with Robot's useage of _doprnt on a Pyramid in the
+Berkeley universe.  The Pyramid's doprnt is closer to System V.
+Symptom: the program core dumps while it is trying to tell you that
+you've won.
+
+Apply the following patch:
+
+*** robots.old.c	Thu Jun 27 22:47:12 1985
+--- robots.c	Thu Jun 27 23:00:00 1985
+***************
+*** 853,858
+  	return(x > 0);
+  }
+  
+  msg(message,args)
+  	char *message;
+  	int args;
+
+--- 853,859 -----
+  	return(x > 0);
+  }
+  
++ #ifndef	pyr
+  msg(message,args)
+  	char *message;
+  	int args;
+***************
+*** 869,874
+  	clrtoeol();
+  	refresh();
+  }
+  
+  interrupt()
+  {
+
+--- 870,901 -----
+  	clrtoeol();
+  	refresh();
+  }
++ #else
++ #include <varargs.h>
++ msg(format, va_alist)
++ char *format;
++ va_dcl
++ {
++ 	register int count;
++ 	FILE siop;
++ 	va_list ap;
++ 	unsigned char	buf[5000];		/* data storage */
++ 
++ 	siop._cnt = sizeof(buf) ;
++ 	siop._base = siop._ptr = &buf[0] ;
++ 	siop._flag = _IOWRT;
++ 	siop._file = _NFILE;
++ 	va_start(ap);
++ 	count = _doprnt(format, ap, &siop);
++ 	va_end(ap);
++ 	*siop._ptr = '\0'; /* plant terminating null character */
++ 	putc(0,&siop);
++ 	mvaddstr(LINES-1,MSGPOS,buf);
++ 	clrtoeol();
++ 	refresh();
++ 
++ }
++ #endif	pyr
+  
+  interrupt()
+  {
+-- 
+Chris Lewis,
+UUCP: {allegra, linus, ihnp4}!utzoo!mnetor!clewis
+BELL: (416)-475-8980 ext. 321

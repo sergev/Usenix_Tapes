@@ -1,0 +1,243 @@
+From wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!bu-cs!root Wed Jul 10 21:19:08 CDT 1985
+Article 788 of net.bugs.4bsd:
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site bu-cs.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!bu-cs!root
+>From: root@bu-cs.UUCP (Barry Shein)
+Newsgroups: net.bugs.4bsd
+Subject: Re: The definitive fix for tips' lock file problem
+Message-ID: <476@bu-cs.UUCP>
+Date: 9 Jul 85 21:25:33 GMT
+Date-Received: 11 Jul 85 01:18:45 GMT
+References: <1942@ukma.UUCP>
+Organization: Boston Univ Comp. Sci.
+Lines: 170
+
+>RE: fix for tip involving keeping parent around setuid() to remove lock
+
+Well, I see the fix and there is nothing wrong with it per se *but* I
+still prefer my fix I mentioned earlier to this list: To leave the lock
+files around always and fix the uucp lock routines to use soft file
+locks on those files (lockf() in 4.2 and SYSVR2.)
+
+This solves two and one half problems at once: First, if the process
+dies for *any* reason the lock is freed, regardless of UID, sys crash,
+etc (suid might only be needed on startup to create the lock or
+something in rc could make sure it's there, or it just oughta be there
+like /etc/init oughta be there, it's part of installing a line as
+available.) Second, it gets rid of the original suid problem, you can
+probably run w/o setuid entirely on most systems (give or take tty and
+/etc/phones access), and 'half' it eliminates the need for touching the
+lock file at all as locked is locked and the only conclusion is there is
+an active process out there that will have to be killed or respected to
+free it.
+
+Adherence to this fixes all sorts of software which use these psuedo locks
+(with the initial nuisance of having to re-compile it all.)
+
+	1. Yes, I realize that not all unices have soft file locks
+	yet, but now that SYSV has it as well as 4.2 I think it
+	can be accepted as the standard method. Obviously software
+	developers should probably #ifdef this for a while, possibly
+	using the suggested fine fix for deficient systems.
+
+	2. Yeah, ya gotta have the source. but you have to in order
+	to implement the other fix so no objection here.
+
+Isn't this the kind of thing soft locks were added for?
+
+Not a flame, but when something came across as if it should be the
+standard fix, I thought I would put my 2c in.
+
+At any rate, here's the relevant fixed code from my uucplock.c in the
+tip dir: (yow, have I violated my source license yet? in deference to
+this concern most of the code is *not* here, just the two small subrs
+involved, I didn't have the old source around to diff.)
+
+For SYSV the fixes (which I have not yet installed) are similar.  As I
+suggested, this should probably incorporate the previously suggested
+fixes if soft locks are not available and conditionally compile one way
+or the other.
+
+Note: Looking this over now a couple of years later it is still not
+ideal, there is no reason to unlink and re-create the file which would
+still require suid but you get the idea. (ie. not definitive, just
+instructive.)
+
+	-Barry Shein, Boston University
+
+(from ../src/usr.bin/tip/uucplock.c):
+
+------------------
+
+#define LOCKPRE "/usr/spool/uucp/LCK."
+
+/*
+ * This code is taken almost directly from uucp and follows the same
+ * conventions.  This is important since uucp and tip should
+ * respect each others locks.
+ *
+ *	MODIFICATION: (BZS@BU-CS) The way this was written if /usr/spool/uucp
+ *	mode did not allow any user to delete files then TIP could
+ *	not delete the lock (!!) as it had already done a setuid(getuid()).
+ *	The best fix I could think of (which is actually perfect and
+ *	solves the vagaries of an 'old' lock) was to keep a soft
+ *	lock on the file via flock(2). The problem is it is not
+ *	portable to systems that do not support this. For this reason
+ *	it is a condtl compilation and the worst case is you get
+ *	what everyone else gets and figure out a solution on your
+ *	system...at least I warned you of the problem. What UNIX
+ *	really needs is temporary files which go
+ *	away if the process dies. This is 99% of that except for the
+ *	little turd it leaves in the file system.
+ */
+#define FLOCK	1	/* file locking supported	*/
+			/* remember, gotta do this to UUCP also */
+
+	/*  ulockf 3.2  10/26/79  11:40:29  */
+/* #include "uucp.h" */
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <stdio.h>
+#ifdef FLOCK
+#include <sys/file.h>
+#endif
+
+/*******
+ *	ulockf(file, atime)
+ *	char *file;
+ *	time_t atime;
+ *
+ *	ulockf  -  this routine will create a lock file (file).
+ *	If one already exists, the create time is checked for
+ *	older than the age time (atime).
+ *	If it is older, an attempt will be made to unlink it
+ *	and create a new one.
+ *
+ *	return codes:  0  |  FAIL
+ */
+
+static
+ulockf(file, atime)
+	char *file;
+	time_t atime;
+{
+	struct stat stbuf;
+	time_t ptime;
+	int ret;
+	static int pid = -1;
+	static char tempfile[NAMESIZE];
+#ifdef FLOCK
+	int fd ;
+#endif
+
+	if (pid < 0) {
+		pid = getpid();
+		sprintf(tempfile, "/usr/spool/uucp/LTMP.%d", pid);
+	}
+	if (onelock(pid, tempfile, file) == -1) {
+		/* lock file exists */
+#ifndef FLOCK
+		/* get status to check age of the lock file */
+		ret = stat(file, &stbuf);
+		if (ret != -1) {
+			time(&ptime);
+			if ((ptime - stbuf.st_ctime) < atime) {
+				/* file not old enough to delete */
+				return (FAIL);
+			}
+		}
+		ret = unlink(file);
+#else
+		if((fd = open(file,O_RDONLY)) < 0)
+			return(FAIL) ;	/* shouldn't happen	*/
+		if(flock(fd,LOCK_EX | LOCK_NB)) /* get exclusive lock */
+		{
+			close(fd) ;
+			return(FAIL) ;	/* nope, someone really out there */
+		}
+		flock(fd,LOCK_UN) ; /* probably not necessary */
+		close(fd) ;
+		unlink(file) ;
+#endif
+		ret = onelock(pid, tempfile, file);
+		if (ret != 0)
+			return (FAIL);
+	}
+	stlock(file);
+	return (0);
+}
+			...stuff excised...
+static
+onelock(pid, tempfile, name)
+	char *tempfile, *name;
+{
+	int fd;
+
+	fd = creat(tempfile, 0444);
+	...stuff excised...
+	unlink(tempfile);
+#ifdef FLOCK
+	if((fd = open(name,O_RDONLY)) < 0 || flock(fd,LOCK_EX | LOCK_NB))
+		return(-1) ;
+#endif
+	return (0);
+}
+
+
+From wuphys!wucs!abstl!we53!ltuxa!cuae2!ihnp4!cbosgd!clyde!burl!ulysses!bellcore!decvax!decwrl!pyramid!hplabs!hpfcdc!hpfcdc!hpfcla!rdg Mon Feb 24 20:46:58 CST 1986
+Article 445 of net.bugs.uucp:
+Path: plus5!wuphys!wucs!abstl!we53!ltuxa!cuae2!ihnp4!cbosgd!clyde!burl!ulysses!bellcore!decvax!decwrl!pyramid!hplabs!hpfcdc!hpfcdc!hpfcla!rdg
+>From: rdg@hpfcla.UUCP
+Newsgroups: net.bugs.uucp
+Subject: SVR2 multihop uux buug
+Message-ID: <170400001@hpfcdc.UUCP>
+Date: 20 Feb 86 00:00:00 GMT
+Organization: 19 Feb 86 17:00:00 MST
+Lines: 42
+Posted: Wed Feb 19 18:00:00 1986
+
+
+Subject: Problem with multihop UUX
+                               ^^^
+
+Try the following on a SVR2 system: (if you have one :-)
+
+	uux foo!bar!command args
+
+It'll say: (supposing you don't talk to system 'bar')
+
+	bad system name: bar
+	uux failed etc etc
+
+The silly thing looks in L.sys for bar instead of looking for foo!
+If your L.sys file happens to contain 'bar' then you won't notice
+anything wrong. But if your L.sys contains 'bar' but doesn't
+contain 'foo', uux will go ahead and queue the transaction anyway!
+
+To fix it: (sorry for not posting source)
+Look at uux.c, around line 309; it expects that the variable "xsys"
+will contain the name of the system next in line to receive the
+transaction. But the while loop around line 270 totally mungs xsys
+with successive parts of the original command. Fix this by creating
+a new variable, say char kludge[NAMEBUF], and replace xsys with kludge
+in the appropriate places: lines (approx) 270, 272, 276. In addition
+strcpy xsys[] to kludge[] right before the while loop at line 269.
+Don't touch anything else. The reason for not using prm[] is that
+there is some code later on that expects xsys[] to contain the name
+of the next system, and I'd rather not replace xsys[] with prm[]
+all over the place (prm[] is used for other stuff.)
+
+If anyone has any insights or further thoughts on this (or envisions
+any problems with this fix) please speak now or forever hold...aw, forget
+it.
+
+
+Rob Gardner                     {ihnp4,hplabs,hpbbn}!hpfcla!rdg
+Hewlett Packard                 or rdg%hpfcla@hplabs.arpa
+Fort Collins, Co. 80525         303-229-2048
+
+
+"Something there is that doesn't love a wall..."
+
+

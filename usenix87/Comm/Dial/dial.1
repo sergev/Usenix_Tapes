@@ -1,0 +1,299 @@
+.TH DIAL 1 "23 January 1986"
+.UC 4
+.SH NAME
+dial \- connect to a remote system using a state transition script
+.SH SYNOPSIS
+.B dial
+[
+.B \-v
+] [
+.B \-p
+] [ \-l\f2line\fP
+] [script-file [ arguments... ]]
+.SH DESCRIPTION
+.I Dial
+establishes a connection to a remote machine using
+a user-supplied state transition script.
+.I Dial
+is mainly used to communicate with remote server-logins in a
+non-interactive way, or for interactive sessions on a remote machine
+when the login/logout procedures should be carried out automatically.
+.PP
+The
+.B \-l\f2line\fP
+parameter specifies the line to be opened to establish the connection.
+If it is a relative pathname,
+.I dial
+prepends the string
+.I ``/dev/''
+to the specified line.
+If the line does not exist,
+.I dial
+interprets
+.I line
+as the system name of the remote machine and uses the file /etc/remote
+to find out how to reach the system and how the line parameters
+(e.g. baud rate) should be set; refer to
+.IR remote (5)
+for a full description.
+.PP
+The
+.B \-v
+option causes
+.I dial
+to print on standard output diagnostic information for each
+state transition.
+This can be helpful for debugging
+.I dial
+scripts.
+.PP
+.I Script-file
+contains the state transition table; if
+.I script-file
+is `\-', standard input is used.
+If
+.I script-file
+cannot be opened, the value of the environment variable ``DIALDIR''
+(if present) is prepended to the file name.  
+If this also fails, the path ``/usr/local/lib/dial/'' is prepended to
+the specified file name.
+.PP
+Lines in the script beginning with `#' are treated as comment lines.
+Comment lines and blank lines are ignored.
+All occurrences of `$\f2n\fP' in the script are substituted by the \f2n\fPth 
+optional argument
+from the command line; the first argument is `$0'.
+`$*' is substituted by the concatenation of all arguments separated
+by blanks.
+All occurrences of `${\f2symbol\fP}' are replaced by the value of
+the environment variable
+.I symbol.
+If
+.I symbol
+begins with `~' or `/', it is interpreted as the name of a file,
+and the contents of the file is interpolated into the
+script (\f2dial\fP performs
+.IR csh (1)-style
+expansion of `~' and `~user').
+.PP
+The script file contains a list of state definitions; each definition
+is of the form
+.RS
+.HP
+.nf
+state-name  send-string  [[time-out][,delay]]
+next-state  pattern  [output-string]
+next-state  pattern  [output-string]
+\0\0\0...
+.fi
+.RE
+.PP
+The first line of each state definition starts in column 0; the following
+lines are indented by spaces or tabs.
+.I
+State-name
+is the name of the state;
+.I send-string
+is a string that is sent to the remote system whenever the state is entered.
+When a state has been entered,
+.I dial
+receives data from the remote system until the characters read
+so far match one of the
+.I patterns
+listed in the state definitions.
+If a match occurs, the optional
+.I output-string
+is sent to the standard output, and then the corresponding
+.I next-state
+is entered.
+The order of the
+.I "next-state\-pattern"
+pairs is significant.
+.PP
+When the
+.B \-p
+options is given, the
+.I output-string
+field of each rule is ignored.
+Instead, all characters received from the remote system are sent
+to the standard output.
+.PP
+When a time-out occurs while receiving from the remote system,
+a transition to the state
+.B exit
+is performed (if not specified otherwise).
+The default time-out for each state is 10 seconds; it can be changed
+as described below.
+The optional
+.I time-out
+field in each state definition can be used to assign a different
+time-out value to this state.
+Likewise, the
+.I .delay
+field can be used to specify a delay (measured in seconds) to be
+performed before the
+.I send-string
+is transmitted.
+Both fields are optional.
+Thus,
+.B ``,1.5''
+means ``use the default time-out and a delay of 1.5 seconds''.
+.PP
+Each time the symbol `\\<' or `\\?' is encountered in the
+.I send-string
+field of a state definition,
+.I dial
+reads one input line from standard input and replaces the symbol
+with that line (not including the terminating newline).
+In case of `\\?', the read is performed in CBREAK mode with all
+special characters as well as echo turned off.
+This is useful when passwords should be interpolated into the
+data sent to the remote machine, but should not appear directly
+in the script.
+.PP
+.I Pattern
+is a simple character string; `.' within a pattern matches any character.
+The special pattern `*' matches anything (useful for catch-all rules);
+the pattern `#' denotes
+.IR timeout ,
+that is, the corresponding
+.I next-state
+is entered when a time-out occurs.
+In
+.IR output-string,
+the symbol `&'
+denotes the string that matched the corresponding pattern.
+This mechanism is used to print on standard output characters
+received from the remote system or diagnostic messages.
+The special interpretation of `.', `#', `*', `&', `$', `\\<', and `\\?' is
+suppressed when the symbol is preceded by `\\' (backslash).
+.PP
+.IR Send-string ,
+.IR pattern ,
+and
+.I output-string
+can be surrounded by double-quotes.
+This is useful when blanks should be included or to denote an
+empty string.
+The symbol `\\r' can be used to denote
+.IR "carriage return" ,
+`\\n' stands for
+.IR "line feed" .
+In addition, a `\\' followed by one to three octal digits stands for the
+character whose ASCII code is given by those digits.
+.PP
+When
+.I dial
+is called, a transition to the first state listed in the script file
+is performed.
+A transition to the special state
+.B exit
+causes
+.I dial
+to drop the connection and terminate.
+A transition to the state
+.B user
+causes
+.I dial
+to enter interactive mode.
+In this mode, all typed characters are transmitted to the remote machine,
+while all characters received from the remote machine are sent to
+standard output (that is,
+.I dial
+acts as if you had been connected to the remote machine using
+.IR tip (1)).
+.PP
+If no script file is given, or if the specified script-file does not
+contain any state definitions,
+.I dial
+performs a transition to the state
+.BR user ,
+that is, opens an interactive session.
+.PP
+If the special
+.I "escape character"
+(usually `~') followed by carriage return or space
+is typed in interactive mode,
+.I dial
+sends the
+.I "prompt string"
+(usually `:')
+to standard output and reads from standard input the name of a new state.
+If a valid state name has been entered,
+.I dial
+leaves the interactive mode and enters the given state.
+.PP
+If the
+.I "escape character"
+is followed by either `.' or the end-of-file character (usually `^D'),
+.I dial
+enters the state
+.B exit
+immediately, that is, closes the connection and terminates.
+.I Dial
+can be suspended by typing
+.I escape
+followed by the suspend process character (usually `^Z').
+.I Escape
+followed by `!' forks a shell;
+.I escape
+followed by `?' prints a summary of available
+.I escape
+commands.
+.PP
+Lines in the script file of the form
+.IP
+keyword = value
+.PP
+are used to assign values to certain parameters.
+Valid keywords are
+.B timeout
+(the default time-out to be used),
+.B delay
+(the default delay),
+.B line
+(the line to be opened),
+.B escape
+(the
+.IR "escape character" ),
+and
+.B prompt
+(the
+.IR "prompt string" ).
+The value for
+.B line
+is overridden by the
+.B \-l\f2line\fP
+option.
+.SH EXAMPLES
+The following simple script prints on standard output each character
+received from /dev/tty0.
+It terminates when a `.' is received or when a timeout of 0.5 second
+occurs.
+.PP
+.RS
+.nf
+# Simple example for a dial script:
+line=tty0
+loop "" .5
+    exit \\. "Done.\\n"
+    exit #  "Got time-out.\\n"
+    loop *  &
+.fi
+.RE
+.ta \w'/usr/spool/uucp/LCK..*\0\0\0'u
+.SH FILES
+.nf
+/usr/local	system-wide \f2dial\fP scripts
+.br
+${DIALDIR}	private \f2dial\fP scripts
+.br
+/usr/spool/uucp/LCK..*	lock file for \f2uucp\fP and \f2tip\fP
+.fi
+.SH "SEE ALSO"
+tip(1C)
+.SH AUTHOR
+Oliver Laumann
+.SH BUGS
+The number of characters actually matched by the pattern `*'
+is not deterministic.

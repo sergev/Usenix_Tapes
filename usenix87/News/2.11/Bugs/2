@@ -1,0 +1,70 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA11093; Thu, 9 Apr 87 02:35:03 CDT
+Path: plus5!wucs1!mcdchg!clyde!rutgers!seismo!rick
+From: seismo.CSS.GOV!rick (Rick Adams)
+Newsgroups: news.software.b
+Subject: Re: Patch #6 for news 2.11 source
+Summary: how to use GENERICPATH/GENERICFROM
+Message-Id: <43223@beno.seismo.CSS.GOV>
+Date: 24 Mar 87 19:04:49 GMT
+References: <43222@beno.seismo.CSS.GOV>
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 56
+Apparently-To: hokey
+
+
+   The patches try to support maximum naming choice, providing
+independently a local system name, USENET node name, and generic From:
+address.  As far as I can tell, they implement both the previous naming
+system (with or without HIDDENNET) as well as Stephen Muir's naming
+behaviour, which he recently have propagated for in news.software.b.
+Essentially, what they do is to divide the dual purpose that HIDDENNET
+presently is being used for (generic UUCP/USENET nodename and generic
+From:-address), into GENERICPATH and GENERICFROM.  The former being the
+name of the local UUCP gateway and the latter being the preferred user
+From:-address for mail replies etc.
+
+Or more specifically,
+
+   If GENERICPATH is defined, it is used as the site's PATHSYSNAME.  If
+   not, PATHSYSNAME is set to the site's local hostname (as returned by
+   GETHOSTNAME or eqiv).
+
+   If GENERICFROM is defined, it is used as the site's FROMSYSNAME.  If
+   not, FROMSYSNAME is set to the site's local hostname concat- enated
+   with the value of mydomain().
+
+Both GENERICPATH and GENERICFROM are being sprintf'ed through, thus
+being subject to %s interpretation.  The first %s will be substituted
+for the node's hostname (ubuf.nodename), the second for the value of
+mydomain().  (Use a %0.0s pattern to ignore the hostname.)
+
+   The GENERIC macros are essentially only used in pathinit, where they
+form LOCALSYSNAME, FROMSYSNAME and PATHSYSNAME.  These replace the
+former LOCALSYSNAME and FULLSYSNAME and the use of mydomain() in the
+rest of the code.  Note that LOCALSYSNAME now has the site's complete
+name (with domain) and that the ifdef's for HIDDENNET are no more
+necessary and thus have been removed.
+
+   An example:  We currently have all our machines in the "ida.liu.se"
+domain, but plan to put all the university's hosts within the same
+"liu.se" domain.  We will still use "ida.liu.se" as a generic
+From:-address, though, as the same time as we hold on to our "liuida"
+UUCP/USENET node name.  In the old naming system, this was not possible
+to implement.  With the proposed patches, this will be done by defining
+GENERICPATH to "liuida", GENERICFROM to "ida.liu.se" and MYDOMAIN to
+".liu.se".  The articles produced will then have header lines like:
+
+	From: lenlo@ida.liu.se (Lennart Lovstrand) Path: liuida!lenlo
+	Message-ID: <123456@prefix.liu.se>
+	...
+
+If one rather would like to emulate the old behaviour of HIDDENNET, one
+would define GENERICPATH to "liuida", GENERICFROM to "liuida.UUCP" and
+MYDOMAIN to ".UUCP".  As before, if neither GENERIC macro is defined,
+the site's hostname will be used in both cases.
+
+   To make the transition easier, the code will still use the value of
+HIDDENNET if the GENERIC macros have not been defined.
+
+	Lennart Lovstrand (enea!liuida!lenlo)

@@ -1,0 +1,735 @@
+#!/bin/sh
+
+#
+#	Savesrc:	Unpack program sources from news in a sensible manner.
+#
+#				Copyright (c) Chris Robertson 1986
+#
+#	Savesrc will put a C source file into a default sources
+#	directory, or make a new directory (subdirectory by default) for
+#	a shar-ed source and unpack it.  It will make an entry
+#	in a Makefile (or a whole basic Makefile, if necessary),
+#	take a shot at compiling the thing if you want it to, give
+#	you a shell to diddle the source when it won't compile, prompt
+#	you for a short blurb about what it does, and create a note
+#	as to where it came from and when, and whether it compiles
+#	and works, so you have some chance of remembering what state this
+#	stuff is in next time you look at it.  A simple auxilliary program,
+#	note, goes with this and is used for adding/reading notes on
+#	sources.  Prompts are deliberately rather terse for those folks who
+#	read news at slow baud rates.
+#
+#	Usage:	from rn, | savesrc dest
+#			otherwise, savesrc dest [sourcefile ... ]
+#
+#	Savesrc expects at least one argument, the name of a C source file
+#	(in "foo.c" form), or the name of a directory to put a bunch
+#	of stuff in, and may have several other arguments which are
+#	used as the program source input files.  It is normally not
+#	very sensible to give it more than one source file, however.
+#
+#	Use QUIT to abort it, not DEL.
+#
+#	Assumptions:
+#		/bin/[ exists -- replace with "test" if necessary
+#		unshar exists -- replace with "sh" if necessary
+#		note exists   -- replace with "cat >> NOTES" if necessary
+#
+#	Editing Note:
+#		This is set up for vi with tabstop=4 and shiftwidth=4.
+#		Indenting will look funny otherwise.
+#
+
+trap '' 2
+trap "rm -f /tmp/newsrc$$;exit" 0 1 3
+
+case "$VISUAL" in
+	"")
+		case "$EDITOR" in
+			"")
+				;;
+			*)
+				VISUAL=$EDITOR
+				;;
+		esac
+		;;
+esac
+VISUAL=${VISUAL-/usr/bin/vi}
+case "$VISUAL" in
+	"")						# in case it's explicitly set to nothing
+		VISUAL=/bin/ed
+		;;
+esac
+SHELL=${SHELL-/bin/sh}
+PAGER=${PAGER-/usr/local/bin/more}
+case "$PAGER" in
+	"")						# in case it's explicitly set to nothing
+		PAGER=cat
+		;;
+esac
+
+srcdir=${srcdir-$HOME/src}				# where source is kept -- overidden by
+										#	a full pathname for dest
+mandir=${mandir-$HOME/man}				# where src manual pages go
+catdir=${catdir-$HOME/man}				# where formatted manual pages go
+CFLAGS=${CFLAGS--O}						# used in generating a Makefile
+
+ls="ls -F"								# replace with your favourite
+
+# find which echo we're using, thanks to Larry Wall for the idea
+
+case "`echo -n foo`" in
+	-n*)
+		c="\c"
+		n=""
+		;;
+	foo)
+		c=""
+		n="-n"
+		;;
+	*)
+		echo "Your echo command is broken!"
+		c=
+		n=
+		;;
+esac
+
+# find what we want to call it and save the article (read standard input
+# if no filename given)
+
+case "$#" in
+	0)
+		echo "Usage: savesrc dest [sourcefile ...]" > /dev/tty
+		exit 1
+		;;
+esac
+dest=$1
+shift
+cat $* > /tmp/newsrc$$
+
+# if what we've saved was a news article, strip off the header, but
+# remember the date, path, and poster.  If you have 'bm', you may want
+# to replace 'grep' with it for speed.
+
+date="`set - \`date\`;echo $2 $3 $6`"
+case "`egrep 'Posting-Version|Relay-Version:|^From:' /tmp/newsrc$$`" in
+	"")
+		# not a news article
+
+		path=
+		poster=
+		;;
+	*)
+		path="`grep '^Path:' /tmp/newsrc$$`"
+		poster="`grep '^From:' /tmp/newsrc$$`"
+		sed -e '1,/^$/d' /tmp/newsrc$$ > /tmp/strip$$
+		mv /tmp/strip$$ /tmp/newsrc$$
+		;;
+esac
+
+# set up standard input and output to be /dev/tty, in case this is invoked
+# via a pipe from rn
+
+exec < /dev/tty > /dev/tty
+
+# see if we got a full pathname as 'dest', otherwise cd to source dir
+
+case "$dest" in
+	/*)
+		;;
+	*)
+		cd $srcdir || exit 0
+		;;
+esac
+
+# file names known about are *.?, *.[1-8], *.fix, *.bug, *.patch, & READ* --
+# anything else is assumed to be a directory name 
+
+case "$dest" in
+	*.[1-8])					 # manual pages
+		until [ ! -s "$dest" ]
+			do
+			echo $n "\nOverwrite '$dest'? [n] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				y*|Y*)
+					break
+					;;
+				*)
+					echo $n "New name: $c"
+					read dest
+					;;
+			esac
+		done
+		mv /tmp/newsrc$$ $dest
+		echo $n "\nEdit ${dest}? [y] $c"
+		read answer
+		case "$answer" in
+			q*|Q*)
+				exit 0
+				;;
+			n*|N*)
+				;;
+			*)
+				trap '' 2 3
+				($VISUAL $dest)
+				trap 3
+				;;
+		esac
+		section=`expr "$dest" : '.*\.\(.*\)'`
+		case "`file $dest`" in
+			*roff*)
+				echo $n "\n$dest -- man page source. Move to $mandir/man${section}? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						if [ ! -d $mandir/man$section ]
+							then
+							if (mkdir $mandir/man$section > /dev/null 2>&1)
+								then
+								mv $dest $mandir/man$section
+								dest=$mandir/man$section/$dest
+							else
+								echo "Can't make directory $mandir/man$section -- can't move $dest."
+							fi
+						else
+							mv $dest $mandir/man$section
+							dest=$mandir/man$section/$dest
+						fi
+						;;
+				esac
+				echo $n "\nNroff it to $catdir/cat${section}? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						if [ ! -d $catdir/cat$section ]
+							then
+							if (mkdir $catdir/cat$section > /dev/null 2>&1)
+								then
+								nroff -man $dest > $catdir/cat$section/$dest
+								$PAGER $catdir/cat$section/$dest
+							else
+								echo "Can't make directory $catdir/cat$section -- can't nroff $dest."
+							fi
+						else
+							nroff -man $dest > $catdir/cat$section/`basename $dest`
+							$PAGER $catdir/cat$section/`basename $dest`
+						fi
+						;;
+				esac
+				;;
+			*)
+				echo $n "\nMove $dest to $catdir/cat${section}? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						if [ ! -d $catdir/cat$section ]
+							then
+							if (mkdir $catdir/cat$section > /dev/null 2>&1)
+								then
+								mv $dest $catdir/cat$section/$dest
+							else
+								echo "Can't make directory $catdir/cat$section -- can't move $dest."
+							fi
+						fi
+						;;
+				esac
+				;;
+		esac
+		;;
+	READ*|*.?|*.fix|*.bug|*.patch)
+		# we are dealing with a single, (relatively!) short program
+
+		copy=yes
+		until [ ! -s "$dest" ]
+			do
+			echo $n "\nOverwrite '$dest'? [n] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				y*|Y*)
+					break
+					;;
+				*)
+					echo $n "Append to '$dest'? [n] $c"
+					read answer
+					case "$answer" in
+						q*|Q*)
+							exit 0
+							;;
+						y*|y*)
+							cat /tmp/newsrc$$ >> $dest
+							copy=no
+							;;
+						*)
+							echo $n "New name: $c"
+							read dest
+							;;
+					esac
+					;;
+			esac
+		done
+		case "$copy" in
+			yes)
+				cp /tmp/newsrc$$ $dest
+				;;
+		esac
+		echo $n "\nEdit ${dest}? [y] $c"
+		read answer
+		case "$answer" in
+			q*|Q*)
+				exit 0
+				;;
+			n*|N*)
+				echo $n "Want a shell? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						$SHELL
+						;;
+				esac
+				;;
+			*)
+				trap '' 2 3
+				($VISUAL $dest)
+				trap 3
+				;;
+		esac
+		case "$dest" in
+			READ*|*.h)
+				exit 0
+				;;
+			*.fix|*.bug|*.patch)
+				echo $n "Want a shell? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						$SHELL
+						;;
+				esac
+				exit 0
+				;;
+		esac
+
+		# set up a summary for later use
+
+		echo $n "\n1/2-line program summary: $c"
+		read blurb
+
+		# if "makefile" exists, add it to "Makefile", for consistency
+
+		if [ -s "makefile" ]
+			then
+			cat makefile >> Makefile
+			rm makefile
+			ed - Makefile << ++++
+			g/makefile/s//Makefile/g
+			w
+++++
+		fi
+
+		# add a Makefile entry if there isn't one there already
+
+		bname=`basename $dest .c`
+		case "`grep \"^${bname}:	\" Makefile`" in
+			"")
+				echo $n "Want a Makefile entry? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						;;
+					*)
+						echo "\n# $bname -- $blurb\n" >> Makefile
+						echo "Default:\n\n$bname: $bname.o\n	cc \$(CFLAGS) $bname.o -o $bname"
+						echo $n "\nOK as the Makefile entry? [y] $c"
+						read answer
+						case "$answer" in
+							q*|Q*)
+								exit 0
+								;;
+							y*|Y*|"")
+								echo "$bname: $bname.o" >> Makefile
+								echo "	cc \$(CFLAGS) $bname.o -o $bname" >> Makefile
+								;;
+							*)
+								echo $n "\nComplete Makefile entry (. to end)\n> $c"
+								read instruct
+								echo "$instruct" >> Makefile
+								instruct=
+								while :
+									do
+									echo $n "> $c"
+									read instruct
+									case "$instruct" in
+										.)
+											break
+											;;
+									esac
+									echo "	$instruct" >> Makefile	# tab is essential
+								done
+								;;
+						esac
+						;;
+				esac
+				;;
+		esac
+		;;
+	*)
+		# we are probably going to make a new directory for this one
+
+		newdir=true
+		if [ -d "$dest" ]
+			then
+			echo $n "\n$dest already exists -- put the stuff there? [y] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				n*|N*)
+					echo $n "New directory name: $c"
+					read dest
+					;;
+				*)
+					newdir=false
+					;;
+			esac
+		fi
+		if ($newdir)
+			then
+			until ( mkdir "$dest" > /dev/null 2>&1 )
+				do
+				echo $n "Can't make '$dest'.\nNew name: $c"
+				read dest
+			done
+		fi
+
+		cd $dest || exit 1
+
+		# set up a summary for later use
+
+		echo $n "\n1/2-line program description: $c"
+		read blurb
+
+		echo $n "\nUnshar it? [y] $c"
+		read answer
+		case "$answer" in
+			q*|Q*)
+				exit 0
+				;;
+			n*|N*)
+				echo $n "\nEdit it? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						echo $n "Want a shell? [y] $c"
+						read answer
+						case "$answer" in
+							q*|Q*)
+								exit 0
+								;;
+							n*|N*)
+								;;
+							*)
+								$SHELL
+								;;
+						esac
+						;;
+					*)
+						trap '' 2 3
+						($VISUAL /tmp/newsrc$$)
+						trap 3
+						;;
+				esac
+				$ls
+				echo $n "\ncp /tmp/newsrc$$ what? [RETURN = no copy] $c"
+				read name
+				case "$name" in
+					"")
+						;;
+					*)
+						cp /tmp/newsrc$$ $name
+						;;
+				esac
+				;;
+			*)
+				unshar /tmp/newsrc$$
+				$ls
+				echo $n "\nDid that extract OK? [y] $c"
+				read answer
+				case "$answer" in
+					q*|Q*)
+						exit 0
+						;;
+					n*|N*)
+						echo "Starting a shell."
+						trap '' 2 3
+						($SHELL)
+						trap 3
+						$ls
+						echo $n "\ncp /tmp/newsrc$$ what? [RETURN = no copy] $c"
+						read name
+						case "$name" in
+							"")
+								;;
+							*)
+								cp /tmp/newsrc$$ $name
+								;;
+						esac
+						;;
+				esac
+				;;
+		esac
+		if [ -s "README" -o -s "READ_ME" ]
+			then
+			echo $n "\nSee the README? [y] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				n*|N*)
+					;;
+				*)
+					$PAGER READ*
+					;;
+			esac
+		else
+			echo $n "\nEdit a README? [y] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				n*|N*)
+					;;
+				*)
+					trap '' 2 3
+					($VISUAL README)
+					trap 3
+					;;
+			esac
+		fi
+
+		# manual pages
+
+		for i in `ls *.[1-8] 2> /dev/null`
+			do
+			page=$i
+			case "`file $i`" in
+				*roff*)
+					section=`expr "$i" : '.*\.\(.*\)'`
+					echo $n "\n$i -- man page source. Copy to $mandir/man${section}? [y] $c"
+					read answer
+					case "$answer" in
+						q*|Q*)
+							exit 0
+							;;
+						n*|N*)
+							;;
+						*)
+							if [ ! -d $mandir/man$section ]
+								then
+								if (mkdir $mandir/man$section > /dev/null 2>&1)
+									then
+									cp $i $mandir/man$section
+									page=$mandir/man$section/$i
+								else
+									echo "Can't make directory $mandir/man$section -- can't move $dest."
+								fi
+							else
+								cp $i $mandir/man$section
+								page=$mandir/man$section/$i
+							fi
+							;;
+					esac
+					echo $n "\nNroff it to $catdir/cat${section}? [y] $c"
+					read answer
+					case "$answer" in
+						q*|Q*)
+							exit 0
+							;;
+						n*|N*)
+							;;
+						*)
+							if [ ! -d $catdir/cat$section ]
+								then
+								if (mkdir $catdir/cat$section > /dev/null 2>&1)
+									then
+									nroff -man $page > $catdir/cat$section/$i
+									$PAGER $catdir/cat$section/$i
+								else
+									echo "Can't make directory $catdir/cat$section -- can't nroff $dest."
+								fi
+							else
+								nroff -man $page > $catdir/cat$section/$i
+								$PAGER $catdir/cat$section/$i
+							fi
+							;;
+					esac
+					;;
+			esac
+		done
+
+		# if "makefile" exists, move it to "Makefile", for consistency
+
+		if [ -s "makefile" ]
+			then
+			cat makefile >> Makefile
+			rm makefile
+			ed - Makefile << ++++
+			g/makefile/s//Makefile/g
+			w
+++++
+		fi
+		if [ ! -s "Makefile" ]
+			then
+			echo $n "\nGot a Makefile somewhere? [n] $c"
+			read answer
+			case "$answer" in
+				q*|Q*)
+					exit 0
+					;;
+				y*|y*)
+					echo $n "What's it called? $c"
+					read name
+					cp $name Makefile
+					;;
+				*)
+					echo $n "Generating basic Makefile ... $c"
+					echo "# $dest -- $blurb\n" > Makefile
+					echo $n "\nCFILES =	$c" >> Makefile
+					for i in `ls *.c 2> /dev/null`
+						do
+						echo $n "$i $c" >> Makefile
+					done
+					echo $n "\n\nOFILES =	$c" >> Makefile
+					for i in `ls *.c 2> /dev/null`
+						do
+						echo $n "`basename $i .c`.o $c" >> Makefile
+					done
+					echo "\n\nCFLAGS =	$CFLAGS" >> Makefile
+					echo "\n${dest}:	\$(OFILES)" >> Makefile
+					echo "	cc \$(CFLAGS) \$(OFILES) -o $dest" >> Makefile
+					echo "\nclean:\n	rm -f *.o" >> Makefile
+
+					echo "Done."
+					;;
+			esac
+		fi
+		;;
+esac
+
+echo $n "\nEdit Makefile? [y] $c"
+read answer
+case "$answer" in
+	q*|Q*)
+		exit 0
+		;;
+	n*|N*)
+		;;
+	*)
+		trap '' 2 3
+		($VISUAL Makefile)
+		trap 3
+		;;
+esac
+
+# create basic NOTES entry for it
+
+echo $n "\nCreate basic NOTES entry? [y] $c"
+read answer
+case "$answer" in
+	q*|Q*)
+		exit 0
+		;;
+	n*|N*)
+		;;
+	*)
+		echo "`basename $dest .c`:	[$date] ${blurb}" >> NOTES
+		case "$poster" in
+			"")						# not a net article
+				;;
+			*)
+				echo "	$poster" >> NOTES
+				echo "	$path" >> NOTES
+				;;
+		esac
+		echo "" >> NOTES
+		;;
+esac
+
+echo $n "\nCompile ${dest}? [y] $c"
+read answer
+case "$answer" in
+	q*|Q*)
+		exit 0
+		;;
+	n*|N*)
+		;;
+	*)
+		make $bname
+		;;
+esac
+echo $n "\nWant a shell? [y] $c"
+read answer
+case "$answer" in
+	q*|Q*)
+		exit 0
+		;;
+	n*|N*)
+		;;
+	*)
+		trap '' 2 3
+		($SHELL)
+		trap 3
+		;;
+esac
+echo $n "\nAny NOTES? [y] $c"
+read answer
+case "$answer" in
+	q*|Q*)
+		exit 0
+		;;
+	n*|N*)
+		;;
+	*)
+		note
+		;;
+esac

@@ -1,0 +1,140 @@
+
+	MicroGnuEmacs Termcap Terminal Capabilities
+
+The termcap library needs to know where to get the terminal type and
+termcap capibilities file from.  UNIX and Os9/68k users should "setenv
+TERM" to their terminal type, and "setenv TERMCAP" if they are using a
+non-standard termcap file.  VMS users should see AAAREADME.1ST for
+information on how to define the logical names TERM and ETC to point
+to the termcap definition file.  Users of other operating systems
+should do the aproprate thing.  For an example of a termcap file, UNIX
+users may look in /etc/termcap, Os9/68k users may look at
+/dd/sys/termcap (if present), and VMS users should see the file
+[.SYS.VMS.TERMCAP]TERMCAP. 
+
+MicroGnuEmacs requires that certain terminal capabilities exist in the
+specified termcap entry.  The "cm" (cursor motion) capability *must*
+be available to use MicroGnuEmacs.  (Yes, it is possible to fake cm
+with some other capibilities, but MicroGnuEmacs doesn't try.)  If your
+terminal is one that uses control characters in the paramater portion
+of the "cm" string, the "up" and "bc" capabilites may also be needed.
+(See your termlib documentation for when this is so.)
+
+If the following capabilities are available, they are used.  The AL
+and DL sequences are not totally standard, but having them improves
+the performance of the editor, since it doesn't have to redraw the
+screen to delete a line.  They should not be used if they need control
+characters as paramaters.
+
+	cd	-- clear display
+	ce	-- clear to eol
+
+	al	-- insert 1 line
+	dl	-- delete 1 line
+
+	AL	-- parametrized insert line (note capitalization)
+	DL	-- parametrized delete line (note capitalization)
+
+	ti	-- cursor movement initialization string
+	te	-- cursor movement end string
+
+The cs capability is not as standard as some of the other
+capibilities, but is used by MicroGnuEmacs when available.  It is used
+to define a "scrolling region", which defines a window within the
+screen where all the action takes place.  A newline character at the
+bottom of this area scrolls the rest of the text in the area up one
+line, just like the normal screen; a reverse linefeed (sr) at the top
+of the window moves all the text in the area down a line.
+MicroGnuEmacs does not properly handle "cs" if your terminal needs
+control characters as paramaters, and in this case "cs" should not be
+defined.  
+
+If the cs and sr capabilities are available, the termcap driver uses
+these to make the insert/delete line functions work more smoothly. If
+only the cs capability is present, it is still used for the delete
+line function, but not for inserting lines.
+
+The definition of the cs capability is: the first parameter in the
+sequence defines the first row (origin 0) that is in the scrolling
+region, and the second argument defines the last row to include in the
+scrolling region.
+
+	cs	-- set scrolling region (arg1 = top, arg2 = bottom)
+	sr	-- reverse index
+
+The following capabilities provide for an enhanced (reverse-video
+or otherwise rendered) mode line.  The sg entry should not be present
+on terminals that do this to characters as they are placed on the
+screen.  Terminals that	put a region of the screen in the standout
+mode should have sg defined as numeric: :sg#0: for terminals that do
+this on regions but don't take any character positions to do this,
+(this may be a non-standard interprition of the meaning of sg) and the
+number of character positions taken by any other terminal.
+
+	so	-- enter standout mode
+	se	-- leave standout mode
+	sg	-- number of character positions used by standout
+
+			Function Keys
+
+If MicroGnuEmacs is compiled with XKEYS defined, a new feature of the
+termcap driver is support for function keys, based on the termcap
+entry that defines the terminal.  This may not be be deisriable in all
+cases, especially those in which the terminal in use does not use ESC
+as the first character of all arrow and function keys.  If you do
+deside to use this feature, don't expect it to work with all terminal
+types.  Those termial types it doesn't work with will have to use
+modified termcaps that do not include the termcap sequences described
+below to be useful with MicroGnuEmacs compiled with the XKEYS option. 
+XKEYS also interferes with the proper operation of delayed prompts.
+
+The termcap "standard" provides for a number of sequences that define
+how to activate the function keys, what the function key sequences
+are, and the names of the function keys.  The termcap driver uses the
+following capabilities to parse for function key sequences:
+
+	ks	-- start using function keys
+	ke	-- finish using the function keypad
+	kh	-- home key
+	ku	-- up arrow
+	kd	-- down arrow
+	kl	-- left arrow
+	kr	-- right arrow
+	k0-k9	-- standard termcap function keys (1-10)
+	l0-l9	-- labels for same
+
+The following key capabilities are not standard, but are used if
+they are in the termcap:
+
+	K0-K9	-- function keys 10 through 19
+	L0-L9	-- labels for same
+
+For example, the DEC LK201 (vt200-series, VAXstation) keyboard has an
+editing keypad. A VT200 termcap entry could include the following
+capabilities to go into application keypad mode, set up the arrow keys,
+and map the editing keypad to internal function key codes KF0-KF7:
+
+	...the beginning of the termcap entry....
+	:ks=\E[?1h\E=:ke=\E[?1l\E>:\
+	:ku=\EOA:kd=\EOB:kr=\EOC:kl=\EOD:kh=\E[H:\
+	:k0=\E[28~:l0=Help:\
+	:k1=\E[29~:l1=Do:\
+	:k2=\E[1~:l2=Find:\
+	:k3=\E[2~:l3=Insert Here:\
+	:k4=\E[3~:l4=Remove:\
+	:k5=\E[4~:l5=Select:\
+	:k6=\E[5~:l6=Prev Screen:\
+	:k7=\E[6~:l7=Next Screen:\
+
+There is one problem with supporting function keys: If the META
+introducer key (usually ESC) is used as the initial character of a
+function key sequence, how is the parser to know when the user intends
+the introducer to be taken at face value?  The parser doesn't have
+enough information.
+
+The approach the current code takes is that if the META introducer is
+the first character in a function sequence, and the second character c
+isn't part of a function key sequence, the parser returns (KMETA | c).
+If it sees *two* META introducers in a row, it returns one instance of
+METACH. This approach is subject to discussion and debate, but it
+works right most of the time.

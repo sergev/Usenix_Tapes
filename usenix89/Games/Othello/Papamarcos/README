@@ -1,0 +1,80 @@
+Since there seems to be an interest in Othello programs, I thought I might
+contribute one I wrote as a project for an AI course a few years back.  It
+has a somewhat primitive human interface, but is quite good and has an
+easily tunable board evaluator.  Here I include some information on the
+inner workings of the program, to ease hacking.
+
+Note that, at the time I wrote this program, I didn't know enough about C
+to do anything non-standard, and it has compiled and run first-time on two
+different 4.2 Unix machines since.  Since it uses nothing outside of the
+scope of K&R, there should be no portability problems (although I believe
+it is possible that the current weighting scheme may depend on 'int' being
+more than 16 bits, for what it's worth).
+
+Occasionally, the program makes an apparently stupid move.  However, it
+succeeds in wasting me enough of the remaining games so as to be plenty
+challenging.  At 5 plies (half-moves of lookahead with alpha-beta pruning),
+it takes 20-30 seconds worst-case to move on a VAX 780.  A Sun-3 or
+similar beast should do somewhat better, and you might want to keep it
+to 4 plies on lesser machines.  The quality of play is very similar.
+
+Many of my ideas on improving the program's performance stem from the
+book, "How to win at Othello" by Goro Hasegawa and Maxine Brady.  This
+includes the particular partitioning of the board into various values,
+the "dependency" factors, which reward squares adjacent to corners when
+the corner is owned, and the changing of relative weights as the game
+progresses.
+[First Harvest/Harcourt Brace Jovanovich, 1977, ISBN 0-15-642215-8]
+
+Before I delve into implementation details, I would like to apologize
+in advance for the truly deplorable quality of the actual code-- it hasn't
+changed significantly since the initial coding, and there are a few things
+(like the mechanics of data handling by the recursive procedure ply(...))
+which are particularly messy.  Sorry.  Anyway....
+
+The board is defined as
+
+	CORNER	ADJCOR	EDGE2	EDGE1	EDGE1	EDGE2	ADJCOR	CORNER
+	ADJCOR	INCOR	ADJEDGE	ADJEDGE	ADJEDGE	ADJEDGE	INCOR	ADJCOR
+	EDGE2	ADJEDGE	CENT3	CENT2	CENT2	CENT3	ADJEDGE	EDGE2
+	EDGE1	ADJEDGE	CENT2	CENT1	CENT1	CENT2	ADJEDGE	EDGE1
+	EDGE1	ADJEDGE	CENT2	CENT1	CENT1	CENT2	ADJEDGE	EDGE1
+	EDGE2	ADJEDGE	CENT3	CENT2	CENT2	CENT3	ADJEDGE	EDGE2
+	ADJCOR	INCOR	ADJEDGE	ADJEDGE	ADJEDGE	ADJEDGE	INCOR	ADJCOR
+	CORNER	ADJCOR	EDGE2	EDGE1	EDGE1	EDGE2	ADJCOR	CORNER
+
+(in some cases ADJ->A,IN->I, but I'm sure you can figure that out)
+
+Each square begins with a weight equal to V_____, and every STAGE moves, it
+changes by DV_____.  In addition, since squares next to the corners should be
+worth considerably more when the corner is taken (they become valuable instead
+of dangerous), DEPEDGE is the additional value that ADJCOR spaces acquire with
+the occupation of the adjacent corner, and DEPCOR is the additional value that
+the INCOR position gets.  These are all plainly declared as constants and
+then included in the weighting arrays.  If you want to play with the program
+itself, you are welcome to do so.  I believe that it is commented copiously
+enough to be reasonable.
+
+The problem that I have been having is that while most of the time it plays
+a very strong game, occasionally it gives away corners near the end of the
+game (>40 moves) when it clearly has safe and legal moves.  I think that
+this may be fixable by adjusting the relative values of the corners, the
+adjacent 3 squares, and the dependency factors, but I don't have the time
+right now to play with it.  Please let me know if you manage to find a
+good balance of V's and DV's.
+
+And, of course, I make no guarantees that this program as it stands will ever
+play a brilliant game.  In fact, the evaluators should probably not change
+linearly throughout the game as they do now, but I was not particularly in the
+mood to juggle 5 or 6 matrices when 2 are bad enough.  So anyway, have fun
+with it.  Oh, as for speed, expect 20-30 seconds absolute worst case for
+5-ply.  I usually play 4-ply games, a level at which it should be able to
+kill as long as the static board evaluator is reasonable.
+
+I did spend quite a bit of time tuning this baby back in the dark ages,
+so we are rather attached :-).  As such, I would greatly appreciate any
+improvements that you make.
+
+				Mark Papamarcos
+				Valid Logic Systems
+				hplabs!ridge!valid!markp

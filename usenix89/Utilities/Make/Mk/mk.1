@@ -1,0 +1,263 @@
+.TH MK 1
+\" $Compile: nroff -man -e %'FLAGS' %f
+.SH NAME
+mk \- detect compilation directives in files
+.br
+compile \- detect compilation directives in files
+.SH SYNOPSIS
+.B mk
+[
+.BI -m mark
+] [
+.BI -d submark
+] [
+.BI -D def
+] [
+.B -n
+] [
+.B -s
+]
+file ...
+.SH DESCRIPTION
+.I Mk
+(formerly known as
+.I compile),
+is a utility for detecting compilation directives within files.
+.I Mk
+searches through the first block of the named file(s), searching
+for a marker, by default "$Compile:". When this marker
+is detected, the portion of the line after the colon and up to a newline
+(or an occurence of two sequential unescaped dollar signs ('$')) is
+executed by the shell via
+.I system(3).
+.PP
+The strings that are substituted are:
+.sp
+.RS
+.ns
+.TP 8
+.B %f
+\- the full name of the file specified on the command line.
+.br
+.sp
+.ns
+.TP 8
+.B %d
+\- the
+.I directory
+part of the specified file, including the final '/'.
+.br
+.sp
+.ns
+.TP 8
+.B %x
+\- the
+.I extension
+on the specified file, if any. This is the
+string following the
+.I last
+occurence of a period ('.').
+.br
+.sp
+.ns
+.TP 8
+.B %p
+\- the
+.I prefix
+part of the specified file. This is the string which follows the final
+slash and precedes the first period. (This is useful for SCCS files.)
+.br
+.sp
+.ns
+.TP 8
+.B %F
+\- the filename\-only part of the specified file. This 
+does not include the path, prefix, or extension parts.
+.br
+.sp
+.ns
+.TP 8
+.B %'name'
+\- the
+.I name
+is substituted with the value (if any) specified by the
+.B -D
+switches on the command line. Double-quotes may be substituted for the
+single quotes.
+.br
+.sp
+.ns
+.TP 8
+.B %{name}
+\- the
+.I name
+is substituted with the value (if any) of that variable in the user's
+.I environment.
+.RE
+.PP
+Also, some C-like escape sequences are substituted:
+.sp
+.RS
+.ns
+.TP 8
+.B \en
+\- newline
+.br
+.ns
+.TP 8
+.B \et
+\- tab
+.br
+.ns
+.TP 8
+.B \e\e
+\- backslash
+.br
+.ns
+.TP 8
+.B \e<nnn>
+\- the character whose octal value is <nnn>
+.br
+.RE
+.PP
+Several switches modify the behavior of
+.I mk :
+.sp
+.RS
+.ns
+.TP 12
+.BI -m mark
+\- specifies that the following argument should replace
+the default mark string ("Compile"). Note that the replacement does
+not include either the leading dollar\-sign of the trailing colon.
+These are constant parts of the marker.
+.br
+.sp
+.ns
+.TP 12
+.BI -d submark
+\- specifies that the next argument is a
+.I submark
+that should be matched in addition to the specified (or defaulted)
+.I mark.
+The full mark searched for is then "$mark (submark):". Whitespace is
+ignored. A command line including "-d DEBUG" would match
+"$Compile (DEBUG):". Submarks in the file are ignored (do not take part
+in matching) if no submarker is specified.
+.br
+.sp
+.ns
+.TP 12
+.BI -D def
+\- this argument specifies that the next argument is a
+.I definition
+specification. It takes the form
+.I name=value.
+When the substitution string "%'name'" is detected, the assigned
+.I value
+will be substituted, if it is defined, otherwise the empty string
+will be substituted.
+.br
+.sp
+.ns
+.TP 12
+.B -n
+\- this flag specifies that the resulting command(s) should not be
+executed, but only printed on the standard output (like
+.I make (1)).
+.br
+.sp
+.ns
+.TP 12
+.B -s
+\- this flag indicates
+.I silent
+operation. Executed commands are not printed (like
+.I make (1)).
+.RE
+.sp
+.SH EXAMPLES
+.I Mk
+would most commonly be used to produce input for the shell.
+The following lines might occur in a C program source file:
+.sp
+.RS
+.nf
+/*
+ * $Compile: cc %'CFLAGS' -o %F -DFOO=1 %f
+ * $Compile (DEBUG): cc %'CFLAGS' -o %F -DDEBUG=1 %f
+ */
+.fi
+.RE
+.sp
+If the file were called "foo.c",
+.I mk,
+invoked as
+.sp
+.RS
+.nf
+mk foo.c
+.fi
+.RE
+.sp
+would execute the command:
+.sp
+.RS
+.nf
+cc  -o foo -DFOO=1 foo.c
+.fi
+.RE
+.sp
+With an invocation like
+.sp
+.RS
+.nf
+mk -dDEBUG -DCFLAGS="-g" foo.c
+.fi
+.RE
+.sp
+the command
+.sp
+.RS
+.nf
+cc -g -o foo -DDEBUG=1 foo.c
+.fi
+.RE
+.sp
+would be executed.
+.I Mk
+is in no way limited to "compiling" source language programs. It can
+be used on
+.I nroff
+source by adding a line near the top of an
+.I nroff
+source file, e.g.
+.sp
+.RS
+.nf
+\e"  $Compile: nroff -ms -rO8 %f >%F.out
+.fi
+.RE
+.sp
+.SH BUGS
+Extensions and prefices are rather rigidly
+defined. These bugs will be fixed with future extensions. See
+the comment at the beginning of the source code for other
+planned enhancements.
+.SH AUTHOR
+S. McGeady
+.br
+Tektronix, Inc.
+.br
+(503) 685-2555
+.br
+stevenm@tektronix		(CSNET)
+.br
+stevenm.tektronix@rand-relay	(ARPA)
+.br
+decvax!teklabs!stevenm		(UUCP)
+.br
+ucbvax!teklabs!stevenm		(UUCP)
+.br
+zehntel!tektronix!stevenm	(UUCP)
+

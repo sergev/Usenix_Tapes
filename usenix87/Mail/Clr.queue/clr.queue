@@ -1,0 +1,62 @@
+#! /bin/csh -f
+# clear the sendmail queue of any waiting mail
+#
+set ADMIN = barto
+set mqueue = /usr/spool/mqueue
+set output = /tmp/clr.out$$
+
+cat /dev/null > $output
+
+cd $mqueue
+
+foreach f (*)
+	switch ($f)
+		case 'syslog*':	# skip log files
+			breaksw;
+		case 'df*':
+			set qf = `echo $f | sed -e 's/df/qf/' `
+			if (! -e $qf) then
+				echo "Missing qf file for $f" >> $output
+				echo "Contents of $f follow:" >> $output
+				cat $f >> $output
+				echo "---- end of $f" >> $output
+				echo "/bin/rm -f $f" >> $output
+				/bin/rm -f $f
+			else if (-z $f) then
+				echo "$f is empty, deleted" >> $output
+				/bin/rm -f $f
+			endif
+			breaksw
+
+		case 'xf*':
+		case 'lf*':
+			echo /bin/rm $f >> $output
+			/bin/rm $f
+			breaksw
+
+		case 'qf*':
+			set df = `echo $f | sed -e 's/qf/df/' `
+			if (! -e $df) then
+				echo "Missing df file for $f" >> $output
+				echo "Contents of $f follow:" >> $output
+				cat $f >> $output
+				echo "---- end of $f" >> $output
+				echo /bin/rm $f >> $output
+				/bin/rm $f
+			endif
+			breaksw
+		
+		default:
+			echo "Invalid file $f, deleted" >> $output
+			/bin/rm -f $f
+			breaksw
+	endsw
+end
+
+/usr/lib/sendmail -q -v >> $output
+
+if (! -z $output) then
+	Mail -s "Sendmail Cleanup" $ADMIN < $output
+endif
+
+/bin/rm $output

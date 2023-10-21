@@ -1,0 +1,689 @@
+Received: from wucs2 by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA00570; Mon, 5 Jan 87 21:24:25 EST
+Received: by wucs2.UUCP; Mon, 5 Jan 87 19:05:19 CST
+Date: Mon, 5 Jan 87 19:05:19 CST
+From: wucs2.UUCP!tp (tom patterson)
+Message-Id: <8701060105.AA28310@wucs2.UUCP>
+To: plus5.com!hokey
+Subject: news patch 3
+
+>From wucs1!cuae2!gatech!lll-lcc!seismo!rick Wed Dec 31 11:02:22 CST 1986
+Article 146 of news.software.b:
+Path: wucs2!wucs1!cuae2!gatech!lll-lcc!seismo!rick
+>From: rick@seismo.CSS.GOV (Rick Adams)
+Newsgroups: news.software.b
+Subject: 2.11 news src patch #3
+Message-ID: <43045@beno.seismo.CSS.GOV>
+Date: 30 Dec 86 00:03:28 GMT
+Sender: rick@seismo.CSS.GOV
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 666
+
+Description:
+	patch#2's change to vnews to keep the save filename can be confusing.
+	restore the old behavior and add control-e to retrieve the old filename.
+	patch#2 broke the SPOOLBATCH code. This is fixed.
+	Yet another HIDDENNET problem is fixed.
+	NOTIFY didn't tell you if the newsgroup to be created was moderated
+	or not.
+	unbatch should use the existing string RNEWS for the rnews program 
+	instead of building it itself.
+	The vnews helpfile has a tab instead of multiple blanks.
+
+Fix:
+	cd to the src directory and apply the following patch.
+
+Index: visual.c
+Prereq: 1.34
+*** .d/visual.c	Wed Dec 17 18:23:37 1986
+--- visual.c	Mon Dec 29 15:54:08 1986
+***************
+*** 4,10 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.34	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+--- 4,10 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.35	12/23/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+***************
+*** 52,57 ****
+--- 52,58 ----
+  #endif
+  
+  #define PIPECHAR '|'	/* indicate save command should pipe to program */
++ #define	CAGAIN	('e'&0x1F)	/* Save-to-same-place indicator */
+  #define META	0200	/* meta character bit (as in emacs) */
+  /* print (display) flags */
+  #define HDRONLY	0001	/* print header only */
+***************
+*** 514,537 ****
+  		int wflags;
+  
+  	case '|':
+- 		if (savebuf[0] != '|') {
+- 			savebuf[0] = '|';
+- 			savebuf[1] = '\0';
+- 		}
+- 		c = 's';
+  	case 's':
+  	case 'w':
+  		/* We loop back to here each time user types ^U to prompt */
+  		do {
+! 			if (savebuf[0] == 0) {
+! 				/* No saved default.  Ask. */
+! 				msg("file: ");
+! 				curflag = CURP2;
+! 				while ((wflags = vgetc()) == ' ');
+! 				if (wflags == cintr) {
+! 					secpr[0] = '\0';
+! 					break;
+! 				}
+  				savebuf[0] = wflags;
+  				savebuf[1] = 0;
+  			}
+--- 515,533 ----
+  		int wflags;
+  
+  	case '|':
+  	case 's':
+  	case 'w':
+  		/* We loop back to here each time user types ^U to prompt */
+  		do {
+! 			/* No saved default.  Ask. */
+! 			msg( (c=='|')? "|": "file: ");
+! 			curflag = CURP2;
+! 			while ((wflags = vgetc()) == ' ');
+! 			if (wflags == cintr) {
+! 				secpr[0] = '\0';
+! 				break;
+! 			}
+! 			if (wflags != CAGAIN) {
+  				savebuf[0] = wflags;
+  				savebuf[1] = 0;
+  			}
+***************
+*** 540,545 ****
+--- 536,542 ----
+  		} while (wflags == 2);
+  		if (wflags) break;	/* Interrupted out */
+  		wflags = 0;
++ 		if (c == '|') c = 's';
+  		if (c == 's')
+  			wflags |= SVHEAD;
+  		if (count != 1)
+***************
+*** 787,794 ****
+  	case '<':
+  		/* could improve this */
+  		linebuf[0] = '<'; linebuf[1] = 0;
+! 		if (prget("", linebuf))
+  			break;
+  searchid:	secpr[0] = '\0';
+  		if (index(linebuf, '@') == NULL && index(linebuf, '>') == NULL) {
+  			ptr1 = linebuf;
+--- 784,793 ----
+  	case '<':
+  		/* could improve this */
+  		linebuf[0] = '<'; linebuf[1] = 0;
+! 		if (prget("", linebuf)) {
+! 			secpr[0] = 0;
+  			break;
++ 		}
+  searchid:	secpr[0] = '\0';
+  		if (index(linebuf, '@') == NULL && index(linebuf, '>') == NULL) {
+  			ptr1 = linebuf;
+***************
+*** 2502,2507 ****
+--- 2501,2507 ----
+  	char	temp[20];
+  	char	*fname;
+  	char	prog[BUFLEN + 24];
++ 	int	err;
+  
+  	saveoff = ftell(fp);
+  	(void) fseek(fp, artbody, 0);
+***************
+*** 2559,2574 ****
+  		tprint(fp, ufp, FALSE);
+  	}
+  
+  	fclose(ufp);
+  	if (isprogram) {
+! 		(void) sprintf(prog, "(%s)<%s", to + 1, fname);
+! 		shcmd(prog, CWAIT);
+! 		prflags |= NOPRT;
+  	} else {
+! 		if ((flags & OVWRITE) == 0)
+! 			msg("file: %s %s", to, isnew ? "created" : "appended");
+! 		else
+! 			msg("file: %s written", to);
+  	}
+  
+  out:
+--- 2559,2589 ----
+  		tprint(fp, ufp, FALSE);
+  	}
+  
++ 	err = ferror(ufp);
++ 
+  	fclose(ufp);
+  	if (isprogram) {
+! 		if (err)
+! 			msg("error in writing temp file, maybe disk full?");
+! 		else {
+! 			(void) sprintf(prog, "(%s)<%s", to + 1, fname);
+! 			shcmd(prog, CWAIT);
+! 			prflags |= NOPRT;
+! 		}
+  	} else {
+! 		msg("%sfile: %s %s",
+! 			err? "ERROR WHILE WRITING ": "",
+! 			to,
+! 			(flags&OVWRITE)? "written":
+! 				isnew ? "created" : "appended");
+! 	}
+! 
+! 	/* If we got an error, screen may be messed.  E.g. 4.2BSD
+! 	 * writes "disk full" messages to the user's tty.
+! 	 */
+! 	if (err) {
+! 		clearok(curscr, 1);
+! 		updscr();
+  	}
+  
+  out:
+
+Index: inews.c
+Prereq: 2.71
+*** .d/inews.c	Wed Dec 17 18:23:19 1986
+--- inews.c	Mon Dec 29 18:17:41 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.71	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.73	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 47,53 ****
+  #define	CREATENG 0020	/* Create a new newsgroup */
+  
+  char	forgedname[NAMELEN];	/* A user specified -f option. */
+! int spool_news = FALSE;
+  extern char histline[];
+  /* Fake sys line in case they forget their own system */
+  struct srec dummy_srec = { "MEMEME", "", "all", "", "" };
+--- 47,53 ----
+  #define	CREATENG 0020	/* Create a new newsgroup */
+  
+  char	forgedname[NAMELEN];	/* A user specified -f option. */
+! int spool_news = 0;
+  extern char histline[];
+  /* Fake sys line in case they forget their own system */
+  struct srec dummy_srec = { "MEMEME", "", "all", "", "" };
+***************
+*** 123,128 ****
+--- 123,129 ----
+  	mode = UNKNOWN;
+  	infp = stdin;
+  	pathinit();
++ 	savmask = umask(N_UMASK);	/* set up mask */
+  	ptr = rindex(*argv, '/');
+  	if (!ptr)
+  		ptr = *argv - 1;
+***************
+*** 138,144 ****
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+  #endif /* V7 */
+  #endif	/* !BSD4_2 */
+! 		spool_news = TRUE;
+  	else {
+  #ifdef SPOOLNEWS
+  		if (argc > 1 && !strcmp(*(argv+1), "-S")) {
+--- 139,145 ----
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+  #endif /* V7 */
+  #endif	/* !BSD4_2 */
+! 		spool_news = 2;
+  	else {
+  #ifdef SPOOLNEWS
+  		if (argc > 1 && !strcmp(*(argv+1), "-S")) {
+***************
+*** 145,159 ****
+  			argc--;
+  			argv++;
+  		} else
+! 			spool_news = TRUE;
+  
+  #endif /* SPOOLNEWS */
+- #if !defined(BSD4_2) && !defined(LOCKF)
+- 	(void) UNLINK(bfr);
+- #endif	/* !BSD4_2 && !LOCKF */
+  	}
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+! 		if (spool_news)	/* can't unspool while things are locked */
+  			xxit(0);
+  		dounspool();
+  		/* NOT REACHED */
+--- 146,166 ----
+  			argc--;
+  			argv++;
+  		} else
+! 			spool_news = 1;
+  
+  #endif /* SPOOLNEWS */
+  	}
++ #ifdef BSD4_2
++ 	flock(fileno(actfp), LOCK_UN);
++ #else	/* !BSD4_2 */
++ #ifdef	LOCKF
++ 	lockf(fileno(actfp), F_ULOCK, 0);
++ #else	/* !LOCKF */
++ 	UNLINK(ACTIVE, bfr);
++ #endif /* V7 */
++ #endif	/* !BSD4_2 */
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+! 		if (spool_news > 1) /* can't unspool while things are locked */
+  			xxit(0);
+  		dounspool();
+  		/* NOT REACHED */
+***************
+*** 216,222 ****
+  		(void) signal(SIGHUP, onsig);
+  		(void) signal(SIGINT, onsig);
+  	}
+- 	savmask = umask(N_UMASK);	/* set up mask */
+  	uid = getuid();
+  	gid = getgid();
+  	duid = geteuid();
+--- 223,228 ----
+***************
+*** 327,333 ****
+  	 */
+  
+  	if (*filename) {
+- 		(void) fclose(stdin);
+  		infp = freopen(filename, "r", stdin);
+  		if (infp == NULL)
+  			xerror("freopen(%s): %s", filename, errmsg(errno));
+--- 333,338 ----
+***************
+*** 511,519 ****
+  		SPOOL,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+! 	sp = xfopen(buf, "w");
+  	if (batchcmd != NULL)
+  		fprintf(sp, "%s\n", batchcmd);
+  	if (dolhwrite)
+  		lhwrite(&header, sp);
+  	while ((c = getc(infp)) != EOF)
+--- 516,538 ----
+  		SPOOL,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+! 	sp = fopen(buf, "w");
+! 	if (sp == NULL) {
+! 		char dbuf[BUFLEN];
+! #ifdef VMS
+! 		sprintf(dbuf, "%s/+rnews", SPOOL);
+! #else /* !VMS */
+! 		sprintf(dbuf, "%s/.rnews", SPOOL);
+! #endif /* !VMS */
+! 		if (mkdir(dbuf, 0777&~N_UMASK) < 0)
+! 			xerror("Cannot mkdir %s: %s", dbuf, errmsg(errno));
+! 		sp = xfopen(buf, "w");
+! 	}
+  	if (batchcmd != NULL)
+  		fprintf(sp, "%s\n", batchcmd);
++ 	else
++ 		if (not_here[0] != '\0')
++ 			fprintf(sp, "#! inews -x %s -p\n", not_here);
+  	if (dolhwrite)
+  		lhwrite(&header, sp);
+  	while ((c = getc(infp)) != EOF)
+***************
+*** 798,804 ****
+  
+  	if (spool_news && mode != PROC) {
+  		fprintf(stderr,"Your article has been spooled for later processing.\n");
+! 		dospool((char *)NULL, TRUE);
+  		/* NOT REACHED */
+  	}
+  
+--- 817,823 ----
+  
+  	if (spool_news && mode != PROC) {
+  		fprintf(stderr,"Your article has been spooled for later processing.\n");
+! 		dospool("#! inews -S -h", TRUE);
+  		/* NOT REACHED */
+  	}
+  
+***************
+*** 877,883 ****
+  			if ((pid=fork()) < 0)
+  				xerror("Can't fork");
+  			else if (pid > 0)
+! 				exit(0);
+  		}
+  #ifdef SIGTTOU
+  		signal(SIGTTOU, SIG_IGN);
+--- 896,902 ----
+  			if ((pid=fork()) < 0)
+  				xerror("Can't fork");
+  			else if (pid > 0)
+! 				_exit(0);
+  		}
+  #ifdef SIGTTOU
+  		signal(SIGTTOU, SIG_IGN);
+***************
+*** 885,891 ****
+  		savehist(histline);
+  		broadcast(mode==PROC);
+  	}
+! 	xxit(mode == PROC ? 0 : exitcode);
+  }
+  
+  input()
+--- 904,910 ----
+  		savehist(histline);
+  		broadcast(mode==PROC);
+  	}
+! 	xxit((mode == PROC && filename[0] == '\0') ? 0 : exitcode);
+  }
+  
+  input()
+***************
+*** 1104,1109 ****
+--- 1123,1129 ----
+  	register DIR	*dirp;
+  	register struct direct *dir;
+  	register int foundsome;
++ 	int pid, status, ret;
+  #ifdef VMS
+  	sprintf(bfr, "%s/+rnews", SPOOL);
+  #else /* !VMS */
+***************
+*** 1122,1133 ****
+  		while ((dir=readdir(dirp)) != NULL) {
+  			if (dir->d_name[0] == '.')
+  				continue;
+! 			sprintf(bfr,"%s -S -p %s", RNEWS, dir->d_name);
+! 			if (system(bfr) != 0) {
+  				sprintf(bfr, "../%s", dir->d_name);
+  				(void) LINK(dir->d_name, bfr);
+! 				logerr("rnews failed. Batch saved in %s/%s",
+! 					SPOOLDIR, dir->d_name);
+  			}
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+--- 1142,1163 ----
+  		while ((dir=readdir(dirp)) != NULL) {
+  			if (dir->d_name[0] == '.')
+  				continue;
+! 			if ((pid=vfork()) == -1)
+! 				xerror("Can't fork: %s", errmsg(errno));
+! 			if (pid == 0) {
+! 				execl(RNEWS, "rnews", "-S", "-p", dir->d_name,
+! 					(char *) NULL);
+! 				_exit(1);
+! 			}
+! 			
+! 			while ((ret=wait(&status)) != pid && ret != -1)
+! 				/* continue */;
+! 
+! 			if (status != 0) {
+  				sprintf(bfr, "../%s", dir->d_name);
+  				(void) LINK(dir->d_name, bfr);
+! 				logerr("rnews failed, status %d. Batch saved in %s/%s",
+! 					status, SPOOL, dir->d_name);
+  			}
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+Index: control.c
+Prereq: 2.49
+*** .d/control.c	Wed Dec 17 18:23:05 1986
+--- control.c	Mon Dec 29 18:17:52 1986
+***************
+*** 19,25 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.49	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 19,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.50	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 479,489 ****
+  				ORGDISTRIB);
+  			fprintf(fd,
+  				"In other words, by executing the command:\n");
+! 			fprintf(fd, "%s/inews -d %s -C %s\n", LIB, 
+! 							ORGDISTRIB, argv[1]);
+  #  else /* !ORGDISTRIB */
+  			fprintf(fd, "In other words, by executing the command:\n");
+! 			fprintf(fd, "%s/inews -C %s\n", LIB, argv[1]);
+  #  endif /* !ORGDISTRIB */
+  		}
+  		(void) mclose(fd);
+--- 479,490 ----
+  				ORGDISTRIB);
+  			fprintf(fd,
+  				"In other words, by executing the command:\n");
+! 			fprintf(fd, "%s/inews -d %s -C %s %s\n", LIB, 
+! 				ORGDISTRIB, argv[1], argc > 2 ? argv[2] : "");
+  #  else /* !ORGDISTRIB */
+  			fprintf(fd, "In other words, by executing the command:\n");
+! 			fprintf(fd, "%s/inews -C %s %s\n", LIB, argv[1],
+! 				argc > 2 ? argv[2] : "");
+  #  endif /* !ORGDISTRIB */
+  		}
+  		(void) mclose(fd);
+Index: rfuncs.c
+Prereq: 2.38
+*** .d/rfuncs.c	Wed Dec 17 18:23:41 1986
+--- rfuncs.c	Mon Dec 29 15:54:15 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.38	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.39	12/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 622,631 ****
+  	p = ACTIVE;
+  	ACTIVE = newactivename;
+  	afp = xfopen(p, "r");
+- 	tp = table;
+  #else /* !SORTACTIVE */
+  	afp = xfopen(ACTIVE, "r");
+  #endif /* !SORTACTIVE */
+  	while (fgets(aline, sizeof aline, afp) != NULL) {
+  		if (sscanf(aline,"%s %ld %ld %c", ngname, &tp->maxart,
+  		    &tp->minart, &tp->yn) != 4) 
+--- 622,631 ----
+  	p = ACTIVE;
+  	ACTIVE = newactivename;
+  	afp = xfopen(p, "r");
+  #else /* !SORTACTIVE */
+  	afp = xfopen(ACTIVE, "r");
+  #endif /* !SORTACTIVE */
++ 	tp = table;
+  	while (fgets(aline, sizeof aline, afp) != NULL) {
+  		if (sscanf(aline,"%s %ld %ld %c", ngname, &tp->maxart,
+  		    &tp->minart, &tp->yn) != 4) 
+Index: rfuncs2.c
+Prereq: 1.33
+*** .d/rfuncs2.c	Wed Dec 17 18:23:28 1986
+--- rfuncs2.c	Mon Dec 29 15:54:19 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs2.c	1.33	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs2.c	1.34	12/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 149,154 ****
+--- 149,155 ----
+  		if (checkfrom && strncmp(bfr, "From ", 5) == 0)
+  			putc('>', ofp);
+  		(void) fputs(bfr, ofp);
++ 		if (ferror(ofp)) break;		/* E.g. disk full */
+  	}
+  	if (SigTrap)
+  		qfflush(ofp);
+Index: unbatch.c
+Prereq: 1.24
+*** .d/unbatch.c	Wed Dec 17 18:23:30 1986
+--- unbatch.c	Mon Dec 29 15:54:23 1986
+***************
+*** 13,19 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.24	12/16/86";
+  #endif /* SCCSID */
+  
+  #define	MAXARGS		32
+--- 13,19 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.25	12/23/86";
+  #endif /* SCCSID */
+  
+  #define	MAXARGS		32
+***************
+*** 105,111 ****
+  #ifdef IHCC
+  			(void) sprintf(buf, "%s/%s/rnews", logdir(HOME), LIBDIR);
+  #else
+! 			(void) sprintf(buf, "%s/rnews", BINDIR);
+  #endif
+  #ifdef SPOOLNEWS
+  			execlp(buf, "rnews", "-S", (char *)0);
+--- 105,111 ----
+  #ifdef IHCC
+  			(void) sprintf(buf, "%s/%s/rnews", logdir(HOME), LIBDIR);
+  #else
+! 			strcpy(buf, RNEWS);
+  #endif
+  #ifdef SPOOLNEWS
+  			execlp(buf, "rnews", "-S", (char *)0);
+Index vnews.help
+*** .d/vnews.help	Wed Dec 17 18:23:38 1986
+--- vnews.help	Mon Dec 29 15:49:43 1986
+***************
+*** 17,22 ****
+  ESC-r  Reply directly using mailer      m   Move on to next item in a digest
+  f   Post a followup article             s   Save article in file
+  N   Go to newsgroup (next is default)   w   Save without header
+! l   List unread articles in group	L   List all articles in group
+  
+  [Press ^L to see article again]
+--- 17,22 ----
+  ESC-r  Reply directly using mailer      m   Move on to next item in a digest
+  f   Post a followup article             s   Save article in file
+  N   Go to newsgroup (next is default)   w   Save without header
+! l   List unread articles in group       L   List all articles in group
+  
+  [Press ^L to see article again]
+
+Index: funcs2.c
+Prereq: 1.17
+*** .d/funcs2.c	Wed Dec 17 18:23:11 1986
+--- funcs2.c	Mon Dec 29 18:19:19 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.17	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.18	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 127,133 ****
+--- 127,137 ----
+   * A sys file line reading "ME" means the name of the local system.
+   */
+  	if (strcmp(sp->s_name, "ME") == 0)
++ #ifdef HIDDENNET
++ 		(void) strcpy(sp->s_name, LOCALSYSNAME);
++ #else /* !HIDDENNET */
+  		(void) strcpy(sp->s_name, FULLSYSNAME);
++ #endif /* !HIDDENNET */
+  	e = index(sp->s_name, '/');
+  	if (e) {
+  		*e++ = '\0';
+Index: patchlevel.h
+*** .d/patchlevel.h	Wed Dec 17 18:23:46 1986
+--- patchlevel.h	Mon Dec 29 18:19:21 1986
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	2
+  
+! #define NEWS_VERSION   "B 2.11 12/17/86"
+--- 1,3 ----
+! #define	PATCHLEVEL	3
+  
+! #define NEWS_VERSION   "B 2.11 12/29/86"
+
+

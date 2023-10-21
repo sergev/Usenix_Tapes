@@ -1,0 +1,200 @@
+.TH SP 1-LOCAL "12 December 1986"
+.UC 4
+.SH NAME
+sp \- give possible spellings
+.br
+mksp \- maintain sp dictionaries
+.br
+calcsoundex \- calculate soundex values
+.SH SYNOPSIS
+.B sp
+[
+.B -vace
+] [
+.B -f dictionary-list
+] [
+.B word ...
+]
+.br
+.B mksp
+[
+.B -adt
+] [
+.B -v#
+]
+.B dictionary
+.br
+.B calcsoundex
+[
+-v
+]
+.SH DESCRIPTION
+.I Sp
+takes one or more words as input and for each word prints
+a list of possible spellings.
+If the words are not given on the command line, the program prompts and reads
+from the standard input.
+You must know the first letter of the word.
+Upper case is mapped to lower case.
+Words must start with an alphabetic character, but any subsequent
+characters need not be alphabetic (but see the limitation below on words that
+may appear in the dictionary).
+Blanks are allowed within a word.
+.PP
+Up to ten dictionaries previously created by
+.I mksp
+may be specified by a command line argument and an environment variable.
+The name of a dictionary is specified by a pathname,
+not including the suffix (.dir or .pag).
+A list of dictionaries consists of one or more colon separated dictionary
+names.
+The environment variable SPPATH may be set to a dictionary list.
+If a command line dictionary list is given in addition to the SPPATH variable,
+all dictionaries are used.
+If no dictionaries are specified the program looks for default dictionaries.
+.PP
+To reduce the size of the word list, certain heuristics are used.
+Normally, all words
+.I sp
+considers to be a "satisfactory" match are printed.
+The \fB-c\fR option causes only close
+matches or an exact match to be printed.
+The \fB-e\fR option only prints an exact match.
+The \fB-a\fR option causes all words matched to be printed.
+The output is sorted alphabetically and indicators are printed beside each
+word:
+.sp 2
+.in +0.5i
+.nf
+.na
+   X == exact match
+.br
+   ! == close match
+.br
+   * == good match
+.br
+ ' ' == matched
+.in -0.5i
+.fi
+.ad
+.sp 2
+Duplicated words are not removed from the listing.
+.PP
+If the \fB-v\fR flag is given,
+.I sp
+becomes verbose.
+.PP
+.I Mksp
+is a program to maintain dictionaries for use with
+.I sp.
+The \fB-a\fR option is used to create a new dictionary or to add
+words to an existing dictionary.
+The words to be put in the dictionary are read from the standard input,
+one per line.
+The \fB-v\fR flag (which may immediately be followed by an optional number)
+causes some information to be printed as words are processed.
+A non-flag argument to
+.I mksp
+is assumed to be the prefix of the name of the dictionary files.
+The dictionary consists of two files, one with a ".dir" suffix and one with
+a ".pag" suffix (see \fBdbm\fR(3X)).
+If these files do not exist,
+.I mksp
+will create both.
+The words need not be sorted.
+There should not be duplicates in the word list when creating a new dictionary
+but when words are added to an existing dictionary, duplicates are ignored.
+Upper case letters are stored in the dictionary but
+.I mksp
+maps upper case to lower case when checking for duplicate words.
+.I Sp
+is case insensitive when searching the database.
+The first character of a word must be alphabetic and
+the second character (if present) must be either alphabetic, a single quote,
+an ampersand, a period, or a blank.
+There is no restriction on the third and subsequent characters.
+.PP
+The \fB-d\fR option is used to delete words from the specified dictionary.
+The words are read from the standard input.
+If a word is not found in the dictionary, no message is printed.
+The comparison is case insensitive.
+.PP
+The \fB-t\fR option prints the contents of the specified dictionary.
+The words are not sorted.
+.PP
+.I Calcsoundex
+reads words from the standard input (one per line) and prints the soundex
+code corresponding to each word on stdout.
+With the \fB-v\fR flag,
+.I calcsoundex
+also echoes each word.
+.SH EXAMPLE
+.in +0.5i
+.na
+.nf
+% mksp -a mydictionary
+aardvark
+precipitation
+<more words>
+zyzz
+<^D>
+% sp -c -f mydictionary:herdictionary
+Word? propogate
+!  1. perfect
+!  2. perfectible
+<more words>
+!  7. propagate
+!  8. proposition
+<more words>
+Word? <^D>
+.fi
+.ad
+.in -0.5i
+.SH FILES
+.nf
+.na
+<dictionary.pag>, <dictionary.dir>        dictionary data base
+/usr/public/lib/sp/{soundex,aux.soundex}  default dictionaries
+.fi
+.ad
+.SH LIMITATIONS
+No more than 10 dictionaries may be specified.
+The maximum length of a word is 50 characters.
+The program can return up to 400 matches taking up a maximum of 20480 bytes.
+The limitation on what the second character of a word can be is due to
+the algorithm used to compress the dictionaries; there is some room in the
+data structure for a few other characters to become valid.
+Dbm doesn't work between a Sun and VAX across NFS so you can't share a
+dictionary between a VAX and a Sun.
+.PP
+There is a limit on the number of words having the same soundex code that can
+appear in a single dictionary.
+This value should be at least 256 (on a VAX/Sun it is 1024), but it depends
+on how the program has been configured locally.
+If you come up against this limitation you can split your dictionary; e.g.,
+extract every second word from the big dictionary to make a new dictionary,
+then delete the words from the big dictionary.
+The following pipeline can be used to determine the number of times each
+soundex code appears in a list of words (one per line):
+.sp 2
+.ti +0.5i
+calcsoundex | sort | uniq -c | sort -r -0n
+.SH "SEE ALSO"
+spell(1), uniq(1), dbm(3X), ndbm(3)
+.br
+Donald E. Knuth, The Art of Computer Programming, Vol. 3,
+Sorting and Searching, Addison-Wesley, pp. 391-392, 1973.
+.SH AUTHOR
+Barry Brachman
+.br
+Dept. of Computer Science
+.br
+University of British Columbia
+.SH BUGS
+You may not agree on what constitutes a match.
+You are likely to have to create your own dictionary as the UNIX
+dictionary is far from complete.  In particular, the suffixes
+have been removed from most words.
+The limitations mentioned above are arbitrary.
+The limitation on the second character of a word is disgusting.
+

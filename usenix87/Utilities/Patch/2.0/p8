@@ -1,0 +1,163 @@
+
+System: patch version 2.0
+Patch #: 8
+Priority: LOW
+Subject: Short replacement part causes spurious "Out of sync" message.
+From: hpl-opus!jewett (Bob Jewett)
+
+Description:
+	In a context diff, if the next-to-last hunk has a short replacement
+	section (missing the last line or two of context) because the last
+	hunk deletes everything from there to the end, patch reports that
+	the lines of the pattern and replacement sections don't match up
+	properly.  This doesn't happen very often, since few patches do
+	deletions.  In fact, you're more likely to run across this bug when
+	trying to apply a patch in reverse, when additions look like deletions.
+
+	The problem was that the loop applying the patch needed two
+	terminating conditions instead of one, since either the pattern
+	part or the replacement part can run out first.  So much for
+	structured programming.
+
+Fix:	From rn, say "| patch -d DIR", where DIR is your patch source
+	directory.  Outside of rn, say "cd DIR; patch <thisarticle".
+	If you don't have the patch program, apply the following by hand,
+	or get patch.
+
+	If patch indicates that patchlevel is the wrong version, you may need
+	to apply one or more previous patches, or the patch may already
+	have been applied.  See the patchlevel.h file to find out what has or
+	has not been applied.  In any event, don't continue with the patch.
+
+	If you are missing previous patches they can be obtained from me:
+
+	Larry Wall
+	{allegra,burdvax,cbosgd,hplabs,ihnp4,sdcsvax}!sdcrdcf!lwall
+
+	If you send a mail message of the following form it will greatly speed
+	processing:
+
+	Subject: Command
+	@SH mailpatch PATH patch 2.0 LIST
+
+	where PATH is a return path FROM ME TO YOU in bang notation, and LIST
+	is the number of one or more patches you need, separated by spaces,
+	commas, and/or hyphens.  Saying 35- says everything from 35 to the end.
+
+Index: patchlevel.h
+Prereq: 7
+1c1
+< #define PATCHLEVEL 7
+---
+> #define PATCHLEVEL 8
+ 
+Index: patch.c
+Prereq: 2.0.1.3
+*** patch.c.old	Mon Feb 16 14:02:12 1987
+*** patch.c	Mon Feb 16 14:02:18 1987
+***************
+*** 1,5
+  char rcsid[] =
+! 	"$Header: patch.c,v 2.0.1.3 87/01/30 22:45:50 lwall Exp $";
+  
+  /* patch - a program to apply diffs to original files
+   *
+
+--- 1,5 -----
+  char rcsid[] =
+! 	"$Header: patch.c,v 2.0.1.4 87/02/16 14:00:04 lwall Exp $";
+  
+  /* patch - a program to apply diffs to original files
+   *
+***************
+*** 9,14
+   * money off of it, or pretend that you wrote it.
+   *
+   * $Log:	patch.c,v $
+   * Revision 2.0.1.3  87/01/30  22:45:50  lwall
+   * Improved diagnostic on sync error.
+   * Moved do_ed_script() to pch.c.
+
+--- 9,17 -----
+   * money off of it, or pretend that you wrote it.
+   *
+   * $Log:	patch.c,v $
++  * Revision 2.0.1.4  87/02/16  14:00:04  lwall
++  * Short replacement caused spurious "Out of sync" message.
++  * 
+   * Revision 2.0.1.3  87/01/30  22:45:50  lwall
+   * Improved diagnostic on sync error.
+   * Moved do_ed_script() to pch.c.
+***************
+*** 548,553
+  #define IN_ELSE 3
+      Reg4 int def_state = OUTSIDE;
+      Reg5 bool R_do_defines = do_defines;
+  
+      where--;
+      while (pch_char(new) == '=' || pch_char(new) == '\n')
+
+--- 551,557 -----
+  #define IN_ELSE 3
+      Reg4 int def_state = OUTSIDE;
+      Reg5 bool R_do_defines = do_defines;
++     Reg6 LINENUM pat_end = pch_end();
+  
+      where--;
+      while (pch_char(new) == '=' || pch_char(new) == '\n')
+***************
+*** 570,575
+  	    last_frozen_line++;
+  	    old++;
+  	}
+  	else if (pch_char(new) == '+') {
+  	    copy_till(where + old - 1);
+  	    if (R_do_defines) {
+
+--- 574,581 -----
+  	    last_frozen_line++;
+  	    old++;
+  	}
++ 	else if (new > pat_end)
++ 	    break;
+  	else if (pch_char(new) == '+') {
+  	    copy_till(where + old - 1);
+  	    if (R_do_defines) {
+***************
+*** 629,635
+  	    }
+  	}
+      }
+!     if (new <= pch_end() && pch_char(new) == '+') {
+  	copy_till(where + old - 1);
+  	if (R_do_defines) {
+  	    if (def_state == OUTSIDE) {
+
+--- 635,641 -----
+  	    }
+  	}
+      }
+!     if (new <= pat_end && pch_char(new) == '+') {
+  	copy_till(where + old - 1);
+  	if (R_do_defines) {
+  	    if (def_state == OUTSIDE) {
+***************
+*** 641,647
+  		def_state = IN_ELSE;
+  	    }
+  	}
+! 	while (new <= pch_end() && pch_char(new) == '+') {
+  	    fputs(pfetch(new), ofp);
+  	    new++;
+  	}
+
+--- 647,653 -----
+  		def_state = IN_ELSE;
+  	    }
+  	}
+! 	while (new <= pat_end && pch_char(new) == '+') {
+  	    fputs(pfetch(new), ofp);
+  	    new++;
+  	}
+
+

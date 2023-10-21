@@ -1,0 +1,140 @@
+This directory ([.SYS.VMS]) contains the VMS-specific files for MicroGnuEmacs.
+
+			+-----------------------+
+			|      Construction	|
+			+-----------------------+
+
+By this point you should have put the ``system-independent'' files into
+a directory of your choice, then put the VMS files into the subdirectory
+[.SYS.VMS].  You should also put the termcap terminal driver into the
+subdirectory [.TTY.TERMCAP]. 
+
+The command file MAKE.COM is designed to compile and link the entire
+program, using the VMS system functions and the termcap terminal driver.
+
+To invoke MAKE.COM, enter
+
+	SET DEF dev:[emacs-dir]	! location of system-independent files
+	@[.SYS.VMS]MAKE		! go have some coffee...
+
+This will create the termcap library, compile each of the necessary
+modules, and link the entire program into dev:[emacs-dir]MG.EXE.
+
+NOTE: To keep the size of the executable program down,
+[.SYS.VMS]MGLINK.COM attempts to link in the VAX C shareable run-time
+library. If the command procedure finds the file SYS$SHARE:VAXCRTL.EXE,
+it attempts to link to it, else it defaults to SYS$LIBRARY:VAXCRTL.OLB
+for the runtime library.
+
+	+-------------------------------------------------------+
+	|	Specifying Your Terminal With Termcap		|
+	+-------------------------------------------------------+
+
+(CAVEAT AND CREDITS: The termcap library in [.SYS.VMS.TERMCAP] was
+written by Fred Fish (of Amiga Public Domain Library fame) and placed in
+the public domain. It is not guaranteed to be a complete implementation
+of the Unix termcap(5) library; the usual disclaimers (like "it works
+for me":-) apply here.  I have modified it to support the tc=
+capability, which lets you define terminals in terms (pardon the pun) of
+other terminals, so it should work reasonably well with the termcap
+provided in [.SYS.VMS.TERMCAP]TERMCAP.)
+
+To use the termcap library, you need to tell it where to find a terminal
+definition (termcap) file. On Unix systems, this is found in a file
+called /etc/termcap. To emulate the same behavior on VMS, DEFINE/JOB the
+logical name ETC to point to a directory that contains a termcap file,
+with the name TERMCAP. (no extension). (The /JOB qualifier is needed
+when you run MicroGnuEmacs as a spawned supprocess.)
+
+If your system has Eunice, there is a large termcap file already
+available via this exact mechanism, so you shouldn't need to define ETC
+at all.  If you don't have Eunice, never fear; a termcap resides in the
+file [.SYS.VMS.TERMCAP]TERMCAP., so all you have to do is
+
+	DEFINE ETC [emacs-directory.SYS.VMS.TERMCAP]
+
+to get started.  You get the idea.  Lastly, if your site uses the logical
+name ETC for another purpose, you can define the logical name TERMCAP
+to point to the MG termcap file.  You must specify the path in Unix format,
+with the root being the disk drive the file resides on.  For example,
+if the termcap file is in DUA0:[USER]TERMCAP., the command would be
+
+	DEFINE TERMCAP "/dua0/user/termcap"
+
+The VAX C run-time library can translate this into the appropriate
+VMS file specification for you (a rather nice feature...).
+
+Once you've indicated where the termcap file is,
+	DEFINE/JOB TERM "termtype"
+
+where "termtype" is in lower case and matches an entry in the termcap
+file. This tells MicroEmacs (even when it runs in another process) what
+your terminal type is. 
+
+NOTE: One performance aspect of termcap files is that they are searched
+sequentially, so you may want to move the most frequently used terminals
+at your site to the beginning of the file to minimize startup overhead. 
+
+		+---------------------------------------+
+		|		INVOKING MG		|
+		+---------------------------------------+
+
+First of all, remember to set up the logical names for the terminal
+type and termcap file:
+	$ DEFINE/JOB	ETC	dev:[dir]	! location of TERMCAP. file
+    (or)$ DEFINE/JOB	TERMCAP "/disk/dir1/dir2/termcapfile"
+
+	$ DEFINE/JOB	TERM	"termtype"	! termtype is lower case
+
+(Obviously, this can be done just once, in your LOGIN.COM file.)
+
+Then, to just run MicroGnuEmacs in your current process,
+	$ RUN [emacs-directory]MG
+
+Or you can define a symbol to run it with command line arguments:
+	$ MG :== $dev:[emacs-directory]MG
+	$ MG [file]
+
+		+---------------------------------------+
+		|     	     MG As a Kept Fork		|
+		+---------------------------------------+
+
+You can use [.SYS.VMS]MG.COM to spawn a MicroEmacs subjob, which you
+can then attach to and pop out of as you please. Edit the line at the
+top of MG.COM that defines the path to the image MG.EXE, then define a
+global symbol called MG:
+
+	$ MG :== @dev:[emacs-directory.SYS.VMS]MG
+
+You can then use MG to edit files:
+
+	$ MG [file]
+
+When inside MicroGnuEmacs, use the command M-x suspend-emacs (bound to
+C-z by default) to suspend the MicroGnuEmacs process and attach your
+terminal to the process that spawned it. To re-attach to
+MicroGnuEmacs, just issue the MG command again:
+
+	$ MG [file]
+
+The command file will reattach you to your MicroGnuEmacs process,
+where you can continue editing where you left off. If you specify a
+new file to edit, the command file sets a logical name which
+MicroGnuEmacs then looks at when you reattach. 
+
+Note that this functionality may not be identical to what happens in
+real GNU Emacs for VMS. However, it does provide a facility that you
+don't really want to do without.
+
+		+---------------------------------------+
+		|     MicroGnuEmacs As a Mail Editor	|
+		+---------------------------------------+
+
+As an added bonus, the file MGMAILEDIT.COM makes MicroGnuEmacs your
+mail editor when you use the SEND/EDIT command.  Just issue the
+command
+
+	DEFINE/JOB MAIL$EDIT dev:[dir]MGMAILEDIT.COM
+
+to inform the mail system you want to use MGMAILEDIT.COM, then whenever
+you issue SEND/EDIT inside mail, MG will be used as your mail editor.

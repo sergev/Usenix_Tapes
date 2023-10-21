@@ -1,0 +1,76 @@
+		SMAIL MODIFICATIONS FOR SENDMAIL.CF FILE
+
+Note: most sites should be able to use the standard UUCP sendmail.cf
+file included with this distribution.  This information is presented 
+for those who need to strike out on their own.
+
+For UUCP Zone Addressing, there are 5 major changes to the standard 
+sendmail.cf file:
+
+[1] Prevent butchering of UUCP addresses.  The sendmail.cf internal
+notation of host!user becomes user@host.UUX instead of user@host.UUCP.
+We now interpret user@host.UUCP to imply routing and user@host.UUX
+to imply a direct neighbor.  These are the new lines:
+
+(ruleset S4)
+# UUX must always be presented in old form
+R$+@$-.UUX		$2!$1				u@h.UUX => h!u
+
+(ruleset S3)
+# convert old-style addresses to a domain-based address
+R$+%$+			$@$>6$1<@$2>			user%host
+R$+^$+			$1!$2				convert ^ to !
+R$-!$+			$@$>6$2<@$1.UUX>		resolve uucp names
+R$+!$+			$@$>6$2<@$1>			domain!host
+
+[2] In resolution part of ruleset 0, resolve UUX addresses and domain 
+addresses as follows:
+
+# resolve names we can handle locally
+R<@$+.UUX>:$+		$#uux$@$:$1!$2			@host.uux:user
+R$+<@$+.UUX>		$#uux$@$:$2!$1			host!user
+R$*<@$*>$*		$#dom$@$:$1@$2$3		user@anywhere
+
+[3] Change the UUCP mailer definition to the following:
+
+Muux,	P=/bin/smail, F=sDFMhum, S=13, R=23, M=100000,
+	A=smail -vkH$j $u
+Mdom,	P=/bin/smail, F=sDFMhum, S=13, R=23, M=100000,
+	A=smail -vH$j $u
+
+S13
+R$+<@$-.UUX>		$@$2!$1				u@host.UUX => host!u
+R$*<$*.$=S>$*		$@$1<$2.$3.$D>$4		externalize
+R$*<$*>$*		$@$1<$2>$3			already ok
+R$+			$@$1<@$j>			tack on our name
+
+S23
+
+[4] Recognise local host names using the =D class instead of an explicit
+list:
+
+(at local definitions)
+# domain
+DDUUCP
+CDUUCP LOCAL UUX
+
+(in zerobase)
+# now delete the local info
+R$*<$*$=w.$=D>$*	$1<$2>$5			thishost.topdom
+R$*<$*$=w.$D>$*		$1<$2>$4			thishost.domain
+R$*<$*$=w>$*		$1<$2>$4			thishost
+R$*<$*.>$*		$1<$2>$3			drop trailing dot
+R<@>:$*			$@$>0$1				retry after route strip
+R$*<@>			$@$>0$1				strip null trash & retry
+
+[5] Put something in the version number so we know who's converted.
+This version looks like this:
+
+DV1.00.UUCP-MOD.8-11-85
+
+---
+
+
+		/+\
+8/11/85		+\	chris@cbosgd.att.uucp
+		\+/

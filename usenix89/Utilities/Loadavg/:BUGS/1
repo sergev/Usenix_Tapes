@@ -1,0 +1,384 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!cbatt!clyde!burl!ulysses!allegra!mit-eddie!genrad!panda!harvard!husc6!think!nike!caip!cbmvax!bpa!burdvax!sdcrdcf!usc-oberon!brand!barad
+From: barad@brand.UUCP (Herb Barad)
+Newsgroups: net.sources.bugs
+Subject: month daemon fix
+Message-ID: <246@brand.UUCP>
+Date: 6 Aug 86 16:24:08 GMT
+Reply-To: barad@brand.UUCP (Herb Barad)
+Organization: U. of So. Calif., Los Angeles
+Lines: 373
+Posted: Wed Aug  6 11:24:08 1986
+
+The following is a patch to the month program posted a while back.
+Rich Collins (of TRW) found a bug in the way in which the daemon
+initializes the day of the week.  I took the README file and made
+a manual page out of it.  I don't remember who was the original
+author of this, but the program has proved to be useful.  Maybe
+you (if you are listening) will want to incorporate the fix and
+then repost a cleaned up version.
+
+					Herb Barad
+
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	month.patch
+#	month.1
+# This archive created: Tue Aug  5 10:05:58 1986
+export PATH; PATH=/bin:$PATH
+echo shar: extracting "'month.patch'" '(1376 characters)'
+if test -f 'month.patch'
+then
+	echo shar: will not over-write existing file "'month.patch'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'month.patch'
+	X*** month.c	Tue Jul 29 15:02:45 1986
+	X--- month.c.new	Tue Aug  5 10:04:32 1986
+	X***************
+	X*** 1,3
+	X  #include <curses.h>
+	X  #include <signal.h>
+	X  #include <utmp.h>
+	X
+	X--- 1,14 -----
+	X+ /*			Modification History
+	X+  *
+	X+  * RRC001: The original author failed to define the variable
+	X+  *	   'start_day' for the daemon ('-d' option).  The variable
+	X+  *	   is used in routine 'event_matches_day' in module 'time.c'.
+	X+  *	   As a result, the daemon acted as if all months start on
+	X+  *	   Sunday, thus throwing off all reports involving the days
+	X+  *	   of the week.
+	X+  *
+	X+  */
+	X+ 
+	X  #include <curses.h>
+	X  #include <signal.h>
+	X  #include <utmp.h>
+	X***************
+	X*** 10,15
+	X  extern struct event_rec events;
+	X  extern struct mdate mdates[];
+	X  
+	X  main(argc, argv)
+	X  int argc;
+	X  char *argv[];
+	X
+	X--- 21,28 -----
+	X  extern struct event_rec events;
+	X  extern struct mdate mdates[];
+	X  
+	X+ extern short start_day;		/* RRC01 */
+	X+ 
+	X  main(argc, argv)
+	X  int argc;
+	X  char *argv[];
+	X***************
+	X*** 120,125
+	X  	fflush(stdout);
+	X  AGAIN:
+	X  	get_current_date();
+	X  	minutes = (60 * dhour) + dminute;
+	X  
+	X  	seconds = (60 * (15 - (dminute % 15) - 1)) + (60 - dsecond);
+	X
+	X--- 133,139 -----
+	X  	fflush(stdout);
+	X  AGAIN:
+	X  	get_current_date();
+	X+ 	start_day = get_start_day(this_month, this_year);	/* RRC01 */
+	X  	minutes = (60 * dhour) + dminute;
+	X  
+	X  	seconds = (60 * (15 - (dminute % 15) - 1)) + (60 - dsecond);
+SHAR_EOF
+if test 1376 -ne "`wc -c < 'month.patch'`"
+then
+	echo shar: error transmitting "'month.patch'" '(should have been 1376 characters)'
+fi
+fi # end of overwriting check
+echo shar: extracting "'month.1'" '(8580 characters)'
+if test -f 'month.1'
+then
+	echo shar: will not over-write existing file "'month.1'"
+else
+sed 's/^	X//' << \SHAR_EOF > 'month.1'
+	X.TH MONTH 1L
+	X.SH NAME
+	Xmonth \- a visual monthly calendar and time/event browser
+	X.SH SYNOPSIS
+	X.B month
+	X[
+	X.B \-d
+	X]
+	X.br
+	X.SH DESCRIPTION
+	X.TP
+	X.B Overview
+	X.br
+	XMonth displays a calendar of the current month of the current year,
+	Xwith the current day highlighted.  It then allows the user to browse
+	Xto any month/day/year he chooses, and to schedule and recall events
+	Xfor a day or for some regular repeating series of days.
+	X.br
+	X.TP
+	X.B Screen Areas
+	X.br
+	XThere are four distinct areas of the screen.  The days area where
+	Xthe days of the month are listed in calendar format, the months area
+	Xwhere the months of the year are listed, the years area where a
+	Xsequence of years are listed, and the schedule area, which may be
+	Xblank and occupies lines 19-24 on the terminal. (lines below 24 are
+	Xnot used)
+	X.br
+	X.TP
+	X.B Commands
+	X.br
+	X.I Quitting
+	X.br
+	XYou may type 'Q' almost any time to quit.  This will update
+	Xyour event database if you have made any changes.
+	XYour event database is a file called ".month" in your
+	Xhome directory.
+	XControl-c or Control-\\ can be used any time for immediate
+	Xabort and no event database update.
+	XAny time you quit in any of these ways, you will be informed
+	Xof whether your event database has been updated.
+	X.br
+	X.I Cursor motion
+	X.br
+	X'h', 'l', 'k', and 'j' are used to move the cursor left, right,
+	Xup and down respectively within a screen area.  In some cases,
+	Xexplained later, 'j' and 'k' will not work, and a <TAB> or <CR>
+	Xis used to move between fields in a wrap-around fashion.
+	X.br
+	X.I Selection
+	X.br
+	X<CR> and <LF> are used to select items/commands at the cursor
+	Xposition.
+	X.br
+	X.I Direct entry of numbers
+	X.br
+	XThe user may type the number of a desired month, day, or year
+	Xwhenever the cursor is appropriately positioned.  This is
+	Xtrue in all screen areas.  <ESC> is used to abort the function.
+	X.br
+	X.I Scrolling numbers
+	X.br
+	XIn the schedule area, numbers may be scrolled forwards and
+	Xbackwards with the <SPACE> and <BACKSPACE> keys respectively.
+	XThis is the only way to change hours and minutes.
+	X.br
+	X.I Time browsing
+	X.br
+	XThe keys 'm', 'd' and 'y' are used to move into the months area, the
+	Xdays area or the years area respectively.  This is only when
+	Xtime browsing in these three panes.  To get to a particular
+	Xmonth or year, move to the appropriate area and onto the
+	Xdesired month or year, and select it. (<CR>)  Years may be
+	Xscrolled a year at a time by using the scroll areas marked
+	Xby '<<' and '>>'.  Attempting to move passed these areas will
+	Xscroll by one year, selecting them scrolls by ten years.
+	XThe last month of the previous year, or the first month of
+	Xnext year, may be obtained by selecting the area above
+	XJanuary or below December respectively.  The cursor is the
+	Xpositioned for immediate return via a subsequent selection.
+	X.br
+	XThe keys 'n' and 'p' can be used to go to the next or previous month,
+	Xday, or year, depending on which screen area you are in.
+	X.br
+	XThe key 'M' is used to mark a specific date.  You will be prompted for
+	Xan identifier which is a single digit between '0' and '9'.
+	XOnce a mark has been set at a certain date, you may jump to
+	Xthat date from any other date with the command below.
+	X.br
+	XThe key 'G' is used to go to a previously set mark.  You will be
+	Xprompted for the mark's identifying digit.
+	X.br
+	XThe key ';' is used to go directly to the last date you viewed which
+	Xwas in a different month than currently displayed.  Use the
+	Xsame command again to return to where you were originally.
+	X.br
+	XThe key 'T' is used to go directly the actual, real current date, which
+	Xis the date initially displayed upon startup.
+	X.br
+	XThe key '/' is used to go directly to a date to be fully specified by
+	Xthe user.  A prompt is given to which the user responds with
+	Xa date in the form m/d/y, such as 5/6/86.  Years less than
+	X100 are assumed to be in this century, hence, 5/6/80 is the
+	Xsame as 5/6/1986.
+	X.TP
+	X.B Overviewing a day
+	X.br
+	XThe key 'O' will fill the schedule area with a read only view
+	Xof your day according to your event database.  Four
+	Xsix-hour grids appear showing which hours of the
+	Xday have been pre-scheduled.  The cursor must be placed
+	Xon the day to be viewed with this function.
+	X.TP
+	X.B Overviewing a month
+	X.br
+	XThe key 'A' will mark all the days on the calendar that have
+	Xat least one event posted.  This feature is especially
+	Xuseful before scanning; described next.
+	X.TP
+	X.B Scanning events
+	X.br
+	XThe key 'S' will cause a sequential list of events for the current day
+	Xto be displayed in the schedule area.  The events for any given
+	Xday may be scanned, deleted, or modified.
+	XAfter displaying each one, the prompt "[n,p,d,e,q]" is put
+	Xup and will respond to these character commands:
+	X.br
+	X.I 'n':
+	Xgo to next event
+	X.br
+	X.I 'p':
+	Xgo to previous event
+	X.br
+	X.I 'd':
+	Xdelete this event
+	X.br
+	X.I 'e':
+	Xedit this event as during a posting described below
+	X.br
+	X.I 'q':
+	Xquit the scan and return to calendar
+	X.br
+	X.I <ESC>:
+	Xsame as 'q'
+	X.br
+	X.TP
+	X.B Every event scan
+	X.I 'E'
+	Xwill display, one at a time, absolutely every event
+	Xin your event database.  The prompt "['n','q']" is displayed
+	Xand will respond to these character commands:
+	X.br
+	X.I 'n':
+	Xgo to next event
+	X.br
+	X.I 'q':
+	Xquit the scan and return to calendar
+	X.br
+	X.I <ESC>:
+	Xsame as 'q'
+	X.br
+	X.TP
+	X.B Posting an event
+	X.I 'P'
+	Xis the command used to post an event.  The
+	Xcursor is placed into the schedule area with a host of
+	Xinformation displayed.  To discontinue, use <ESC> or
+	Xselect CANCEL.  The cursor first appears on the first
+	Xline of the schedule area.  This line gives the starting
+	Xdate for the event, and when it shall occur.  The user
+	Xmay move into the starting date and change the month,
+	Xday and year by scrolling with <SPACE> and <BACKSPACE>,
+	Xor by directly typing it.  The other fields in this
+	Xfirst line may be moved onto and selected.  <TAB> will
+	Xmove the cursor to the next line which contains the
+	Xtime at which the event occurs.  'h' and 'l' move between
+	Xthe hours and minutes fields which may be scrolled.  The
+	XAM/PM indicator changes as the hours scroll across
+	X12:00 boundaries.  <TAB> will move the cursor to the
+	Xnext line which gives the duration of the event, and
+	Xit is edited in the same fashion.  <TAB> moves the cursor
+	Xto the next line which is a one line description of the
+	Xevent, to be typed whenever the cursor is placed here.
+	X<TAB> moves to the last line in the schedule area which
+	Xallows the user to select ACCEPT or CANCEL.  Selecting
+	XACCEPT will put the event into the user's event database,
+	Xafter being asked if he really wants it to be.  Selecting
+	XCANCEL aborts the process.  <TAB> returns to the first
+	Xline.
+	X.TP
+	X.B Event scheduling
+	XWhen and how often will an event occur?  This information
+	Xis contained in the first line of the schedule area.  The
+	Xdate entered there is the starting date for the event,
+	Xthat is, the event will not be recalled until that date.
+	XThis date is best entered by browsing to it, placing the
+	Xcursor in the days area on the desired day, and then
+	Xtype 'P' to post the event, in which case the desired date
+	Xautomatically appears as the default, but may be edited.
+	XIn the following examples, only the fields that need to be
+	Xselected are mentioned, all others should be turned off.
+	X(not highlighted)  Examples:
+	X.br
+	X.I March 5, 1990 (once only)
+	X.br
+	X3/5/1990
+	X.br		
+	X.I Every Tuesday and Wednesday
+	X.br
+	Xm/d/y every TueWed
+	X.br	
+	X.I The 7th of each month
+	X.br
+	Xm/7/y monthly
+	X.br		
+	X.I Each July 4th
+	X.br
+	X7/4/y yearly
+	X.br
+	X.I The 2nd and last sunday of
+	X.I each month
+	X.br
+	Xm/d/y monthly every 2nd last Sun
+	X.br
+	X.I The 1st and last friday of
+	X.I each year
+	X.br
+	Xm/d/y yearly every 1st last Fri
+	X.br
+	X.I Every other thursday
+	X.br
+	Xm/d/y every 2nd Thu
+	X.br
+	XNote, this will include the 1st, 3rd, 5th, 7th, etc.
+	Xthursday, starting from the specified m/d/y
+	X.TP
+	X.B Miscellaneous
+	XThe key 'L' stands for lunar, and causes a picture of what the moon will
+	Xlook like at 11:00PM on the day on which the cursor is placed.
+	XThe keys '^L' or '^R' will redraw the screen.
+	X.SH OPTIONS
+	XSpecifying the -d flag causes a background daemon to be born that
+	Xwill wake up at 15 minute intervals during the current login
+	Xsession, check your event database, and print a message to your
+	Xterminal with a bell if it finds an event that is 15 minutes, or
+	Xless, away.  It will do this check upon invocation, then wake up
+	Xon every 15-minute clock division until killed or you log out.
+	X.SH CAVEATS/BUGS
+	XVery few attempts have been made to prevent the user from browsing
+	Xthrough negatively numbered years or years with more than four
+	Xdigits in them, the latter causing the years area to get messed up,
+	Xbut remains functional.
+	XIn rare cases, events with a starting date before the year 1753,
+	Xwill not be recalled correctly.
+	X.SH FILES
+	X$HOME/.month
+SHAR_EOF
+if test 8580 -ne "`wc -c < 'month.1'`"
+then
+	echo shar: error transmitting "'month.1'" '(should have been 8580 characters)'
+fi
+fi # end of overwriting check
+#	End of shell archive
+exit 0
+
+-- 
+
+Herb Barad	[USC - Signal and Image Processing Institute]
+
+USENET:		...!sdcrdcf!usc-oberon!brand!barad			or
+		...!mcvax!seismo!sdcsvax!sdcrdcf!usc-oberon!brand!barad
+
+ARPANET:	barad%brand@USC-ECL.ARPA
+
+USMail:		Univ. of Southern California
+		Powell Hall 306, MC-0272
+		Los Angeles, CA 90089-0272
+		phone: (213) 743-0911

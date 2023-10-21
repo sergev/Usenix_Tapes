@@ -1,0 +1,684 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site usceast.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!mcnc!ncsu!ncrcae!usceast!ted
+From: ted@usceast.UUCP (Ted Nolan)
+Newsgroups: net.sources.bugs
+Subject: More mods to CKermit 4.2(030) PRERELEASE # 2 (2.9BSD, 68000 v7.2)
+Message-ID: <2203@usceast.UUCP>
+Date: 6 May 85 05:55:26 GMT
+Date-Received: 9 May 85 04:20:48 GMT
+References: <260@log-hb.UUCP>
+Reply-To: ted@usceast.UUCP (System Programmer)
+Organization: Csci Dept, U of S. Carolina, Columbia
+Lines: 669
+Keywords: 2.9BSD, v7.2 pdp,68000
+
+I ran into a few problems trying to port the ckermit prerelease to a
+Unisoft 68000 v7.2 system and 2.9 BSD (on a pdp 11/44).  Following
+are context diffs to Makefile ckxunx.c and ckzunx.c that seem to work
+for both of those cases.
+
+The main points are:
+
+1) A function in ckxunx.c does a read(fd,&c,1) where c is an int, not a char.
+   This fails on the 68000.
+
+2) The ioctl FIONREAD has it's argument declared as an int, when it should be
+   a long. (this fails on the 11).
+
+3) uucp line locking must be done with creat, not open.
+
+There are also some minor problems with certain variables not being declared
+when certain #defines are set, and one variable being declared twice if
+TOWER1 is defined.
+
+I used the code in the TOWER1 #defines to base my changes on, since both
+my target systems were v7 based as was the original tower OS (it is now
+sys5 based).  I used the #define V7, but I doubt it will run under vanilla
+V7, which I think lacked FIONREAD.
+
+2.9 systems will need to use pcc to compile (this is provided for in
+the makefile), but you will first need to compile pcc.  The actual pcc command
+comes installed, but it calls a library routine that does not.  I thought
+that this was probably easier than changing working kermit code to pass through
+the Ritchie pdp11 C compiler. (Surely there are no binary 2.9 sites?)
+Ckermit needs separate I and D space.  If your 11 doesn't have it, you will
+need to figure out the 2.9 overlay scheme in ld(1).  I didn't have to and
+so didn't!
+
+The kermit folks know about these changes, so they should be fixed in
+the next release, but in the meantime...
+
+--------------------------Makefile--------------------------------------
+
+
+*** Makefile.orig	Thu Mar 21 18:08:44 1985
+--- Makefile	Mon Apr 29 01:07:35 1985
+***************
+*** 7,12
+  # for Bell generic III/V "make sys3"
+  # for Pro-3xx Venix 1.0 "make provx1"
+  # for NCR Tower 1632, "make tower1"
+  
+  LNKFLAGS=
+  
+
+--- 7,15 -----
+  # for Bell generic III/V "make sys3"
+  # for Pro-3xx Venix 1.0 "make provx1"
+  # for NCR Tower 1632, "make tower1"
++ # for v7  make v7
++ # for 2.9 bsd  make bsd29
++ # for ridge (ROS 3.2) make ridge
+  
+  LNKFLAGS=
+  CC= cc
+***************
+*** 9,14
+  # for NCR Tower 1632, "make tower1"
+  
+  LNKFLAGS=
+  
+  make: 
+  	@echo 'Make what?  You must tell which system to make C-Kermit for.'
+
+--- 12,19 -----
+  # for ridge (ROS 3.2) make ridge
+  
+  LNKFLAGS=
++ CC= cc
++ CC2= cc
+  
+  make: 
+  	@echo 'Make what?  You must tell which system to make C-Kermit for.'
+***************
+*** 15,21
+  
+  wermit: ckmain.o ckcmd.o ckuser.o ckusr2.o ckusr3.o ckprot.o ckfns.o ckfns2.o \
+  		 ckconu.o ckxunx.o ckzunx.o ckdial.o cklogi.o Makefile
+! 	cc $(LNKFLAGS) -o wermit ckmain.o ckxunx.o ckzunx.o ckfns.o ckfns2.o \
+  		 ckprot.o ckcmd.o ckusr2.o ckusr3.o ckuser.o ckconu.o \
+  		 ckdial.o cklogi.o
+  
+
+--- 20,27 -----
+  
+  wermit: ckmain.o ckcmd.o ckuser.o ckusr2.o ckusr3.o ckprot.o ckfns.o ckfns2.o \
+  		 ckconu.o ckxunx.o ckzunx.o ckdial.o cklogi.o Makefile
+! 	$(CC2)  $(LNKFLAGS) -o wermit ckmain.o ckxunx.o ckzunx.o ckfns.o \
+! 		 ckfns2.o \
+  		 ckprot.o ckcmd.o ckusr2.o ckusr3.o ckuser.o ckconu.o \
+  		 ckdial.o cklogi.o
+  
+***************
+*** 30,36
+  ckcmd.o: ckcmd.c ckcmd.h ckdebu.h
+  
+  ckprot.o: ckprot.w wart ckermi.h
+! 	wart ckprot.w ckprot.c ; cc $(CFLAGS) -c ckprot.c
+  
+  ckfns.o: ckfns.c ckermi.h ckdebu.h
+  
+
+--- 36,42 -----
+  ckcmd.o: ckcmd.c ckcmd.h ckdebu.h
+  
+  ckprot.o: ckprot.w wart ckermi.h
+! 	wart ckprot.w ckprot.c ; $(CC) $(CFLAGS) -c ckprot.c
+  
+  ckfns.o: ckfns.c ckermi.h ckdebu.h
+  
+***************
+*** 43,49
+  ckconu.o: ckconu.c ckermi.h
+  
+  wart: ckwart.o
+! 	cc $(LNKFLAGS) -o wart ckwart.o
+  
+  ckwart.o: ckwart.c
+  
+
+--- 49,55 -----
+  ckconu.o: ckconu.c ckermi.h
+  
+  wart: ckwart.o
+! 	$(CC) $(LNKFLAGS) -o wart ckwart.o
+  
+  ckwart.o: ckwart.c
+  
+***************
+*** 53,59
+  
+  #Berkeley Unix
+  bsd:
+! 	make wermit "CFLAGS= -DBSD4"
+  
+  #Microsoft "Xenix/286" e.g., as sold by IBM for PC/AT
+  xenix:
+
+--- 59,65 -----
+  
+  #Berkeley Unix
+  bsd:
+! 	make wermit "CFLAGS= -DBSD4" 
+  
+  #Microsoft "Xenix/286" e.g., as sold by IBM for PC/AT
+  xenix:
+***************
+*** 62,68
+  #PC/IX, Interactive Corp System III port for IBM PC/XT as sold by IBM
+  pcix:
+  	make wermit "CFLAGS= -DPCIX -DUXIII -DISIII -Dsdata=sdatax -O -i" \
+! 		"LNKFLAGS = -i"
+  
+  #interactive corp system III port --
+  is3:
+
+--- 68,74 -----
+  #PC/IX, Interactive Corp System III port for IBM PC/XT as sold by IBM
+  pcix:
+  	make wermit "CFLAGS= -DPCIX -DUXIII -DISIII -Dsdata=sdatax -O -i" \
+! 		"LNKFLAGS = -i" 
+  
+  #interactive corp system III port --
+  is3:
+***************
+*** 67,73
+  #interactive corp system III port --
+  is3:
+  	make wermit "CFLAGS = -DISIII -DUXIII -Ddata=datax -O -i" \
+! 		"LNKFLAGS = -i"
+  
+  #plain old Bell System III or System V without strange things
+  sys3:
+
+--- 73,79 -----
+  #interactive corp system III port --
+  is3:
+  	make wermit "CFLAGS = -DISIII -DUXIII -Ddata=datax -O -i" \
+! 		"LNKFLAGS = -i" 
+  
+  #plain old Bell System III or System V without strange things
+  sys3:
+***************
+*** 71,77
+  
+  #plain old Bell System III or System V without strange things
+  sys3:
+! 	make wermit "CFLAGS = -DUXIII -i -O" "LNKFLAGS = -i"
+  
+  #DEC Pro-3xx with Venix 1.0
+  provx1:
+
+--- 77,83 -----
+  
+  #plain old Bell System III or System V without strange things
+  sys3:
+! 	make wermit "CFLAGS = -DUXIII -i -O" "LNKFLAGS = -i" 
+  
+  #DEC Pro-3xx with Venix 1.0
+  provx1:
+***************
+*** 77,83
+  provx1:
+  	make wart "CFLAGS= " "LNKFLAGS= "
+  	make wermit "CFLAGS = -DPROVX1 -md780" \
+! 		"LNKFLAGS= -u _sleep -lc -md780"
+  
+  #NCR Tower 1632, OS 1.02
+  tower1:
+
+--- 83,89 -----
+  provx1:
+  	make wart "CFLAGS= " "LNKFLAGS= "
+  	make wermit "CFLAGS = -DPROVX1 -md780" \
+! 		"LNKFLAGS= -u _sleep -lc -md780" 
+  
+  #NCR Tower 1632, OS 1.02
+  tower1:
+***************
+*** 81,85
+  
+  #NCR Tower 1632, OS 1.02
+  tower1:
+! 	make wermit "CFLAGS = -DTOWER1"
+  
+
+--- 87,93 -----
+  
+  #NCR Tower 1632, OS 1.02
+  tower1:
+! 	make wermit "CFLAGS = -DTOWER1" 
+  
+  # v7 
+  v7:
+***************
+*** 83,85
+  tower1:
+  	make wermit "CFLAGS = -DTOWER1"
+  
+
+--- 89,103 -----
+  tower1:
+  	make wermit "CFLAGS = -DTOWER1" 
+  
++ # v7 
++ v7:
++ 	make wermit "CFLAGS = -DTOWER1 -DV7" 
++ 
++ #ridge ros 3.2:
++ ridge:
++ 	make wermit "CFLAGS= -DUXIII -DRIDGE -i -O"  "LNKFLAGS = -i" 
++ #
++ # 2.9 bsd (pdp11)
++ #
++ bsd29:
++ 	make wermit "CFLAGS= -DV7  " "LNKFLAGS= -i" "CC= pcc " "CC2= cc"
+
+---------------------------ckxunx.c--------------------------------------
+
+
+*** ckxunx.c.orig	Fri Mar 15 14:44:59 1985
+--- ckxunx.c	Mon Apr 29 01:06:47 1985
+***************
+*** 13,18
+  #endif
+  
+  /* Tower support contributed by John Bray, Auburn University */
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+
+--- 13,19 -----
+  #endif
+  
+  /* Tower support contributed by John Bray, Auburn University */
++ #ifndef V7
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+***************
+*** 16,21
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  
+  /* Sys III/V, Xenix, PC/IX support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+
+--- 17,23 -----
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
++ #endif V7
+  
+  #ifdef V7
+  char *ckxsys = "V7 unix, mostly";
+***************
+*** 17,22
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  
+  /* Sys III/V, Xenix, PC/IX support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+  #ifdef XENIX
+
+--- 19,29 -----
+  #endif
+  #endif V7
+  
++ #ifdef V7
++ char *ckxsys = "V7 unix, mostly";
++ #endif V7
++ 
++ 
+  /* Sys III/V, Xenix, PC/IX support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+  #ifdef XENIX
+***************
+*** 122,127
+  #include <sys/types.h>
+  #endif
+  
+  #ifndef PROVX1
+  #include <sys/file.h>			/* File information */
+  #endif
+
+--- 129,138 -----
+  #include <sys/types.h>
+  #endif
+  
++ #ifdef V7
++ #include <sys/types.h>
++ #endif V7
++ 
+  #ifndef PROVX1
+  #ifndef V7
+  #ifndef RIDGE
+***************
+*** 123,128
+  #endif
+  
+  #ifndef PROVX1
+  #include <sys/file.h>			/* File information */
+  #endif
+  
+
+--- 134,141 -----
+  #endif V7
+  
+  #ifndef PROVX1
++ #ifndef V7
++ #ifndef RIDGE
+  #include <sys/file.h>			/* File information */
+  #endif RIDGE
+  #endif V7
+***************
+*** 124,130
+  
+  #ifndef PROVX1
+  #include <sys/file.h>			/* File information */
+! #endif
+  
+  #ifndef DIRSIZ
+  #ifdef MAXNAMLEN
+
+--- 137,145 -----
+  #ifndef V7
+  #ifndef RIDGE
+  #include <sys/file.h>			/* File information */
+! #endif RIDGE
+! #endif V7
+! #endif PROVX1
+  
+  #ifndef DIRSIZ
+  #ifdef MAXNAMLEN
+***************
+*** 245,250
+  #ifdef BSD4
+      	if ((flock(ttyfd,(LOCK_EX|LOCK_NB)) < 0) || (ttlock(ttname) < 0 )) {
+  #else
+  #ifdef TOWER1
+      	if (ioctl(ttyfd,TIOCEXCL, NULL) < 0) {
+  #else
+
+--- 260,268 -----
+  #ifdef BSD4
+      	if ((flock(ttyfd,(LOCK_EX|LOCK_NB)) < 0) || (ttlock(ttname) < 0 )) {
+  #else
++ #ifdef V7
++ 	if(ttlock(ttname) < 0) {
++ #else
+  #ifdef TOWER1
+      	if (ioctl(ttyfd,TIOCEXCL, NULL) < 0) {
+  #else
+***************
+*** 251,256
+      	if (ttlock(ttname) < 0) {
+  #endif
+  #endif
+      	fprintf(stderr,"Sorry - Exclusive access to %s was denied\n",ttname);
+  	return(-1);			/* Can't open if already locked */
+      	} else lkf = 1;
+
+--- 269,275 -----
+      	if (ttlock(ttname) < 0) {
+  #endif
+  #endif
++ #endif
+      	fprintf(stderr,"Sorry - Exclusive access to %s was denied\n",ttname);
+  	return(-1);			/* Can't open if already locked */
+      	} else lkf = 1;
+***************
+*** 372,377
+      hasLock = 0;			/* not locked yet */
+      if ((l4l=look4lk(ttyfd)) < 0) return(-1); /* already locked */
+      if (l4l == 1) return (0);		/* can't read/write lock directory */
+      if ((lck_fil=open (flfnam, O_CREAT | O_EXCL)) < 1 ) 
+      	return(-1);			/* failed to create */
+      close (lck_fil);
+
+--- 391,397 -----
+      hasLock = 0;			/* not locked yet */
+      if ((l4l=look4lk(ttyfd)) < 0) return(-1); /* already locked */
+      if (l4l == 1) return (0);		/* can't read/write lock directory */
++ #ifndef V7
+      if ((lck_fil=open (flfnam, O_CREAT | O_EXCL)) < 1 ) 
+      	return(-1);			/* failed to create */
+  #else 
+***************
+*** 374,379
+      if (l4l == 1) return (0);		/* can't read/write lock directory */
+      if ((lck_fil=open (flfnam, O_CREAT | O_EXCL)) < 1 ) 
+      	return(-1);			/* failed to create */
+      close (lck_fil);
+      hasLock = 1;			/* now is locked */
+      return(0);
+
+--- 394,403 -----
+  #ifndef V7
+      if ((lck_fil=open (flfnam, O_CREAT | O_EXCL)) < 1 ) 
+      	return(-1);			/* failed to create */
++ #else 
++     if ((lck_fil=creat (flfnam,000 )) < 0 ) 
++     	return(-1);			/* failed to create */
++ #endif V7
+      close (lck_fil);
+      hasLock = 1;			/* now is locked */
+      return(0);
+***************
+*** 663,669
+  
+  ttchk() {
+  #ifndef PROVX1
+!     int n, x;
+  #ifdef BSD4
+      x = ioctl(ttyfd, FIONREAD, &n);
+      return((x < 0) ? 0 : n);
+
+--- 687,694 -----
+  
+  ttchk() {
+  #ifndef PROVX1
+!     long n;     /* FIONREAD arg should be long - esp for pdp's */
+!     int x;
+  #ifdef BSD4
+      x = ioctl(ttyfd, FIONREAD, &n);
+      return((x < 0) ? 0 : n);
+***************
+*** 719,725
+  */
+  
+  ttinl(dest,max,timo,eol) int max,timo; char *dest; {
+!     int x, y, c;
+      if (ttyfd < 0) return(-1);		/* Not open. */
+      if (timo <= 0) {			/* Untimed. */
+  #ifndef UXIII
+
+--- 744,755 -----
+  */
+  
+  ttinl(dest,max,timo,eol) int max,timo; char *dest; {
+!     int x, y;
+! #ifndef UXIII
+!     char c;
+! #else
+!     int c;
+! #endif
+      if (ttyfd < 0) return(-1);		/* Not open. */
+      if (timo <= 0) {			/* Untimed. */
+  #ifndef UXIII
+***************
+*** 855,860
+  #endif
+  
+  #ifdef TOWER1
+      if (ftime(&ftp) < 0) return(-1);		/* Get current time. */
+      t1 = ((ftp.time & 0xff) * 1000) + ftp.millitm;
+      while (1) {
+
+--- 885,891 -----
+  #endif
+  
+  #ifdef TOWER1
++    { long t1,t3;
+      if (ftime(&ftp) < 0) return(-1);		/* Get current time. */
+      t1 = ((ftp.time & 0xff) * 1000) + ftp.millitm;
+      while (1) {
+***************
+*** 862,867
+  	t3 = (((ftp.time & 0xff) * 1000) + ftp.millitm) - t1;
+  	if (t3 > m) return (t3);
+      }
+  #endif
+  }
+  
+
+--- 893,899 -----
+  	t3 = (((ftp.time & 0xff) * 1000) + ftp.millitm) - t1;
+  	if (t3 > m) return (t3);
+      }
++   }
+  #endif
+  }
+  
+***************
+*** 1031,1037
+  #ifdef PROVX1
+      return(0);
+  #else
+!     int n, x;
+  #ifndef UXIII
+      x = ioctl(0, FIONREAD, &n);
+      return((x < 0) ? 0 : n);
+
+--- 1063,1070 -----
+  #ifdef PROVX1
+      return(0);
+  #else
+!     long  n; 		/* arg to FIONREAD shoul be long (even for 4.2)*/
+!     int   x;
+  #ifndef UXIII
+      x = ioctl(0, FIONREAD, &n);
+      return((x < 0) ? 0 : n);
+
+------------------------------------ckzunx.c-------------------------------
+
+*** ckzunx.c.orig	Fri Mar 15 14:45:08 1985
+--- ckzunx.c	Mon Apr 29 01:06:48 1985
+***************
+*** 16,21
+  
+  /* NCR Tower support contributed by Kevin O'Kane, U. of Tennessee */
+  /* Tower OS is like Sys III but with BSD features -- mostly follows BSD */
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+
+--- 16,22 -----
+  
+  /* NCR Tower support contributed by Kevin O'Kane, U. of Tennessee */
+  /* Tower OS is like Sys III but with BSD features -- mostly follows BSD */
++ #ifndef V7
+  #ifdef TOWER1
+  char *ckzsys = " NCR Tower 1632, OS 1.02";
+  #endif
+***************
+*** 17,23
+  /* NCR Tower support contributed by Kevin O'Kane, U. of Tennessee */
+  /* Tower OS is like Sys III but with BSD features -- mostly follows BSD */
+  #ifdef TOWER1
+! char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  
+  /* Sys III/V, Xenix, PC/IX,... support by Herm Fischer, Litton Data Systems */
+
+--- 18,24 -----
+  /* Tower OS is like Sys III but with BSD features -- mostly follows BSD */
+  #ifndef V7
+  #ifdef TOWER1
+! char *ckzsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  #endif V7
+  
+***************
+*** 19,24
+  #ifdef TOWER1
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  
+  /* Sys III/V, Xenix, PC/IX,... support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+
+--- 20,26 -----
+  #ifdef TOWER1
+  char *ckzsys = " NCR Tower 1632, OS 1.02";
+  #endif
++ #endif V7
+  
+  #ifdef V7
+  char *ckzsys = " V7 unix, mostly";
+***************
+*** 20,25
+  char *ckxsys = " NCR Tower 1632, OS 1.02";
+  #endif
+  
+  /* Sys III/V, Xenix, PC/IX,... support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+  #ifdef XENIX
+
+--- 22,31 -----
+  #endif
+  #endif V7
+  
++ #ifdef V7
++ char *ckzsys = " V7 unix, mostly";
++ #endif V7
++ 
+  /* Sys III/V, Xenix, PC/IX,... support by Herm Fischer, Litton Data Systems */
+  #ifdef UXIII
+  #ifdef XENIX
+***************
+*** 91,96
+  #include <pwd.h>			/* Password file for shell name */
+  
+  #ifndef PROVX1
+  #include <sys/file.h>			/* File access */
+  #endif
+  
+
+--- 97,104 -----
+  #include <pwd.h>			/* Password file for shell name */
+  
+  #ifndef PROVX1
++ #ifndef RIDGE
++ #ifndef V7
+  #include <sys/file.h>			/* File access */
+  #endif V7
+  #endif RIDGE
+***************
+*** 92,97
+  
+  #ifndef PROVX1
+  #include <sys/file.h>			/* File access */
+  #endif
+  
+  /* Some systems define these in include files, others don't... */
+
+--- 100,107 -----
+  #ifndef RIDGE
+  #ifndef V7
+  #include <sys/file.h>			/* File access */
++ #endif V7
++ #endif RIDGE
+  #endif
+  
+  /* Some systems define these in include files, others don't... */
+-- 
+-------------------------------------------------------------------------------
+Ted Nolan                   ...decvax!mcnc!ncsu!ncrcae!usceast!ted  (UUCP)
+6536 Brookside Circle       ...akgua!usceast!ted
+Columbia, SC 29206          allegra!usceast!ted@seismo (ARPA, maybe)
+
+      ("Deep space is my dwelling place, the stars my destination")
+-------------------------------------------------------------------------------

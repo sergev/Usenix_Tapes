@@ -1,0 +1,82 @@
+
+#				DIGEST-ALL
+#
+# This shell script is to help create a 'digest' suitable for mailing out
+#    of all messages in a given mailbox...
+#
+# Dave Taylor, Hewlett-Packard Laboratories
+
+	awk_script="digest.awk"
+
+if [ $# -ne 4 ]
+then
+  echo "Usage: $0 <header> <mailbox-name> <digest-name> <tail>"
+  exit 1
+fi
+
+if [ ! -r $1 -o ! -r $4 ]
+then
+  echo "$0: Can't find the header and/or tail files!"
+  exit 2
+fi
+
+if [ ! -r $awk_script ]
+then
+  echo "$0: Can't find the AWK script I need."
+  exit 2
+fi
+
+if [ ! -r $2 ]
+then
+  echo "$0: Can't find specified mailbox - $2"
+  exit 3
+fi
+
+if [ -z $2 ]
+then
+  echo "$0: Mailbox $2 is EMPTY!"
+  exit 4
+fi
+
+if [ -r $3 ]
+then
+  if [ "`echo -n hi | grep n`" = "" ]		# can echo use "-n" ??
+  then
+    echo -n "$0: File $3 exists!  Overwrite it? (y/n) "	  # yes!
+  else
+    echo "$0: File $3 exists!  Overwrite it? (y/n) \\c"	  #  no!
+  fi
+  read answer junk
+  if [ "$answer" = "y" -o "$answer" = "yes" ]
+  then
+    echo "$0: removing current copy of file $3..."
+    rm -f $3
+  else
+    echo "$0: Digest processing cancelled!"
+    exit 5
+  fi
+fi
+
+# Now let's try to do something!
+
+cat $1 > $3
+
+# first collect all the 'subject' lines at the top of the file...
+
+echo ' '
+echo "Extracting all the 'subject' lines..."
+
+egrep -e "^Subject:" $2 | sed 's/Subject://' | center >> $3
+
+echo ' '
+
+# now digest the file...
+
+echo "...feeding the file to awk..."
+
+cat $2 | awk -f $awk_script - >> $3
+
+cat $4 >> $3
+ 
+echo ' '
+exit 0

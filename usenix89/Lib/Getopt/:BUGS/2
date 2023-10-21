@@ -1,0 +1,81 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84 (Fortune 01.1b1); site graffiti.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!ut-sally!ut-ngp!shell!graffiti!peter
+From: peter@graffiti.UUCP (Peter da Silva)
+Newsgroups: net.sources.bugs
+Subject: Re: getopt(3) posting FLAME
+Message-ID: <306@graffiti.UUCP>
+Date: 15 Oct 85 16:52:34 GMT
+Date-Received: 17 Oct 85 23:15:01 GMT
+References: <910@utcs.uucp>
+Organization: The Power Elite, Houston, TX
+Lines: 68
+
+Disclaimer: the following text should be ignored by 90% of the readers of
+mod.std.c, since they've already gone through this.
+
+> Second, it is very useful and should be used in all new programs.
+> People should not write their own version of argument parsing
+> in every new program, and get it wrong, when a standard argument
+> parser is available.
+
+Not when (as has been pointed out by many people) the standard argument parser
+does the wrong thing. It can't even handle the arguments that sort(1) (V7)
+uses, to wit:
+
+	sort -mubdfincrtx
+
+Where the final 'tx' means 'tab character <x>'. The rest of sort's arguments
+are even less parsable by getopt. There is no reason for getopt's
+insistence on lots of whitespace, nor for its ignoring argument order, nor
+for its inability to handle '+' and '-' type command flags...
+
+And finally it's too big. If your program takes the following arguments:
+
+	foo [-someflags] [file]...
+
+Which is the usual case, what's wrong with:
+
+	char *prog;
+
+	main(ac, av)
+	int ac;
+	char **av;
+	{
+		int flag = 0;
+
+		prog = *av;
+		while(av++, ac--)
+			if(**av=='-')
+				while(*++*av)
+					switch(**av) {
+						case 's': /* -s */
+							sflag++;
+							break;
+						...
+						case 'g': /* -g<s> */
+							if(av[0][1])
+								gchar = *++*av;
+							else if(av[1])
+								gchar = **++av;
+							else
+								usage(*av);
+						default:
+							usage(*av);
+					}
+			else {
+				FILE *fp = fopen(*av, "r");
+				if(fp) {
+					do_something_with(fp, *av);
+					fclose(fp);
+				}
+				flag = 1;
+			}
+		if(flag==0) /* no files processed */
+			do_something_with(stdin, "standard input");
+	}
+
+which is not much more complex than the main you have to write with getopt to
+do the same thing, allows more flexibility (foo -s -g:; foo -s -g :; foo -sg:;
+foo -sg :), and produces a program that needs less core. If you think that's
+a minor consideration, remember why vi doesn't use stdio on a PDP-11.

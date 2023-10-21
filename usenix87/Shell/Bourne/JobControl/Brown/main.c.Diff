@@ -1,0 +1,162 @@
+*** main.c	Mon Nov 24 17:49:25 1986
+--- /cs/simon/c/shdiff-sources/main.c	Fri Feb 20 12:48:19 1987
+***************
+*** 147,152
+  	dfault(&mchknod, MAILCHECK);
+  	mailchk = stoi(mchknod.namval);
+  
+  	if ((beenhere++) == FALSE)	/* ? profile */
+  	{
+  		if (*(simple(cmdadr)) == '-')
+
+--- 147,156 -----
+  	dfault(&mchknod, MAILCHECK);
+  	mailchk = stoi(mchknod.namval);
+  
++ #ifdef JOB
++ 	initjobs();
++ #endif JOB
++ 
+  	if ((beenhere++) == FALSE)	/* ? profile */
+  	{
+  		if (*(simple(cmdadr)) == '-')
+***************
+*** 186,191
+  			comdiv--;
+  		}
+  	}
+  #ifdef pdp11
+  	else
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+
+--- 190,200 -----
+  			comdiv--;
+  		}
+  	}
++ 	else {
++ #ifdef JOBSXT
++ 		extern int sxtchan;
++ 		sxtchan = -1;
++ #endif JOBSXT
+  #ifdef pdp11
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+  #endif
+***************
+*** 187,193
+  		}
+  	}
+  #ifdef pdp11
+- 	else
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+  #endif
+  		
+
+--- 196,201 -----
+  		sxtchan = -1;
+  #endif JOBSXT
+  #ifdef pdp11
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+  #endif
+  	}
+***************
+*** 190,195
+  	else
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+  #endif
+  		
+  	exfile(0);
+  	done();
+
+--- 198,204 -----
+  #ifdef pdp11
+  		*execargs = (char *)dolv;	/* for `ps' cmd */
+  #endif
++ 	}
+  		
+  	exfile(0);
+  	done();
+***************
+*** 262,267
+  
+  	if (input >= 0)
+  		initf(input);
+  	/*
+  	 * command loop
+  	 */
+
+--- 271,281 -----
+  
+  	if (input >= 0)
+  		initf(input);
++ 
++ #ifdef JOB
++ 	if (flags&ttyflg) setjob(0);
++ #endif
++ 
+  	/*
+  	 * command loop
+  	 */
+***************
+*** 265,270
+  	/*
+  	 * command loop
+  	 */
+  	for (;;)
+  	{
+  		tdystak(0);
+
+--- 279,285 -----
+  	/*
+  	 * command loop
+  	 */
++ 
+  	for (;;)
+  	{
+  		tdystak(0);
+***************
+*** 304,310
+  
+  		trapnote = 0;
+  		peekc = readc();
+! 		if (eof)
+  			return;
+  
+  #ifdef TIME_OUT
+
+--- 319,337 -----
+  
+  		trapnote = 0;
+  		peekc = readc();
+! 		if (eof){
+! #ifdef JOBSXT
+! 			if ((flags&ttyflg) && stpjobs()){
+! 				int fd;
+! 				prs("\nThere are blocked jobs\n");
+! 				fd = sxtopen(1);
+! 				if (fd>=0){
+! 					initf(fd);
+! 					continue;
+! 				}
+! 			}
+! 				
+! #endif JOBSXT
+  			return;
+  		}
+  
+***************
+*** 306,311
+  		peekc = readc();
+  		if (eof)
+  			return;
+  
+  #ifdef TIME_OUT
+  		alarm(0);
+
+--- 333,339 -----
+  				
+  #endif JOBSXT
+  			return;
++ 		}
+  
+  #ifdef TIME_OUT
+  		alarm(0);

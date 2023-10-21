@@ -1,0 +1,96 @@
+			F protocol (X.25 PAD)
+			Installation hints
+
+"F" protocol is a UUCP protocol used to communicate over X.25 networks.
+The PAD dialer is a "real" dialer that can be used to set up connections
+to remote X.25 destinations using MICOM or Motorola PADS - and will probably
+work with most other PADS.  fio.c was originally distributed with various 
+"alpha-test" versions of the UUCP in BSD4.3 and has been posted several
+times.  I wrote the PAD dialer.  This readme gives some pointers on how 
+to install this into your UUCP.
+
+Applicability: if you already have "f" protocol (eg: you already have BSD4.3 
+UUCP), fio.c is likely to be a little older than the one you have, so don't 
+bother using it.  However, Rick Adams has told me that the PAD dialer 
+didn't make it into real BSD4.3, so the dialer should be really useful to you
+without any changes.  If you have an older UUCP (eg: BSD4.2 or previous, 
+System V, XENIX) you may be able to install both of these files.
+
+Note: I have never tried to install either of these into non-4.3 UUCP,
+so your mileage may vary - greatly.  The pad dialer in particular makes use
+of "generic" facilities (ABORT sequences, chat scripts etc.) that are not
+likely to be accessible in older UUCPs.  So you may have to do some carving
+just to get your new UUCP to compile and link.  I'm afraid you're on your
+own in that case.
+
+Installation:
+	1) Make copies of cntrl.c and condevs.c
+	2) Insert into cntrl.c, near the beginning:
+	    #ifdef PAD
+	    extern int fturnon(), fturnoff();
+	    extern int frdmsg(), frddata();
+	    extern int fwrmsg(), fwrdata();
+	    #endif PAD
+	3) in cntrl.c, inside the "struct Proto Ptbl[] =" initialization,
+	   insert the following just before the "g" proto definition:
+	    #ifdef PAD
+		'f', fturnon, frdmsg, fwrmsg, frddata, fwrdata, fturnoff,
+	    #endif PAD
+	4) In cntrl.c, inside the fptcl(str) function,
+	   you will see something like:
+	    for (p = Ptbl; p->P_id != '\0'; p++) {
+	    ...
+		if (index(str, p->P_id) != NULL) {
+			return p->P_id;
+		}
+	    }
+	   Insert the following code just before the "index" line:
+	    #ifdef PAD
+		/* only use 'f' protocol on PAD */
+		if (p->P_id == 'f' && strcmp("PAD", Flds[F_LINE]))
+			continue;
+	    #endif PAD
+	
+	5) in condevs.c, insert the following into the 
+	   "struct condev condevs[]=" initialization:
+	    #ifdef PAD
+		{ "PAD", "PAD", padopn, nulldev, padcls },
+	    #endif
+	6) insert "#define PAD 1" into your uucp.h
+	7) copy pad.c into the directory containing the rest of the dialers
+	   and modify the makefile to compile it.
+	8) copy fio.c into the main UUCP directory and modify the makefile
+	   to compile it.
+	9) run your UUCP make.
+
+You may encounter a number of undefined things.  If "dochat" is undefined,
+remove it from pad.c.  Ditto the stuff about ABORT sequences.
+
+Typical L.sys entry:
+
+<system> Any PAD <speed> <seq> 
+
+Where <speed> is the baud rate between your computer and your pad.  <seq>
+is the "dial number" to dial the destination.  Eg: if you have to type
+"c 12345555" to reach that destination, place "12345555" here.  You may
+encounter length restrictions when talking to the PAD, so you may have to
+set up "2-character aliases" in the PAD configuration.
+
+Typical L-devices entry:
+
+PAD <tty> ignored <baud> <chat sequence>
+
+The <baud> must be the same as in the L.sys entry.  <tty> is the ttyname
+that the PAD is connected to.  Eg: "tty44".  Chat sequence (alternatively
+protocol specification in some versions of SV UUCP) is probably not
+of any use unless you have the rest of 4.3BSD UUCP.  Duplicate this line
+with "DIR" instead of "PAD" so that you can "cu" to the line.
+
+Other setup: on dialer out-going line: disable getty, and connect the line
+to the PAD.  Initialize the PAD line parameters so that it is a "outgoing"
+port, and that you can get at X.28 command mode.  Eg: you should be able
+to "cu" to the line and dial out using X.28 commands.  Do not worry about
+any other parameters because the dialer will initialize all of the parameters
+on the line every time it starts up, and when the link is broken, the parameters
+revert.  Thus, the best thing to do is initialize the line for outgoing
+cu.

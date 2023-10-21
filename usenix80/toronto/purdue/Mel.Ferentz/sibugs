@@ -1,0 +1,379 @@
+   *** Problems, comments, and suggestions relating to the
+       installation of 3 SI 9400/CDC9766 disk systems on
+       2 PDP-11/45's and a PDP-11/70 at Purdue University
+       School of Electrical engineering.
+	Date: Near end of December, 1978.
+
+Current configuration:
+Each machine has 1 9400 controller, CPA, and 1 CDC 9766 drive on it.
+(9766 drive is 300 megabytes unformatted)
+
+Future configuration:
+11/70 and 11/45 in rm 338 will share the disk system as follows:
+
+------------           --------------                   ------------
+|(unibus)  |<--------->| 9400       |<----------------->|(unibus)  |
+|          |           ---/--\-------                   |          |
+|          |    ---------/    \----------               |          |
+|  11/45   |    |9766-0 |      |9766-1  |               |  11/70   |
+|          |    |       |      |        |               |          |
+|          |    ---------\    /----------               |          |
+|          |           ---\--/-------                   |          |
+|(unibus)  |<--------->| 9400       |<----------------->|(cachebus)|
+------------           --------------                   ------------
+
+
+Third system will have 1 drive, 1 9400 and 2 CPA's, one CPA will be
+mostly a spare and there is a possiblilty of adding another small CPU
+like an 11/10 in the future.
+
+
+1) drive gets hung in an indeterminate state (fault light either
+   on or off) which can't be cleared with software.  Usually
+   happens on powerup.  Fix: Ground cable between drive, controller,
+   and putting drive and controller on same phase of AC line so
+   they both get power fail.  Also change software to issue RECAL
+   command to drive in processing error/power failures.
+
+2) various "read-only" bits in device registers can be written
+   into, and various bits (like bits 12,13 in rpcs1) come up
+   in indeterminate states on powerup. (massbus parity error)
+   which is contrary to SI 9400 documentation.
+   Fix: This doesn't bother UNIX or us very much, but DEC software might
+   get mad and take RPCS1-13 to be a "Massbuss parity error"
+
+3) BUS HOG - throttle control doesn't work - keeps bus for whole xfer.
+   FIX: Not sure, more thought should be put into this area.  CPA now works
+   as documented in this area (After several Purdue mods and SI mods)
+   There is a tradeoff here:
+      If left currently as is (on a large time sharing system) then
+      CPA drops bus (after throttle count) when another device wants
+      to use the bus.  This allows for much more throughput since
+      the SI disk is faster than 11/70 memory (especially on Unibus
+      CPA instead of "cache-bus") by reducing bus arbitration.  We have
+      experimentally wired CPA (with SI's permission) for a short time
+      to drop bus unconditionally after throttle count and throughput
+      (pack-to-pack copy) dropped off very badly as could be expected.
+      We then returned the CPA to its original mode of bus arbitration.
+
+      The major problem with the current method of CPA bus arbitration
+      is that the CPU cannot "request" the bus, therefore the CPA will
+      not drop the bus until the 9400's buffer is done, probably on a
+      track/sector boundry (this time has been measured in the 400-1000
+      microsecond range).  Therefore the CPU is locked out dead for
+      400-1000 microseconds.  Any non trivial PDP-11 operating system
+      (UNIX, RSTS, RSX-11) operates with a clock interrupting at 60HZ, and
+      almost always the CPU will attempt to access one or more unibus
+      device registers during the clock interrupt (60 times/sec) and
+      get locked out.  The CPU must "request" the bus in order to get
+      at a device register, however DMA (NPR) and interrupts work ok
+      since the CPA can sense they are pending.  We have noticed the UNIX
+      time of day (derived from the line clock KW-11L) loses about 1 hour
+      in a 12 hour period when the SI drive is running hard.
+
+      A much more serious problem occurs when non-DMA devices on the
+      bus are driven at high data rates (9600 baud), like DL-11's,
+      DH-11's (input only, output is DMA), Line printer interfaces, etc.
+      For one device running at 9600 baud, the CPU must issue about
+      1000 bus requests a second just to read/write the data-buffer
+      register for the device, and many more if the "ready" bit is
+      checked (another dev register read).  Under these conditions
+      (which are common on our system) I have measured that we only
+      have about 5% to 10% of the CPU time available to do anything,
+      the rest is eaten up waiting for the CPA to drop the bus during
+      CPU-unibus accesses.  This figure does not include "cache-wiping",
+      which is a DEC 11/70 design flaw that causes the cache to become
+      ineffective whenever a high speed Unibus transfer is in progress.
+      Cache wiping does not occur for "massbus" (your cache-bus)
+      interface.
+
+      A possible solution to the above problem for your future
+      customers might be to install a switch selectable option
+      (or programmable using some "spare" bit) to select which mode
+      to operate in (unconditional bus drop on throttle count or
+      "bus arbitrate" mode).  During our "normal" timesharing
+      operations, most transfers are 1 sector long and there is a
+      seek between each operation.  Doing an unconditional bus drop
+      will slow down only the actual data transfer part of a disk
+      function which is only about 5-10% of the total time to
+      execute a disk function (the rest is spent seeking, rotational
+      latency, etc).  However this mode of operation will kill us
+      when doing large continuous transfers (pack-to-pack backup)
+      since the 9766 drives are so fast they will miss revolutions
+      waiting on transfers between the 9400 and main memory.  I would
+      like to hear some of your comments on this problem.
+
+
+4) drive sometimes gets hung in indeterminate state when "controller
+   reset" switche is pressed, must power down drive to clear.
+   FIX: Software changed to issue a drive RECAL function.  This will
+   definately cause problems with DEC software and SI is changing
+   9400 micro-code to issue RECAL's whenever a controller reset is
+   issued.
+
+5) When a read command is issued (when VV bit in RPDS hasn't been
+   set), no error is returned, however RPWC remains unchanged..
+   FIX: Change software to always set VV bit if off.  This difference
+   will definately confuse DEC software when packs are mounted/dismounted
+   on multiple drives.  See paragraph below on RP04-SI Differences.
+
+    VV bit differences with RP04.
+
+    If a read/write is done to SI 9400 controller with VV clear,
+    it is a "nop", I.E. completes with no error bits.  RPWC does
+    not change. Our RP04 sets ATTN, TRE, and MXF, and
+    no error bits set in RPer1, RPer2, and RPer3 (RPWC doesn't change)
+
+    Also issueing a Unibus reset (Start-init) or Controller-clear
+    to DEC RP04 does not clear VV bit, where SI 9400 clears VV bit.
+
+
+6) TRE (in RPCS1) doesn't set on aborted function, Addr Err,
+   write-lock err, drive fault, etc....
+   FIX: I later found TRE did set correctly in most of the cases
+   (software cleared IENABLE and TRE gets cleared when a 1 is written
+   into it).  One case in particular when it did not set was after
+   an attempt to access in illegal cylinder on the drive.  Subsequent
+   drive functions are apparently no-op'd (no error, RPWC doesn't
+   change).  DEC software (most notably "preserve") has been known to
+   read/write off the end of a pack depending on the blocking factors used.
+   Micro-control should probably be changed to set TRE in this error.
+
+7) Selecting different drives (including nonexistant ones)
+   causes trash to appear in bits 13 + 12 in RPCS1 which are
+   apparently emulated 8 times but documented as always 0
+   and some DEC software may think it got a Massbus parity error
+   if on.
+   FIX: SI is changing micro-control to clear these bits out on power-up.
+
+8) Power fail crashes system if SI transfer in progress.  If there is
+   a transfer in progress between main memory (core made by
+   Standard Memories) and a power fail occurs, the SI  controller keeps
+   right on making DMA (NPR) requests to main memory even after AC low
+   has been asserted.  Standard memory "freezes up" about 2 ms after AC
+   low has been asserted to prevent data destruction, and the SI keeps
+   trying to access it.  An attempt to access the memory after is is
+   frozen, causes it to generate a "parity" error (fatal system crash
+   to us).  Also the CPU will get locked out for 400-1000 microseconds
+   (see "BUS HOG" above) during the power fail sequence which makes it
+   real tight on getting all the registers saved with the 2 millisecond
+   power fail time limit.  If DEC ever gets their software to handle
+   power fails, there probably would not be enough time for it to complete.
+   FIX: kludgey software fix to stuff a 40 into RPCS2 (controller clear)
+   at beginning of power fail sequence.  This aborts the transfer and
+   fixes the problem of trying to access memory after it is frozen up.
+   MOVing a 40 into RPCS2 causes the CPU to get locked out for 400-1000
+   microseconds, but we are just barely able to complete the register
+   save before DC low comes asserted.  I talked to the SI 9400 firmware
+   expert and he mentioned there is an interlock problem in the 9400
+   firmware: doing a controller-clear in the middle of a transfer sets
+   RPBA = 0 which may cause a few words to get transfered to/from low
+   core before things finally shut down.  If a disk read were it progress
+   it may be possible to clobber the PDP-11 low core interrupt vector
+   area due to this.  I have tried several powerfails when doing reads,
+   but have never clobbered the interrupt vectors, presumably because
+   the CPA caused the CPU to get locked out until a sector boundary
+   when trying to stuff a controller clear into RPCS2.
+   The hardware people here tell me that the DEC disks terminate their
+   transfers at the first sector boundry after AC low is asserted.
+
+9) Attempts to access emulated RP04 units 1 and 2 return
+   DRIVE FAULT and UNSAFE error bits.
+   FIX: Since we started with a "mapped" system, nobody knew that
+   units 1 and 2 must be formatted with zaptest before using.
+   Talking to "factory" fixed this one.
+
+10) Can write into RPCC register (and many other "read-only" ones)
+    FIX: none probably needed. UNIX isn't bothered by this and I
+    don't know if any DEC software (except diagnostics) which would
+    be fouled up by this.
+
+11) Seek command just copies RPDC register into RPCC register and
+    apparently does nothing else, this works even for illegal
+    cylinder addresses (like 177777).  Our UNIX does not do
+    explicit seeks, but somebody may have one that will.  DEC
+    software sometimes does overlapped seeks (rather useless on
+    9766 which is probably why seek command is a no-op) but if
+    one had multiple 9762 drives, then overlapped seeks (with DEC
+    software) would be beneficial.  FIX: It doesn't affect us,
+    but SI may want to do something about it for their customers
+    who run DEC software.
+
+12) RPDS write lock bit (WRL) is not correctly updated.  If the
+    state of the write protect switch on the 9766 drive is
+    changed, the change does not show up in the state of the WRL
+    bit in RPDS.  The state of the WRL bit still does not change
+    if read-in-preset, pack-acknowledge, seek (nop), drive
+    recalibrate, or drive clear functions are issued.  However,
+    turning the drive off and on, or issueing a read/write
+    command causes WRL bit to get updated.  Also DEC software
+    might get confused when trying to mount a disk for write
+    access and might check WRL bit in RPDS to see if he can write
+    on it.  If the previous command to the drive was a read-in-
+    preset and the drive was write locked, the DEC software would
+    see WRL=0 and might try to write on it, causing a system
+    crash since the next write would blow up when he thought it
+    was ok to write on it.
+    FIX: SI knows of the problem, doesn't affect UNIX.
+
+13) RPDS shows drive ready when drive electronics first powered up.
+    If a 9766 drive is turned off and on via the start button on
+    the front, RPDS correctly indicates the situation, DPR, DRY, and
+    MOL all go off and come on when they should. VV goes off and
+    correctly sets when read-in-preset is issued.  If the 9766 drive
+    is turned off via the front start button, and then the drive
+    electronics is turned off by the main breaker in the back of
+    the drive (or a real power fail), RPDS will show 110600 when
+    the drive electronics is turned on again (start button on front
+    still off).  MOL, DPR, and DRY are set and the drive is turned off!
+    This plays havoc with powerfail/recovery code which
+    typically waits for the pack to spin up before using again.
+    If a read-in-preset function is issued while in this state, the
+    VV bit does not set, if the drive is turned on via the front start
+    switch, RPDS does not change after pack has spun up but issueing
+    a read-in-preset at this point will set VV bit.
+    FIX: Several people at SI know about this problem, I am not sure
+    what is being done.  Our (temporary kludge) fix consisted of:
+    a)  Power fail recovery waits 20 seconds before doing anything.
+	It usually takes 18 seconds for a drive to spin up and go
+	ready.
+    b)  Device driver error processing issues RECAL functions after
+	controller/drive clears and sees whether the RECAL completed
+	ok without error, RECAL will return error if drive really isn't
+	ready, but RPDS thinks it is ready.
+
+14) ECC polynomial error on writes over 11 sectors.
+    This bug by far has been the most perplexing and annoying.
+    If a 9400/9766 system (only on an 11/70) is run in a mode where
+    reads/writes using a buffer greater then 11 sectors continuously,
+    (both DEC-X11 and UNIX) occasionaly (once every 2-6 hours) a
+    sector will be written out with a bad polynomial in it.  Attempts
+    to read the sector will return an ECC uncorrectable error, no matter
+    how many attempts are made to read it.  The data contained in the
+    "bad" sector has always been correct.  It does not seem pattern
+    or address sensitive, totally random.  Sometimes the sector can be
+    read by setting RPOF = 120000 (HCI + FMT22) and a 1 sector read
+    issued.  There is a much lesser probably of reading the same
+    sector in a multiple sector read which HCI set.  For any given
+    occurrence of the error, the outcome of the read doesn't change
+    from retry to retry (except by setting HCI bit), this indicates
+    the problem probably isn't a "soft" spot or disk data error.
+    For the first 10 times or so this error occurred, I "burned in"
+    that sector by writing 1000's of different patterns into just
+    that sector and they always read back ok.  Both 9400's, CPA's,
+    and 9766's (in EE 338) have failed in all combinations on the 11/70,
+    but have never failed on the 11/45.  We also ran the "third system"
+    9400 controller for 20 or 30 hours of testing on the 11/70 and
+    it did not fail due to ECC error.
+    FIX: Immediate: Don't do any transfers over 11 sectors with UNIX
+    which eliminates use of swapping and large pack-to-pack copies
+    for the SI drive. Long term: SI has been working hard at coming
+    up with ECO's for the 9400 board.  SI spent several days here
+    (Steve Adams) looking for answers and coming up with an engineering
+    prototype 9400 board for testing on the 11/70.  The first 6 or 7
+    attempts to run with the proto 9400 board resulted in various
+    bad things happening to the system like memory address parity
+    errors, bus hangs, instructions aborting, missed transfers (sometime
+    could not be cleared by software or even powerdown!)
+    The proto was tried with various CPA's (one new CPA had intermittent
+    interrupt problems and was returned), all ran for over 4 hours but
+    aborted in less than 24 hours, each time from a different error.
+    We finally discovered that the 6800 chip in the proto board was
+    slightly loose and was falling part way out of its socket!  When pushed
+    in again, it fell out when mounted upside down in rack.  A little
+    masking tape to hold it in, the misc crashing and aborting all vanished!
+    After 13 hours of running the proto with 100 sector read/writes, we
+    got an ECC error, SI gave us another ECO relating to the problem
+    and we installed this along with putting in a new 6800 chip.
+    We have run fine on it for about 1 week now (about 60 hours of 100
+    sector read/write) with no failures now.  We did have 2 system crashes
+    in that period, but I have tracked them down to other (non-SI) causes
+    (one of them showed up a software bug which had been around for 3
+    years, but the "Bus-hog" effect strained the software which made it
+    show up, i.e. if the SI were not running the crash would not have
+    happened, but the SI is certainly not the cause of the crash)  Anyway,
+    it would seem to indicate that SI has finally licked this error.
+    This proto 9400 board seems to hit bus-busy about 20% harder then
+    a stock 9400 board.
+
+15) Cannot get errors on pack with known badspots with ECC disabled.
+    All of the packs we use on our new 9766's are from Dysan,
+    guaranteed error free.  We have 2 CDC packs for a 9500/9766 system
+    which show up 5 or 6 badspots (with 9500 ECC disabled) but are
+    error free with ECC on. To test the ECC in the 9400 (which fails
+    zaptest due to software bug I am told) I set the 40000 bit in RPOF
+    which is documented as disabling the ECC correction and reformatted
+    the pack on the 9400.  I wrote and read back several patterns
+    (starting with 133333,165555,166666) which seemed to show the
+    most badspots on the 9500.  I could not even get 1 error!!!!.
+    I find it hard to believe that all of the badspots on the CDC
+    pack would now fall into a sector gap (9400 is 33 sector, 9500 is
+    32 sector/track).  This seems to imply the current version of the
+    9400 micro-code doesn't turn off the ECC correction process.
+    It would be nice to disable the ECC for maintenance and testing
+    since we could see when things were beginning to go flakey
+    (marginal), now we don't even know if we are getting errors 11 bits
+    or less.  I talked to someone at SI (on 6800 firmware) that it
+    might be nice to have some obscure status bit to indicate whether
+    or not an ECC error recovery was performed on a transfer.
+
+
+16) The first two 9400's (in EE 338) began to randomly hang up
+    like the 6800 in them had crashed 2 or 3 times a week after
+    3 weeks from initial installation.  Sometimes various controller
+    power-low error bits were found on in RPER3.  Software could
+    not clear this error, only hitting reset switch on 9400 board.
+    FIX: SI found the Lambda power supplies tend to go flakey
+    and produce spikes which can crash the 6800.  Their new 9400's
+    (our third system) use another brand of supplies.  SI shipped us
+    new power supplies for our first 2 systems and the problem
+    cleared up.
+
+17) Near the beginning of our installation, there were many problems
+    uncovered with CPA/unibus protocol's.  Many system crashes, bus
+    hangs, reduced throughput, random errors occurred on both the 11/45
+    and 11/70 until many hours were spent with a logic analyzer
+    and SI engineers and our own hardware staff to correct the
+    problems.  I will leave it up to the hardware staff to finish
+    this paragraph since it is beyond my scope.  I know that out of the
+    3 CPA's here, that 2 of them have had dissimilar mods done to them
+    while the CPA for the third system is a straight "stock" SI CPA
+    with their latest ECO's.  I know the mods which allowed one CPA
+    to run 1 week error free on the 11/45 in EE 338 (very heavy bus
+    transfers going) will not run on the 11/70 if the DMC-11 is running
+    (The DMC-11 seems to generate lots of spurious interrupts)
+
+18) When issueing a read command to an illegal cylinder
+    address, Drive error is set in RPDS, but RPWC is cleared.
+    Also cannot issue further functions until controller reset
+    (writing a 40 into RPCS2).
+
+
+Purdue/EE is willing to work with SI in the future to help track down
+still pending and new problems.  The cache-bus interface will probably
+need some debugging and we still have bus glitches on our 11/70 when
+the SI disk is running, but we are not sure who is causing them yet.
+Also our CPA's are not very "interchangeable", between 45's and 70's
+and there are several complex bus interaction problems between
+certain CPA's and other DEC devices (DMC-11, DH-11, DA-11, etc)
+on the 70 unibus.
+
+
+		 *** more hardware type problems ***
+
+Si controller issued more than 1 unibus SACK request at the end of each
+sector, causing the loss of pending NPR and BR bus requests.
+SI fixed with ECO.
+
+SI drops BBSY briefly during a transfer, causing mutiple devices to
+come on the bus at the  same time under heavy bus activity.
+Purdue has fix for this.
+
+SACK is asserted for entire transfer + after BBSY was dropped, this
+prevented the next bus grant being arbitrated during the transfer
+and caused a small loss in throughput.
+
+Throttle count does not work as documented. SI fixed with ECO
+
+Low transfer rate (1.8 microsecs/word on unibus CPA)
+seems to be design problem.

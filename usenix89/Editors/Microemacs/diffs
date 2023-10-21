@@ -1,0 +1,90 @@
+changes to MicroEMACS v3.8i
+
+Sorry I couldn't do a context diff on the system with the source. These
+consist of the name of the module, the reason for the change, given as
+comments, and the actual diffs. These represent some changes I found
+useful. With the exception of the change to the 'word' logic, these will
+do nothing but eliminate compiler warnings.
+----------------------------------------------------------------
+estruct.h
+# This change is to keep the VAX C compiler from complaining about
+# undefining 'abs'. It complains on every compile, and on the link
+# once per module. Enough!
+269a270
+> #ifdef abs
+270a272
+> #endif
+
+termio.c
+# this avoids a message from the BSD compiler about "statement
+# not reached"
+462c462
+< #endif
+---
+> #else
+463a464
+> #endif
+word.c
+# This causes emacs to treat words the way vi does. Delete word now has
+# the following logic:
+# - if the cursor is in a word, delete the word and all following
+# whitespace
+# - if the cursor is not in a word delete characters up to the next word
+# 
+# This matters for expressions like "abc/(def+ghi)", where the original
+# logic would delete from 'a' in 'abc' to 'd' in 'def', dropping the
+# operators on the way. With this change the word deleted is 'abc' only,
+probably what is intended.
+255,258c255,267
+< 		while (inword() != FALSE) {
+< 			if (forwchar(FALSE,1) == FALSE)
+< 				return(FALSE);
+< 			++size;
+---
+> 		if (inword()) {
+> 			while (inword() != FALSE) {
+> 				if (forwchar(FALSE,1) == FALSE)
+> 					return(FALSE);
+> 				++size;
+> 			}
+> 	
+> 	                while ((iswhite()) &&
+> 					(curwp->w_doto != llength(curwp->w_dotp))) {
+> 	                        if (forwchar(FALSE, 1) == FALSE)
+> 	                                return (FALSE);
+> 	                        ++size;
+> 	                }
+260,266c269,276
+< 
+<                 while ((inword() == FALSE) &&
+< 				(curwp->w_doto != llength(curwp->w_dotp))) {
+<                         if (forwchar(FALSE, 1) == FALSE)
+<                                 return (FALSE);
+<                         ++size;
+<                 }
+---
+> 		else {
+> 			while ((inword() == FALSE) &&
+> 					(curwp->w_doto != llength(curwp->w_dotp))) {
+> 				if (forwchar(FALSE,1) == FALSE)
+> 					return(FALSE);
+> 				++size;
+> 			}
+> 		}
+340a351,366
+>         return (FALSE);
+> }
+> 
+> /*
+>  *  return TRUE if the current character is whitespace,
+>  *  else return FALSE.
+>  */
+> 
+> iswhite()
+> {
+>         register int    c;
+> 
+>         if (curwp->w_doto == llength(curwp->w_dotp))
+>                 return (FALSE);
+>         c = lgetc(curwp->w_dotp, curwp->w_doto);
+> 	if (c == ' ' || c == '\t') return (TRUE);

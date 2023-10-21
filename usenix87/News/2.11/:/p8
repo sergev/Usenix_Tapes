@@ -1,0 +1,448 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA14184; Sun, 12 Apr 87 03:29:27 CDT
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!gatech!seismo!rick
+From: seismo.CSS.GOV!rick (Rick Adams)
+Newsgroups: news.software.b
+Subject: patch #8 for news 2.11 src (IMPORTANT)
+Keywords: stupid
+Message-Id: <43388@beno.seismo.CSS.GOV>
+Date: 11 Apr 87 04:30:36 GMT
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 434
+Posted: Fri Apr 10 23:30:36 1987
+Apparently-To: hokey
+
+If you have installed patch #6 it is important that you install this
+patch. (Having installed #7 implies that you have installed #6).
+Patch #6 added locking so that only 1 newgroup message at a time
+would be running. Unfortunately, if the newgroup message was for a
+group that already existed, you did a premature return and did
+not unlock inews.
+
+Description:
+	This is patch #8 for news 2.11 source. It addresses the following
+	problems:
+
+	The newgroup locking mentioned above.
+	Cancel control messages for articles that were non-existant are
+	not forwarded.
+	If SPOOLNEWS is defined, locally generated articles (i.e. inews
+	not rnews) are processed immediately unless SPOOLINEWS is defined.
+	Several defines that are no longer used were removed.
+	The SPOOLNEWS code was made a little more readable.
+	A temporary file used for rnews -U interlocking is now removed.
+
+Fix:
+	cd to the src directory and apply the following patch
+
+Index: patchlevel.h
+Prereq: 7
+*** .d/patchlevel.h	Tue Apr  7 13:58:31 1987
+--- patchlevel.h	Fri Apr 10 23:40:11 1987
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	7
+  
+! #define NEWS_VERSION   "B 2.11 4/06/87"
+--- 1,3 ----
+! #define	PATCHLEVEL	8
+  
+! #define NEWS_VERSION   "B 2.11 4/10/87"
+
+Index: control.c
+Prereq: 2.53
+*** .d/control.c	Tue Mar 24 13:51:24 1987
+--- control.c	Fri Apr 10 23:40:06 1987
+***************
+*** 20,24 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.53	3/20/87";
+  #endif /* SCCSID */
+  
+--- 20,24 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.54	4/10/87";
+  #endif /* SCCSID */
+  
+***************
+*** 57,65 ****
+   */
+  
+- static int is_proc;
+  
+! control(h, isproc)
+  struct hbuf *h;
+- int isproc;
+  {
+  	register char *ctlmsgtext;
+--- 57,63 ----
+   */
+  
+  
+! control(h)
+  struct hbuf *h;
+  {
+  	register char *ctlmsgtext;
+***************
+*** 66,70 ****
+  	register struct msgtype *mp;
+  
+- 	is_proc = isproc;
+  	if (strncmp(h->title, "cmsg ", 5) == 0) {
+  		register char *cp1, *cp2;
+--- 64,67 ----
+***************
+*** 397,402 ****
+  #endif /* NONEWGROUPS */
+  			} else {
+! 				if (*p != 'm')
+  					return 0;
+  # ifdef NONEWGROUPS
+  				if(can_change)  {
+--- 394,401 ----
+  #endif /* NONEWGROUPS */
+  			} else {
+! 				if (*p != 'm') {
+! 					unlock();
+  					return 0;
++ 				}
+  # ifdef NONEWGROUPS
+  				if(can_change)  {
+***************
+*** 644,648 ****
+  		   tm->tm_min);
+  		savehist(bfr);
+! 		return is_proc ? 0 : 1;
+  	}
+  
+--- 643,647 ----
+  		   tm->tm_min);
+  		savehist(bfr);
+! 		return -1;
+  	}
+  
+***************
+*** 652,656 ****
+  		*q = '\0';
+  		log("Expired article %s", line);
+! 		return is_proc ? 0 : 1;
+  	}
+  	if (strcmp(p, "cancelled") == 0) {
+--- 651,655 ----
+  		*q = '\0';
+  		log("Expired article %s", line);
+! 		return -1;
+  	}
+  	if (strcmp(p, "cancelled") == 0) {
+***************
+*** 657,661 ****
+  		*q = '\0';
+  		log("Already Cancelled %s", line);
+! 		return is_proc ? 0 : 1;
+  	} else
+  		log("Cancelling %s", line);
+--- 656,660 ----
+  		*q = '\0';
+  		log("Already Cancelled %s", line);
+! 		return -1;
+  	} else
+  		log("Cancelling %s", line);
+
+Index: defs.dist
+Prereq: 2.57
+*** .d/defs.dist	Tue Mar 24 13:56:06 1987
+--- defs.dist	Fri Apr 10 23:40:06 1987
+***************
+*** 15,19 ****
+   */
+  
+! /*	@(#)defs.dist	2.57	3/23/87	*/
+  
+  /*
+--- 15,19 ----
+   */
+  
+! /*	@(#)defs.dist	2.58	4/10/87 	*/
+  
+  /*
+***************
+*** 50,55 ****
+  #define MANUALLY		/* Don't execute rmgroups, just notify.	*/
+  /* #define NONEWGROUPS		/* Don't create new groups, just notify.*/
+! #define BATCH "unbatch"		/* name of unbatcher 		*/
+! /* #define SPOOLNEWS		/* Spool incoming news, don't process	*/
+  /* #define LOCALNAME 		/* There is no full name database. 	*/
+  /* #define INTERNET		/* Internet mail works locally		*/
+--- 50,55 ----
+  #define MANUALLY		/* Don't execute rmgroups, just notify.	*/
+  /* #define NONEWGROUPS		/* Don't create new groups, just notify.*/
+! /* #define SPOOLNEWS		/* Spool incoming rnews, don't process	*/
+! /* #define SPOOLINEWS		/* Spool local inews, don't process	*/
+  /* #define LOCALNAME 		/* There is no full name database. 	*/
+  /* #define INTERNET		/* Internet mail works locally		*/
+
+Index: ifuncs.c
+Prereq: 2.64
+*** .d/ifuncs.c	Tue Apr  7 13:58:42 1987
+--- ifuncs.c	Fri Apr 10 23:40:09 1987
+***************
+*** 17,21 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.64	4/6/87";
+  #endif /* SCCSID */
+  
+--- 17,21 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.65	4/10/87";
+  #endif /* SCCSID */
+  
+***************
+*** 24,29 ****
+  /*LINTLIBRARY*/
+  
+- #define AFSIZ	4000	/* size of text in the active file for initial malloc */
+- 
+  /*
+   * Transmit this article to all interested systems.
+--- 24,27 ----
+***************
+*** 1026,1030 ****
+  }
+  
+- #ifdef BATCH
+  /*
+   * If the stdin begins with "#" the input is some kind of batch.  if
+--- 1024,1027 ----
+***************
+*** 1307,1311 ****
+  	xxit(2);
+  }
+- #endif /* BATCH */
+  
+  /*
+--- 1304,1307 ----
+
+Index: inews.c
+Prereq: 2.79
+*** .d/inews.c	Tue Apr  7 13:58:48 1987
+--- inews.c	Fri Apr 10 23:40:11 1987
+***************
+*** 18,22 ****
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.79	4/6/87";
+  #endif /* SCCSID */
+  
+--- 18,22 ----
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.80	4/10/87";
+  #endif /* SCCSID */
+  
+***************
+*** 52,58 ****
+  #define	CREATENG 0020	/* Create a new newsgroup */
+  
+! char	forgedname[NAMELEN];	/* A user specified -f option. */
+! int spool_news = 0;
+  extern char histline[];
+  /* Fake sys line in case they forget their own system */
+  struct srec dummy_srec = { "MEMEME", "", "all", "", "" };
+--- 52,62 ----
+  #define	CREATENG 0020	/* Create a new newsgroup */
+  
+! #define DONT_SPOOL	0
+! #define	DO_SPOOL	1
+! #define	EXPIRE_RUNNING	2
+! int spool_news = DONT_SPOOL;
+! 
+  extern char histline[];
++ char	forgedname[NAMELEN];	/* A user specified -f option. */
+  /* Fake sys line in case they forget their own system */
+  struct srec dummy_srec = { "MEMEME", "", "all", "", "" };
+***************
+*** 153,157 ****
+  #endif	/* !BSD4_2 */
+  			xerror("Can't lock %s: %s", ACTIVE, errmsg(errno));
+! 		spool_news = 2;
+  	} else {
+  #ifdef SPOOLNEWS
+--- 157,161 ----
+  #endif	/* !BSD4_2 */
+  			xerror("Can't lock %s: %s", ACTIVE, errmsg(errno));
+! 		spool_news = EXPIRE_RUNNING;
+  	} else {
+  #ifdef SPOOLNEWS
+***************
+*** 161,169 ****
+  			Sflag = 1;
+  		} else
+! 			spool_news = 1;
+  
+  #endif /* SPOOLNEWS */
+  	}
+! 	if (spool_news != 2) {
+  		/* only unlock if we locked */
+  #ifdef	LOCKF
+--- 165,173 ----
+  			Sflag = 1;
+  		} else
+! 			spool_news = DO_SPOOL;
+  
+  #endif /* SPOOLNEWS */
+  	}
+! 	if (spool_news != EXPIRE_RUNNING) {
+  		/* only unlock if we locked */
+  #ifdef	LOCKF
+***************
+*** 181,185 ****
+  	}
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+! 		if (spool_news > 1) /* can't unspool while things are locked */
+  			xxit(0);
+  		dounspool();
+--- 185,190 ----
+  	}
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+! 		/* can't unspool while things are locked */
+! 		if (spool_news == EXPIRE_RUNNING)
+  			xxit(0);
+  		dounspool();
+***************
+*** 189,193 ****
+  	if (!strncmp(ptr+1, "rnews", 5)) {
+  		mode = PROC;
+! 		if (spool_news) {
+  			dospool((char *)NULL, FALSE);
+  			/* NOT REACHED */
+--- 194,198 ----
+  	if (!strncmp(ptr+1, "rnews", 5)) {
+  		mode = PROC;
+! 		if (spool_news != DONT_SPOOL) {
+  			dospool((char *)NULL, FALSE);
+  			/* NOT REACHED */
+***************
+*** 197,203 ****
+  			(void) nice(NICENESS);
+  #endif /* NICENESS */
+! 	} else
+  		if (argc < 2)
+  			goto usage;
+  
+  	state = OPTION;
+--- 202,214 ----
+  			(void) nice(NICENESS);
+  #endif /* NICENESS */
+! 	} else {
+! 	/* it's not rnews, so it must be inews */
+  		if (argc < 2)
+  			goto usage;
++ #ifndef SPOOLINEWS
++ 		if (spool_news == DO_SPOOL)
++ 			spool_news = DONT_SPOOL;
++ #endif /* SPOOLINEWS */
++ 	}
+  
+  	state = OPTION;
+***************
+*** 355,358 ****
+--- 366,370 ----
+  			/* there are certain fields we won't let him specify. */
+  			if (header.from[0]) {
++ 				(void) fixfrom(header.from);
+  				if (Sflag && !Mflag && !header.approved[0] &
+  					!header.sender[0]) {
+***************
+*** 437,443 ****
+  	/* Authorize newsgroups. */
+  	if (mode == PROC) {
+- #ifdef BATCH
+  		checkbatch();
+- #endif /* BATCH */
+  		(void) signal(SIGHUP, SIG_IGN);
+  		(void) signal(SIGINT, SIG_IGN);
+--- 449,453 ----
+***************
+*** 846,851 ****
+  		tm->tm_mon+1, tm->tm_mday, tm->tm_year,tm->tm_hour, tm->tm_min);
+  	addhist(bfr);
+! 	log("%s %s ng %s subj '%s' from %s",
+! 		spool_news ? "queued" : (mode==PROC ? "received" : "posted"),
+  		header.ident, header.nbuf, header.title, header.from);
+  
+--- 856,861 ----
+  		tm->tm_mon+1, tm->tm_mday, tm->tm_year,tm->tm_hour, tm->tm_min);
+  	addhist(bfr);
+! 	log("%s %s ng %s subj '%s' from %s", spool_news != DONT_SPOOL
+! 		? "queued" : (mode==PROC ? "received" : "posted"),
+  		header.ident, header.nbuf, header.title, header.from);
+  
+***************
+*** 928,935 ****
+  	}
+  
+! 	if (mode != PROC && spool_news)  {
+! 		if (spool_news == 1 && ngmatch(header.nbuf, "to.all.ctl"))
+! 			spool_news = 0;
+! 		if (spool_news) {
+  			fprintf(stderr,
+  			"Your article has been spooled for later processing.\n");
+--- 938,946 ----
+  	}
+  
+! 	if (mode != PROC && spool_news != DONT_SPOOL)  {
+! 		if (spool_news != EXPIRE_RUNNING
+! 			&& ngmatch(header.nbuf,"to.all.ctl"))
+! 				spool_news = DONT_SPOOL;
+! 		if (spool_news != DONT_SPOOL) {
+  			fprintf(stderr,
+  			"Your article has been spooled for later processing.\n");
+***************
+*** 940,944 ****
+  
+  	if (is_ctl) {
+! 		exitcode = control(&header, mode == PROC);
+  		if (localize("control") && exitcode != 0)
+  			savehist(histline);
+--- 951,955 ----
+  
+  	if (is_ctl) {
+! 		exitcode = control(&header);
+  		if (localize("control") && exitcode != 0)
+  			savehist(histline);
+***************
+*** 1023,1027 ****
+  		broadcast(mode==PROC);
+  	}
+! 	xxit((mode == PROC && filename[0] == '\0') ? 0 : exitcode);
+  }
+  
+--- 1034,1039 ----
+  		broadcast(mode==PROC);
+  	}
+! 	xxit((mode == PROC && filename[0] == '\0') ? 0 :
+! 		(exitcode < 0 ? 0 : exitcode));
+  }
+  
+***************
+*** 1271,1276 ****
+  	sprintf(bfr, "%s.tmp", spbuf);
+  	(void) close(creat(bfr, 0666));
+! 	if (LINK(bfr, spbuf) < 0) {
+! 		(void) UNLINK(bfr);
+  		if (errno != EEXIST)
+  #endif /* V7 */
+--- 1283,1291 ----
+  	sprintf(bfr, "%s.tmp", spbuf);
+  	(void) close(creat(bfr, 0666));
+! 	ret = LINK(bfr, spbuf);
+! 	status = errno;
+! 	(void) UNLINK(bfr);
+! 	errno = status;
+! 	if (ret < 0) {
+  		if (errno != EEXIST)
+  #endif /* V7 */

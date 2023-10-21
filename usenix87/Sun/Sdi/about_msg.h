@@ -1,0 +1,1 @@
+	"Sdi was designed and coded by Mark Weiser\nwhile at the University of Maryland.\nIf you like sdi, send mark a picture postcard at:\n  Mark Weiser\n  Computer Science Laboratory\n  Xerox Palo Alto Research Center\n  3333 Coyote Hill Rd.\n  Palo Alto, California  94304\n        (Email: mark@mimsy.umd.edu)"

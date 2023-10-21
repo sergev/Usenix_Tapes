@@ -1,0 +1,82 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: RM,v 1.15 86/06/22 18:13:33 dick Exp $
+
+#
+#		R e m o v e   E n t r y
+#	RM filename ... : removes entries from the present version.
+#	The entries will be removed from the RCS repository upon the
+#	next CM.
+#
+Name=RM; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+case $# in
+0)
+	echo Call is: $Name filename ... \
+				to remove files from present version >&2
+	exit 1
+	;;
+esac
+
+OK=yes
+for User in $@
+do
+	Rcs=$Repository/$User,v
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	# $User may still exist
+	case "$TS_User" in
+	"")
+		;;
+	*)
+		echo $Name: $User still exists >&2
+		OK=no
+		continue
+		;;
+	esac
+	
+	# check its status
+	case $VN_User in
+	"")
+		echo $Name: there is no entry for $User >&2
+		OK=no
+		;;
+	0)
+		# killed in the cradle
+		$CVSLIB/SC.aux $User
+		rm -f $User,?
+		;;
+	-*)
+		echo $Name: $User was already removed >&2
+		OK=no
+		;;
+	*)
+		# a full-grown entry; set it to removed
+		$CVSLIB/RG.aux $User -$VN_User "$TS_Rcs"
+		;;
+	esac
+done
+
+$CVSLIB/EF.aux				# update CVS.adm/Files
+
+# did we succeed?
+case $OK in
+no)
+	exit 1
+	;;
+esac
+
+exit 0

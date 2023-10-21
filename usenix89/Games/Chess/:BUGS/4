@@ -1,0 +1,250 @@
+Path: plus5!wucs1!cuae2!ihnp4!alberta!ubc-vision!uw-beaver!fluke!toma
+From: toma@tc.fluke.COM (Tom Anderson)
+Newsgroups: net.sources.games
+Subject: network chess (fix for 2.2)
+Message-ID: <314@as-jkp.tc.fluke.COM>
+Date: 19 Jan 87 19:37:32 GMT
+Organization: John Fluke Mfg. Co., Inc., Everett, WA
+Lines: 241
+
+
+As some of you may have noticed, the sources posted for network chess
+run into a snag on release 2.2 of Sun Unix.  Replacements for "decls.h"
+and "tool.c" appended below should fix this, as well as suffice for
+3.2.  However, if memory serves correctly (perhaps someone from Sun
+can confirm this), release 3.0 does not define "struct tool" and 
+"struct toolsw" (they are typedefs Tool and Toolsw, respectively);
+if this is true and you are running 3.0, don't use these files.
+
+Tom Anderson, (206) 356-5895
+John Fluke Mfg. Co., Inc.,  P.O. Box C9090 M/S 245F, Everett, Wa. 98206
+{ hplsla, microsoft, uw-beaver, sun }!fluke!toma
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by toma on Mon Jan 19 11:36:24 PST 1987
+# Contents:  decls.h tool.c
+ 
+echo x - decls.h
+sed 's/^@//' > "decls.h" <<'@//E*O*F decls.h//'
+/*
+ * global declarations 
+ */
+
+/* board.c */
+
+extern void InitBoard(), DoMove(), UnDoMove(), ShowLastPlay(), 
+    SaveGame(), WriteTranscript(), RestoreGame(), DoSetupChange(),
+    DoResignation();
+extern BOOL InitialTurn, IsOurPieceAt(), IsSrcPieceAt(), 
+    IsMoveLegal(), IHaveMoved(), InCheck(), GameOver;
+extern Square * GetSquare(), * GetSrcSquare();
+extern int PromotePawn(), Turn;
+
+/* boardsw.c */
+
+extern void InitBoardSW(), DrawBoard(), DrawSquare(), AddVictim(),
+    DeleteVictim(), KillMouseActivity(), RequestUndo();
+extern MouseState Mouse;
+extern BOOL Flashing;
+
+/* chessprocess.c */
+
+extern void InitChessProcess(), ReapChessProcesses(), KillChessProcesses(),
+    SendMachineMove(), MachineUndo(), MachineRestore(), MachineFirst();
+extern BOOL MachineSetup(), MachineDebug;
+extern int GetMachineMove(), MachineSave(), ChessProcessFDs[];
+
+/* controlsw.c */
+
+extern void InitControlSW();
+extern BOOL SaveWanted;
+
+/* ipc.c */
+
+extern int MyColor, PeerColor;
+extern unsigned long PeerProgNum; 
+extern void InitRPC(), SendResignation(), SendUndoRequest(), SendTalkMsg(),
+    SendRestoreMove(), SendEndRestore(), SendSetupChange(),
+    SendUndoAcknowledgement();
+extern BOOL UndoWanted, SendMove(), RestoringGame;
+extern char * PeerUserName;
+
+/* main.c */
+
+#ifdef FILE
+extern FILE * RestoreFile;
+#endif
+extern int errno, TranscriptType;
+extern char * TranscriptFileName, * SaveFileName, * PlayerName[];
+extern BOOL SetupMode, IsMachine[2];
+extern struct passwd * UserPWEntry;
+
+/* msgsw.c */
+
+extern void InitMsgSW(), Message(), ClearMessage(), WhoseMoveMessage();
+
+/* rpcsw.c */
+
+extern void AddRPCSubwindow(), DeleteRPCSubwindow();
+
+/* select.c */
+
+extern void SelectAll();
+
+/* talksw.c */
+
+extern void RecvTalkMsg(), InitTalkSW();
+
+/* tool.c */
+
+/* the following is a kludge, but hides enormous organizational problems
+ * with Sun's headers */
+extern struct tool * NchessTool;
+extern void RunTool(), InitTool(), ParseToolArgs();
+
+/* xdr.c */
+
+extern int XdrGameReq(), XdrMove(), XdrString(), XdrSetup();
+
+/* undeclared system calls and library fxns */
+
+extern int getpid();
+extern long random();
+extern char * malloc();
+@//E*O*F decls.h//
+chmod u=r,g=r,o=r decls.h
+ 
+echo x - tool.c
+sed 's/^@//' > "tool.c" <<'@//E*O*F tool.c//'
+/*
+ * handle the tool environment 
+ */
+
+#include <stdio.h>
+#include <suntool/tool_hs.h>
+#include <suntool/panel.h>
+#include <suntool/gfxsw.h>
+#include <sys/resource.h>
+#include <sys/ioctl.h>
+#include <strings.h>
+
+#include "nchess.h"
+
+struct tool * NchessTool;
+char ** ToolAttrs = (char **) NULL;
+char * ToolName;
+
+/*
+ * iconic form of window
+ */
+unsigned short IconImage[] = {
+#include "Icons/nchess.icon"
+};
+
+DEFINE_ICON_FROM_IMAGE(WindowIcon, IconImage);
+
+sigwinched()
+{
+    tool_sigwinch(NchessTool);
+}
+
+/*
+ * parse the tool args.
+ */
+void 
+ParseToolArgs(argc, argv)
+    int *argc;
+    char **argv;
+{
+    ToolName = argv[0];
+    (*argc)--;
+    argv++;
+    if (tool_parse_all(argc, argv, &ToolAttrs, ToolName) == -1) {
+	tool_usage(ToolName);
+	exit(1);
+    }
+    (*argc)++;
+}
+
+/*
+ * set up the tool environment
+ */
+void
+InitTool(useRetained, iconDirectory)
+    BOOL useRetained;		/* use a retained pixrect for the board */
+    char * iconDirectory;	/* custom piece icon directory */
+{
+    register unsigned int height;
+    register struct toolsw * twsp;
+    char c[256];
+
+    /* create the tool marquee */
+    strcpy(c, " ");
+    strcat(c, PlayerName[WHITE]);
+    strcat(c, " vs. ");
+    strcat(c, PlayerName[BLACK]);
+    if ((NchessTool = tool_make( 
+	WIN_LABEL, c, 
+	WIN_ICON, &WindowIcon, 
+	WIN_ATTR_LIST, ToolAttrs,
+	WIN_WIDTH, 8 * (SQUARE_WIDTH-1) + 2 * tool_borderwidth(NchessTool) - 1,
+	/*
+	 * NOTE: The following line was unnecessary in Sun release 2.2,
+	 * but is necessary in release 3.0.  For some unknown reason, the
+	 * call to tool_set_attributes following the call to InitBoardSW
+	 * now fails to uncover the board area that was obscured by the 
+	 * default tool height being too small (note that the tool has not 
+	 * been installed yet).
+	 */
+	WIN_HEIGHT, 2000,
+	0)) == (struct tool *) NULL) 
+    {
+	fputs("Can't make tool\n", stderr);
+	exit(1);
+    }
+    tool_free_attribute_list(ToolAttrs);
+    /* initialize the subwindows */
+    InitTalkSW();
+    InitMsgSW();
+    InitControlSW();
+    InitBoardSW(useRetained, iconDirectory);
+    /* 
+     * add up subwindow heights and force the tool to the resulting size 
+     */
+    height = tool_stripeheight(NchessTool) + tool_borderwidth(NchessTool) - tool_subwindowspacing(NchessTool);
+    for (twsp = NchessTool->tl_sw ; twsp != (struct toolsw *) 0 ; twsp = twsp->ts_next) 
+	height += twsp->ts_height + tool_subwindowspacing(NchessTool);
+    /*
+     * NOTE: under 2.2, the above calculation yielded the correct height.
+     * under 3.0, we need to add a few pixels to make it come out right (the
+     * reason is not yet known).
+     */
+    height += 2;
+    tool_set_attributes(NchessTool, WIN_HEIGHT, height, 0); 
+    signal(SIGWINCH, sigwinched);
+}
+
+void
+RunTool()
+{
+    /*
+     * NOTE: this is another difference between release 2.2 and 3.0:
+     * in release 2.2, the SIGWINCH handler would get called once at the
+     * outset to draw the board area; in release 3.0, this doesn't happen.
+     */
+    DrawBoard();
+    tool_select(NchessTool, 0);
+    tool_destroy(NchessTool);
+}
+
+@//E*O*F tool.c//
+chmod u=r,g=r,o=r tool.c
+ 
+exit 0
+-- 
+
+Tom Anderson, (206) 356-5895
+John Fluke Mfg. Co., Inc.,  P.O. Box C9090 M/S 245F, Everett, Wa. 98206
+{ hplsla, microsoft, uw-beaver, sun }!fluke!toma

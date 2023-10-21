@@ -1,0 +1,166 @@
+From uucp Tue Nov  1 09:31:18 1983
+>From umi Tue Nov  1 00:38:17 1983 remote from washu
+To: hokey
+Subject: uucp bug
+
+>From mtplx1!ihnp4!clyde!floyd!harpo!decvax!genrad!security!linus!utzoo!utcsrgv!dave Wed Dec 31 18:00:00 1969
+Relay-Version: version B 2.10.1 6/24/83; site washu.UUCP
+Posting-Version: version B 2.10 5/3/83; site utcsrgv.UUCP
+Path: washu!mtplx1!ihnp4!clyde!floyd!harpo!decvax!genrad!security!linus!utzoo!utcsrgv!dave
+From: dave@utcsrgv.UUCP (Dave Sherman)
+Newsgroups: net.bugs.uucp
+Subject: Security hole on systems with drwxrwxrwx /usr/spool/uucp
+Message-ID: <2588@utcsrgv.UUCP>
+Date: Fri, 28-Oct-83 23:21:33 CST
+Date-Received: Mon, 31-Oct-83 18:04:52 CST
+Organization: The Law Society of Upper Canada, Toronto
+Lines: 75
+
+Many systems have a fully readable/writeable /usr/spool/uucp
+directory. We all know that this means that traffic (mail etc.)
+is vulnerable to inspection and destruction. Did you know that
+this can also affect uucp's own files such as L.sys?
+
+If you go into the spool directory, delete a data file which is
+on its way out of the system, and link /usr/lib/uucp/L.sys to that
+file name, uucico will copy it without checking for permission.
+(Uucp does check for permission if you try to explicitly copy a
+file to which you do not have access.) For the bug to exist,
+uucico must be running setUID=>uucp. Also, your uucp spool and
+lib directories must be on the same file system. On many
+4.1bsd systems, all of these conditions are true.
+
+Here's one way to demonstrate the bug.
+   This explanation will assume that we are going to copy the
+"L.sys" privileged file to system "lsuc".
+
+   Do the following:
+    uucp /etc/motd lsuc!~uucp/junk
+/etc/motd is simply a convenient file to copy; anything will do.
+When uucp is finished, it will have created a copy of /etc/motd
+in a data file named /usr/spool/uucp/D.lsucn1234, with some
+four-digit number in the place of "1234". A perusal of the
+/usr/spool/uucp directory will identify the exact file name.
+
+   Now do this, substituting the appropriate digits for "1234":
+    cd /usr/spool/uucp
+    rm D.lsucn1234
+    ln /usr/lib/uucp/L.sys D.lsucn1234
+Presto! The link works because both the spool directory and
+uucp's own files are on the /usr filesystem. When uucico is next
+invoked to call system "lsuc" (or when lsuc next calls), it runs
+as  setUID  and  happily  copies  the  L.sys  file  into
+/usr/spool/uucppublic/junk on the lsuc system. There it can be
+read, or copied back if the user has no access to lsuc. Uucico
+even unlinks the file when it is done, thus cleaning up all evi-
+dence of the security breach.
+
+   Although I have not tested it (not wishing to destroy any
+files currently owned by uucp), it seems likely that the same bug
+could be exploited to change the L.sys file. The user would have
+to figure out ahead of time what name the file would be given
+when uucico at the receiving end created it, so it would take a
+little more planning than the above example. (Once the name was
+figured out, the user would simply link L.sys to that name, and
+then a subsequent "creat" by uucico would cause the data file
+write to actually write into L.sys.)
+
+   The fix to the bug is to add a protection mode check to
+uucico, just as there is in uucp. A quick look at the source
+suggests that the fix should go into the cntrl() routine in
+cntrl.c, just before the fopen() on the data file. This would
+slow down uucp generally, but because of the batch nature of
+uucico seems to be the only way of closing the security hole.
+
+   It should be noted that on many systems, the basic information
+in the L.sys file is available anyway by invoking "uucico -r1 -sxxx -x9",
+which in the course of diagnostic information will present the
+login name and password for system "xxx". Some versions of uucp suppress
+displaying at least the password.
+
+   It should also be noted that the information in L.sys isn't that
+important anyway, since the uucp password can't give you a shell on
+any system. But it would be unpleasant if a malicious user disabled
+callouts by mucking up L.sys or its related files.
+
+
+Dave Sherman
+Toronto
+
+P.S. If anyone out there is silly enough to be running uucico
+setUID to root, you had better change it quick...
+-- 
+ {cornell,decvax,ihnp4,linus,utzoo,uw-beaver}!utcsrgv!lsuc!dave
+
+
+
+
+From uucp Fri Nov  4 10:08:21 1983
+>From umi Fri Nov  4 00:13:44 1983 remote from washu
+To: hokey
+Subject: uucp.bug
+
+>From mtplx1!ihnp4!houxm!mhuxl!eagle!harpo!seismo!rlgvax!guy Wed Dec 31 18:00:00 1969
+Relay-Version: version B 2.10.1 6/24/83; site washu.UUCP
+Posting-Version: version B 2.10.1a 7/7/83; site rlgvax.UUCP
+Path: washu!mtplx1!ihnp4!houxm!mhuxl!eagle!harpo!seismo!rlgvax!guy
+From: guy@rlgvax.UUCP
+Newsgroups: net.bugs.uucp
+Subject: Re: Security hole on systems with drwxrwxrwx /usr/spool/uucp
+Message-ID: <1358@rlgvax.UUCP>
+Date: Wed, 2-Nov-83 10:45:15 CST
+Date-Received: Thu, 3-Nov-83 07:32:12 CST
+References: utcsrgv.2588 <967@utah-gr.UUCP>
+Organization: CCI Office Systems Group, Reston, VA
+Lines: 10
+
+The "-x" option can't be given to any UUCP program under the 4.2BSD UUCP
+unless your UID is under a certain magic number, specified in "uucp.h".
+We changed it so that it wouldn't let you use the "-x" option unless you had
+read permission on /usr/lib/uucp/L.sys, which avoids magic numbers and gives
+you the effect you really want (i.e., people can't run "uucico" to some
+system, turn the debugging up, and get told that system's login sequence for
+UUCP).
+
+	Guy Harris
+	{seismo,ihnp4,allegra}!rlgvax!guy
+
+
+
+
+From  Wed Nov 16 20:15:47 1983
+To: hokey
+Subject: uucp.bug
+
+>From eric Wed Nov 16 14:25:37 1983 remote from washu
+To: hokey kurt
+Subject: bugs
+
+
+	From wuphys!uucp Wed Nov 16 05:08:09 1983
+	Relay-Version: version B 2.10 beta 3/9/83; site wuphys.UUCP
+	Posting-Version: version B 2.10.1 (Tek) 9/26/83; site hammer.UUCP
+	Path: wuphys!mtplx1!ihnp4!houxm!mhuxl!eagle!harpo!decvax!microsoft!uw-beaver!tektronix!tekgds!tekecs!hammer!steveh
+	From: steveh@hammer.UUCP
+	Newsgroups: net.bugs.uucp
+	Subject: Uucp runs out of processes.
+	Message-ID: <347@hammer.UUCP>
+	Date: Mon, 14-Nov-83 14:55:03 CST
+	Organization: Tektronix, Wilsonville OR.
+	Lines: 8
+	
+	When polling many sites at once it is possible for uuxqt to run
+	out of processes (exceed the max # processes/uid), and not execute the
+	command.  The fix is to put a while loop of the form:
+	
+		while ( (pid = fork()) < 0)
+			sleep(30);
+	
+	in shio.c and xqt.c (and where ever else fork() is used).
+	
+	
+
+---------------------
+ewk
+
+

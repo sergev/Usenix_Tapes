@@ -1,0 +1,130 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site cadre.ARPA
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!mhuxt!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!rochester!cmu-cs-pt!cadre!jack
+From: jack@cadre.ARPA (Jack Nelson)
+Newsgroups: net.sources.bugs
+Subject: vi
+Message-ID: <448@cadre.ARPA>
+Date: 6 Jun 85 21:17:59 GMT
+Date-Received: 12 Jun 85 08:39:30 GMT
+Distribution: net
+Organization: Decision Systems Lab., University of Pittsburgh
+Lines: 117
+
+*** REPLACE THIS LINE WITH YOUR MESSAGE ***
+/*top*/
+I added two subroutines to vi 3.7 as supplied with 2.9bsd which are
+called from ex_vops2.c to set a standout mode flag 'I' in the lower
+left corner of the screen during inserts of text; it seems to make
+use of vi easier for the beginner, to distinuish the insert modes from
+command mode.  Seeing the flag go on and off is reassuring.  The
+subroutines are assemblages of other vi subroutine calls which do the
+job.  My effort is hereby deeded to public domain, all AT&T
+Bell Laboratory and UCB rights not disputed.
+
+BUGS: not tested with ex.40 version.  I added "jpnsubs.o" to
+the same overlay segment of ex.70 in which ex_vops2.o lives.
+They could probably just as well be tacked onto the end of ex_vops2.c.
+
+John Paul Nelson, M.D., U.of Pittsburgh, 3811 O'Hara St.,
+Pittsburgh Pa 15213 412-624-1769.  jack@cadre.UUCP
+
+This is not a shar file.  "Patch" will not handle the subroutines
+as a separate file.
+
+*** ex_vops2.c.org	Wed Feb 13 15:17:13 1985
+--- ex_vops2.c	Fri Feb 15 20:05:59 1985
+***************
+*** 113,118
+  	int repcnt, savedoomed;
+  	short oldhold = hold;
+  
+  	/*
+  	 * Before a move in hardopen when the line is dirty
+  	 * or we are in the middle of the printed representation,
+
+--- 113,119 -----
+  	int repcnt, savedoomed;
+  	short oldhold = hold;
+  
++ 	setIflag();
+  	/*
+  	 * Before a move in hardopen when the line is dirty
+  	 * or we are in the middle of the printed representation,
+***************
+*** 356,361
+  				vscrap();
+  			else
+  				vsync1(LINE(vcline));
+  		}
+  		strcLIN(gcursor);
+  		*gcursor = 0;
+
+--- 357,363 -----
+  				vscrap();
+  			else
+  				vsync1(LINE(vcline));
++ 			setIflag();
+  		}
+  		strcLIN(gcursor);
+  		*gcursor = 0;
+***************
+*** 362,367
+  		cursor = linebuf;
+  		vgotoCL(qcolumn(cursor - 1, genbuf));
+  	}
+  
+  	/*
+  	 * All done with insertion, position the cursor
+
+--- 364,370 -----
+  		cursor = linebuf;
+  		vgotoCL(qcolumn(cursor - 1, genbuf));
+  	}
++ 	clrIflag();
+  
+  	/*
+  	 * All done with insertion, position the cursor
+
+
+/*********************/
+/* jpnsubs.c follows: */
+
+#include "ex.h"
+#include "ex_tty.h"
+#include "ex_vis.h"
+
+int
+clrIflag()
+{
+			if (state == VISUAL) { 
+				int sdc = destcol, sdl = destline;
+				splitw++;
+				vigoto(WECHO, 0);
+				vclreol();
+				vgoto(WECHO, 0);
+				vputchar(' '); 
+				splitw = 0;
+				vgoto(sdl, sdc);
+			}
+}
+
+int
+setIflag()
+{
+			if (state == VISUAL) {  
+				int sdc = destcol, sdl = destline;
+
+				splitw++;
+				vigoto(WECHO, 0);
+				vclreol();
+				vgoto(WECHO, 0);
+				if (SO && SE)
+					putpad(SO);
+				vputchar('I'); 
+				if (SO && SE)
+					putpad(SE);
+				splitw = 0;
+				vgoto(sdl, sdc);
+			}
+}

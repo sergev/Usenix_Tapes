@@ -1,0 +1,155 @@
+/*
+#
+# $Source: /local/projects/X/fed/RCS/font.txt,v $
+# $Header: font.txt,v 1.3 87/04/08 08:49:35 jim Exp $
+#
+#                     Copyright (c) 1987 Cognition Inc.
+#
+# Permission to use, copy, modify and distribute this software and its
+# documentation for any purpose and without fee is hereby granted, provided
+# that the above copyright notice appear in all copies, and that both
+# that copyright notice and this permission notice appear in supporting
+# documentation, and that the name of Cognition Inc. not be used in
+# advertising or publicity pertaining to distribution of the software
+# without specific, written prior permission.  Cognition Inc. makes no
+# representations about the suitability of this software for any purpose.
+# It is provided "as-is" without express or implied warranty.
+#
+#							  Jim Fulton
+#							  Cognition Inc.
+#                                                         900 Tech Park Drive
+# uucp:  ...!{mit-eddie,talcott,necntc}!ci-dandelion!jim  Billerica, MA
+# arpa:  jim@athena.mit.edu, fulton@eddie.mit.edu         (617) 667-4800
+#
+*/
+
+/***** :X / jim / 10:59 am  Dec  2, 1986*/
+While things are still fresh in my mind I thought that I would enter a series
+of notes describing the formats of some of the more commonly used, but less
+understood items in X.  The first in the series is a description of the DEC
+standard font file format used in X versions 1 through 10 (but not in V11).
+This is intended for people who need to write font utilities (i.e. a primer
+for fed-hackers).
+
+The basic structure is that the fontfile contains several "segments":
+
+	o  a header block starting at the beginning of the file.  This 
+		contains information such as the size of the font, the number
+		of characters, and most importantly, the location within
+		the file of the other segments.  It is described by the 
+		struct _fontfileheader below.
+
+	o  the leftarray.  This is an array of shorts giving the offset within
+		the strike bitmap (described below) of each of the possible
+		characters.  In the current standard there may be up to 256
+		characters in each font, so there are 257 elements in the
+		leftarray (one for the start of each character plus a 
+		"fencepost" so that the last character width can be
+		determined.  This location of this segment within the fontfile
+		is given in the fontfileheader.  Usually the leftarray is
+		converted into a widtharray when the font is read in.  Note
+		that the FontInfo.widths array (such as is returned by an
+		XOpenFont() call) is indexed by the RELATIVE position of the
+		character (i.e. [c - firstchar] for character c) whereas the
+		leftarray (and often the width array in the server) is indexed
+		by the ABSOLUTE number of the character (i.e. [c] for 
+		character c).  This is a common source of confusion.
+
+	o  the strike bitmap.  The characters in a fontfile are stored as one
+		long bitmap that looks like the alphabet strips that are
+		posted on elementary school walls.  Since characters in a font
+		may be of variable width (but not height, of course) they are
+		packed as tightly as possible on disk, but are usually split
+		up into the server for efficient access.  As described above,
+		the character c starts at column leftarray[c] and has a width
+		of leftarray[c+1] - leftarray[c].  Note that if a character is
+		missing from the font it and its successor simply start at the
+		same location.
+
+
+Here is a C-ish description of the structures involved.  For alignment
+reasons, there are some kludges such as the fileoffset stuff to insure that 
+C doesn't add any padding.
+
+A later note will describe bitmaps in detail, but now you just have to keep
+in mind that they can be represented as a 2d matrix of shorts with padding on
+the right end of each scanline to made it word-aligned.  Also, if a font is
+fixed width then the leftarray might be bogus.  No problem since you can then
+compute it trivially.
+
+/*
+ * The following is a declaration for DEC standard font file.
+ */
+
+#define MAXCHARS 256		/* most number of characters in a font */
+
+typedef short fileoffset[2];	/* hack to prevent C structure padding */
+
+typedef struct _fontfileheader {
+	fileoffset bm_offset;	/* offset in file of strike bitmap */
+	short bm_width;		/* not word-aligned */
+	short bm_height; 	/* height of all characters in font */
+	short bm_bitsperpixel;	/* now always 1 */
+	short firstchar;	/* num of 1st char in font (usually 0 or 1) */
+	short lastchar;		/* num of last char in font */
+	fileoffset leftarray_offset;	/* start of leftarray in file */
+	short baseline;		/* for applications to use */
+	short spaceindex;	/* index of space character */
+	short fixedwidth;	/* 0:var width, else width of each char */
+} FontHeader;
+
+short leftarray[MAXCHARS+1];	/* font file information */
+short widtharray[MAXCHARS];	/* widths of characters */
+
+/*
+ * After reading in the header, the left edge array is read by seeking to 
+ * leftarray_offset in the file and reading in a short for each char plus one
+ * additional short plus one for the right most edge.
+ */
+
+#define mkoffset(a) ((long) a[0])
+
+	/* goto to start of leftarray in file */
+lseek (fontfile, mkoffset(fontheader->leftarray_offset), L_SET); 
+
+	/* make sure that it is full of zeros for where we don't read */
+bzero (leftarray, sizeof leftarray);
+
+	/* read in left array */
+nleft = fontfileheader->lastchar - fontfileheader->firstchar + 2;
+leftsize = nleft * sizeof (short);
+read (fontfile, &leftarray[fontfileheader->firstchar], leftsize);
+
+
+/*
+ * The left array contains the starts of the left edges.  To figure out the 
+ * widths of each character, figure the distance between it and the next
+ * character.  Note, if this is a fixed width font then dummy up a leftarray
+ * as:  for (c = 0; c < CHARSPERFONT+1; c++) leftarray[c] = c*width;
+ */
+
+for (i = fontfileheader->firstchar; i <= fontfileheader->lastchar; i++) {
+    widtharray[i] = leftarray[i+1] - leftarray[i];
+}
+
+
+/*
+ * Finally, read in the bitmaps for the characters.  Remember that bitmaps
+ * are word-aligned (more in a later note) so you need to round the width up
+ * to the nearest multiple of 16 (number of bits in a word).
+ */
+
+wordsperscanline = div16 (fontfileheader->bm_width * 
+			  fontfileheader->bitsperpixel + 15);
+
+	/* get space for strike bitmap */
+fontsize = wordsperscanline * sizeof (short) * fontfileheader->bm_height;
+fontarea = (caddr_t) malloc (fontsize);
+
+	/* go to the place in the file */
+lseek (fontfile, mkoffset(fontheader->bm_offset), L_SET);
+
+	/* read it in */
+read (fontfile, fontarea, fontsize);
+
+/* ---------- */

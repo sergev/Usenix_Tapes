@@ -1,0 +1,121 @@
+.TH REMOTENAME 2 "27 July 1983"
+.UC 4
+.SH NAME
+remotename \- provide name information to the kernel
+.SH SYNOPSIS
+.nf
+.ft B
+#include <remote/remotefs.h>
+
+remotename(action, name, namelen, path)
+long action;
+caddr_t name;
+long namelen;
+char *path;
+.fi
+.SH DESCRIPTION
+.I Remotename
+is an interface for an exchange of information with
+the kernel about remote hosts.
+The value of
+.I action,
+defined by NM_* symbolic constants in remote/remotefs.h,
+determines what exchange takes place:
+.PP
+NM_SERVER
+.br
+The current process is registered as the name server for the kernel.
+Whenever the kernel needs a path name translated into
+an internet address,
+the current process will receive the SIGIO signal.
+Arguments besides
+.I action
+are ignored.
+If there is already a process registered as the name server,
+.I remotename
+will fail.
+.PP
+NM_WHATNAME
+.br
+After receiving the SIGIO signal,
+the registered name server should
+supply this action to
+.I remotename
+along with a valid
+character pointer
+in
+.I name
+and its length in
+.I namelen.
+The kernel will copy into that pointer
+a null\-terminated string of the form "/single-component".
+It is the name server's job to translate "single-component"
+into a valid internet address.
+.PP
+The kernel obtains the single component from the second component
+of a path name used in a system call by some user process.
+The first component of that path name would have been a generic mount
+point.
+.PP
+NM_NAMEIS
+.br
+After obtaining a valid internet address,
+the registered name server should
+supply this action to 
+.I remotename
+along with a valid
+.I name
+and
+.I namelen
+containing the internet address the way that
+.I connect(2)
+would expect it,
+and a
+.I path
+containing the nameserver's opion of what the null-terminated
+mount point should
+have been.
+.PP
+NM_DEBUG
+.br
+Turns on debug level to the value in
+.I system.
+.SH "RETURN VALUE
+.I Remotename
+returns 0 if the action occurred, \-1 if
+.I name
+or
+.I path
+is an invalid address (when a valid one was expected),
+or the user is not the super user.
+.SH ERRORS
+.TP 15
+[EPERM]
+The caller is not the super-user
+or the calling process is not the registered nameserver.
+.TP 15
+[EINVAL]
+.I Name
+or
+.I path
+are not valid addresses (if expected),
+.I namelen
+is too long or
+the
+.I action
+was not recognized.
+.TP 15
+[ENOREMOTEFS]
+On
+.I NM_WHATNAME
+there was no pathname for which the kernel needed a internet address.
+.TP 15
+[EBUSY]
+The calling process is trying to register as the nameserver,
+but one already exists.
+.SH "SEE ALSO"
+remoteon(2), remoteoff(2), rmtmnt(8), rfs_server(8)
+.SH BUGS
+.I NM_DEBUG
+will not be recognized unless the kernel is has the debug software
+compiled in.

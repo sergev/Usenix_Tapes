@@ -1,0 +1,46 @@
+From geoff@desint.UUCP (Geoff Kuenning) Sat Jan 26 02:56:03 1985
+Relay-Version: version B 2.10.2 9/17/84; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/12/84; site desint.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxm!mhuxj!houxm!whuxlm!akgua!sdcsvax!sdcrdcf!trwrb!desint!geoff
+From: geoff@desint.UUCP (Geoff Kuenning)
+Newsgroups: net.news.b
+Subject: Re: multiple invocations of rnews
+Message-ID: <326@desint.UUCP>
+Date: 26 Jan 85 08:56:03 GMT
+Date-Received: 29 Jan 85 07:59:21 GMT
+References: <337@qantel.UUCP>
+Distribution: net
+Organization: his home computer, Manhattan Beach, CA
+Lines: 29
+
+In article <337@qantel.UUCP> stv@qantel.UUCP (Steve Vance@ex2499) writes:
+
+>When I came in
+>this morning, there were 5 editions of news processing going on,
+>as well as last night's expire run.
+
+Your problem is in uuxqt.  Older versions of it do not have a concept of jobs
+that take several hours to run.  So, after news has been unbatching for an
+hour, a new uuxqt comes along (probably out of crontab), discards the old
+LCK.XQT file, and starts up a new unbatching job.  Of course, usually it is
+running on the same batch as the previous one.  This continues until the first
+uuxqt deletes the X. and D. files;  subsequent uuxqt's then pick up the second
+one.  Eventually everything dies down, but I once had an especially heavy
+news load (our feed was down) take over 24 hours to unbatch!
+
+The solution is trivial:  add the following lines to your crontab or to your
+hourly uucp demon:
+
+    # Ensure that long-running uuxqt's continue to run without interference.
+    # ***NOTE*** If uuxqt crashes and a LCK.XQT file gets left hanging around,
+    # no more uuxqt's will run until the LCK.XQT file is removed.  This is done
+    # by the /etc/rc startup file.
+
+    test -f /usr/spool/uucp/LCK.XQT  &&  touch /usr/spool/uucp/LCK.XQT
+-- 
+
+	Geoff Kuenning
+	Unix Consultant
+	...!ihnp4!trwrb!desint!geoff
+
+

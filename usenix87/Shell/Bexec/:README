@@ -1,0 +1,91 @@
+
+[I won't make a habit of posting my own sources here, but there've been
+people asking for this.  ++bsa]
+
+The following program is designed to be used with the "alias shell" feature of
+many "add-on" C shells (I don't know if it's supported under BSD4.x; would
+someone please send me mail about it?) in order to force the issue of how a
+shell script should be run.
+
+BSD-based kernels are capable of "executing" scripts which begin with the
+magic incantation "#! /full/path/name [single-arg]" by running the program
+specified by /full/path/name with two arguments:  the (optional) single-arg
+in the #! incantation and the name of the script.  If the first line of the
+script is not in the proper format, the exec fails and csh attempts to execute
+the script by examining the first character.  If the first character is # then
+the script is executed by csh, otherwise by sh.  This can be a royal pain in
+the *ss.
+
+The bexec program uses the "alias shell" feature to intercept csh's interpre-
+tation of scripts.  If the kernel exec fails, csh checks to see if there is an
+alias for "shell"; if so, it executes the program specified by that alias by
+prepending the alias's contents to the command line.  The program named by
+the alias must be a full path name, and the usual history substitutions are
+not performed.  The checking for # is only done is there is no alias for
+"shell".
+
+Bexec thus takes over when the kernel cannot execute a script.  It supports
+three kinds of execution:
+
+(1) It handles #! if the kernel does not.  Some of the semantics are different;
+    in particular, it does not handle setuid.  This is probably a win, as
+    setuid shell scripts are a major security hole.
+
+(2) If the first line is not a valid #! line, the first block of the script
+    is scanned.  If it contains non-ASCII characters, bexec attempts to pass
+    the script to RM/COBOL; this makes executing RM/COBOL programs a bit
+    easier.  (RM/COBOL options can be specified in the command line, due to
+    the way "runcobol" parses options.)
+
+(3) If all else fails, sh is executed on the script.
+
+The upshot of all this, with respect to the basic problem of getting the
+right shell to run the right script, is that csh scripts will be forced to
+start with "#! /bin/csh", otherwise sh runs the script; this is in most cases
+the desired behavior.
+
+Bexec is designed to be small and fast, since it is wedged into the "execute"
+command sequence.  It does not use stdio, and it does exactly one file read
+of one disk block.  (The default block size is 1024.)
+
+Compilation:
+
+There is no makefile.  To compile it, select some options:
+
+-DSH='"path"'	The pathname of the shell to execute; default is /bin/sh.
+-DSYSBLK=num	The size of a disk block; default is 1024.
+-DBSD		Disables #! option, since BSD does it in the kernel.
+-DRMC='"path"'	If defined, enables RM/COBOL program execution; its value
+		is the pathname of the RM/COBOL "runcobol" executable.  In
+		general, this option makes no sense on BSD systems because
+		RM/COBOL isn't available for them.
+
+Then compile it: "cc -O -o bexec bexec.c <options>", where <options> is
+zero or more of the -D options above.
+
+Installation:
+
+Copy bexec into a bin directory.  It need not be on people's paths.  Then
+type in to csh:  "alias shell /path/to/bexec".  The full pathname of bexec
+must be specified.  Place this command in your .cshrc for permanent use.
+
+Testing:
+
+Try it on some shell scripts, including ones with # comments at the beginning.
+Then try it on some non-shell scripts, like the following:
+
+---
+#! /usr/bin/awk -f
+BEGIN { print "AWK running"; exit }
+---
+
+---
+#! /bin/date
+---
+
+If you have any RM/COBOL programs, "chmod +x" one of them and try running it
+as a shell command.  (As written, bexec does a chdir to the directory contain-
+ing the RM/COBOL program.  At the price of compatibility with RM/COBOL 1.x and
+some loss of speed (and increase in size), it could instead put the directory
+in the RUNPATH environment variable.)
+

@@ -1,0 +1,152 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!clyde!burl!ulysses!ucbvax!sdcsvax!mr-frog
+From: mr-frog@sdcsvax.UUCP (Dave Pare)
+Newsgroups: net.games.emp
+Subject: hacks to PSL's 1985 4.2 BSD version of empire
+Message-ID: <1820@sdcsvax.UUCP>
+Date: 29 May 86 19:23:39 GMT
+Organization: EECS Dept. U.C. San Diego
+Lines: 153
+Keywords: PSL Empire
+Posted: Thu May 29 14:23:39 1986
+
+Having been away from this newsgroup for quite a while, I am not sure if
+someone else has done similar things.  However, here is a list of hacks I have
+made to the 1985 distribution of PSL's Empire game. 
+
+Around 50% of the empire commands have been decompiled (empcom.a), the entirety
+of the command dispatcher (empdis.o), and about 90% of the subroutines
+(empsub.a) as of this date. 
+
+Mechanical and Performance Changes
+
+World Updates:
+	A server updates the world now, with no more "update it as you look at
+	it".  Every 8 time units a server comes and reads in all the files into
+	memory, does all production, and writes them out again.  Every 1 time
+	unit the server reads in sector and ship files and updates mobility. 
+	Production updates take around 30 sec, mobility updates take around 4
+	sec.  (thanks to Matt Crawford for "update.c")
+
+Empire Login Server:
+	The login server sits on an internet socket, waiting for players to
+	connect -- simliar to rlogind.  For sites with many hosts on an
+	ethernet, this is a must.  This also (interestingly enough) makes games
+	reasonable over the ARPAnet, as all character processing is done at the
+	local site.  The empire login server makes sure that only one user can
+	log on per country...and there are no more problems with set-uid empire
+	games doing funky things. 
+
+Empire Sector Map:
+	The empire sector map is read into memory by each player on startup. 
+	It consists of the sctstr fields "sct_own" and "sct_type".  A
+	transaction manager keeps things current.  The sector map is used for
+	queries such as "?des=c" and "?own=9".  When used by "radar" and other
+	such commands, massive speed increases result.  This is transparent to
+	the user.  For example, the command:
+		cen -64:64,-64:64 ?des=c
+	
+	returned in under 10 seconds on our vax.
+
+ship file reads:
+	a number of commands read the ship file 64-byte ship by 64-byte ship,
+	notably radar and detonate.  Reading the entire ship file into memory
+	saves huge numbers of system calls. 
+
+nuke file reads:
+	In a conversation with PSL some years ago, he revealed his dislike for
+	nuclear weapons.  Perhaps this is why "detonate" is slow.  Reading in
+	the nuke file into memory saves large amounts of time. 
+
+news file reads:
+	While decompiling the news package, I noted that PSL looped through the
+	news file four times: once for the headlines, and once for each "page"
+	of the news.  Each read() from the news file was an 8 byte read (PSL
+	doesn't like buffering).  This resulted in around 6000 system calls for
+	a good-sized news file.  Reading the news file into memory caused the
+	news to print faster than my SUN (at 19.2k baud) can handle it. 
+
+All of the "memory file reads" were accomplished using "alloca", so if your
+machine has problems allocating stack space dynamically, then my version of
+Empire wouldn't work on your machine. 
+
+Semantic Changes
+
+trade:
+	trading: commodities, ships, and nukes has been implemented.  There is
+	arbitrary pricing, with the ability to give price breaks to individual
+	nations. 
+
+concept: taxes
+	many people have noted that money is absolutely worthless in empire,
+	beyond a certain point.  My fix was to disallow contracting commodities
+	to the deity, and to allow people to produce most intermediate goods
+	for free.  Guns, shells, planes, ships, tech research, happiness and
+	education still cost money to produce.  Civilians generate 0.10 per 12
+	time units, military cost 1.00 per 12 time units.  The only way to get
+	money is to have the civ-to-mil ratio greater than 10:1, or to trade. 
+
+world generation:
+	in order for trading to be reasonable, scarcity of commodities must
+	exist in the world.  I made this occur by writing a small program which
+	went around and removed all the gold content < 35, all min content <
+	35, and all oil content < 35.  Some continents have dust, some have
+	oil, and a few have both.  The game I'm running now has the "financial"
+	section (trade, loan, etc) of the news twice as large as any other. 
+
+concept: education
+	Empire education depends on the populace of the country.  You must
+	produce 1 education unit per 2500 people to have a net production of 1
+	unit.  Also, education is a "moving average".  The equation (for an 8
+	etu update) looks something like this:
+
+		e_produced = (eunits * 2500) / population;
+		elev = (old_elev * 48 + e_produced * 8) / (48 + 8);
+
+	happiness goes much the same way, with the average moving a bit faster. 
+	Enlist no longer uses happiness.  (thanks to Chris Guthrie for a great
+	idea!)
+
+concept: populace; oldown and loyalty
+	Since civilians in empire are now very important, it follows that they
+	should be a bit more difficult to conquer -- to win their hearts and
+	minds, as it were. 
+
+	Upon conquering a sector, the game now checks to see if you were the
+	old owner.  If so, the people are happy to see you back.  If not, the
+	sector goes into a "captured" status, and you cannot enlist, move
+	civilians out, or move new civilians in until the sector "becomes
+	yours".  Conversion of conquered sectors is a tedious process,
+	requiring days of work by substantial numbers of military in the sector
+	spreading good cheer.  The number of military must be > 1:10 (mil:civ)
+	ratio for civilian happiness to improve. 
+
+	It is possible to shoot the offending civilians of an occupied sector,
+	but it makes neighboring civilians get upset. 
+
+	The happiness of the old owner and the new owner are taken into account
+	when determining the attitude of a people towards the conqueror. 
+
+	It is possible to lose sectors by starving your civilians.  They will
+	riot, and kill military, and try to go independant (change ownership to
+	country 0).  It is also possible to have revolution in conquered
+	sectors which do not possess enough military.  They will revert back to
+	the old owner. 
+
+Currently, this version only runs on a VAX 11/750 running 4.3 BSD UNIX. 
+Eventually, when everything is decompiled -- say by the end of the summer -- it
+can be ported to other systems such as Pyramid 90x, SUN-3, and other 4.2/4.3
+machines like that.  If anybody would like to exchange already-decompiled
+routines with me, I would be more than happy to hear from you...and would be
+more than happy to send you some of what I've done. 
+
+Please: no requests for source unless you have some of your own to exchange
+(1985 versions or later, please...I like my nukes).  I am not yet ready to send
+out copies to the world!
+
+Dave Pare
+
+mr-frog@sdcsvax.ucsd.edu
+...!ucbvax!sdcsvax!mr-frog
+
+P.S. If you know PSL (I don't have his address), could you give him a copy of
+     this?

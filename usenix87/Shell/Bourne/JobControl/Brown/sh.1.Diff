@@ -1,0 +1,300 @@
+*** /cs/simon/src/util/sh.sysV/sh.1	Thu Feb 19 19:12:25 1987
+--- ../shdiff-sources/sh.1	Thu Feb 19 18:12:00 1987
+***************
+*** 31,36
+  .TH SH 1
+  .SH NAME
+  sh, rsh \- shell, the standard/restricted command programming language
+  .SH SYNOPSIS
+  .B sh
+  [
+
+--- 31,37 -----
+  .TH SH 1
+  .SH NAME
+  sh, rsh \- shell, the standard/restricted command programming language
++ (job-control version)
+  .SH SYNOPSIS
+  .B sh
+  [
+***************
+*** 552,557
+  below) for this name.
+  If it is found and there is an 'r' in the file name part of its value, the
+  shell becomes a restricted shell.
+  .PD
+  .RE
+  .PP
+
+--- 553,578 -----
+  below) for this name.
+  If it is found and there is an 'r' in the file name part of its value, the
+  shell becomes a restricted shell.
++ .TP
++ .B
++ .SM NOTIFY
++ If this is set, then you will receive asynchronous notification of the
++ termination of background jobs \- it is equivalent to an automatic
++ \f2notify\^\fP being applied to all jobs.
++ .TP
++ .B
++ .SM REALTTY
++ If job-control is being used, this parameter will hold the name of the
++ real (physical) terminal you are logged in on; the entry in \f2utmp\^\fP
++ is reset to the name of the \f2sxt\^\fP device you are using.
++ It is automatically read-only and exported.
++ .TP
++ .B
++ .SM SXT_CONTROL
++ This may be available in sub-processes in order to do their own
++ job-control. The parameter holds a number on which \f2ioctl\^\fP calls
++ can be done. To suspend itself, a process need only execute the
++ \f2\s-1SXTIOCSWTCH\s+1\fP ioctl with a channel-parameter of zero.
+  .PD
+  .RE
+  .PP
+***************
+*** 557,562
+  .PP
+  The shell gives default values to
+  \f3\s-1PATH\s+1\fP, \f3\s-1PS1\s+1\fP, \f3\s-1PS2\s+1\fP, \f3\s-1MAILCHECK\s+1\fP and \f3\s-1IFS\s+1\fP.
+  .SM
+  .B HOME
+  and
+
+--- 578,585 -----
+  .PP
+  The shell gives default values to
+  \f3\s-1PATH\s+1\fP, \f3\s-1PS1\s+1\fP, \f3\s-1PS2\s+1\fP, \f3\s-1MAILCHECK\s+1\fP and \f3\s-1IFS\s+1\fP.
++ If job-control is being used, it will also set some of
++ \f3\s-1REALTTY\s+1\fP and \f3\s-1SXT_CONTROL\s+1\fP.
+  .SM
+  .B HOME
+  and
+***************
+*** 880,885
+  the
+  .B trap
+  command below).
+  .SS Execution
+  Each time a command is executed, the above substitutions are
+  carried out.
+
+--- 903,940 -----
+  the
+  .B trap
+  command below).
++ .SS "Job Control"
++ Whenever a command is executed which results in the shell forking off
++ a subprocess, this subprocess is entered in a table of "jobs". Individual
++ jobs may then be manipulated using special job-control commands which
++ are built-ins in the shell.
++ The command \f3fg\fP brings a job into the foreground (from either the
++ background or "limbo"), \f3bg\fP resumes a blocked job in the background,
++ \f3jobs\fP lists the jobs-table, \f3notify\fP allows a job to give
++ asynchronous notification if it terminates from the background, 
++ \f3stop\fP allows a job to be blocked from doing any output when it is
++ not in the foreground (see \f3loblk\fP in \f2stty\^\fP(1)), and
++ \f3sxt1\fP allows escape from the job-control regime if this becomes
++ necessary.
++ The \f3kill\fP command is now a shell built-in and can take
++ job-specifiers as parameters, as well as the usual process-id numbers.
++ .PP
++ All of these commands use job-specifiers to name jobs. A job-specifier
++ consists of a percent-sign (\f3%\fP) followed by some unique string.
++ If the string does not name a unique job, this is considered to be
++ an error (which should perhaps not be the case \- "wildcard" globbing
++ of job-specifiers would be nice).
++ The following strings are recognized:
++ .RS
++ .nf
++ %\f2n\^\fP \| the job numbered \f2n\^\fP
++ %+ \| the current job
++ %- \| the previous job
++ %% \| a symnonym for %+
++ %\f2name\^\fP \| the job whose command-name starts with \f2name^\fP
++ %?\f2string\^\fP \| the job whose name contains the named \f2string\^\fP
++ .fi
++ .RE
+  .SS Execution
+  Each time a command is executed, the above substitutions are
+  carried out.
+***************
+*** 969,974
+  is used to find the directory containing
+  .IR file .
+  .TP
+  \f3break\fP \*(OK \f2n\^\fP \*(CK
+  Exit from the enclosing \f3for\fP or
+  .B while
+
+--- 1024,1032 -----
+  is used to find the directory containing
+  .IR file .
+  .TP
++ \f3bg\fP \*(OK \f2%job\^\fP \*CK
++ Resume the named (or "current") job in the background.
++ .TP
+  \f3break\fP \*(OK \f2n\^\fP \*(CK
+  Exit from the enclosing \f3for\fP or
+  .B while
+***************
+*** 1068,1073
+  .I not
+  be exported.
+  .TP
+  \f3hash\fP \*(OK \f3\-r\fP \*(CK \*(OK \fIname\^\fP .\|.\|. \*(CK
+  For each 
+  .IR name\^ ,
+
+--- 1126,1134 -----
+  .I not
+  be exported.
+  .TP
++ \f3fg\fP \*(OK \f2%job\^\fP \*(CK
++ Resume the named (or default) job in the foreground.
++ .TP
+  \f3hash\fP \*(OK \f3\-r\fP \*(CK \*(OK \fIname\^\fP .\|.\|. \*(CK
+  For each 
+  .IR name\^ ,
+***************
+*** 1088,1093
+  adjacent to the \f2hits\fR information.
+  \f2Cost\fR will be incremented when the recalculation is done.
+  .TP
+  \f3newgrp\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Equivalent to
+  .BI "exec newgrp" " arg\^"
+
+--- 1149,1178 -----
+  adjacent to the \f2hits\fR information.
+  \f2Cost\fR will be incremented when the recalculation is done.
+  .TP
++ \f3jobs\fP \*(OK \f3-l\^\fP \*(CK
++ List all currently active (running or blocked) jobs.
++ Each job will be listed by giving its job-number within square
++ brackets, followed by a identifying character, followed
++ by a status-word (either "Blocked" or "Running"), followed by a the name of
++ the command. If the \f3-l\fP option is used, then a list of process-id
++ numbers associated with that job is printed too.
++ .br
++ The identifying-character will be one of <blank>, \f3+\fP or \f3-\fP.
++ The job "%+" is the current "default job", wheras "%-" is the previous
++ current job.
++ .br
++ The status word "Running" means that it is a pure background process,
++ "Blocked" means that it is possibly executing but will block as soon
++ as it tries to do any input (or possibly output \- see the \f3loblk\fP
++ option to \f2stty\^\fP or the \f3stop\fP command) from the terminal.
++ A physically blocked job will have either "(tty input)" or "(tty output)"
++ following the word "Blocked".
++ .TP
++ \f3kill\fP \*(OK \f2-sig\^\fP \*(CK \f2{process,%job} ...\^\fP
++ Kill the named processes or jobs by sending the named signal. If
++ no signal is named, then \f2SIGTERM\^\fP is sent \- signal 15.
++ It is not possible to give signal-name mnemonics to specify signal numbers.
++ .TP
+  \f3newgrp\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Equivalent to
+  .BI "exec newgrp" " arg\^"
+***************
+*** 1096,1101
+  .IR newgrp (1)
+  for usage and description.
+  .TP
+  \f3pwd\fP
+  Print the current working directory.
+  See
+
+--- 1181,1190 -----
+  .IR newgrp (1)
+  for usage and description.
+  .TP
++ \f3notify\fP \*(OK \f2%job\^\fP \*(CK
++ Arrange for asynchronous notification when background jobs terminate.
++ If no job is given, then all subsequent jobs will asynchronously notify.
++ .TP
+  \f3pwd\fP
+  Print the current working directory.
+  See
+***************
+*** 1208,1213
+  .I n\^
+  is not given, it is assumed to be 1.
+  .TP
+  \f3test\fP
+  .br
+  Evaluate conditional expressions. See
+
+--- 1297,1314 -----
+  .I n\^
+  is not given, it is assumed to be 1.
+  .TP
++ \f3stop\fP \*(OK \f2%job\^\fP \*(CK
++ Stop a given (or the "current") running background job. A job that is
++ "stopped" will continue to execute until it tries to do input or output
++ from the terminal, and it will block as soon as this occurs.
++ .TP
++ \f3sxt1 \f2command args ...\^\fP
++ Execute a command without using job-control. This is useful for commands
++ which rely on being able to find out the name of their terminal from the
++ \f2utmp\^\fP file \- such as \f2who\^\fP, \f2mesg\^\fP, \f2tty\^\fP
++ or quite a few others. This is only necessary because of the simplisitic
++ nature of \f2utmp\^\fP.
++ .TP
+  \f3test\fP
+  .br
+  Evaluate conditional expressions. See
+***************
+*** 1476,1481
+  exec(2),
+  fork(2),
+  pipe(2),
+  signal(2),
+  ulimit(2),
+  umask(2),
+
+--- 1577,1583 -----
+  exec(2),
+  fork(2),
+  pipe(2),
++ setpgrp(2),
+  signal(2),
+  ulimit(2),
+  umask(2),
+***************
+*** 1482,1488
+  wait(2),
+  a.out(4),
+  profile(4),
+! environ(5) in the
+  \f2\s-1UNIX\s+1 System Programmer Reference Manual\fR.
+  .SH CAVEATS
+  .PP
+
+--- 1584,1591 -----
+  wait(2),
+  a.out(4),
+  profile(4),
+! environ(5),
+! sxt(7) in the
+  \f2\s-1UNIX\s+1 System Programmer Reference Manual\fR.
+  .SH CAVEATS
+  .PP
+***************
+*** 1502,1504
+  .B cd\^
+  command with a full path name
+  to correct this situation.
+
+--- 1605,1614 -----
+  .B cd\^
+  command with a full path name
+  to correct this situation.
++ .SH ADDITIONS
++ .PP
++ This version of the shell has additional job-control features 
++ for the \f2sxt\^\fP(7) driver,
++ added by Simon Brown at the University of Edinburgh.
++ (Send any bug reports to \f3simon@its63b.edinburgh.ac.uk\fP
++ or \f3seismo!mcvax!ukc!its63b!simon\fP).

@@ -1,0 +1,108 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: RV,v 1.10 86/06/22 18:13:52 dick Exp $
+
+#
+#		R e s t o r e   V e r s i o n
+#	RV reads the recording made by SV and restores the version described
+#	therein. The call is
+#		RV <repository-name> <SV-record>
+#	The repository has to exist, but <repository-name> needs not be the
+#	same as the one that pertained when SV was done. The files will be
+#	reconstructed with the correct revision number, even if they have
+#	been removed by RM in the meantime.
+Name=RV; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# is the call correct?
+case $# in
+2)
+	# the number of parameters is alright; register them for CA.aux
+	Repository=$1
+	InitRecord=$2
+	;;
+*)
+	# wrong number of parameters
+	echo $Name: call is $Name \<repository-name\> \<SV-record\> >&2
+	exit 1
+	;;
+esac
+
+# create the administration directory
+. $CVSLIB/CA.aux			# uses $Repository and $InitRecord
+
+# construct list of files to check out
+OLIST=` <CVS.adm/Entries sed 's/.* \(.*\)|/\1/' `
+
+# see if any is already present
+OK=yes
+for User in $OLIST
+do
+	if	# there is a file $User already
+		[ -f $User ]
+	then
+		echo $Name: $User already exists >&2
+		OK=no
+	fi
+done
+
+case $OK in
+no)
+	echo $Name failed\; correct above errors first >&2
+	exit 1
+	;;
+esac
+
+# check out all files in $OLIST
+for User in $OLIST
+do
+	. $CVSLIB/LR.aux	# sets $Rcs to $Repository/$User,v or /Attic/
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	# how is the RCS file?
+	case $VN_Rcs in
+	"")
+		# there is no RCS file
+		
+		echo $Name: cannot find $Rcs >&2
+		OK=no
+		continue
+		;;
+	*)
+		# there is an RCS file
+		
+		if	# check out correct version of $Rcs into $User
+			$RCSBIN/co -r$VN_User $Rcs $User
+		then	# adjust $User
+			chmod +w $User
+			# make a reference with the NEW time stamp
+			# and the OLD version number
+			. $CVSLIB/VT.aux
+			$CVSLIB/RG.aux $User $VN_User "$TS_User"
+		else
+			echo $Name: could not check out $User >&2
+			OK=no
+		fi
+		;;
+	esac
+done
+
+$CVSLIB/EF.aux				# update CVS.adm/Files
+
+# did we succeed?
+case $OK in
+no)
+	exit 1
+	;;
+esac
+
+exit 0

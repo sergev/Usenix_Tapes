@@ -1,0 +1,119 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA11121; Thu, 9 Apr 87 02:36:51 CDT
+Path: plus5!wucs1!mcdchg!clyde!rutgers!seismo!mcvax!enea!liuida!lenlo
+From: ida.liu.se!lenlo (Lennart Lovstrand)
+Newsgroups: news.software.b
+Subject: Naming problems with Patch#6
+Message-Id: <481@crabbofix.liu.se>
+Date: 31 Mar 87 10:34:21 GMT
+Organization: CS Dept, Univ of Linkoping, Sweden
+Lines: 107
+Apparently-To: hokey
+
+Problem #1: The original hostname/domain patch did not fully emulate the
+	old HIDDENNET code.  LOCALSYSNAME became "hostname.MYDOMAIN"
+	instead of "hostname.HIDDENNET.MYDOMAIN".
+
+Problem #2: Rick's fix to this unfortunately both made the example false
+	and even impossible to implement what was described there.  (The
+	example's LOCALSYSNAME became "prefix.ida.liu.se" instead of
+	"prefix.liu.se" with no way of implementing this.)
+
+Repeat-By: Try to implement the example.
+
+Fix:	Apply the following patches.  They will restore the original setup
+	of LOCALSYSNAME and add a HIDDENNET_IN_LOCALSYSNAME compatibility
+	macro in order to produce _exactly_ the same LOCALSYSNAME as before
+	if the GENERIC macros aren't used.
+
+(Coming-Next: Constants read off file during runtime.)
+(Gosh-I-Wish-I-Had: C News.)
+--Lennart
+
+
+Index: pathinit.c
+Prereq: 1.22
+*** pathinit.c.old	Fri Mar 27 12:43:04 1987
+--- pathinit.c	Tue Mar 31 10:50:03 1987
+***************
+*** 118,126 ****
+  	char *p;
+  #endif /* EXP */
+  #if !defined(CHKN) && !defined(EXP)
+- #ifdef GENERICFROM
+- 	int len;
+- #endif /* GENERICFROM */
+  	struct utsname ubuf;
+  	char buf[BUFLEN];
+  	extern char *mydomain();
+--- 118,123 ----
+***************
+*** 127,150 ****
+  
+  	uname(&ubuf);
+  
+  #ifdef GENERICFROM
+  	(void) sprintf(buf, GENERICFROM, ubuf.nodename, mydomain());
+  	FROMSYSNAME = AllocCpy(buf);
+! 	len = strlen(ubuf.nodename);
+! 	if (FROMSYSNAME[len] == '.' &&
+! 		strncmp(ubuf.nodename, FROMSYSNAME, len) == 0)
+! 		LOCALSYSNAME = FROMSYSNAME;
+! 	else {
+! 		(void) sprintf(buf, "%s.%s", ubuf.nodename, FROMSYSNAME);
+! 		LOCALSYSNAME = AllocCpy(buf);
+! 	}
+! #else	/* !GENERICFROM */
+! 	(void) sprintf(buf, "%s%s", ubuf.nodename, mydomain());
+! 	LOCALSYSNAME = AllocCpy(buf);
+  	FROMSYSNAME = LOCALSYSNAME;
+! #endif	/* !GENERICFROM */
+  
+  	LOCALPATHSYSNAME = AllocCpy(ubuf.nodename);
+  #ifdef GENERICPATH
+  	(void) sprintf(buf, GENERICPATH, ubuf.nodename, mydomain());
+  	PATHSYSNAME = AllocCpy(buf);
+--- 124,146 ----
+  
+  	uname(&ubuf);
+  
++ #ifdef HIDDENNET_IN_LOCALSYSNAME
++ 	/* old compatibility code, remove when HIDDENNET is used no more */
++ 	(void) sprintf(buf, "%s.%s%s", ubuf.nodename, HIDDENNET, mydomain());
++ #else
++ 	(void) sprintf(buf, "%s%s", ubuf.nodename, mydomain());
++ #endif
++ 	LOCALSYSNAME = AllocCpy(buf);
++ 
+  #ifdef GENERICFROM
+  	(void) sprintf(buf, GENERICFROM, ubuf.nodename, mydomain());
+  	FROMSYSNAME = AllocCpy(buf);
+! #else /* !GENERICFROM */
+  	FROMSYSNAME = LOCALSYSNAME;
+! #endif /* !GENERICFROM */
+  
+  	LOCALPATHSYSNAME = AllocCpy(ubuf.nodename);
++ 
+  #ifdef GENERICPATH
+  	(void) sprintf(buf, GENERICPATH, ubuf.nodename, mydomain());
+  	PATHSYSNAME = AllocCpy(buf);
+
+Index: params.h
+Prereq: 2.22
+*** params.h.old	Fri Mar 27 12:43:03 1987
+--- params.h	Tue Mar 31 10:51:06 1987
+***************
+*** 117,122 ****
+--- 117,123 ----
+  #ifdef HIDDENNET
+  #  ifndef GENERICFROM		/* Ugly fix, only for use in pathinit.c */
+  #    define GENERICFROM "%s%0.0s%s", HIDDENNET
++ #    define HIDDENNET_IN_LOCALSYSNAME
+  #  endif
+  #  ifndef GENERICPATH
+  #    define GENERICPATH HIDDENNET
+
+-- 
+Dept of Computer and Information Science, University of Linkoping, Sweden
+Internet: lel@ida.liu.se                     EAN/X.400: lel@ida.liu.sunet
+UUCP: {seismo,mcvax}!enea!liuida!lel            EARN/BITNET: LEL@SELIUI51

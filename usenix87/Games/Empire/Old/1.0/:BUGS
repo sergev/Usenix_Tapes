@@ -1,0 +1,228 @@
+From tsf@drutx.UUCP (FisherTS) Wed Nov 13 07:59:05 1985
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 (Denver Mods 7/26/84) 6/24/83; site drutx.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!drutx!tsf
+From: tsf@drutx.UUCP (FisherTS)
+Newsgroups: net.games.emp
+Subject: Old Empire 1.1 makefile problems?
+Message-ID: <556@drutx.UUCP>
+Date: 13 Nov 85 13:59:05 GMT
+Date-Received: 14 Nov 85 00:45:10 GMT
+Organization: AT&T Information Systems Laboratories, Denver
+Lines: 25
+
+re: Version 1.1 makefile problem?
+
+Has anyone else experienced the makefile problem mentioned by Sean
+Casey (ukma!sean)?  I'm not sure what directories are involved, but if the
+reference was to the EMPIRE and EMPCRE directories, I don't agree with
+Sean's recommendation to add the $(LIBDIR).  Those two directories
+contain a subdirectory named _unix.O to hold the empire.o and empcre.o
+objects.  Those two objects shouldn't be placed in the library
+directory, ../_unix.O, where empsub.a, empcom.a, empdis.o, and empglb.o
+live.
+Actually, it won't hurt anything if they get put there... but that
+wasn't the intent.
+I've seen the makefiles bomb if the directories weren't created properly
+by the tar command.  Make will complain if the _unix.O directory isn't
+there, and I think the compiler complains if the ownership & mode don't allow
+writing.  If that was the problem, all you have to do is create the directory
+with mode 755.
+
+If anyone has solutions to the 3b2 problems - please mail them to me
+at ihnp4!druxn!tsf.  I don't have access to a 3b2 (yet).  The only
+problems I've heard of so far are the execl problem and something to
+do with floating point.  I think you have to compile it with some kind
+of option or empcre will die at the first floating point operation.
+
+Tom Fisher	ihnp4!druxn!tsf
+
+
+From sean@ukma.UUCP (Sean Casey) Thu Nov 14 13:25:58 1985
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 alpha 4/3/85; site ukma.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!ukma!sean
+From: sean@ukma.UUCP (Sean Casey)
+Newsgroups: net.games.emp
+Subject: Old empire 1.1 problems: solved
+Message-ID: <2376@ukma.UUCP>
+Date: 14 Nov 85 19:25:58 GMT
+Date-Received: 15 Nov 85 23:58:50 GMT
+References: <556@drutx.UUCP>
+Reply-To: sean@ukma.UUCP (Sean Casey)
+Organization: The White Tower @ The Univ. of KY
+Lines: 88
+
+IT WORKS!  IT WORKS!  IT WORKS!
+
+Here's some fixes and suggestions.  These are primarily for the guy
+who's maintaining it, but I thought they might have some general
+usefulness so I'm posting them here.
+
+
+Makefile:  _unix.O
+
+I think it is a good idea to change the makefiles to use the $(LIBDIR)
+directory.  This cuts down on the complexity by keeping things in a
+common directory.  Whether or not I can persuade Tom that it's a good
+idea,  I'd also like to suggest that lines be added to the makefile(s)
+to create the _unix.O directory(ies).  There were no instructions that
+a _unix.O directory would have to be created anywhere, so inexperienced
+installers may have a little trouble with it.
+
+3b2 floating point:
+
+A 3b2 has no floating point hardware and must emulate it in software.
+Unfortunately, the C compiler doesn't know this, and blindly generates
+floating point instructions for the wc32000.  This can cause extreme
+consternation when the poor user gets "Illegal instruction - core dump"
+upon execution of the first floating point instruction.  There is a
+barely documented option to cc, "-f" that will force the loading of
+floating point emulation routines.  Note that the "-f" need only appear
+in the final load of whatever you are compiling.
+
+execl() bug:
+
+After about 6 hours of testing and recompiling, I found out what broke
+execl().  execl() works before sigsave() and not after.  Here's the
+code to sigsave.c:
+
+----- EMPSUBS/sigsave.c -----
+
+extern	int	sigaddr[];
+
+sigsave()
+{
+	sigaddr[0] = signal(-1, 1);
+	sigaddr[1] = signal(2, 1);
+	sigaddr[2] = signal(3, 1);
+}
+
+sigrest()
+{
+	signal(-1, sigaddr[0]);
+	signal(2, sigaddr[1]);
+	signal(3, sigaddr[2]);
+}
+
+What is signal -1?  I can't find it in signal.h, and as documented,
+the signal(2) call does nothing special with it.  It shouldn't even work,
+but it does for BSD.  Beats me.  My temporary fix was to change the -1
+to 1 (SIGHUP), but a REAL fix would use the defines in signal.h.
+
+============
+Improvements
+============
+
+I'm announcing these because I don't want to duplicate someone's efforts
+if I don't have to.  Let me know if you are working on any of these...
+
+I'm probably going to hack up empire so that it does NOT use 6 overlapping
+modules.  I imagine that this was done to make it fit on a small address
+space machine.  This is really unnecessary for something like a 3b2, or
+a Vax that has enough address space to handle it.  The scheme uses much
+more disk space than is necessary.  It also slows it down because a 3b2
+has a pretty slow disk (well, ours does).  If and when I get this completed
+I'll send it to Tom and he can do an official announcement.
+
+I'm also going to write a server to run empire over 3bnet so that everyone
+on 3bnet will be playing the same game.  The game is much more fun with
+lots of players.  This will involve modifying part of empire so that it
+can be used with a pty.
+
+Happy emping!
+
+Sean
+
+
+-- 
+-------------------------------------------------------------------------------
+Sean Casey                             UUCP:  sean@ukma.UUCP   or
+915 Patterson Office Tower                    {cbosgd,anlams,hasmed}!ukma!sean
+University of Kentucky                 ARPA:  ukma!sean@ANL-MCS.ARPA
+Lexington, Ky. 40506-0027            BITNET:  sean@UKMA.BITNET
+
+
+From tsf@druxn.UUCP (FisherTS) Sat Nov 16 05:40:07 1985
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site druxn.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!drutx!druxn!tsf
+From: tsf@druxn.UUCP (FisherTS)
+Newsgroups: net.games.emp
+Subject: Old Empire news
+Message-ID: <1322@druxn.UUCP>
+Date: 16 Nov 85 11:40:07 GMT
+Date-Received: 18 Nov 85 14:33:39 GMT
+Organization: AT&T Information Systems Laboratories, Denver
+Lines: 68
+
+A 1,000 humble apologies for all the trouble that sigsave booboo
+caused the 3b2 folks.  Someone actually reported this, and I dropped
+the ball.  That -1 in signal(-1, 1); makes no sense at all (sigsave.c).
+It should have been fixed in 1.1.  As for why symbols aren't used..
+that's merely because the decompiler wasn't aware of symbolic
+values, and the ones that are there were put there by hand.
+
+If 4.2 and SysV have the same header and symbols for signals, then
+it's a good idea to fix up sigsave that way.  I'll fix it in 1.2.
+For you 3b2'ers out there, be sure to change that -1.
+
+In general, sigsave and sigrest have been ignored, and maybe 1.2
+will address signal handling a bit better.
+
+As for the floating point quirk of the 3b2s..  I'm not sure how to
+handle this one.  Maybe I could add something to the README file?
+
+Is the final load supposed to be:
+	$(CC) -o target -f objects...  libs...
+If this is accurate, I could put it in the README.
+
+The job of combining the 6 modules (emp[123457]) into one was done by
+eagle!mjs.  He modified empdis.c in a way that assigned all the commands
+to emp1.  Neat solution.  He did it conditionally so that the folks
+with 16-bit machines wouldn't be out in the cold cruel world.  I'll
+include that in 1.2.
+
+The directory structure may look a bit bizarre, but there is actually
+a rationale behind it.  It is a structure that is very useful in large
+software projects (especially with multiple machine targets), and
+it's perhaps a bit of overkill for empire.  I'm fond of it ('cause
+I work with it every day in the *real* world), and I'll claim artistic
+license and keep it the way it is for this hobby of mine (the *non-real*
+world).  I'm worried that the distribution might not have created the
+empty directories though.  I should check to see if tar creates those
+directories.  I thought it would create the whole directory structure.
+In any case, having the makefiles compensate for the missing directories
+would be a neat solution.  Consider it done in Version 1.2.
+
+I'm hoping that Version 1.2 won't be a big deal, and I'll be able to
+shar it up and post here.
+
+Someone reported that the manual page shell command (MAN.CCL ?) doesn't
+work with the Korn shell.  I'll believe anything people say about the
+stuff in INFO; I didn't even look at most of the stuff in there.
+
+Someone reported that they could get all the resources they wanted by
+using exchange sectors.  Now this one I'm really interested in.  Anyone
+out there know how to do this??  So far the report is lacking details,
+but I'm eagerly awaiting those details so we can get it fixed.
+
+A friend who did the original decompilation of empire.c back in 1980,
+fixed a bug that allowed a person to log into a country with the same
+uid twice using two different terminals.  I'm pretty sure I broke that
+fix when I hardcoded the ttyn function to always return 1.  I compromised
+that code when trying to port it to several machines and UNIX variants.
+It seems to be percolating up to the top of the priority list, so that
+might be fixed in 1.2.
+
+One last thing..  I tried to check out the Old Empire Visual Empire
+tool on 4.2 bsd last night.  The system I was on didn't have getopt(3),
+termio.h, strspn(3), and it didn't appear to have yacc or lex libraries
+(liby.a and libl.a).  Ugh.  Other than that, everything was fine ...
+I can get around the termio.h with no regrets, and I can get around
+the getopt and strspn problems (boo), but I'll have to get my 4.2
+expert to help me find those libraries.
+
+Tom Fisher	ihnp4!druxn!tsf
+
+

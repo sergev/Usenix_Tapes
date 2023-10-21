@@ -1,0 +1,164 @@
+Installation procedure steps:
+
+1) Edit file config.h, which defines system dependent parameters such as
+spool directory, and so on.  I have NOT ifdef'ed this file for likely
+changes for SYSV or anything like that.  You probably can use this file
+untouched only if you are UCB with news installed in all the standard places.
+Even then, you may not like some of the defaults.
+
+Note very carefully the definitions involving mailer treatment.
+
+2) decide which makefile to use, edit it to fill in the correct libraries
+for your system.  See notes 2) below for explanation.
+
+3) make vn
+
+4) put the executable where you want it.  put the man page, vn.man
+where you want it.  roff it with -man to print it out.  If you made
+some configuration changes, or you are a SYSV installation, you may
+want to modify the manual a bit.  It is written to reflect the actions in
+the config.h as distributed, and as used on UCB (it refers to job control).
+
+Notes:
+
+1)
+	If you modify the default mailer, poster, printer or editor, this is
+	their invocation, ufile being a tempfile name.
+
+	"mailer [path] <ufile" - path obtained from newsarticle, possibly
+		modified by user.  May be invoked with no argument dependent
+		on how you set up config.h.  No path argument if INLETTER.
+	"poster <ufile" - thus the "inews -h" to get header lines from
+		file, giving user a chance to modify headers.
+	"printer files 2>/dev/null"
+	"editor ufile"
+
+	You may also be interested in the header file "tune.h" which contains
+	some sizing / performance affecting parameters.
+
+2)
+	There are three makefile templates, all very simple, because I
+	want to make you think about whether you have the system V regular
+	expression library, and strtok() or not.  If you have regex and
+	regcmp (as opposed to re_exec and re_comp, the ucb regular
+	expression library), I advise you to use them.  regex and
+	regcmp are used because they have the ability to keep several
+	regular expressions compiled at once.  The file "reg.c" is an
+	implementation of regcmp and regex on top of the ucb calls,
+	with a special procedure called "regfree" used in place of the
+	generic "free" call used with regcmp / regex.  Use the system V
+	calls if you have them available because:
+
+		i) They should be faster than the reg.c code, which
+		recompiles the "current" ucb string every time you
+		switch regular expressions.
+
+		ii) I briefly checked out reg.c once, and it seemed to
+		work.  Our system has the "real" calls available, so I
+		run with those.  reg.c hasn't been used much by me, although
+		I've had nobody tell me it doesn't work.
+
+	strtok.c defines the strtok() and strpbrk() functions.  As with
+	regex, if you have system libraries, they are likely more efficient -
+	these string routines will often be done in assembler on a given
+	machine.
+
+	tmpnam.c defines the tmpnam() routine.  Even if a BSD system has it,
+	you might use it anyhow.  We are currently running under Ultrix on a
+	microvax, and in fact, the Ultrix version doesn't work right (as of
+	the last time I checked).  Also, the tmpnam.c version will produce
+	temp files named vnXXXXXX, instead of a generic tmpXXXXXX.
+
+	There are 2 IFDEF's handled in the makefile templates:
+
+		SYSV - system V specific portions.
+
+		JOBCONTROL - brackets the parts dealing with the SIGTSTP
+			signal handling for job control.  This could really
+			be done with "#ifndef SYSV", I suppose, but this
+			clearly marks this specific difference.
+
+	The ifdef OLDRC may be set to make the .newsrc format consistent
+	with an apparently earlier readnews format which would not take
+	ranges for "articles read".  This also makes -i an alias for a -x
+	option, and assumes that any arguments with no options are really
+	-n options.  These changes came from Australia, and are apparently
+	compatible with whatever other newsreader was being used there.
+
+	SYSV, JOBCONTROL, OLDRC and the definitions referred to in config.h
+	are the whole set.
+
+	If you are BSD but have regex/regcomp:
+
+		mf.re is the makefile template.  Fill in your local
+		libraries (termcap), the library to find regex/regcmp in.
+		This makefile defines "regfree" simply to be "free", and
+		doesn't link the "reg" object.  JOBCONTROL defined.  This
+		template also assumes you have strtok() / strpbrk().  If you
+		don't, include strtok.o in the objects.  This is actually
+		the makefile I use for Ultrix as given.
+
+	If you are BSD but don't have regex/regcomp:
+
+		mf.nore is the makefile template.  Fill in your local
+		libraries (termcap).  This makefile pulls in the "reg"
+		object.  JOBCONTROL defined.  If you DO have strtok() /
+		strpbrk() available, you might remove strtok.o from the
+		object list.
+
+	If you are SYS V:
+
+		mf.sysv is the makefile template.  Fill in your local
+		libraries (termcap).  This makefile does not pull in
+		the extra objects.  It defines "regfree" to "free", and
+		turns the BSD index / rindex into strchr / strrchr.
+		SYSV defined.
+
+		I haven't personally tried any SYSV stuff out - I don't have
+		access to a SYS V machine running news.  You might want to
+		include tmpnam.o in the object list instead of using the
+		standard one, to get specifically named temp. files.
+
+	Something pretty close to the current vn version used to run here
+	on a VAX 780 under BSD 4.2.
+
+NEWS VERSIONS:
+
+I know there's a lot of news versions running out there.  We seem to
+be running something called B2.10.3, for those of you whom that signifies
+anything to.  Something to look at is your "active" file.  I expect to
+find a newsgroup followed by the high, then low, spooling numbers (followed
+by a y/n for posting priveledge, which I don't care about).  Earlier news
+versions used to only have a single spooling number.  vn is written to
+handle this, assuming 0 for a low spool.  My basic assumptions are that
+the "active" file gives the newsgroups and spooling information and that
+articles will be numeric filenames living in the directory obtained by
+replacing periods with slashes in the newsgroup, and prefixing the spool
+directory.  I hope these really are "basic" assumptions that work across all
+versions.  vn is intended to be highly fault-tolerant regarding what it
+finds for header lines - it may not be able to make sense out of an "article",
+but it's willing to let you look at it anyway, with the single exception
+that it throws away articles which turn out to be empty or 1 line files (
+COUNTING the header lines - articles with 0 lines in them are OK.  I'm
+just preventing the "unknown subject, unknown author, and no text" case).
+
+RESOURCE USE:
+
+vn should look like people sitting in an editor once it is done with its
+reading phase.  During the reading phase, it is beating mercilessly on
+the spooling directory, reading file after file.  I have thought from time
+to time about having a daemon do this work periodically, building a master
+file of title information for vn to access.  Its reading phase would then
+be a "pause" rather than a "phase", with the penalty that you couldn't
+read anything until the daemon had gotten around to it.
+
+vn maintains a large temporary file containing the users page screens.
+Again, it should look a lot like the user is using an editor which has
+a temp file out there for its edit buffer.  MAX_C in "tune.h" can be
+used to help control the size.
+
+malloc() usage - Around 50 bytes per newsgroup is dynamically allocated,
+plus storage for character strings and the current screen structure.
+My guess would be on the order of 20-40K.  It's all "permanent" information
+maintained for the entire session, hence unfreed.  Regular expression
+storage is freed, but is minimal anyway.

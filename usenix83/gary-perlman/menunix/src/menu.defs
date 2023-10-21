@@ -1,0 +1,96 @@
+/*Copyright (c) 1981 Gary Perlman  All rights reserved*/
+#include <curses.h>
+#include <ctype.h>
+FILE	*xopen ();
+char	*getargs (), *copy (), *interpolate (), *getresponse ();
+char	menudir[100] = "/b3/gsp/ucsd/menunix/menus";
+char	maildir[100] = "/usr/spool/mail";
+char	*mailfile;
+struct MENU *savemenu;
+int	anchored = 0;
+int	newmenu;
+int	ttyspeed;
+#define	MAXOPTION 15
+#define	MAXCOM 10
+#define	COMMAND 0
+#define MAXVAR 100
+#define	OUT_OF_RANGE -2
+#define	INDENT     5
+#define MENUTOP    1
+#define MENUBOTTOM 23
+#define HISTORY    (MAXOPTION+1)
+#define TIMELINE   (MENUBOTTOM)
+#define INFOLINE   (MENUBOTTOM-2)
+#define RESPLINE   (MENUBOTTOM-1)
+#define	NOTICES    (HISTORY-1)
+#define RIGHTMENU  (COLS/2)
+#define GETRETURN  {printf("press RETURN to continue");while(getchar()!='\n');}
+char	response[BUFSIZ];
+char	*command[MAXCOM];
+char	commandbuffer[MAXCOM][BUFSIZ];
+int	docmode = 0;
+int	progmode = 1;
+struct	VAR
+	{
+	char	*name;
+	char	*value;
+	} variables[MAXVAR];
+int	nvar = 0;
+WINDOW *lmenu, *timewin, *history;
+struct MENU
+	{
+	char	*menuname;
+	char	*display[MAXOPTION];
+	char	*program[MAXOPTION];
+	char	*arguments[MAXOPTION];
+	char	selector[MAXOPTION];
+	int	noptions;
+	struct MENU *nextmenu[MAXOPTION]; 
+	struct MENU *parent;
+	char	nowait[MAXOPTION];
+	} *menu, *rootmenu, *stdmenu;
+struct MENU *readmenu ();
+
+short	uid, gid;
+#define	ESC       ''
+#define	BACKSPACE ''
+#define ESCAPE    '\\'
+#define RETURN    '\n'
+#define MODECHANGE -2
+#define RUN	   -1
+char	escapechar = '\\';
+char	varchar    = '$';
+char	shellchar  = '!';
+char	popchar    = ',';
+char	unixchar   = '.';
+char	dotdotchar = '0';
+char	quitchar   = '`';
+char	modechar   = '_';
+int	flipped    = 0;
+#include <sys/types.h>
+#include <sys/dir.h>
+#include <sys/stat.h>
+#define MAXDEPTH 10
+#define	NAMELENGTH DIRSIZ+2
+char	dirpath[MAXDEPTH][NAMELENGTH];
+int	pathlength = 0;
+char	pwdname[BUFSIZ];
+WINDOW	*filewin;
+#define MAXENTRIES 250
+int	nonames;
+int	page = 1;
+#define	DIRFILE 3
+#define	PLAINFILE      1
+#define PROGFILE   2
+#define	PAGESIZE  9
+#define	NAMESIZ  DIRSIZ+2
+struct FILENT
+	{
+	char	f_name[NAMESIZ];
+	char	f_protect[12];
+	off_t	f_size;
+	} filent[MAXENTRIES];
+#define begin(c) (c == '[')
+#define end(c)  (c == ']' || c == '\n' || c == NULL)
+#define separator(c) (c == ':')
+#define skipspace(ptr) while (isspace (*ptr)) ptr++;

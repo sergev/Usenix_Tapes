@@ -1,0 +1,100 @@
+Simultaneous Multi-Site News Feeder (version 1.0)
+--------------------------------------------------
+
+This software may be freely copied provided that no charge is made and you
+don't pretend you wrote it.
+
+This is the simultaneous multi-site news feeder.  It was written to solve the
+following problems with existing news batchers:
+
+	o When feeding several sites, each news article was the subject of
+	  several batch runs, thus consuming a lot of processor power.
+
+	o When feeding several sites, disk space would be gobbled up very
+	  quickly.
+
+	o If, for some reason, two batchers for the same site tried to run
+	  simultaneously, chaos would ensue.
+
+	o If the disk filled during batching, the batcher wouldn't notice and
+	  carry on regardless.
+
+	o If news was being unbatched during news batching, you would end up
+	  with lots of tiny batches.
+
+	o The log file(s) had to be trimmed from time to time.
+
+	o The "maximum batch size" was, in fact, a minimum batch size!
+
+Now for the bad news!  It is not very portable (yet!).  These are the minimum
+requirements:
+
+	o 4.2 BSD UNIX
+
+	o C++ version 1.1
+
+	o 2.10.3 news (if you want the multi-site facility)
+
+If you have a different environment, then I'm afraid you'll have to hack it.
+
+Installation:
+
+	1)  Edit the following files to your requirements:
+		Makefile
+		config.h
+		newsfeedlist.sh
+
+	2)  There are several bugs in the include files in C++ version 1.1.
+	    All but one of these will show up as compilation errors.  The
+	    remaining one, which will cause a memory fault if not fixed, is
+	    that the "stat" structure is different from that used by 4.2 BSD
+	    UNIX.  If you have done everything properly, there should be no
+	    errors or warnings during compilation.  You should be able to
+	    achieve this by editing the C++ include files alone.
+
+	3a) Edit your "sys" file, in order to make full use of the multi-site
+	    capabilities of this news batcher, to use the MULTICAST facility.
+	    This also has to be defined in inews.  (It will still accept old
+	    style batches.)  Here is a rather contrived example:
+
+		site1:M:world,comp,sci,rec,news:uucp-feed
+		site2:M:world,comp,sci,rec,news:uucp-feed
+		site3:M:world,comp,news:uucp-feed
+		uucp-feed:OF:all:
+
+	    All these sites will now be fed by "newsfeed uucp-feed"
+	    (but see below).
+
+	3b) You now need a command file which will take a news batch and queue
+	    it for several sites simultaneously (if you use the above feature).
+	    To save disk space problems when batching, it should ideally make
+	    one copy and use UNIX links for the remaining sites.  Here is an
+	    example, for an 8-bit compressed multi-feed, to put in file
+	    "uucp-feed.cmd":
+
+		#!/bin/sh
+		(echo "#! cunbatch"; /usr/lib/news/compress -q) | \
+		/usr/lib/news/uucp-multifeed $*
+
+	    You have to write "uucp-multifeed" yourself!  It takes the sites to
+	    queue for as arguments.  (I only use UUCP for one of the sites I
+	    feed, so I haven't bothered to write it.)  If the command file
+	    exits abnormally, batching will be abandoned and the various files
+	    will be reset to their previous state.  Thus, for example, if you
+	    wish to stop batching when the disk is too full, you could add the
+	    following to "uucp-feed.cmd" (after the first line):
+
+		if /usr/lib/news/disktoofull
+		then
+			echo $0: DISK TOO FULL >> /usr/lib/news/errlog
+			exit 1
+		fi
+
+	    where "disktoofull" returns normally if your disk is too full.
+
+Send any bugs/improvements to me:
+
+Name:	Stephen J. Muir			| Post: University of Lancaster,
+EMAIL:	stephen@comp.lancs.ac.uk	|	Department of Computing,
+UUCP:	...!mcvax!ukc!dcl-cs!stephen	|	Bailrigg, Lancaster, UK.
+Phone:	+44 524 65201 Ext. 4120		|	LA1 4YR

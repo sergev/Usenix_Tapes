@@ -1,0 +1,743 @@
+
+		  Lisp Functions and Emacs Commands
+		 Robert Krawitz (rlk@ATHENA.MIT.EDU)
+
+The Lisp language that GNU Emacs uses is, like all Lisp languages,
+comprised mainly of a set of functions and variables.  This section is
+concerned with the definition and manipulation of functions in the
+Lisp language and their relationship to editing commands.
+
+Functions in GNU Emacs Lisp can be defined in one of two basic ways;
+in the C code that the editor as a whole is written in, or in the Lisp
+that is an integral part of the editor.  The C-coded functions, of
+which there are approximately 500 defined, provide the very
+lowest-level interfaces to editing functions or operating system
+services, or in a very few cases, to perform certain operations more
+quickly than they could be performed in Lisp.  These can only be
+modified by rewriting them and recompiling the editor.  This is a
+fairly complex process, and will be described at the end of this
+section.
+
+The other method, which is the standard method for writing extensions
+to the editor, is to write new functions in Lisp.  If you have ever
+programmed other versions of Emacs you will find writing code
+for GNU Emacs very pleasant; the Lisp provided is a true version of
+Lisp, and functions that are used as commands do not require any
+terribly arcane calling sequence.
+
+It will be helpful to define a few terms first, as the meanings of a
+few terms used here differ from the common definitions.
+
+PRIMITIVE -- A primitive is a function callable from Lisp that is
+	written in C, such as car and cdr.  These are sometimes called
+	built-in functions.
+
+FUNCTION -- A function in general is anything that can be called in
+	Lisp code.  In this text, function will normally be used to
+	mean code written in Lisp.  The exceptions should be easy to
+	spot.
+
+COMMAND -- A command is something that is advertised to the user and
+	can be invoked by the user either by M-x command-name or by
+	means of a keystroke.  From the programmer's point of view, it
+	is a function with an interactive specification (see
+	interactive, below).
+
+KEYSTROKE COMMAND -- A keystroke command is a command that can be
+	executed with a short sequence of keystrokes, as opposed to a
+	command that is not bound to a keystroke.  The distinction is
+	made here merely to avoid confusion with the meaning of
+	command in non-Emacs editors; for programmers, the distinction
+	is normally unimportant.
+
+Since many people have not programmed in Lisp before, it may be
+helpful to review just what a function is before discussing some of
+the particular facilities provided for manipulating functions.  If you
+are a Lisp programmer, you can skim this section, but there are some
+points that are specific to the GNU Emacs Lisp language.
+
+A Lisp function is a list that looks like this:
+
+(lambda <ARGS> <DOCUMENTATION> <BODY>)
+
+(This sort of Lisp expression is known as a "Lambda-expression" for
+mainly historical reasons.)
+
+The first element of this list is the symbol ``lambda''; the second
+element of this list is a list of arguments; the third element is an
+optional string documenting the function, and all other elements of
+the list comprise Lisp code to execute, or, as a Lisp programmer would
+say, "are a list of Lisp forms to evaluate".  The value returned by
+the function is the value returned by the last element of the body.
+
+The list of arguments, called the lambda-list, is a list of variable
+names.  When a lisp function is called, the arguments provided are
+matched up against the names in the lambda-list, and those variables
+are bound to the values provided.
+
+Thus, if the function foo looked like this:
+
+(lambda (a b c) "Test" (+ a b c))
+
+and was called as follows:
+
+(foo 1 2 3)
+
+foo would be evaluated with the variable a bound to 1, b bound to 2,
+and c bound to 3.  Note that the arguments could have been the results
+of other functions; i. e.
+
+(foo 1 (* 2 3) (- 5 4))
+
+all the arguments to foo (1, (* 2 3), and (- 5 4)) would be evaluated,
+left to right.  Then foo would be applied to these arguments. 
+
+The function that calls our example here must provide all three
+arguments.  If you attempted to call foo with only two arguments, you
+would get a Lisp error.  However, it is often convenient not to have
+to specify certain arguments, allowing them to default in some way,
+such as the function rmail, which will default to a predetermined
+filename if not passed a specific filename; or to be able to provide
+an indefinite number of arguments; functions such as and, or, and +
+fall into this category.  If optional or rest arguments are not
+provided, they are bound to nil.
+
+GNU Emacs Lisp has a way to allow you to specify optional and extra
+(commonly known as "rest") arguments.  Simply include the keyword
+&optional before the optional arguments and the keyword &rest before
+one final argument that will be a list of all extra arguments.
+
+Thus, a lambda list that looks like this:
+
+(a b &optional c d &rest e)
+
+binds a and b to the first two arguments, which are required.  If one
+or two more arguments are included, c and d are bound to them
+respectively; any arguments after that are collected into a list and e
+is bound to that list.  After the arguments provided by the caller are
+used up, any remianing optional or rest variables are bound to nil.
+			
+[The concept of binding should be explained clearly in the section on
+dynamic scoping.  That should come BEFORE this section!]
+
+All arguments after the &optional are optional arguments, and only one
+argument is meaningful after &rest.  To see why this must be so,
+suppose that c in the example is optional and d is required.  Suppose
+three arguments are given; then what should be bound to the third
+argument?  If c is bound to it, then d is left unbound, which is an
+error.  If d is bound to it, then any fourth argument would be bound
+to c, changing the order of the list.  It should be clear that a
+required argument following an optional argument in this scheme is
+meaningless.  Similarly, multiple &rest arguments have no meaning
+since all extra arguments are collected into a list; if you do not
+want this behavior you should use &optional arguments.  [This is very
+messy; anyone want to clean it up?]
+
+One minor problem with this is that if the last argument provided is
+nil, and it is an optional argument, then the function cannot tell if
+the argument was provided or not.
+
+The documentation string is completely optional as far as the language
+is concerned; if provided, it is a literal string that is used by a
+few functions for the user's benefit.  It is a good idea to provide
+documentation strings for all commands and functions, and it should
+explain what the function does and all its arguments in order.
+
+You may wonder how the documentation string could be optional, since
+there are required components of the function that follow it (the
+body).  Since evaluation of a string returns that string, without any
+side effects, it has no effect if it is not the last form in the body.
+Thus, in practice, there is no confusion between the first form of the
+body and the documentation string; if the only body form is a string
+then it serves as both the return value and the documentation.
+
+The rest of the function definition is simply a list of lisp forms to
+be evaluated in order, and the value of the last form is returned.
+
+Functions and special forms provided to create and manipulate
+functions:
+
+----------------------------------------------------------------
+
+defun <FUNCTION-NAME> <LAMBDA-LIST> <{DOCUMENTATION}> &rest <BODY-FORMS>
+
+defun is the basic special form for defining new lisp functions.  A
+special form is a function whose arguments are not evaluated.  As
+mentioned above, the arguments to functions are normally evaluated
+before the function is called.  With a special form, this is not true.
+This is necessary in this case because defun must be able to see
+exactly what its arguments look like.  All special forms will be noted
+as such in the description of the appropriate function, otherwise you
+may assume that the function is an ordinary function.  This can be
+mildly confusing.
+
+FUNCTION-NAME should be the name of the symbol that will be the name
+of the new function.  This can be the name of a pre-existing variable,
+since variable values are stored in a different place (the "value
+cell" of the symbol) than the function definition (the "function
+cell").
+
+What defun does is set the contents of the function cell of the symbol
+FUNCTION-NAME to the lambda-expression specified by the rest of the
+arguments.  Thus, if we evaluate this expression:
+
+(defun test-function (a b)
+  "This is a sample Lisp function definition"
+  (setq c (+ a b))
+  (* c 2))
+
+the function cell of the symbol test-function will be given the
+following value:
+
+(lambda (a b) "This is a sample Lisp function definition"
+   (setq c (+ a b)) (* c 2))
+
+If a function is already defined, and you wish to redefine it, you
+merely need evaluate a new defun with the new function definition.
+
+----------------------------------------------------------------
+
+fset <FUNCTION-NAME> <DEFINITION>
+
+fset is a primitive for creating or modifying functions.  The
+difference between fset and defun, aside from the fact that fset takes
+different arguments, is that fset is a function, and thus its
+arguments are evaluated.  This can be useful, for example, if you wish
+to define a function whose name you don't know when you are writing
+code, but that you intend to find out at runtime, or if you have code
+that will generate a legal function definition.  Thus, any constant
+arguments (i. e. if you know the function name or function definition
+in advance) will have to be quoted.  See <function> below.
+
+fset is for use in tools that operate on Lisp functions themselves,
+not for defining particular functions with particular definitions.
+For example, named keyboard macros are created by means of fset; the
+name of the function and its definition are supplied by the user and
+not fixed in the code for the keyboard macro facility.
+
+----------------------------------------------------------------
+
+function <LISP-CODE>
+
+function is a special form very similar to the quote form that is used
+in the Lisp interpreter.  The quote special form is normally implied
+by the "'" syntax; thus, the syntax 'list is completely equivalent to
+the form (quote list).  The difference between the two forms is that
+with quote you might be planning to use the actual Lisp value of the
+constant (quoted Lisp forms).  You should use function only if you do
+not intend to use the value for anything except to apply it to
+arguments, since the byte compiler will compile forms inside function,
+but not touch forms inside quote.
+
+I. e., you might use
+
+(setq text-mode-hook (function (lambda () (auto-fill-mode 1))))
+
+----------------------------------------------------------------
+
+apply <FUNCTION> <ARGS>
+
+apply calls FUNCTION with the elements of ARGS.  This is very handy
+when you don't know how many arguments you wish to call a function
+with, or don't know what function you want to call, or just want to
+apply an arbitrary lambda-expression which may not have any symbol
+bound to it to a list of arguments.  Thus, you might want to use apply
+to do the following:
+
+(defvar magic-op 0 "Magic operation to be applied to a list of numbers")
+
+(apply (nth magic-op '(+ - * /)) list-of-numbers)
+
+Or, if you already know the operation, and just wanted to apply it to
+a list of arguments:
+
+(apply '+ list-of-numbers)
+
+----------------------------------------------------------------
+
+funcall <FUNCTION> &rest <ARGS>
+
+funcall is similar to apply, except that the arguments are specified
+individually rather than collected into a list.  For example, you
+might know what arguments you want to call a function with, but you
+might not know what function you need.  Example:
+
+(defconst divide-by-zero-hook '(lambda (x) 8388607))
+
+(defun /-safe (num denom)
+  "Divide NUM by DENOM, checking that DENOM is not zero.  If DENOM is
+zero, then the value of divide-by-zero-hook is called with NUM as the only
+argument."
+  (if (zerop denom)
+      (if (and (boundp divide-by-zero-hook)
+	       divide-by-zero-hook)
+	  (funcall divide-by-zero-hook num)
+	(error "Dividing by zero"))
+    (/ x y)))
+
+This is the technique used to call the various hooks (i. e.
+divide-by-zero-hook).  After checking that the hook does indeed exist,
+the hook is called with no arguments using funcall.  You can't just
+evaluate the form (divide-by-zero-hook num) because the actual
+function is the value of divide-by-zero-hook, not the function
+definition of that symbol.
+
+(funcall function a b c)
+
+is completely equivalent to 
+
+(apply function (list a b c)).
+
+----------------------------------------------------------------
+
+fboundp <FUNCTION-NAME>
+
+fboundp checks whether the function cell of FUNCTION is bound to
+anything, returning t if it is, or nil if it isn't.  This can be
+useful before attempting to funcall something that may or may not
+exist, since attempting to call a void function results in a Lisp
+error.
+
+----------------------------------------------------------------
+
+fmakunbound <FUNCTION-NAME>
+
+fmakunbound removes any function definition of the symbol
+FUNCTION-NAME.  This function is rarely used, since there is seldom a
+reason for simply removing the function cell of a symbol (making a
+function undefined).
+
+----------------------------------------------------------------
+
+eval <FORM>
+
+eval evaluates an arbitrary lisp expression and returns its value.
+This function is rarely useful when writing lisp code; one example of
+its use is inside the function eval-expression, which reads a Lisp
+form in the minibuffer and evaluates it.
+
+If you find yourself using eval frequently, you are almost certainly
+writing very poor code.  eval is used in tools that operate on Lisp
+code itself, rather than in normal applications.
+
+----------------------------------------------------------------
+
+mapcar <FUNCTION> <LIST>
+
+mapcar returns a list of the values of FUNCTION applied to each
+element of LIST.  I. e.
+
+(mapcar 'car '((a b) (c d) (e f)))
+
+returns
+
+(a c e)
+
+----------------------------------------------------------------
+
+variable-documentation (property)
+
+(get <SYMBOL> 'variable-documentation)
+
+The variable-documentation property of a symbol holds documentation
+for the value, if any, of a symbol.
+
+----------------------------------------------------------------
+
+documentation <FUNCTION>
+
+Return the documentation string, if any, of FUNCTION.
+
+----------------------------------------------------------------
+
+symbol-function <SYMBOL>
+
+Return the function definition, if any, of SYMBOL.  This is how you
+get at the function definition of a symbol to manipulate it.
+
+If the symbol does not have a function definition, then this function
+gets an error.  Unless you know that SYMBOL has a function definition,
+or don't mind the error, it is wise to check first with fboundp.
+
+================================================================
+
+The remainder of the functions discussed here are specific to Emacs
+Lisp.
+
+----------------------------------------------------------------
+
+interactive <INTERACTIVE-SPEC>
+
+interactive is neither a function nor a special form.  It is the way
+to tell the Lisp interpreter that a function may be called
+interactively (i. e. that a function may be used as a command) and in
+addition specifies how some or all of its arguments should be read.
+
+This form (there is no more specific way of describing it) is the only
+part of GNU Emacs Lisp that does not follow standard Lisp conventions.
+It is not difficult to use, and provides a very simple interface for
+reading arguments.
+
+The interactive form must be the first form of the body of a function,
+coming immediately after the lambda-list or documentation string.
+
+There are several forms of call to interactive.
+
+The simplest form of interactive is simply a "call" to interactive:
+
+(interactive)
+
+This merely tells Emacs that the function so defined can be used as a
+command; it can be called with M-x command-name or bound to a key,
+command-apropos will find it, etc.  It does not read any arguments; if
+the function requires any, it will get an error.
+
+The second form is the use of interactive with a control string.  The
+control string specifies how arguments are to be found, any prompts
+that may be necessary, and how many arguments are desired.  The string
+consists of a series of elements consisting of a one-character control
+specification, a prompt if appropriate, and a newline if there are
+more specifications following the current one (i. e. the newline
+character delimits interactive specifications).  The arguments are
+assigned to the parameters in the lambda-list in left-to-right order;
+i. e. the first specification reads an argument for the first
+parameter, etc.  If any required arguments are not specified in this
+manner, the function will get an error.  In all cases except as noted,
+the specifications cause something to be read from the minibuffer, and
+thus accept a prompt string.  The specifications are:
+
+a -- Function name: symbol with a function definition.  This refuses
+	to accept a name that does not have a function definition.
+b -- Name of existing buffer.
+B -- Name of buffer, possibly nonexistent.
+c -- Single character.
+C -- Command name: symbol with an interactive function definition.
+d -- Value of point as number.  This does not prompt for anything in
+	the minibuffer, so supplying a prompt string is meaningless.
+D -- Directory name.  Checks to make sure the supplied string is a
+	directory.
+f -- Existing file name.
+F -- Possibly nonexistent file name.
+k -- Keystroke sequence (string).
+m -- Value of mark as number.  This does not read from the minibuffer.
+n -- Number.  This reads from the minibuffer and converts the result
+	into a number.
+p -- Prefix arg converted to number.  A prefix arg is one specified,
+	for example, by means of C-u.  This does not read from the
+	minibuffer.  It is meaningful, but not very useful, to use
+	this more than once; every argument specified with this option
+	receives the same value.  This does not use the minibuffer.
+P -- Prefix arg in raw form.  This is useful for determining whether
+	or not a prefix argument was supplied, because the conversion
+	routine defaults prefix arguments to reasonable values (1 for
+	a keystroke command, 0 for a M-x command, 4 for C-u, and -4
+	for C-u - ).  It is also meaningful, but not very useful, to
+	use this more than once.  It is more useful to use both this
+	and "p", since the two arguments are difficult.  This form can
+	be converted easily into a numerical argument; see
+	prefix-numeric-value.  This does not use the minibuffer.
+r -- Region: point and mark as 2 numeric args, smallest first.  This
+	is the appropriate way to read arguments for a command
+	operating on a region; a lisp function calling this function
+	should specify the bounds of the region itself.  This
+	specifies two consecutive arguments.  It does not use the minibuffer.
+s -- Any string.
+S -- Any symbol.
+v -- User variable name: symbol that is user-variable-p.  User
+	variables (user options) are defined as variables whose
+	documentation strings begin with "*".
+x -- Lisp expression read but not evaluated.
+X -- Lisp expression read and evaluated.
+In addition, if the first character of the string is '*' then an error is
+ signaled if the buffer is read-only.
+ This happens before reading any arguments.
+
+For example, a function that looks like this:
+
+(lambda (a b c d &optional e)
+   (interactive "p\nr\nfFile name to delete: ") nil)
+
+when called interactively, first converts any prefix argument to a
+number and binds a to that number, then binds b to the smaller of the
+point and mark (beginning of region), then binds c to the end of the
+region, then prompts in the minibuffer with the string "File name to
+delete: ", reading a filename and checking that it exists.  e is bound
+to nil, since it is an optional argument and nothing was specified for
+it.
+
+The third way of of using interactive is to pass it a form to
+evaluate.  This form should return a list, and the arguments are
+assigned from the elements of this list.  For example,
+
+(lambda (a b)
+   (interactive (list current-prefix-arg
+		      (completing-read "File to trash: " precious-files))))
+
+a will be bound to current-prefix-arg (what interactive "P" uses) and
+b will be bound to a file name read from the keyboard.
+
+With any form of interactive, calling the function from Lisp does not
+use any of interactive's features; you must pass all arguments the
+usual way.  It is possible to call a function interactively from Lisp,
+though; see call-interactively.
+
+----------------------------------------------------------------
+
+call-interactively <COMMAND>
+
+call-interactively calls a command (an interactive function) as if it
+had been called from the keyboard.  Thus, arguments are found from the
+interactive specification of COMMAND.  This function is sometimes
+useful if you want to call a function from lisp, but wish to treat it
+as a command.
+
+----------------------------------------------------------------
+
+interactive-p
+
+interactive-p returns t if the function from which it was called was
+called interactively; that is, from the keyboard or with
+call-interactively, and with input from the terminal (i. e.
+standard-input's value is t).
+
+----------------------------------------------------------------
+
+commandp <FUNCTION>
+
+A FUNCTION satisfies commandp if it can be interactively called.  This
+means, either:
+ -- that it has an interactive specification;
+ -- is a string (which is considered a keyboard macro);
+ -- is an interactively autoloadable function (see autoload);
+ -- or is an interactively-callable primitive.
+
+A symbol also satisfies commandp if its function definition is
+commandp.
+
+This function is not normally too useful for programmers, since it
+seldom matters whether a function is a command.  However, it may be
+useful for determining whether a function can be called with
+call-interactively.
+
+----------------------------------------------------------------
+
+autoload <FUNCTION-NAME> <FILENAME> &optional <DOCUMENTATION> <INTERACTIVE> <MACRO>
+
+autoload provides a way to specify that if FUNCTION is called, it can
+be found in file FILENAME.  Thus, an attempt to call FUNCTION will
+cause FILENAME to be loaded.
+
+DOCUMENTATION is a documentation string; normally it will be the same
+as the documentation string for the underlying function.
+
+INTERACTIVE specifies that the function may be called interactively.
+This means that the function name will be included in the completion
+space for M-x.  Any call to the function, interactive or not, will
+load the file.  What to do will be determined when the true definition
+is present.
+
+MACRO specifies that the underlying function is really a macro, and
+not a function.  See the section on macros for more information.
+
+----------------------------------------------------------------
+
+prefix-numeric-value <RAW-PREFIX-ARG>
+
+Translates a raw prefix argument, such as that returned by interactive
+"P", into a number.  This is the proper way of extracting the numeric
+value of a prefix argument from the raw argument.
+
+----------------------------------------------------------------
+
+current-prefix-arg (variable)
+
+The current value of the prefix argument.  This variable is reset
+after each command.
+
+It consists of one of the following:
+
+nil 	 -- no argument given
+-   	 -- (the symbol -) -- C-u - or M-- is the prefix arg
+A number -- C-u followed by a number or M-{number} is the prefix arg
+A list	 -- One or more C-u's is the prefix arg.  (4) means one C-u,
+	    (16) means 2, etc.
+
+This can be used instead of interactive "P"; however, interactive "P"
+is the preferred means of access.  current-prefix-arg can be set or
+bound, and a function then called with call-interactively, to control
+the passing of numerical arguments to a command.
+
+----------------------------------------------------------------
+
+ignore &rest <ARGUMENTS>
+
+ignore simply ignores any and all arguments passed it.  A typical
+application would be when you are using a standard facility that wants
+a function that may be called at some point to inform you of some
+condition that you are not in fact interested in.  You can safely
+supply ignore in this situation.
+
+----------------------------------------------------------------
+
+mapconcat <FUNCTION> <SEQUENCE> <SEPARATOR>
+
+mapconcat applies FUNCTION to each element of SEQUENCE and
+concatenates each result into a string, separated by SEPARATOR.  It
+can be useful for printing out a list or vector in a preferred format.
+It is frequently used with identity (see below).
+
+----------------------------------------------------------------
+
+identity <FORM>
+
+identity is a function that merely returns its argument.  It is
+primarily useful with mapconcat, for printing out a list.
+
+================================================================
+
+Functions written in C (primitives)
+
+Certain functions, and all special forms, are written in C.  A
+convenient interface is provided via a set of macros.  The only way to
+really understand how to write new C code is to read the source;
+however, some information will be provided here.
+
+An example of a special form (an ordinary function would have the same
+general appearance) is the definition of or, from eval.c;
+
+/* NOTE!!! Every function that can call EVAL must protect its args
+ and temporaries from garbage collection while it needs them.
+ The definition of `For' shows what you have to do.  */
+
+DEFUN ("or", For, Sor, 0, UNEVALLED, 0,
+  "Eval args until one of them yields non-NIL, then return that value.\n\
+The remaining args are not evalled at all.\n\
+If all args return NIL, return NIL.")
+  (args)
+     Lisp_Object args;
+{
+  register Lisp_Object val;
+  Lisp_Object args_left;
+  struct gcpro gcpro1;
+
+  if (NULL(args))
+    return Qnil;
+
+  args_left = args;
+  GCPRO1 (args_left);
+
+  do
+    {
+      val = Feval (Fcar (args_left));
+      if (!NULL (val))
+        break;
+      args_left = Fcdr (args_left);
+    }
+  while (!NULL(args_left));
+
+  UNGCPRO;
+  return val;
+}
+
+Here is a precise explanation of the arguments to the DEFUN macro.
+
+The first argument is the name of the function in Lisp; it will be
+named "or".
+
+The second argument is the C function name for this function.  This is
+the name that is used in C code for calling the function.  The name
+is, by convention, F prepended to the Lisp name, with all dashes (-)
+in the Lisp name changed to underscores.  Thus, if your C code wishes
+to call this function, it will call For(...).  Remember that the
+arguments must be Lisp_Objects; various macros and functions for
+creating Lisp_Objects are provided in the file lisp.h.
+
+The third argument is the name of the C variable representing the Lisp
+primitive that this function codes.  This name is by convention "S"
+prepended to the name, in the same manner that the function name is
+created.
+
+The fourth argument is the minimum number of arguments that must be
+provided; i. e. the number of required arguments.  In this case, no
+arguments are required.
+
+The fifth argument is the maximum number of arguments that can be
+provided.  This is a special form because this number is the macro
+UNEVALLED, indicating that the arguments are not to be evaluated.  A
+function with the equivalent of an &rest argument would have the macro
+MANY in this position.  This argument must be one of these macros or a
+number at least as large as the fourth argument.
+
+The sixth argument is an interactive specification exactly like the
+one provided in Lisp.  In this case it is 0 (a null pointer),
+indicating that this function cannot be called interactively.  A value
+of "" indicates an interactive function not taking arguments.
+
+The last argument is the documentation string.
+
+A list of arguments must be provided, and their types (all Lisp
+objects) must be declared.
+
+If you are modifying a file that already has Lisp primitives defined
+in it, find the function near the end of the file named
+syms-of-<something>, and add a line of the form
+
+defsubr (&Sname);
+
+If the file doesn't have this function, or you have created a new
+file, add a syms_of_<filename>, e. g. syms_of_eval, and find the spot
+in emacs.c where all of these functions are called.  Add your there.
+This makes all the subroutines (primitives) available from Lisp.
+
+Here is another function, with more complicated arguments.  This comes
+from the code for the X window system, and it demonstrates the use of
+macros and functions to manipulate Lisp objects.
+
+DEFUN ("coordinates-in-window-p", Fcoordinates_in_window_p,
+  Scoordinates_in_window_p, 2, 2,
+  "xSpecify coordinate pair: \nXExpression which evals to window: ",
+  "Return non-nil if POSITIONS (a list, (SCREEN-X SCREEN-Y)) is in WINDOW.\n\
+Returned value is list of positions expressed\n\
+relative to window upper left corner.")
+  (coordinate, window)
+     register Lisp_Object coordinate, window;
+{
+  register Lisp_Object xcoord, ycoord;
+
+  if (!LISTP  (coordinate)) wrong_type_argument (Qlistp, coordinate);
+  CHECK_WINDOW (window, 2);
+  xcoord = Fcar (coordinate);
+  ycoord = Fcar (Fcdr (coordinate));
+  CHECK_NUMBER (xcoord, 0);
+  CHECK_NUMBER (ycoord, 1);
+  if ((XINT (xcoord) < XINT (XWINDOW (window)->left)) ||
+      (XINT (xcoord) >= (XINT (XWINDOW (window)->left) +
+                         XINT (XWINDOW (window)->width))))
+    {
+      return Qnil;
+    }
+  XFASTINT (xcoord) -= XFASTINT (XWINDOW (window)->left);
+  if (XINT (ycoord) == (screen_height - 1))
+    return Qnil;
+  if ((XINT (ycoord) < XINT (XWINDOW (window)->top)) ||
+      (XINT (ycoord) >= (XINT (XWINDOW (window)->top) +
+                         XINT (XWINDOW (window)->height)) - 1))
+    {
+      return Qnil;
+    }
+  XFASTINT (ycoord) -= XFASTINT (XWINDOW (window)->top);
+  return (Fcons (xcoord, Fcons (ycoord, Qnil)));
+}
+
+There are similar equivalents for defvar and defconst, as well as a
+few others that have no equivalent in the Lisp interpreter.
+
+Note that you cannot directly call functions defined in Lisp as, for
+example, Fcons is called above.  You must create the appropriate Lisp
+form, protect everything from garbage collection, and Feval the form,
+as was done in For above.
+
+eval.c is a very good file to look through for examples; lisp.h
+contains the definitions for some important macros and functions.
+-- 
+Robert^Z

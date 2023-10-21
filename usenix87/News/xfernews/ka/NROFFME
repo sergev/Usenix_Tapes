@@ -1,0 +1,373 @@
+.hy
+.de p
+.sp
+.ti +5
+..
+.de Np
+'bp
+'sp 5
+.ns
+..
+.wh 61 Np
+.de h
+.sp 2
+.ne 4
+.nr h +1
+\\nh)\ \ \\$1
+.p
+..
+.h "What is xfernews?"
+Xfernews is a package of software for transporting news,
+and optionally mail, between machines.
+It is designed to be efficient, reliable, and to run on top of
+vanilla uucp.
+.p
+The memo is divided into five sections.
+Section 2 documents the protocal used by xfernews.
+Section 3 gives an overview of how the xfernews software works.
+Section 4 and 5 discuss the compilation and installation of xfernews.
+Finally, section 6 talks about error messages.
+.h "The xfernews protocal"
+The two news transport methods described in the
+.ul
+USENET Interchange Standard
+are based upon remote execution and mail, respectively.
+Xfernews is based upon file transfer,
+which is handled better by uucp and certain other networks.
+.p
+Assuming that two systems communicate using the xfernews
+protocal, each systems has an input directory which the other
+system sends files to.
+Each system periodicly checks its input directory and processes
+any files which it may find there.
+The name of the file identifies its contents.
+The first character of the name is the type;
+a list of types is given below.
+The next 9 characters contain the value in decimal returned by time(2)
+when the file was queued for transfer.
+This should be used by the receiving system to process
+news in the same order that it was queued.
+The final character of the filename is a letter chosen to make the
+file name unique.
+.p
+There are four file types currently defined.
+Type 'n' files contain news articles.
+Type 'm' files contain mail.
+The use of this protocal for mail is optional,
+but is recomended for links which carry large amounts of mail.
+The first line of the file contains the three characters "To "
+followed by the destination of the mail.
+The rest of the file contains the letter.
+Type 'a' files are acknowledgement files.
+An acknowledgement file contains a list of files received
+by the system which sent the acknowledgement file.
+If a system fails to acknowledge a file,
+the file should be resent.
+.p
+[If the batching version of the protocal is used, then files of the
+preceding three types are combined into batches which are sent across
+as type 'b' files.  The first byte of a type 'b' file specifies the
+format of the batch.  (Currently two formats are defined: 'a' format
+is a simple ascii compaction scheme and 'b' format compresses the data
+into a binary form.)]
+.h "The Xfernews Software"
+This gives an overview of the implementation of the xfernews protocal
+for use with uucp.
+Three programs are provided.
+Qnews queues news or mail for transmission to another system.
+Sendnews sends the news which has been queued up
+to another system.
+Recvnews processes news files sent from another system.
+.p
+For each system talked to using xfernews,
+there is a spool directory.
+The contents of this directory are:
+.de l
+.sp
+.ti 0
+.ta 16
+\\$1	\c
+.ta 8,16,24,32,40,48,56,64,72,80
+..
+.in 16
+.l in
+The input directory used by the remote system (see section 2).
+.l out
+News to be sent to the remote system is placed here by queuenews.
+.l sent
+When sendnews sends news to the remote system, it moves it from
+the out directory to the sent directory.
+The news remains in the sent directory
+until the remote system acknowledges it.
+.l [unbatch
+When a batch file is unpacked, the resulting files are placed in this
+directory.]
+.l [newslist
+A list of news articles to be sent.
+This file is written directly by inews, making it unnecessary
+for qnews to be invoked for each article to be transmitted.]
+.l ackfile
+This file contains a list of input files
+which have been processed.
+Sendnews sends the contents of this file
+to the remote system
+as an acknowledgement file.
+.l lastack
+This file contains the time of the last file acknowledged
+by the remote system.
+It is used to avoid resending files which haven't been acknowledged
+because the remote system is down.
+.l resentflag
+When sendnews resends some news,
+it creates this file.
+The next time sendnews is invoked, it will not resend any news
+in order to give the remote system time to acknowledge the files
+already resent.
+.l bad
+When a file is found in one of the directories "in", "out", or "sent"
+which cannot be processed,
+it is moved to this directory
+and you are informed of the fact by mail.
+.in 0
+.h "Compiling the Xfernews Software"
+Compiling the xfernews software is simple:  all you have to do
+is to type "make".
+However, you will probably want to modify
+some compile time parameters first.
+.p
+If you are not running System 3 or System 5,
+you should remove the "#define USG 1" line
+from common.h.
+This will get you code which should run using Version 6 system calls.
+The version of the library routines provided with 4.1 BSD should
+work with this code.
+If you have 4.2 BSD, the directory format is different;
+eliminate the 4.2 compatability routines in dir.c and dir.h,
+and use the real routines provided by Berkeley.
+.p
+There are several compile time parameters which you may want to change:
+.in 16
+.l RNEWS
+is the path name of the rnews program
+used for processing news.
+Be warned that no path search will be performed.
+Furthermore, the rnews program cannot be a
+shell procedure.
+The default is "/usr/bin/rnews".
+.l RMAIL
+is the path name of a program for processing mail.
+If you don't use xfernews for transferring mail,
+this isn't used.
+The default is "/bin/rmail".
+.l UUCP
+is the path name of the uucp command.
+The default is "/usr/bin/uucp".
+.l MAILCMD
+is the command passed to popen to inform the system administrator
+of problems.
+The default is "mail\ usenet".
+.L [LIBDIR
+is the directory where the unbatcher programs reside.
+The first character of a batch file specifies which unbatcher to use;
+if this character is 'X', then the program LIBDIR/unbat_X will be run
+to unpack the batch.
+The default is "/usr/lib/news".]
+.l RECVLOCK
+is the name of the lock file used to prevent two copies of recvnews
+from running simultaneously.
+Having two copies of recvnews running simultaneously in the same directory
+will cause problems.
+We have one system wide lock rather than one lock per directory
+because inews running multiple copies of inews
+seems to result in "news system locked up" messages.
+.l NETNEWS
+is the numeric user id which is to be used by sendnews
+and recvnews when they are invoked as root.
+If they are not invoked as root then this has no effect.
+.l DESTLEN
+is the maximum length of a mail destination.
+.l MAXARGS
+is the maximum number of files which can be processed
+by a given invokation of sendnews or recvnews.
+.l MINACK
+specifies the minimum number of files needing to be acknowledged
+before an acknowledgement file will be sent.
+Setting this to zero causes the systems to keep trading acknowledgements
+even when the link is idle.  (Each acknowledgement has to be acked.)  Note
+that any pending acknowledgements are always sent if a connection has
+to be established to transfer news or mail anyway.
+MINACK is specified as the number of bytes; since each file currently
+takes 12 bytes, divide by 12 to get the number of files.
+.l [MAXBATSIZE
+is the approxmiate maximum size of a batch.
+The default is 66000, which means that a single batch will take about
+10 minutes to transfer at 1200 baud.
+This may be increased or decreased depending on how reliable your phone
+connections are.]
+.l [MAXBATCH
+The maximum number of outstanding batches.
+The number of outstanding batches is limited so that you will not run out
+of file space if you are unable to contact the remote system for a long
+period of time.]
+.in 0
+.h " Installing Xfernews"
+Once xfernews is compiled,
+you can set up links to other machines using the xfernews protocal.
+.p
+The first step is to create xfernews spool directories
+for the systems you want to talk to.
+The shell procedure mkspool creates an xfernews spool directory.
+Typically the last component of the path will be the name of the
+remote system.
+Thus to talk to spanky you might use the spool directory
+/usr/spool/spanky.
+If you think you might have to move the spool directory to a different
+file system at some point, create a login called netnews with a home
+directory of "/usr/spool", and tell the spanky adminstrator that the
+name of the spool directory is "~netnews/spanky".
+.p
+Recvnews is invoked as "recvnews directory...".
+Each directory is the name of an xfernews spool directory.
+It is recomended that xfernews be invoked from cron
+quite frequently, say once every 10 or 15 minutes,
+so that news will be processed as quickly as possible.
+.p
+Sendnews is invoked as "sendnews [\ -r\ ] directory to".
+Directory is the name of an xfernews spool directory.
+To is the name of the input directory on the remote system
+in uucp format (see example below).
+The -r option is passed directly to uucp;
+it tells uucp not to start up the uucp daemon.
+.p
+It is recomended that both systems using xfernews
+invoke sendnews simultaneously.
+[You can ignore any of the recomendations in this paragraph
+and xfernews will still run.]
+To avoid extra phone calls, one system should specify
+the -r option.
+Normally you will want to alternate specifying the -r option
+in order to share the phone bill.
+For example, if a link exists between spanky and tpsa,
+the crontab entries on spanky might look like
+.in +4
+.nf
+0  * * * * /etc/sendnews /netnews/tpsa tpsa!/usr/spool/spanky/in
+30 * * * * /etc/sendnews -r /netnews/tpsa tpsa!/usr/spool/spanky/in
+.fi
+.in -4
+and the corresponding entries on tpsa would be
+.in +4
+.nf
+0 * * * * /etc/sendnews -r /usr/spool/spanky spanky!/netnews/tpsa/in
+30 * * * * /etc/sendnews /usr/spool/spanky spanky!/netnews/tpsa/in
+.fi
+.in -4
+This arranges systems to alternate the job of calling each other.
+In this example, news is transferred every half hour;
+over a long distance telephone connection you would want to
+transfer it less frequently.
+.p
+Once the connection is set up, you can begin feeding news into it
+using the qnews program.
+For a normal interface with netnews, place the entry
+"qnews directory/out" in to fourth field to the sys file
+for the system you wish to talk to.
+Directory should be replaced by the name of the spool directory
+for the system you wish to talk to.
+This will cause qnews to read its standard input
+and copy it to a file in the directory specified as its argument.
+.p
+In version 2.10 of netnews, it is possible to reference the name
+of the article as it is stored in the netnews spool directory,
+thereby allowing the article to be linked into the spool directory
+rather than being copied there.
+To use this feature, the netnews spool directory and the xfernews
+spool directory must be in the same file system.
+Add the U flag to the third field of the entry in the sys file,
+and in the fourth field say:  "qnews directory/out %s"
+The %s will be replaced by the name of the article in the spool
+directory.
+If the article is a control message and you are running a prerelease of 2.10,
+the article is not placed in
+the netnews spool directory and the %s is passed to qnews unchanged.
+Qnews checks for this case and reads the article from its standard input.
+.p
+[If you are using batching, then you do not need to use qnews to queue news
+(although you will still need qnews to transfer mail).
+Instead, add an 'F' flag to the third field and specify "directory/newslist"
+in the fourth field.  This will cause inews to write the names of the files
+containing the articles to the file "newslist".
+If you use this approach, you should keep all articles around for at least
+a week so that the articles will not be expired before they can be sent.]
+.p
+If the cost of a phone connection is very high, or you are
+having problems with mail being lost, you may want to transfer mail
+as well as news using xfernews.
+You will probably have to modify your mailer code.
+The basic idea is you first figure out how your mail system transfers
+mail using uux.
+It will invoke uux by saying something like:
+.nf
+
+      sprintf(cmd, "uux - %s!rnews \\(%s\\)", system, dest) ;
+      fp = popen(cmd, "w") ;
+
+.fi
+Assuming spanky is the system you want to send mail to using xfernews,
+change this to:
+.nf
+
+      if (strcmp(system, "spanky") == 0) {
+            sprintf(cmd, "qnews -tm %s /usr/spool/spanky", dest) ;
+            fp = popen(cmd, "w") ;
+            if (fp != NULL)
+                  fprintf(fp, "To %s\\n", dest) ;
+      } else {
+            sprintf(cmd, "uux - %s!rnews \\(%s\\)", system, dest) ;
+            fp = popen(cmd) ;
+      }
+
+.fi
+The -t option to qnews specifies the type of file to be created;
+in this case 'm' or mail.
+.h "Administration of xfernews"
+When an error occurs in the xfernews package,
+you will be informed by mail.
+It is important that the mail command work;
+try invoking sendnews without any arguments and see if an error message
+is mailed to you.
+Most error messages refer to errors which "can't happen" (i. e.
+the problem is either a bug in the package or an error in installation).
+You may have to grep through the code or contact the author to identify these.
+You are also informed when the RNEWS or RMAIL programs exit with non-zero
+status.
+When one of these programs fails, the mail or news is still acknowledged
+and the file is linked into the directory "bad" where you can fix the
+problem manually.
+The exit status of the program and any error messages generated by the program
+are included in in the message.
+Sometimes the problem is transient, so just running rnews again will fix
+the problem.
+If you run 2.10, you may want to inews to exit with an error indication
+when an unknown newsgroup is received.
+This way you can fix the problem and resubmit the article.
+The following version of the routine getapproval (in inews.c)
+does the trick, at least for the beta release:
+
+.nf
+
+getapproval(ng)
+char	*ng;
+{
+	char buf[128] ;
+	sprintf(buf, "inews:  unrecognized newsgroup %s\n", ng) ;
+	log(buf) ;
+	printf("%s", buf) ;
+	xxit(4) ;
+}
+
+.fi
+Files in the directories "in", "out", and "sent" with unrecognized names
+will also be moved to the directory "bad".
+If rnews dies with a core dump, the core file will be left in "in",
+and the next invocation of recvnews will move it to "bad".

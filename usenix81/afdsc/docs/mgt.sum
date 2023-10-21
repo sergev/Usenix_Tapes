@@ -1,0 +1,120 @@
+.th MGT.SUM FORM "Nov 80"
+.sh NAME "/sys/prog/mgt.sum \*- summarize management accounting files"
+/sys/prog/mgt.sum \*- summarize management accounting files
+.sh SYNOPSIS
+.bd /sys/prog/mgt.sum
+.sh DESCRIPTION
+.it Mgt.sum
+is a system program that summarizes daily system databases and
+reduces their data into a consolidated database.
+.it Mgt.sum
+reads the files /usr/adm/log.hold, /usr/adm/sh2.hold,
+and /usr/adm/pr.hold
+(documented in /usr/include/acct.h, /usr/include/acct2.h, and /usr/include/pr.rec.h).
+Using these files containing one day of data,
+.it mgt.sum
+writes a single 128 byte record to the file /usr/adm/mgt.data.
+If any one of the files is absent
+.it mgt.sum
+exits.
+Thus, to start
+.it mgt.sum
+accounting, empty these files once.
+Records are placed in the /usr/adm/mgt.data file (documented in /usr/include/mg.rec.h) in julian day
+order, thus 1 Jan data goes in slot one, 2 Jan in slot 2 and so on.
+.it Mgt.sum
+maintains one year of data with this direct access scheme.
+.s3
+While most of the data fields of /usr/adm/mgt.data are straight
+manipulations of the respective holding accounting files, the fields
+user support factor (USF), response time, and 90% response time are
+determined within
+.it mgt.sum.
+.s3
+Response time and 90% response time are synthesized from the
+.it probe
+accounting data.
+The basic design of
+.it UNIX
+permits a single process in execution to capture as many system
+resources as it needs to complete.
+Thus a process not encumbered by terminal I/O (command redirected to a file)
+will complete with its CPU time nearly equal to wall clock time
+for a job lengthening factor (JLF) of one.
+This same design feature of
+.it UNIX
+dictates that two or more identical processes will take longer
+in proportion to the number of processes in execution.
+If enough data is known about how many processes are currently
+executing, it is possible to compute the relative response time
+or JLF that users are currently experiencing.
+To make the number more meaningful
+.it mgt.sum
+references the response time to the actually measured
+single user response time of frequently used commands.
+In the following formula for response time, RTBASE is
+response time for common simple commands (cp, ps, who, sh, mv, date, ...etc)
+as measured
+.it once
+. 8
+by oscilloscope setup with each system configuration.
+Response times for each sample of the probe database
+are averaged for the day, and a 90 % response determined also.
+Response time is computed from the formula below;
+.s3
+Where;
+ rt = response time in seconds for the sample period
+ RTBASE = response time constant measured once for each system
+ pc = processes in core and ready to run
+ sc = core blocks ready to run, but swapped out
+ sp = processed swapped out and ready to run
+ SWSPEED = swap speed of 100 blocks per second
+.s3
+ Then;
+ rt = (RTBASE * pc) + ((RTBASE + (sc /(SWSPEED * sp))) * sp)
+.s3
+The user support factor is based on data from both
+.it login
+accounting and
+.it shell
+accounting.
+Based on the assumption that a system is saturated when
+the processor is busy continuously, the number of "average"
+users a system can support is based on the reciprocal
+of CPU time to wall clock time for a user's system interactions.
+However, a USF figure based on JLF alone does not take into account
+the average user's "think time"
+as a way of allowing other users time to process.
+.it Mgt.sum
+uses both JLF and the reciprocal of the session (login time)
+to compute the USF from the formula below;
+.s3
+ Where;
+ USF = User support factor
+ wt = total command wall clock time
+ lt = total user login time (time of all sessions)
+ cpu = total command CPU time
+.s3
+ Then;
+ USF = (wt + lt) / (2 * cpu)
+.sh EXAMPLE
+/sys/prog/mgt.sum
+.s3
+Summarize yesterday's management data into the direct access
+management database.
+.sh FILES
+.fn /usr/adm/log.hold "Login accounting holding file"
+.fn /usr/adm/sh2.hold "Shell command accounting holding file"
+.fn /usr/adm/pr.hold "Probe accounting holding file"
+.fn /usr/adm/mgt.data "Direct access summary database"
+.fn /sys/prog/acct "Daily accounting processing"
+.fn /sys/prog/mrpt "Automatically generates daily reports"
+.sh "SEE ALSO"
+probe (FORM),
+mgt.rpt (CMD).
+.sh DIAGNOSTICS
+.it Mgt.sum
+prints "MGT.SUM: Sumarization completed" when the
+summary database has been updated.
+.sh BUGS
+-

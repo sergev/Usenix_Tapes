@@ -1,0 +1,18 @@
+/ C library -- tell
+
+/ long_offset = tell(fd)
+
+tell = 40.
+
+.globl _tell, cerror
+
+_tell:
+	mov	r5,-(sp)
+	mov	sp,r5
+	mov	4(r5),r0
+	sys	tell
+	bec	1f
+	jmp	cerror
+1:
+	mov	(sp)+,r5
+	rts	pc

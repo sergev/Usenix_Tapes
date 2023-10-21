@@ -1,0 +1,198 @@
+
+
+
+IO(1STAT)           UNIX Programmer's Manual            IO(1STAT)
+
+
+
+NNNNAAAAMMMMEEEE
+     io - control and monitor input/output (io) flow intelli-
+     gently
+
+SSSSYYYYNNNNOOOOPPPPSSSSIIIISSSS
+     iiiioooo ----mmmmffff [[[[ffffiiiilllleeee ............]]]]
+
+DDDDEEEESSSSCCCCRRRRIIIIPPPPTTTTIIIIOOOONNNN
+     _I_o is a program that initiates, continues, and terminates
+     input and output.  It makes intelligent decisions about what
+     it should do based on where it is called in a pipeline
+     (beginning, middle, or end), whether it is given file argu-
+     ments, and whether flow monitoring is requested.  The fol-
+     lowing flag argument options must be preceded by a dash and
+     can be combined in any order to control how _i_o works.
+
+     mmmm    request monitoring of flow
+
+     ffff    force overwrites of files without user interaction
+          (useful in shell scripts)
+
+     aaaa    appends text the named file rather than overwriting it
+          (only useful when output is being directed to a file)
+
+     _I_o can replace shell file redirection used in shells (with
+     <, > and >>), the simplest uses of _c_a_t, the pipefitting pro-
+     gram _t_e_e, all with the ability to monitor the progress of
+     the processes in a pipeline.  Some uses of _i_o are best shown
+     by example:
+
+     The following form simply prints the named files to the
+     standard output:
+                       io file1 file2 file3 ...
+
+     The following form redirects the output from the pipe to the
+     named file.
+                    program1 | program2 | io file
+     If the output file from _i_o exists, _i_o makes a temporary file
+     before changing it to avoid the possibility of persons
+     over-writing their input files.  Thus, it is possible to
+     sort a file onto itself with _i_o:
+                          sort foo | io foo
+     is both legal and safe.  _I_o will ask you if you want to
+     safely overwrite any files that already exist, for which you
+     should respond with a 'y' or a 'n'.  To avoid having to
+     interact with _i_o, see the ----ffff flag which forces the safe
+     overwrite.
+
+     The following form simply continues the flow from standard
+     input to standard output:
+                       program1 | io | program2
+     When _i_o is used in the middle of a pipeline, it
+
+
+
+Printed 11/22/82           May 5, 1982                          1
+
+
+
+
+
+
+IO(1STAT)           UNIX Programmer's Manual            IO(1STAT)
+
+
+
+     automatically monitors the flow of characters through it by
+     printing a character about every 1000 bytes.  This character
+     changes from instance to instance of _i_o so that several flow
+     meters can supply discriminable information.  The character
+     selection is by process identification number, so that suc-
+     cessive programs would have different flow characters.  For
+     example, the following shell command would set up three
+     meters each with different flow characters:
+                     io foo | io | io | io -m bar
+
+     The automatic monitoring of flow is not used if _i_o is used
+     in the middle of a pipeline and is called with an argument
+     file name.  For example:
+                     program | io fubar | program
+     In this case, the input to _i_o is copied into the file fubar,
+     and another copy is continued along the pipeline.  This is
+     similar to the standard UNIX _t_e_e program.  The monitoring
+     could be turned on if the ----mmmm flag were used:
+                   program | io -m fubar | program
+
+     _I_o can replace the redirection symbols '<' (used to redirect
+     the standard input), and '>' (used to redirect the standard
+     output), used in the standard UNIX command shells, _s_h and
+     _c_s_h.
+                          io file | program
+     has the same effect as:
+                            program < file
+     but is a bit slower.  And,
+                          program | io file
+     is the same as
+                            program > file
+     except that it is safer.  _I_o can be used to append text to a
+     file (emulating the shell >> redirection) by using the ----aaaa
+     flag:
+                         program | io -a file
+     is the exact same as
+                           program >> file
+
+     If _i_o is called with the ----mmmm option, it will monitor the flow
+     of bytes through it.  For example, the following command
+     sets up a bunch of flow meters.
+                     io -m file | io | io -m file
+     When the flow meter is at the beginning of a pipeline, its
+     meter prints the percent of its input so far read.  Its
+     speed depends on how fast programs down the pipeline are
+     reading the output from whatever version of _i_o is used.
+     Note that the ----mmmm flag is not needed in the middle of the
+     pipeline as its only use in that context could be as a flow
+     meter.
+
+RRRRAAAATTTTIIIIOOOONNNNAAAALLLLEEEE
+     The conceptual model of UNIX for piping programs implies
+
+
+
+Printed 11/22/82           May 5, 1982                          2
+
+
+
+
+
+
+IO(1STAT)           UNIX Programmer's Manual            IO(1STAT)
+
+
+
+     that we move data from some file, through several programs,
+     and into another file, which -- conceptually at least, may
+     be the same file as the data have come from.  Thus, concep-
+     tually, the flow through a pipe should look like this:
+     file => program1 ==> program2 ==> ... ==> programN  ==> file
+     Within the existing UNIX shells, this pipe must be specified
+     as
+          program1 < file | program2 | ... | programN > temp
+                             mv temp file
+     This specification of the pipe presents a system image of
+     UNIX that conflicts with the underlying mental model of most
+     users.  First, the specification of "file" and "program1"
+     are out of order; second, one must distinguish among "<" ">"
+     and "|".  The program _i_o is designed to allow a format more
+     consistent with the underlying conceptualization.  Along the
+     way, it eliminates the need for distinguishing between <, >,
+     and | and offers some new properties.   Using _i_o, the exam-
+     ple pipe can be written
+       io file | program1 | program2 | ... | programN | io file
+
+DDDDIIIIAAAAGGGGNNNNOOOOSSSSTTTTIIIICCCCSSSS
+     The program has a lot of knowledge about how it is being
+     used.  It knows whether it is reading from piped input or
+     from the terminal keyboard (tty).  It also knows whether it
+     is writing to a pipe or to the tty.  It knows to check argu-
+     ment files to see if ones to be read can be read, and if a
+     file to be written exists, and if so, to make a temporary
+     version of it before over-writing it.  It also knows that
+     depending on the combination of its information, that some
+     combinations are not meaningful, and even dangerous.  It
+     will complain about all of these, and in most cases, break
+     the pipeline it is in to the best of its ability.
+
+SSSSEEEEEEEE AAAALLLLSSSSOOOO
+     sh(1), csh(1), cat(1), tee(1)
+
+AAAAUUUUTTTTHHHHOOOORRRR
+     Gary Perlman and Don Norman
+
+BBBBUUUUGGGGSSSS
+     Hitting the BREAK or DEL keys while _i_o is overwriting a file
+     can have bad effects.
+
+     If you have several diversions to existing save files as in:
+        pgm | io save.1 | pgm2 | io save.2 | pgm3 | io save.3
+     It will be confusing as all the different instances of _i_o
+     ask you if you want to overwrite each.
+
+     With several flow meters going at the same time, it is dif-
+     ficult to figure what is going on.  _I_o is better suited to a
+     system with better screen management.
+
+
+
+
+Printed 11/22/82           May 5, 1982                          3
+
+
+

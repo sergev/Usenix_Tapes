@@ -1,0 +1,417 @@
+  100 ;
+  110 ; term.plus.64.tables
+  120 ;
+  130 ; last date 870102
+  140 ;
+  150 ;**************************************************************************
+  160 ;note - this program is assembled to run in the address space beginning at
+  170 ;$a080 but should be loaded at $0880. the space from $a000-$a080 (really
+  180 ;$0800-$0880) is reserved for a small basic program which queries for baud
+  190 ;rate, pokes "control" as appropriate, and calls "movterm".
+  200 ;**************************************************************************
+  210 ;
+  220 ; table declarations
+  230 ;
+  240 *=there+$80
+  250 ;
+  260 ;table "to" translates c64 to ascii
+  270 to .byte $00 ; cannot transmit null
+  280 .byte $01 ;"^A from ^A key
+  290 .byte $02 ;"^B from ^B key
+  300 .byte $03 ;"^C from ^C key
+  310 .byte $04 ;"^D from ^D key
+  320 .byte $05 ;"^E from ^E key
+  330 .byte $06 ;"^F from ^F key
+  340 .byte $07 ;"^G from ^G key
+  350 .byte $08 ;"^H from ^H key
+  360 .byte $09 ;"^I from ^I key
+  370 .byte $0a ;"^J from ^J key
+  380 .byte $0b ;"^K from ^K key
+  390 .byte $0c ;"^L from ^L key
+  400 .byte $0d ;"^M from ^M and RETURN keys
+  410 .byte $0e ;"^N from ^N key
+  420 .byte $0f ;"^O from ^O key
+  430 .byte $10 ;"^P from ^P key
+  440 .byte $11 ;"^Q from ^Q and CURS DOWN keys
+  450 .byte $12 ;"^R from ^R key
+  460 .byte $13 ;"^S from ^S and HOME keys
+  470 .byte $08 ;"^H from ^T and DEL keys
+  480 .byte $15 ;"^U from ^U key
+  490 .byte $16 ;"^V from ^V key
+  500 .byte $17 ;"^W from ^W key
+  510 .byte $18 ;"^X from ^X key
+  520 .byte $19 ;"^Y from ^Y key
+  530 .byte $1a ;"^Z from ^Z key
+  540 .byte $1b ;"^[ from ^[ key
+  550 .byte $1c ;"^\ from ^POUND key
+  560 .byte $1d ;"^] from ^] key
+  570 .byte $1e ;"^^ from ^^ key
+  580 .byte $1f ;"^[164] from ^= key
+  590 .byte $20 ;"SPACE from SPACE bar
+  600 .byte "!" ;"! from ! key
+  610 .byte $22 ;"" from " key
+  620 .byte "#" ;"# from # key
+  630 .byte "$" ;"$ from $ key
+  640 .byte "%" ;"% from % key
+  650 .byte "&" ;"& from & key
+  660 .byte "'" ;"' from ' key
+  670 .byte "(" ;"( from ( key
+  680 .byte ")" ;") from ) key
+  690 .byte "*" ;"* from * key
+  700 .byte "+" ;"+ from + key
+  710 .byte "," ;", from , key
+  720 .byte "-" ;"- from - key
+  730 .byte "." ;". from . key
+  740 .byte "/" ;"/ from / key
+  750 .byte "0" ;"0 from 0 key
+  760 .byte "1" ;"1 from 1 key
+  770 .byte "2" ;"2 from 2 key
+  780 .byte "3" ;"3 from 3 key
+  790 .byte "4" ;"4 from 4 key
+  800 .byte "5" ;"5 from 5 key
+  810 .byte "6" ;"6 from 6 key
+  820 .byte "7" ;"7 from 7 key
+  830 .byte "8" ;"8 from 8 key
+  840 .byte "9" ;"9 from 9 key
+  850 .byte ":" ;": from : key
+  860 .byte ";" ;"; from ; key
+  870 .byte "<" ;"< from < key
+  880 .byte "=" ;"= from = key
+  890 .byte ">" ;"> from > key
+  900 .byte "?" ;"? from ? key
+  910 .byte "@" ;"@ from @ key
+  920 .byte "a"+$20 ;"a from a key
+  930 .byte "b"+$20 ;"b from b key
+  940 .byte "c"+$20 ;"c from c key
+  950 .byte "d"+$20 ;"d from d key
+  960 .byte "e"+$20 ;"e from e key
+  970 .byte "f"+$20 ;"f from f key
+  980 .byte "g"+$20 ;"g from g key
+  990 .byte "h"+$20 ;"h from h key
+ 1000 .byte "i"+$20 ;"i from i key
+ 1010 .byte "j"+$20 ;"j from j key
+ 1020 .byte "k"+$20 ;"k from k key
+ 1030 .byte "l"+$20 ;"l from l key
+ 1040 .byte "m"+$20 ;"m from m key
+ 1050 .byte "n"+$20 ;"n from n key
+ 1060 .byte "o"+$20 ;"o from o key
+ 1070 .byte "p"+$20 ;"p from p key
+ 1080 .byte "q"+$20 ;"q from q key
+ 1090 .byte "r"+$20 ;"r from r key
+ 1100 .byte "s"+$20 ;"s from s key
+ 1110 .byte "t"+$20 ;"t from t key
+ 1120 .byte "u"+$20 ;"u from u key
+ 1130 .byte "v"+$20 ;"v from v key
+ 1140 .byte "w"+$20 ;"w from w key
+ 1150 .byte "x"+$20 ;"x from x key
+ 1160 .byte "y"+$20 ;"y from y key
+ 1170 .byte "z"+$20 ;"z from z key
+ 1180 .byte "[" ;"[ from [ key
+ 1190 .byte "\" ;"\ from POUND key
+ 1200 .byte "]" ;"] from ] key
+ 1210 .byte "^" ;"^ from ^ key (really UP ARROW)
+ 1220 .byte $1b ;"^[ from [164] key ([164] means ESC)
+ 1230 .byte "@"+$20 ;"[SHIFT_@] from SHIFT/* key
+ 1240 .byte "a" ;"A from A key
+ 1250 .byte "b" ;"B from B key
+ 1260 .byte "c" ;"C from C key
+ 1270 .byte "d" ;"D from D key
+ 1280 .byte "e" ;"E from E key
+ 1290 .byte "f" ;"F from F key
+ 1300 .byte "g" ;"G from G key
+ 1310 .byte "h" ;"H from H key
+ 1320 .byte "i" ;"I from I key
+ 1330 .byte "j" ;"J from J key
+ 1340 .byte "k" ;"K from K key
+ 1350 .byte "l" ;"L from L key
+ 1360 .byte "m" ;"M from M key
+ 1370 .byte "n" ;"N from N key
+ 1380 .byte "o" ;"O from O key
+ 1390 .byte "p" ;"P from P key
+ 1400 .byte "q" ;"Q from Q key
+ 1410 .byte "r" ;"R from R key
+ 1420 .byte "s" ;"S from S key
+ 1430 .byte "t" ;"T from T key
+ 1440 .byte "u" ;"U from U key
+ 1450 .byte "v" ;"V from V key
+ 1460 .byte "w" ;"W from W key
+ 1470 .byte "x" ;"X from X key
+ 1480 .byte "y" ;"Y from Y key
+ 1490 .byte "z" ;"Z from Z key
+ 1500 .byte $7b ;"[SHIFT_+] from SHIFT/+ key
+ 1510 .byte $7c ;"[C=*] from ?????
+ 1520 .byte $7d ;"[SHIFT_-] from SHIFT/- key
+ 1530 .byte $7e ;"[175] from SHIFT/^ key
+ 1540 .byte $7f ;"DEL from ?????
+ 1550 .byte "?" ;"illegal key
+ 1560 .byte "?" ;"illegal key
+ 1570 .byte "?" ;"illegal key
+ 1580 .byte "?" ;"illegal key
+ 1590 .byte "?" ;"illegal key
+ 1600 .byte $5f ;"[164] from F1 key
+ 1610 .byte $60 ;"[SHIFT_@] from F3 key
+ 1620 .byte $7b ;"[SHIFT_+] from F5 key
+ 1630 .byte $7f ;"DEL from F7 key
+ 1640 .byte $7c ;"[C=*] from F2 key
+ 1650 .byte $7e ;"[175] from F4 key
+ 1660 .byte $7d ;"[SHIFT_-] from F6 key
+ 1670 .byte $14 ;"^T from F8 key
+ 1680 .byte $0a ;"NL from SHIFT/CR key
+ 1690 .byte "?" ;"illegal key
+ 1700 .byte "?" ;"illegal key
+ 1710 .byte "?" ;"illegal key
+ 1720 .byte "?" ;"illegal key
+ 1730 .byte "?" ;"illegal key
+ 1740 .byte "?" ;"illegal key
+ 1750 .byte "?" ;"illegal key
+ 1760 .byte "?" ;"illegal key
+ 1770 .byte "?" ;"illegal key
+ 1780 .byte "?" ;"illegal key
+ 1790 .byte "?" ;"illegal key
+ 1800 .byte "?" ;"illegal key
+ 1810 .byte "?" ;"illegal key
+ 1820 .byte "?" ;"illegal key
+ 1830 .byte "?" ;"illegal key
+ 1840 .byte "?" ;"illegal key
+ 1850 .byte "?" ;"illegal key
+ 1860 .byte "?" ;"illegal key
+ 1870 .byte $20 ;"SPACE from SHIFT/SPACE key
+ 1880 .byte "?" ;"illegal key
+ 1890 .byte "?" ;"illegal key
+ 1900 .byte "?" ;"illegal key
+ 1910 .byte "?" ;"illegal key
+ 1920 .byte "?" ;"illegal key
+ 1930 .byte "?" ;"illegal key
+ 1940 .byte "?" ;"illegal key
+ 1950 .byte "?" ;"illegal key
+ 1960 .byte "?" ;"illegal key
+ 1970 .byte "?" ;"illegal key
+ 1980 .byte "?" ;"illegal key
+ 1990 .byte "?" ;"illegal key
+ 2000 .byte "?" ;"illegal key
+ 2010 .byte "?" ;"illegal key
+ 2020 .byte "?" ;"illegal key
+ 2030 .byte "?" ;"illegal key
+ 2040 .byte "?" ;"illegal key
+ 2050 .byte "?" ;"illegal key
+ 2060 .byte "?" ;"illegal key
+ 2070 .byte "?" ;"illegal key
+ 2080 .byte "?" ;"illegal key
+ 2090 .byte "?" ;"illegal key
+ 2100 .byte "?" ;"illegal key
+ 2110 .byte "?" ;"illegal key
+ 2120 .byte "?" ;"illegal key
+ 2130 .byte "?" ;"illegal key
+ 2140 .byte "?" ;"illegal key
+ 2150 .byte "?" ;"illegal key
+ 2160 .byte "?" ;"illegal key
+ 2170 .byte "?" ;"illegal key
+ 2180 .byte "?" ;"illegal key
+ 2190 .byte "@"+$20 ;"[SHIFT_@] from SHIFT/* key (dup)
+ 2200 .byte "a" ;"A from A key (dup)
+ 2210 .byte "b" ;"B from B key (dup)
+ 2220 .byte "c" ;"C from C key (dup)
+ 2230 .byte "d" ;"D from D key (dup)
+ 2240 .byte "e" ;"E from E key (dup)
+ 2250 .byte "f" ;"F from F key (dup)
+ 2260 .byte "g" ;"G from G key (dup)
+ 2270 .byte "h" ;"H from H key (dup)
+ 2280 .byte "i" ;"I from I key (dup)
+ 2290 .byte "j" ;"J from J key (dup)
+ 2300 .byte "k" ;"K from K key (dup)
+ 2310 .byte "l" ;"L from L key (dup)
+ 2320 .byte "m" ;"M from M key (dup)
+ 2330 .byte "n" ;"N from N key (dup)
+ 2340 .byte "o" ;"O from O key (dup)
+ 2350 .byte "p" ;"P from P key (dup)
+ 2360 .byte "q" ;"Q from Q key (dup)
+ 2370 .byte "r" ;"R from R key (dup)
+ 2380 .byte "s" ;"S from S key (dup)
+ 2390 .byte "t" ;"T from T key (dup)
+ 2400 .byte "u" ;"U from U key (dup)
+ 2410 .byte "v" ;"V from V key (dup)
+ 2420 .byte "w" ;"W from W key (dup)
+ 2430 .byte "x" ;"X from X key (dup)
+ 2440 .byte "y" ;"Y from Y key (dup)
+ 2450 .byte "z" ;"Z from Z key (dup)
+ 2460 .byte $7b ;"[SHIFT_+] from SHIFT/+ key (dup)
+ 2470 .byte $7c ;"[C=*] from ????? (dup)
+ 2480 .byte $7d ;"[SHIFT_-] from SHIFT/- key (dup)
+ 2490 .byte $7e ;"[175] from SHIFT/^ key (dup)
+ 2500 .byte $7f ;"DEL from ?????
+ 2510 .byte $20 ;"SPACE from SHIFT/SPACE key (dup)
+ 2520 .byte "?" ;"illegal key
+ 2530 .byte "?" ;"illegal key
+ 2540 .byte "?" ;"illegal key
+ 2550 .byte "?" ;"illegal key
+ 2560 .byte "?" ;"illegal key
+ 2570 .byte "?" ;"illegal key
+ 2580 .byte "?" ;"illegal key
+ 2590 .byte "?" ;"illegal key
+ 2600 .byte "?" ;"illegal key
+ 2610 .byte "?" ;"illegal key
+ 2620 .byte "?" ;"illegal key
+ 2630 .byte "?" ;"illegal key
+ 2640 .byte "?" ;"illegal key
+ 2650 .byte "?" ;"illegal key
+ 2660 .byte "?" ;"illegal key
+ 2670 .byte "?" ;"illegal key
+ 2680 .byte "?" ;"illegal key
+ 2690 .byte "?" ;"illegal key
+ 2700 .byte "?" ;"illegal key
+ 2710 .byte "?" ;"illegal key
+ 2720 .byte "?" ;"illegal key
+ 2730 .byte "?" ;"illegal key
+ 2740 .byte "?" ;"illegal key
+ 2750 .byte "?" ;"illegal key
+ 2760 .byte "?" ;"illegal key
+ 2770 .byte "?" ;"illegal key
+ 2780 .byte "?" ;"illegal key
+ 2790 .byte "?" ;"illegal key
+ 2800 .byte "?" ;"illegal key
+ 2810 .byte "?" ;"illegal key
+ 2820 .byte $7e ;"[175] from SHIFT/^ key (dup)
+ 2830 ;
+ 2840 ;table "from" translates ascii to c64
+ 2850 from .byte $00 ;"NUL doesn't print
+ 2860 .byte $00 ;"^A doesn't print
+ 2870 .byte $00 ;"^B doesn't print
+ 2880 .byte $00 ;"^C doesn't print
+ 2890 .byte $00 ;"^D doesn't print
+ 2900 .byte $00 ;"^E doesn't print
+ 2910 .byte $00 ;"^F doesn't print
+ 2920 .byte $01 ;"BEL is special
+ 2930 .byte $9d ;"BS prints as CURSOR LEFT
+ 2940 .byte $01 ;"TAB is special
+ 2950 .byte $11 ;"NL prints as CURSOR DOWN
+ 2960 .byte $00 ;"^K doesn't print
+ 2970 .byte $00 ;"^L doesn't print
+ 2980 .byte $01 ;"CR is special
+ 2990 .byte $00 ;"^N doesn't print
+ 3000 .byte $00 ;"^O doesn't print
+ 3010 .byte $00 ;"^P doesn't print
+ 3020 .byte $00 ;"^Q doesn't print
+ 3030 .byte $00 ;"^R doesn't print
+ 3040 .byte $00 ;"^S doesn't print
+ 3050 .byte $00 ;"^T doesn't print
+ 3060 .byte $00 ;"^U doesn't print
+ 3070 .byte $00 ;"^V doesn't print
+ 3080 .byte $00 ;"^W doesn't print
+ 3090 .byte $00 ;"^X doesn't print
+ 3100 .byte $00 ;"^Y doesn't print
+ 3110 .byte $00 ;"^Z doesn't print
+ 3120 .byte $01 ;"^[ is special
+ 3130 .byte $00 ;"^\ doesn't print
+ 3140 .byte $00 ;"^] doesn't print
+ 3150 .byte $00 ;"^^ doesn't print
+ 3160 .byte $00 ;"^[164] doesn't print
+ 3170 .byte $20 ;"SPACE prints as SPACE
+ 3180 .byte $21 ;"! prints as !
+ 3190 .byte $22 ;"" prints as "
+ 3200 .byte $23 ;"# prints as #
+ 3210 .byte $24 ;"$ prints as $
+ 3220 .byte $25 ;"% prints as %
+ 3230 .byte $26 ;"& prints as &
+ 3240 .byte $27 ;"' prints as '
+ 3250 .byte $28 ;"( prints as (
+ 3260 .byte $29 ;") prints as )
+ 3270 .byte $2a ;"* prints as *
+ 3280 .byte $2b ;"+ prints as +
+ 3290 .byte $2c ;", prints as ,
+ 3300 .byte $2d ;"- prints as -
+ 3310 .byte $2e ;". prints as .
+ 3320 .byte $2f ;"/ prints as /
+ 3330 .byte $30 ;"0 prints as 0
+ 3340 .byte $31 ;"1 prints as 1
+ 3350 .byte $32 ;"2 prints as 2
+ 3360 .byte $33 ;"3 prints as 3
+ 3370 .byte $34 ;"4 prints as 4
+ 3380 .byte $35 ;"5 prints as 5
+ 3390 .byte $36 ;"6 prints as 6
+ 3400 .byte $37 ;"7 prints as 7
+ 3410 .byte $38 ;"8 prints as 8
+ 3420 .byte $39 ;"9 prints as 9
+ 3430 .byte $3a ;": prints as :
+ 3440 .byte $3b ;"; prints as ;
+ 3450 .byte $3c ;"< prints as <
+ 3460 .byte $3d ;"= prints as =
+ 3470 .byte $3e ;"> prints as >
+ 3480 .byte $3f ;"? prints as ?
+ 3490 .byte $40 ;"@ prints as @
+ 3500 .byte $61 ;"A prints as A
+ 3510 .byte $62 ;"B prints as B
+ 3520 .byte $63 ;"C prints as C
+ 3530 .byte $64 ;"D prints as D
+ 3540 .byte $65 ;"E prints as E
+ 3550 .byte $66 ;"F prints as F
+ 3560 .byte $67 ;"G prints as G
+ 3570 .byte $68 ;"H prints as H
+ 3580 .byte $69 ;"I prints as I
+ 3590 .byte $6a ;"J prints as J
+ 3600 .byte $6b ;"K prints as K
+ 3610 .byte $6c ;"L prints as L
+ 3620 .byte $6d ;"M prints as M
+ 3630 .byte $6e ;"N prints as N
+ 3640 .byte $6f ;"O prints as O
+ 3650 .byte $70 ;"P prints as P
+ 3660 .byte $71 ;"Q prints as Q
+ 3670 .byte $72 ;"R prints as R
+ 3680 .byte $73 ;"S prints as S
+ 3690 .byte $74 ;"T prints as T
+ 3700 .byte $75 ;"U prints as U
+ 3710 .byte $76 ;"V prints as V
+ 3720 .byte $77 ;"W prints as W
+ 3730 .byte $78 ;"X prints as X
+ 3740 .byte $79 ;"Y prints as Y
+ 3750 .byte $7a ;"Z prints as Z
+ 3760 .byte $5b ;"[ prints as [
+ 3770 .byte $5c ;"\ prints as \
+ 3780 .byte $5d ;"] prints as ]
+ 3790 .byte $5e ;"^ prints as ^
+ 3800 .byte $5f ;"[164] prints as [164]
+ 3810 .byte $60 ;"[SHIFT_@] prints as [SHIFT_@]
+ 3820 .byte $41 ;"a prints as a
+ 3830 .byte $42 ;"b prints as b
+ 3840 .byte $43 ;"c prints as c
+ 3850 .byte $44 ;"d prints as d
+ 3860 .byte $45 ;"e prints as e
+ 3870 .byte $46 ;"f prints as f
+ 3880 .byte $47 ;"g prints as g
+ 3890 .byte $48 ;"h prints as h
+ 3900 .byte $49 ;"i prints as i
+ 3910 .byte $4a ;"j prints as j
+ 3920 .byte $4b ;"k prints as k
+ 3930 .byte $4c ;"l prints as l
+ 3940 .byte $4d ;"m prints as m
+ 3950 .byte $4e ;"n prints as n
+ 3960 .byte $4f ;"o prints as o
+ 3970 .byte $50 ;"p prints as p
+ 3980 .byte $51 ;"q prints as q
+ 3990 .byte $52 ;"r prints as r
+ 4000 .byte $53 ;"s prints as s
+ 4010 .byte $54 ;"t prints as t
+ 4020 .byte $55 ;"u prints as u
+ 4030 .byte $56 ;"v prints as v
+ 4040 .byte $57 ;"w prints as w
+ 4050 .byte $58 ;"x prints as x
+ 4060 .byte $59 ;"y prints as y
+ 4070 .byte $5a ;"z prints as z
+ 4080 .byte $7b ;"[SHIFT_+] prints as [SHIFT_+]
+ 4090 .byte $7c ;"[C=*] prints as [C=*]
+ 4100 .byte $7d ;"[SHIFT_-] prints as [SHIFT_-]
+ 4110 .byte $7e ;"[175] prints as [175]
+ 4120 .byte $00 ;"DEL doesn't print
+ 4130 ;
+ 4140 ;table "newchar" defines 8 substitute screen
+ 4150 ;graphics, 9 bytes each - first byte is screen
+ 4160 ;code for graphic, next 8 are bit pattern
+ 4170 newchar .byte $5b, $0e, $18, $08, $3c, $08, $18, $0e, $00 ; left brace 
+ 4180 .byte $5d, $70, $18, $10, $3c, $10, $18, $70, $00 ; right brace 
+ 4190 .byte $5e, $00, $00, $3b, $6e, $00, $00, $00, $00 ; tilde 
+ 4200 .byte $40, $30, $18, $0c, $00, $00, $00, $00, $00 ; grave accent
+ 4210 .byte $5c, $18, $18, $18, $00, $18, $18, $18, $00 ; vertical bar
+ 4220 .byte $1c, $00, $60, $30, $18, $0c, $06, $03, $00 ; back slash
+ 4230 .byte $1e, $00, $00, $18, $3c, $66, $00, $00, $00 ; caret
+ 4240 .byte $1f, $00, $00, $00, $00, $00, $00, $00, $7f ; underline
+ 4250 ;
+ 4260 .file 08,"0:term.1"

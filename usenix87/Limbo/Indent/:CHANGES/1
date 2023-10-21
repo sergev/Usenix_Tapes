@@ -1,0 +1,917 @@
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!bellcore!decvax!genrad!panda!teddy!wjm
+From: wjm@teddy.UUCP
+Newsgroups: net.sources
+Subject: indent with different bracket switch
+Message-ID: <1966@teddy.UUCP>
+Date: 22 Jan 86 14:25:53 GMT
+Distribution: net
+Organization: GenRad, Inc., Concord, Mass.
+Lines: 906
+Posted: Wed Jan 22 08:25:53 1986
+
+This posting describes the changes to indent to indent with indented
+braces on their own line.  Use the switch -bg to get this style of
+indentation.
+
+diff -c ./Makefile /usr/src/local/indent/Makefile
+*** ./Makefile	Fri May 31 02:33:30 1985
+--- /usr/src/local/indent/Makefile	Thu Jun 13 15:42:21 1985
+***************
+*** 1,3
+  #
+  # @(#)Makefile 1.1 85/05/30 SMI; from UCB 4.2 10/22/82
+  #
+
+--- 1,4 -----
++ #	@(#)Makefile	4.2	(Berkeley)	10/22/82
+  #
+  DESTDIR=
+  CFLAGS=	-O
+***************
+*** 1,6
+  #
+- # @(#)Makefile 1.1 85/05/30 SMI; from UCB 4.2 10/22/82
+- #
+  DESTDIR=
+  CFLAGS=	-O
+  OBJS=	indent.o io.o lexi.o parse.o pr_comment.o
+
+--- 1,5 -----
+  #	@(#)Makefile	4.2	(Berkeley)	10/22/82
+  #
+  DESTDIR=
+  CFLAGS=	-O
+  OBJS=	indent.o io.o lexi.o parse.o pr_comment.o
+***************
+*** 4,9
+  DESTDIR=
+  CFLAGS=	-O
+  OBJS=	indent.o io.o lexi.o parse.o pr_comment.o
+  
+  indent: indent.o io.o lexi.o parse.o pr_comment.o
+  	cc -o indent ${OBJS}
+
+--- 3,10 -----
+  DESTDIR=
+  CFLAGS=	-O
+  OBJS=	indent.o io.o lexi.o parse.o pr_comment.o
++ CFILES = indent.c io.c lexi.c parse.c pr_comment.c
++ HFILES = indent_codes.h indent_globs.h
+  
+  indent: indent.o io.o lexi.o parse.o pr_comment.o
+  	cc -o indent ${OBJS}
+***************
+*** 8,13
+  indent: indent.o io.o lexi.o parse.o pr_comment.o
+  	cc -o indent ${OBJS}
+  
+  clean:
+  	rm -f ${OBJS} indent
+  
+
+--- 9,16 -----
+  indent: indent.o io.o lexi.o parse.o pr_comment.o
+  	cc -o indent ${OBJS}
+  
++ indent.lst:
++ 	(clist $(HFILES) $(CFILES) > $@) &
+  clean:
+  	rm -f ${OBJS} indent
+  
+***************
+*** 12,15
+  	rm -f ${OBJS} indent
+  
+  install:
+! 	install -s indent ${DESTDIR}/usr/ucb/indent
+
+--- 15,18 -----
+  	rm -f ${OBJS} indent
+  
+  install:
+! 	install indent ${DESTDIR}/usr/local/indent
+Only in /usr/src/local/indent: README
+Only in .: SCCS
+Only in /usr/src/local/indent: indent.1
+diff -c ./indent.c /usr/src/local/indent/indent.c
+*** ./indent.c	Fri May 31 02:33:51 1985
+--- /usr/src/local/indent/indent.c	Mon Oct  7 21:44:34 1985
+***************
+*** 1,6
+! #ifndef lint
+! static	char sccsid[] = "@(#)indent.c 1.1 85/05/30 SMI"; /* from UCB 4.1 10/21/82 */
+! #endif
+  
+  /*
+  
+
+--- 1,4 -----
+! static char sccsid[] = "@(#)indent.c	4.1	(GenRad) 30-Sep-85 12:56 jpn";
+  
+  /*
+  
+***************
+*** 48,53
+  	dec_nest =
+  	decl_com_ind =
+  	decl_on_line =
+  	i_l_follow =
+  	in_decl =
+  	ind_level =
+
+--- 46,52 -----
+  	dec_nest =
+  	decl_com_ind =
+  	decl_on_line =
++ 	gr_btype = do GenRad style indentation
+  	i_l_follow =
+  	in_decl =
+  	ind_level =
+***************
+*** 87,92
+  	No one (main routine)
+  
+  HISTORY:
+  	November 1976	D A Willcox of CAC	Initial coding
+  	12/9/76		D A Willcox of CAC	Fixed defaults for decl_com_ind
+  						to be 8 less than com_ind if 
+
+--- 86,95 -----
+  	No one (main routine)
+  
+  HISTORY:
++ 	30-Sep-85 12:56 jpn of GenRad           gr spacing with parens
++ 	12-Jun-85 11:33 wjm of GenRad		treat else if on 1 line
++ 	19-Dec-84 09:32 wjm of GenRad		Add bg for gr indentation
++ 						use open, not creat
+  	November 1976	D A Willcox of CAC	Initial coding
+  	12/9/76		D A Willcox of CAC	Fixed defaults for decl_com_ind
+  						to be 8 less than com_ind if 
+***************
+*** 98,103
+  						Added code to handle -br and -bl
+  						parameters
+  */
+  #include "indent_globs.h";
+  #include "indent_codes.h";
+  
+
+--- 101,107 -----
+  						Added code to handle -br and -bl
+  						parameters
+  */
++ #include <sys/file.h>
+  #include "indent_globs.h";
+  #include "indent_codes.h";
+  
+***************
+*** 133,138
+      "-bl", 15,		       /* put brace on left by itself */
+      "-st", 16,		       /* use the standard input and output
+  				  files */
+      0, 0
+  };
+  
+
+--- 137,143 -----
+      "-bl", 15,		       /* put brace on left by itself */
+      "-st", 16,		       /* use the standard input and output
+  				  files */
++     "-bg", 17,			/* put brace on left indented */
+      0, 0
+  };
+  
+***************
+*** 179,185
+      int     want_blank;	       /* set to true when the following token
+  			          should be prefixed by a blank. (Said
+  			          prefixing is ignored in some cases.) */
+! 
+  #ifdef dolog		       /* include declarations needed for log */
+      int     log_fid;	       /* fid of log file */
+  
+
+--- 184,191 -----
+      int     want_blank;	       /* set to true when the following token
+  			          should be prefixed by a blank. (Said
+  			          prefixing is ignored in some cases.) */
+!     int	    last_else;		/* last stme is else 12-Jun-85 11:37 wjm */
+!     
+  #ifdef dolog		       /* include declarations needed for log */
+      int     log_fid;	       /* fid of log file */
+  
+***************
+*** 239,244
+      input = -1;
+      output = -1;
+      ljust_decl = d_ljust;
+  
+  
+  
+
+--- 245,251 -----
+      input = -1;
+      output = -1;
+      ljust_decl = d_ljust;
++     last_else = 0;		/* starts off as FALSE */
+  
+  
+  
+***************
+*** 254,259
+  			          value by an arg, we will set this equal
+  			          to com_ind */
+      btype_2 = d_btype_2;
+      unindent_displace = d_unindent;
+      leave_comma = d_leave_comma;
+  
+
+--- 261,267 -----
+  			          value by an arg, we will set this equal
+  			          to com_ind */
+      btype_2 = d_btype_2;
++     gr_btype = d_gr_btype;
+      unindent_displace = d_unindent;
+      leave_comma = d_leave_comma;
+  
+***************
+*** 280,286
+  			printf ("Input and output files must be different\n");
+  			exit ();
+  		    }
+! 		    output = creat (out_name, 0644);
+  		    if (output < 0) {   /* check for create error */
+  			printf ("Can't create %s\n", argv[i]);
+  			exit ();
+
+--- 288,294 -----
+  			printf ("Input and output files must be different\n");
+  			exit ();
+  		    }
+! 		    output = open (out_name, (O_WRONLY | O_CREAT | O_EXCL ),0666);
+  		    if (output < 0) {   /* check for create error */
+  			printf ("Can't create %s\n", argv[i]);
+  			exit ();
+***************
+*** 521,527
+  			type_code != lbrace
+  			||
+  			!btype_2
+! 		    )) {       /* we should force a broken line here */
+  		if (verbose && !flushed_nl)
+  		    printf ("%d: Line broken\n", line_no);
+  		flushed_nl = false;
+
+--- 529,541 -----
+  			type_code != lbrace
+  			||
+  			!btype_2
+! 		    )
+! 		    &&		/* check for the else if case here */
+! 		    !( type_code == sp_paren
+! 		    	&& *token == 'i'
+! 			&& last_else
+! 		     )
+! 		    ) {       /* we should force a broken line here */
+  		if (verbose && !flushed_nl)
+  		    printf ("%d: Line broken\n", line_no);
+  		flushed_nl = false;
+***************
+*** 565,572
+  		want_blank = false;
+  		break;
+  
+! 	    case newline: 
+! 		dump_line ();
+  		++line_no;     /* keep track of input line number */
+  		want_blank = false;
+  		break;
+
+--- 579,590 -----
+  		want_blank = false;
+  		break;
+  
+! 	    case newline:	/* don't insert between else if */
+! 	        if ( !last_else )
+! 		    {
+! 		    dump_line ();
+! 		    want_blank = false;
+! 		    }
+  		++line_no;     /* keep track of input line number */
+  		break;
+  
+***************
+*** 568,574
+  	    case newline: 
+  		dump_line ();
+  		++line_no;     /* keep track of input line number */
+- 		want_blank = false;
+  		break;
+  
+  	    case lparen:       /* got a ( or [ */
+
+--- 586,591 -----
+  		    want_blank = false;
+  		    }
+  		++line_no;     /* keep track of input line number */
+  		break;
+  
+  	    case lparen:       /* got a ( or [ */
+***************
+*** 576,582
+  		if (want_blank && *token != '[')
+  			       /* don't put space in front of square
+  			          bracket */
+! 		    *e_code++ = ' ';
+  
+  		if (in_decl)
+  		    while ((e_code - s_code) < dec_ind)
+
+--- 593,600 -----
+  		if (want_blank && *token != '[')
+  			       /* don't put space in front of square
+  			          bracket */
+! 		    if (gr_btype == false || par_blank_ok) /* jpn */
+! 			*e_code++ = ' ';
+  
+  		if (in_decl)
+  		    while ((e_code - s_code) < dec_ind)
+***************
+*** 844,849
+  			          expression is scanned */
+  		hd_type = (*token == 'i' ? ifstmt :
+  			(*token == 'w' ? whilestmt : forstmt));
+  	    /* remember the type of header for later use by parser */
+  		goto copy_id;  /* copy the token into line */
+  
+
+--- 862,869 -----
+  			          expression is scanned */
+  		hd_type = (*token == 'i' ? ifstmt :
+  			(*token == 'w' ? whilestmt : forstmt));
++ 		if ( last_else && hd_type == ifstmt )
++ 		    force_nl = false;/* else if () on 1 line! (wjm) */
+  	    /* remember the type of header for later use by parser */
+  		goto copy_id;  /* copy the token into line */
+  
+***************
+*** 858,863
+  		}
+  
+  		force_nl = true;
+  	    /* also, following stuff must go onto new line */
+  		parse (*token == 'e' ? elselit : dolit);
+  	    /* pass token on to parser */
+
+--- 878,884 -----
+  		}
+  
+  		force_nl = true;
++ 		last_else = *token == 'e';/* catch else if stmt */
+  	    /* also, following stuff must go onto new line */
+  		parse (*token == 'e' ? elselit : dolit);
+  	    /* pass token on to parser */
+***************
+*** 986,992
+  
+  	*e_code = '\0';	       /* make sure code section is null
+  			          terminated */
+! 
+      }			       /* end of main while (1) loop */
+  };
+  
+
+--- 1007,1014 -----
+  
+  	*e_code = '\0';	       /* make sure code section is null
+  			          terminated */
+! 	if ( type_code != sp_nparen && type_code != newline )
+! 	    last_else = false;	/* last else is only true once */
+      }			       /* end of main while (1) loop */
+  };
+  
+***************
+*** 1097,1102
+  	    break;
+  	case 14: 	       /* -br */
+  	    btype_2 = true;
+  	    break;
+  	case 15: 	       /* -bl */
+  	    btype_2 = false;
+
+--- 1119,1125 -----
+  	    break;
+  	case 14: 	       /* -br */
+  	    btype_2 = true;
++ 	    gr_btype = false;
+  	    break;
+  	case 15: 	       /* -bl */
+  	    btype_2 = false;
+***************
+*** 1100,1105
+  	    break;
+  	case 15: 	       /* -bl */
+  	    btype_2 = false;
+  	    break;
+  	case 16:
+  	    if(input<0) input = 0;
+
+--- 1123,1129 -----
+  	    break;
+  	case 15: 	       /* -bl */
+  	    btype_2 = false;
++ 	    gr_btype = false;
+  	    break;
+  	case 16:
+  	    if(input<0) input = 0;
+***************
+*** 1105,1110
+  	    if(input<0) input = 0;
+  	    if(output<0) output = 1;
+  	    break;
+      }
+  }
+  
+
+--- 1129,1139 -----
+  	    if(input<0) input = 0;
+  	    if(output<0) output = 1;
+  	    break;
++ 	case 17:		/* -bg */
++ 	    btype_2 = false;
++ 	    gr_btype = true;
++ 	    break;
++ 
+      }
+  }
+  
+diff -c ./indent_codes.h /usr/src/local/indent/indent_codes.h
+*** ./indent_codes.h	Fri May 31 02:35:21 1985
+--- /usr/src/local/indent/indent_codes.h	Thu Jun 13 14:55:52 1985
+***************
+*** 1,4
+! /*	@(#)indent_codes.h 1.1 85/05/30 SMI; from UCB 4.1 10/21/82	*/
+  
+  /*
+  
+
+--- 1,4 -----
+! /*	indent_codes.h	4.2	83/08/11	*/
+  
+  /*
+  
+diff -c ./indent_globs.h /usr/src/local/indent/indent_globs.h
+*** ./indent_globs.h	Fri May 31 02:35:38 1985
+--- /usr/src/local/indent/indent_globs.h	Mon Oct  7 21:43:49 1985
+***************
+*** 1,4
+! /*	@(#)indent_globs.h 1.1 85/05/30 SMI; from UCB 4.1 10/21/82	*/
+  
+  /*
+  
+
+--- 1,5 -----
+! /*	indent_globs.h	4.2	19-Dec-84 09:26 wjm add gr_btype
+! 				83/08/11	*/
+  
+  /*
+  
+***************
+*** 46,52
+  #define d_leave_comma 0
+  		   /* default value for leave_comma */
+  #define d_btype_2 1/* default value for btype_2 */
+! 
+  #define tabsize 8  /* the size of a tab */
+  #define tabmask 0177770
+  		   /* mask used when figuring length of lines with tabs */
+
+--- 47,53 -----
+  #define d_leave_comma 0
+  		   /* default value for leave_comma */
+  #define d_btype_2 1/* default value for btype_2 */
+! #define d_gr_btype 0		/* default value for gr_btype	 */
+  #define tabsize 8  /* the size of a tab */
+  #define tabmask 0177770
+  		   /* mask used when figuring length of lines with tabs */
+***************
+*** 115,120
+  int     decl_on_line;
+  		   /* set to true if this line of code has part of a
+  		      declaration on it */
+  int     had_eof;   /* set to true when input is exhausted */
+  int     i_l_follow;/* the level to which ind_level should be set after the
+  		      current line is printed */
+
+--- 116,122 -----
+  int     decl_on_line;
+  		   /* set to true if this line of code has part of a
+  		      declaration on it */
++ int	gr_btype;		/* set to true if using gr std indent	 */
+  int     had_eof;   /* set to true when input is exhausted */
+  int     i_l_follow;/* the level to which ind_level should be set after the
+  		      current line is printed */
+***************
+*** 154,156
+  		      with a form feed */
+  int     verbose;   /* when true, non-essential error messages are printed 
+  		   */
+
+--- 156,162 -----
+  		      with a form feed */
+  int     verbose;   /* when true, non-essential error messages are printed 
+  		   */
++ int     par_blank_ok;
++ 		   /* when true, and gr standard formatting,  an open
++ 		      parenthesis may be preceded by a space (modified by
++ 		      want_blank in indent.c) */
+diff -c ./io.c /usr/src/local/indent/io.c
+*** ./io.c	Fri May 31 02:34:09 1985
+--- /usr/src/local/indent/io.c	Thu Jun 13 14:55:53 1985
+***************
+*** 1,6
+! #ifndef lint
+! static	char sccsid[] = "@(#)io.c 1.1 85/05/30 SMI"; /* from UCB 4.1 10/21/82 */
+! #endif
+  
+  /*
+  
+
+--- 1,4 -----
+! static char sccsid[] = "@(#)io.c	4.1	(Berkeley)	10/21/82";
+  
+  /*
+  
+***************
+*** 110,116
+  
+  HISTORY:
+  	initial coding 	November 1976	D A Willcox of CAC
+! 
+  */
+  #include "indent_globs.h";
+  
+
+--- 108,114 -----
+  
+  HISTORY:
+  	initial coding 	November 1976	D A Willcox of CAC
+! 	11-Jun-85 17:55 wjm print single character as a char, not int
+  */
+  #include "indent_globs.h";
+  
+***************
+*** 116,122
+  
+  
+  
+! int     ff = 014;	       /* used to write a form feed */
+  
+  
+  dump_line () {		       /* dump_line is the routine that actually
+
+--- 114,120 -----
+  
+  
+  
+! char     *ff = "\f";	       /* used to write a form feed */
+  
+  
+  dump_line () {		       /* dump_line is the routine that actually
+***************
+*** 195,201
+      }
+  
+      if (use_ff)
+! 	write (output, &ff, 1);/* end the output with a ff */
+      else
+  	write (output, "\n", 1); /* or a newline */
+      use_ff = false;
+
+--- 193,199 -----
+      }
+  
+      if (use_ff)
+! 	write (output, ff, 1);/* end the output with a ff */
+      else
+  	write (output, "\n", 1); /* or a newline */
+      use_ff = false;
+diff -c ./lexi.c /usr/src/local/indent/lexi.c
+*** ./lexi.c	Fri May 31 02:34:28 1985
+--- /usr/src/local/indent/lexi.c	Mon Oct  7 21:46:17 1985
+***************
+*** 1,6
+! #ifndef lint
+! static	char sccsid[] = "@(#)lexi.c 1.1 85/05/30 SMI"; /* from UCB 4.1 10/21/82 */
+! #endif
+  
+  /*
+  
+
+--- 1,5 -----
+! static char sccsid[] = "@(#)lexi.c	4.1	(GenRad) 30-Sep-85 12:56 jpn";
+! static char oldsccs[] = "@(#)lexi.c	4.1	(Berkeley)	10/21/82";
+  
+  /*
+  
+***************
+*** 100,105
+      "else", 6,
+      "do", 6,
+      "sizeof", 0,
+      0, 0
+  };
+  
+
+--- 99,105 -----
+      "else", 6,
+      "do", 6,
+      "sizeof", 0,
++     "return", 0,	/* jpn */
+      0, 0
+  };
+  
+***************
+*** 174,179
+  		fill_buffer ();
+  	}
+  
+  	*tok++ = '\0';
+  
+  	if (l_struct) {	       /* if last token was 'struct', then this token
+
+--- 174,181 -----
+  		fill_buffer ();
+  	}
+  
++ 	par_blank_ok = false;  /* jpn */
++ 
+  	*tok++ = '\0';
+  
+  	if (l_struct) {	       /* if last token was 'struct', then this token
+***************
+*** 204,209
+  
+  	    if (found_it) {    /* we have a keyword */
+  		last_u_d = true;
+  		switch (specials[i].rwcode) {
+  		    case 1:    /* it is a switch */
+  			return (swstmt);
+
+--- 206,212 -----
+  
+  	    if (found_it) {    /* we have a keyword */
+  		last_u_d = true;
++ 		par_blank_ok = true;  /* jpn */
+  		switch (specials[i].rwcode) {
+  		    case 1:    /* it is a switch */
+  			return (swstmt);
+***************
+*** 445,450
+  
+  
+      }			       /* end of switch */
+  
+      if (code != newline) {
+  	l_struct = false;
+
+--- 448,462 -----
+  
+  
+      }			       /* end of switch */
++ 
++     /* this section is a hack for gr standard spacing and open parens */
++     if (code == lparen) {      /* jpn */
++ 	if (last_code == lparen)
++ 	    par_blank_ok = true;
++     }
++     else {
++ 	par_blank_ok = true;
++     }
+  
+      if (code != newline) {
+  	l_struct = false;
+diff -c ./parse.c /usr/src/local/indent/parse.c
+*** ./parse.c	Fri May 31 02:34:46 1985
+--- /usr/src/local/indent/parse.c	Thu Jun 20 08:34:59 1985
+***************
+*** 1,6
+! #ifndef lint
+! static	char sccsid[] = "@(#)parse.c 1.1 85/05/30 SMI"; /* from UCB 4.1 10/21/82 */
+! #endif
+  
+  /*
+  
+
+--- 1,4 -----
+! static char sccsid[] = "@(#)parse.c	4.1  (GenRad)	18-Jun-85 16:13 wjm";
+  
+  /*
+  
+***************
+*** 80,85
+  	btype_2
+  	case_ind =
+  	cstk =
+  	i_l_follow =
+  	il =		Stack of indentation levels
+  	ind_level =
+
+--- 78,84 -----
+  	btype_2
+  	case_ind =
+  	cstk =
++ 	gr_btype =
+  	i_l_follow =
+  	il =		Stack of indentation levels
+  	ind_level =
+***************
+*** 96,101
+  	main
+  
+  HISTORY:
+  	initial coding 	November 1976	D A Willcox of CAC
+  
+  */
+
+--- 95,102 -----
+  	main
+  
+  HISTORY:
++ 	12-Jun-85 16:17 wjm indent else if at the same level
++ 	19-Dec-84 09:49 wjm add GenRad style indentation -bg
+  	initial coding 	November 1976	D A Willcox of CAC
+  
+  */
+***************
+*** 151,157
+  	    }
+  	    break;
+  
+! 	case ifstmt: 	       /* scanned if (...) */
+  	case dolit: 	       /* 'do' */
+  	case forstmt: 	       /* for (...) */
+  	    p_stack[++tos] = tk;
+
+--- 152,167 -----
+  	    }
+  	    break;
+  
+! 	case ifstmt: 	       /* scanned if (...) *//*  12-Jun-85 16:22 wjm*/
+! 	    if ( p_stack[tos] == elsehead )/* an else if statement */
+! 		{
+! 		p_stack[ ++tos ] = ifstmt;
+! 		il[tos] = ind_level = i_l_follow = il[ tos - 1];
+! 		++i_l_follow;
+! 		search_brace = btype_2;
+! 		break;		/* fall thru for the normal case */
+! 		}
+! 	    
+  	case dolit: 	       /* 'do' */
+  	case forstmt: 	       /* for (...) */
+  	    p_stack[++tos] = tk;
+***************
+*** 164,170
+  	    break_comma = false;
+  	/* don't break comma in an initial list */
+  	    if (p_stack[tos] == stmt || p_stack[tos] == decl
+! 				     || p_stack[tos] == stmtl)
+  		++i_l_follow;  /* it is a random, isolated stmt group or a
+  			          declaration */
+  	    else {
+
+--- 174,181 -----
+  	    break_comma = false;
+  	/* don't break comma in an initial list */
+  	    if (p_stack[tos] == stmt || p_stack[tos] == decl
+! 				     || p_stack[tos] == stmtl) {
+! 
+  		++i_l_follow;  /* it is a random, isolated stmt group or a
+  			          declaration */
+  		if ( gr_btype )	/* also indent brackets */
+***************
+*** 167,174
+  				     || p_stack[tos] == stmtl)
+  		++i_l_follow;  /* it is a random, isolated stmt group or a
+  			          declaration */
+! 	    else {
+! 		if (s_code == e_code) {
+  		/* only do this if there is nothing on the line */
+  		    --ind_level;
+  		/* it is a group as part of a while, for, etc. */
+
+--- 178,194 -----
+  
+  		++i_l_follow;  /* it is a random, isolated stmt group or a
+  			          declaration */
+! 		if ( gr_btype )	/* also indent brackets */
+! 		    ind_level = i_l_follow;
+! 		}
+! 	    else if ( gr_btype )
+! 		{
+! 		if ( p_stack[tos] == swstmt )
+! 		    --ind_level;
+! 		}
+! 	    else
+! 		{
+! 		if (s_code == e_code && !gr_btype) {
+  		/* only do this if there is nothing on the line */
+  		    --ind_level;
+  		/* it is a group as part of a while, for, etc. */
+***************
+*** 181,186
+  
+  	    p_stack[++tos] = lbrace;
+  	    il[tos] = ind_level;
+  	    p_stack[++tos] = stmt;
+  	/* allow null stmt between braces */
+  	    il[tos] = i_l_follow;
+
+--- 201,212 -----
+  
+  	    p_stack[++tos] = lbrace;
+  	    il[tos] = ind_level;
++ 	    if ( gr_btype )	/* make sure things get back correctly */
++ 		{
++ 		--il[tos];
++ 		if ( p_stack[tos - 1] == swstmt )
++ 		    --il[tos];
++ 		}
+  	    p_stack[++tos] = stmt;
+  	/* allow null stmt between braces */
+  	    il[tos] = i_l_follow;
+***************
+*** 192,197
+  		ind_level = i_l_follow = il[tos];
+  		p_stack[++tos] = whilestmt;
+  		il[tos] = ind_level = i_l_follow;
+  	    }
+  	    else {	       /* it is a while loop */
+  		p_stack[++tos] = whilestmt;
+
+--- 218,227 -----
+  		ind_level = i_l_follow = il[tos];
+  		p_stack[++tos] = whilestmt;
+  		il[tos] = ind_level = i_l_follow;
++ 		if ( gr_btype ) 
++ 		    {
++ 		    ++ind_level;/* gr style assumes curly's */
++ 		    }
+  	    }
+  	    else {	       /* it is a while loop */
+  		p_stack[++tos] = whilestmt;
+***************
+*** 222,228
+  	case rbrace: 	       /* scanned a } */
+  	/* stack should have <lbrace> <stmt> or <lbrace> <stmtl> */
+  	    if (p_stack[tos - 1] == lbrace) {
+! 		ind_level = i_l_follow = il[--tos];
+  		p_stack[tos] = stmt;
+  	    }
+  	    else {
+
+--- 252,260 -----
+  	case rbrace: 	       /* scanned a } */
+  	/* stack should have <lbrace> <stmt> or <lbrace> <stmtl> */
+  	    if (p_stack[tos - 1] == lbrace) {
+! 		if ( !gr_btype )
+! 		    ind_level = il[ tos - 1];
+! 		i_l_follow = il[--tos];
+  		p_stack[tos] = stmt;
+  		if ( gr_btype && tos > 0 && p_stack[tos-1] == swstmt )
+  		    --ind_level;	/* move one back for switch's */
+***************
+*** 224,229
+  	    if (p_stack[tos - 1] == lbrace) {
+  		ind_level = i_l_follow = il[--tos];
+  		p_stack[tos] = stmt;
+  	    }
+  	    else {
+  		printf ("%d: Stmt nesting error\n", line_no);
+
+--- 256,263 -----
+  		    ind_level = il[ tos - 1];
+  		i_l_follow = il[--tos];
+  		p_stack[tos] = stmt;
++ 		if ( gr_btype && tos > 0 && p_stack[tos-1] == swstmt )
++ 		    --ind_level;	/* move one back for switch's */
+  	    }
+  	    else {
+  		printf ("%d: Stmt nesting error\n", line_no);
+diff -c ./pr_comment.c /usr/src/local/indent/pr_comment.c
+*** ./pr_comment.c	Fri May 31 02:35:04 1985
+--- /usr/src/local/indent/pr_comment.c	Thu Jun 13 14:55:59 1985
+***************
+*** 1,6
+! #ifndef lint
+! static	char sccsid[] = "@(#)pr_comment.c 1.1 85/05/30 SMI"; /* from UCB 4.1 10/21/82 */
+! #endif
+  
+  /*
+  
+
+--- 1,4 -----
+! static char sccsid[] = "@(#)pr_comment.c	4.1	(Berkeley)	10/21/82";
+  
+  /*
+  

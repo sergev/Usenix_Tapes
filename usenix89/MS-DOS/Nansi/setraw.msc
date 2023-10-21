@@ -1,0 +1,60 @@
+/*--- setraw.msc -------------------------------------------------
+  Routines to set and reset raw mode on stdin/stdout.
+  For Microsoft C.
+------------------------------------------------------------------*/
+#include <dos.h>
+/* Use the IOCTL DOS function call to change stdin and stdout to raw mode.
+ * For stdin, this prevents MSDOS from trapping ^P, ^S, ^C, thus freeing us
+ * of ^P toggling 'echo to printer'.
+ * For stdout, this radically speeds up the output because there is no
+ * checking for these special characters in the input buffer whenever
+ * screen output is occurring.
+ * Note that only the stdin OR stdout ioctl need be changed since
+ * apparently they are handled as the same device.
+ * Thanks to Mark Zbikowski (markz@microsoft.UUCP) for helping me with
+ * this.
+ * --- This stolen from sources to the mighty game HACK ---
+ */
+#define DEVICE		0x80
+#define RAW		0x20
+#define IOCTL		0x44
+#define STDIN		fileno(stdin)
+#define STDOUT		fileno(stdout)
+#define GETBITS		0
+#define SETBITS		1
+static unsigned	old_stdin, old_stdout, ioctl();
+/*--- set_raw() ----------
+  Call this to set raw mode; call restore_raw() later to restore
+  console to old rawness state.
+--------------------------*/
+set_raw()
+{
+	old_stdin = ioctl(STDIN, GETBITS, 0);
+	old_stdout = ioctl(STDOUT, GETBITS, 0);
+	if (old_stdin & DEVICE)
+		ioctl(STDIN, SETBITS, old_stdin | RAW);
+	if (old_stdout & DEVICE)
+		ioctl(STDOUT, SETBITS, old_stdout | RAW);
+}
+restore_raw()
+{
+	if (old_stdin)
+		(void) ioctl(STDIN, SETBITS, old_stdin);
+	if (old_stdout)
+		(void) ioctl(STDOUT, SETBITS, old_stdout);
+}
+static unsigned
+ioctl(handle, mode, setvalue)
+unsigned setvalue;
+{
+	union REGS regs;
+
+	regs.h.ah = IOCTL;
+	regs.h.al = mode;
+	regs.x.bx = handle;
+	regs.h.dl = setvalue;
+	regs.h.dh = 0;			/* Zero out dh */
+	intdos(&regs, &regs);
+	return (regs.x.dx);
+}
+/*-- end of setraw.msc --*/

@@ -1,0 +1,4 @@
+myruid()
+{
+        return(getuid());
+}

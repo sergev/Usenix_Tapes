@@ -1,0 +1,165 @@
+.th GR IV 24-February-1978
+.sh NAME
+gr \*- DR-11 interface to Grinnell display processor GMR-27
+.sh DESCRIPTION
+.it Gr
+refers to the modified DR-11B interface to the Grinnell display
+processor, GMR-27.
+The interface supports both synchronous and asynchronous I/O
+as a character device only.
+Synchronous requests are satisfied in a limited time.
+Asynchronous requests may be delayed until some
+external condition is satified,
+such as the CURSOR ENTER button being pressed.
+In synchronous I/O,
+the buffer
+.it must
+begin on a word boundary
+and the count
+.it must
+be even.
+Seek calls for the file
+.it gr
+are meaningless.
+.s3
+Each word written to the file
+.it gr
+commands the GMR-27 to perform one operation
+(except when using packed bytes).
+Each write is done as a single DMA transfer.
+.s3
+The interface performs synchronous reading in a non-standard manner.
+The buffer used to synchronously read words from the GMR-27
+must begin with command words which are first sent to the GMR-27
+to enable reading.
+The last of these command words must be readback peripheral data (RPD),
+0160000 (octal).
+All words following the first RPD in the buffer receive data words
+from the GMR-27.
+If no RPD command resides in the buffer
+or the first RPD is the last word in the buffer,
+.it read
+returns an error condition without sending any commands to the GMR-27.
+The byte count returned from a synchronous
+.it read
+includes the initial command words
+which were written to the GMR-27.
+In order to protect UNIX from being stalled by an improperly
+programmed synchronous read command performing asynchronous I/O
+or using non-existant GMR-27 peripheral devices,
+the interface limits the duration of synchronous reading.
+If the GMR-27 does not complete a synchronous
+.it read
+request promptly,
+the interface interrupts the DMA transfer and returns
+a shortened
+.it read
+byte count.
+Such an incomplete
+.it read
+count should be considered as an error.
+To avoid unnecessarily tying up UNIX,
+processes should not use synchronous
+.it read
+calls which may need to be interrupted.
+.s3
+Processes may also wait for asynchronous events
+by reading with a byte count of exactly two.
+In order to intercept GMR-27 asynchronous events,
+the interface enables the GMR-27 "interrupt" peripheral device
+with a select peripheral device (SPD), 0122000 (octal),
+issues an RPD command, and requests a data word transfer
+from the GMR-27.
+Waiting for an asynchronous event,
+the GMR-27 delays returning a data word until a user either
+presses the
+.it enter
+button or moves the trackball with the
+.it track
+switch on.
+Between synchronous I/O requests,
+until the interface receives an "interrupt" word,
+the interface waits in a background mode
+for an asynchronous event.
+After an asynchronous event,
+all waiting processes receive the "interrupt" word.
+After an asynchronous event,
+synchronous reads can elicit the cause of the event and
+reset the interrupt flags within the GMR-27.
+.s3
+Since multiple opens are permitted,
+the state of the GMR-27 may unexpectedly change between
+the I/O requests of any one process.
+Also,
+the background asynchronous I/O processing may alter
+the selection of peripheral devices with an SPD
+after each synchronous I/O request.
+Thus,
+each I/O request is responsible for reestablishing the volatile state
+of the GMR-27 whenever simultaneous operations could occur.
+Some volatile elements of the GMR-27 state which may need to be reset
+include:
+.br
+	1) Display channel (LDC) and subchannel mask (LSM) selection,
+.br
+	2) Write (LWM) and update (LUM) modes,
+.br
+	3) Element (LER, LEA, LEB, and LEC)
+and line (LLR, LLA, LLB, and LLC) registers, and
+.br
+	4) Selection (SPD) and use (LPR, LPA, and LPD) of
+some GMR-27 peripherals.
+.s3
+.i0
+The volatile GMR-27 peripheral devices include:
+.br
+	1) Memory readback,
+.br
+	2) Independent cursor locations and flags, and
+.br
+	3) Byte unpacking.
+.br
+To avoid interference with other I/O,
+byte unpacking should be completed by single I/O transfers.
+.s3
+Other GMR-27 peripheral devices
+which have global effects are manipulated less often.
+Since all users should agree to their invocation,
+these devices and commands need not be reset or reissued
+with each I/O request:
+.br
+	1) Graphic digitizer (camera input),
+.br
+	2) Video control (color vs grayscale),
+.br
+	3) Video lookup table,
+.br
+	4) Internal self-tests,
+.br
+	5) Screen and line erasure, and
+.br
+	6) Scrolling.
+.s3
+With simultaneous users,
+by convention,
+each user should insure that only allocated GMR-27 display memory
+is altered.
+Mutual user consent should be obtained before changing
+global GMR-27 states.
+.sh FILES
+/dev/gr
+.sh "SEE ALSO"
+grdefs(VII)
+.br
+Grinnell Systems,
+.it "GMR-27 User's Manual."
+.sh BUGS
+The DR-11B interface hardware must be modified
+so that stalled DMA transfers may be safely terminated.
+This modification,
+which connects one of the unassigned function bits to ATTN,
+must be made before reading is attempted.
+.s3
+The driver could establish a starting image position
+before each transfer
+(in GMR-27 registers Ec and Lc perhaps).

@@ -1,0 +1,72 @@
+#
+
+/*
+ *      con - connect mx tty.
+ */
+
+#define	CQUIT	034
+#define	CINTR	0177
+#define	RAW	0340
+
+int	f,pid,sttyb[3];
+char    buf[512];
+
+
+main(argc,argv)
+char **argv;
+{
+	int i;
+	if((f = mxfile()) < 0)
+		out("no mx files\n");
+	if(argc == 1)
+		out("need host name\n");
+	if(mxscon(f,argv[1],1) < 0)
+		out("connect failed\n");
+	ps("connect\n");
+
+	gtty(0,sttyb);
+	i = sttyb[2];  sttyb[2] = RAW;
+	stty(0,sttyb);
+	sttyb[2] = i;
+	signal(1,1);  signal(2,1);  signal(3,1);
+
+	while((pid=fork()) == -1)
+		sleep(10);
+	if(pid)
+		recv();
+	else
+		send();
+}
+
+send()
+{
+	register i;
+	while((i=read(0,buf,sizeof buf)) > 0 &&
+		write(f,buf,i) == i);
+	exit();
+}
+
+recv()
+{
+	register i;
+	while((i=read(f,buf,sizeof buf)) > 0 &&
+		write(1,buf,i) == i);
+	kill(pid,9);
+	stty(0,sttyb);
+	ps("disconnect\n");
+	exit();
+}
+
+out(s)
+{
+	ps(s);
+	exit();
+}
+
+ps(s)
+char *s;
+{
+	do
+		write(1,s,1);
+	while(*++s);
+}

@@ -1,0 +1,754 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!ucbvax!sdcsvax!sdchem!jwp
+From: jwp@sdchem.UUCP (John Pierce)
+Newsgroups: net.sources
+Subject: Awk document
+Message-ID: <238@sdchema.sdchem.UUCP>
+Date: 18 Jun 86 20:04:32 GMT
+Reply-To: jwp@sdchem.UUCP (John Pierce)
+Organization: Chemistry Dept, UC San Diego
+Lines: 743
+Posted: Wed Jun 18 15:04:32 1986
+
+Since there were a lot of problems in mailing this to people, and since
+it isn't clear it ever made it to the mod.sources.doc moderator, here it is.
+It expects the "-ms" macro package, and you'll need to trim the leading '#'
+from each line.
+				John Pierce, Chemistry, UC San Diego
+				jwp%chem@sdcsvax.ucsd.edu
+				sdcsvax!sdchem!jwp
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+#.RP
+#.TL
+#.B
+#A Supplemental Document For AWK
+#.sp
+#.R
+#- or -
+#.sp
+#.I
+#Things Al, Pete, And Brian Didn't Mention Much
+#.R
+#.AU
+#John W. Pierce
+#.AI
+#Department of Chemistry
+#University of California, San Diego
+#La Jolla, California  92093
+#jwp%chem@sdcsvax.ucsd.edu
+#.AB
+#As
+#.B awk
+#and its documentation are distributed with
+#.I
+#4.2 BSD UNIX*
+#.R
+#there are a number of bugs, undocumented features,
+#and features that are touched on so briefly in the
+#documentation that the casual user may
+#not realize their full significance.  While this document
+#applies primarily to the \fI4.2 BSD\fR version of \fIUNIX\fR,
+#it is known that the \fI4.3 BSD\fR version does not have
+#all of the bugs fixed, and that it does not have updated
+#documentation.  The situation with respect to the versions
+#of \fBawk\fR disitributed with other versions \fIUNIX\fR and
+#similar systems is unknown to the author.
+#.FS
+#*UNIX is a trademark of AT&T
+#.FE
+#.AE
+#.LP
+#In this document references to "the user manual" mean
+#.I
+#Awk - A Pattern Scanning and Processing Language (Second Edition)
+#.R
+#by Aho, Kernighan, and Weinberger.  References to "awk(1)" mean
+#the entry for
+#.B awk
+#in the
+#.I
+#UNIX Programmer's Manual, 4th Berkeley Distribution.
+#.R
+#References to "the documentation" mean both of those.
+#.LP
+#In most examples, the outermost set of braces ('{ }') have been
+#ommitted.  They would, of course, be necessary in real scripts.
+#.NH
+#Known Bugs
+#.LP
+#There are three main bugs known to me.  They involve:
+#.IP
+#Assignment to input fields.
+#.IP
+#Piping output to a program from within an \fBawk\fR script.
+#.IP
+#Using '*' in \fIprintf\fR field width and precision specifications.
+#.NH 2
+#Assignment to Input Fields
+#.LP
+#[This problem is partially fixed in \fI4.3BSD\fR;
+#see the last paragraph of this section regarding the unfixed portion.]
+#.LP
+#The user manual states that input fields may be objects of assignment
+#statements.  Given the input line
+#.DS
+#field_one field_two field_three
+#.DE
+#the script
+#.DS
+#$2 = "new_field_2"
+#print $0
+#.DE
+#should print
+#.DS
+#field_one new_field_2 field_three
+#.DE
+#.LP
+#This does not work; it will print
+#.DS
+#field_one field_two field_three
+#.DE
+#That is, the script will behave as if the
+#assignment to $2 had not been made.  However,
+#explicitly referencing an "assigned to" field
+#.I does
+#recognize that the assignment has been made.
+#If the script
+#.DS
+#$2 = "new_field_2"
+#print $1, $2, $3
+#.DE
+#is given the same input it will [properly] print
+#.DS
+#field_one new_field_2 field_three
+#.DE
+#Therefore, you can
+#get around this bug with, e.g.,
+#.DS
+#$2 = "new_field_2"
+#output = $1                       # Concatenate output fields
+#for(i = 2; i <= NF; ++i)          # into a single output line
+#	output = output OFS $i    # with OFS between fields
+#print output
+#.DE
+#.LP
+#In \fI4.3BSD\fR, this bug has been fixed to the extent that
+#the failing example above works correctly.  However, a script like
+#.DS
+#$2 = "new_field_2"
+#var = $0
+#print var
+#.DE
+#still gives incorrect output.  This problem can be bypassed by using
+#.DS
+#\fIvar\fR = sprintf("%s", $0)
+#.DE
+#instead of "\fIvar\fR = $0"; \fIvar\fR will have the correct value.
+#.NH 2
+#Piping Output to a Program
+#.LP
+#[This problem appears to have been fixed in \fI4.3BSD\fR,
+#but that has not been exhaustively tested.]
+#.LP
+#The user manual states that
+#.I print
+#and
+#.I printf
+#statements may write to a program using, e.g.,
+#.DS
+#print | "\fIcommand\fR"
+#.DE
+#This would pipe the output into \fIcommand\fR, and it
+#does work.  However, you should be aware that this causes
+#.B awk
+#to spawn a child process (\fIcommand\fR), and that it
+#.I
+#does not
+#.R
+#wait for the child to exit before it exits itself.  In the case of a
+#"slow" command like
+#.B sort,
+#.B awk
+#may exit before
+#.I command
+#has finished.
+#.LP
+#This can cause problems in, for example, a shell script that
+#depends on everything done by
+#.B awk
+#being finished before the next shell command is executed.
+#Consider the shell script
+#.DS
+#awk -f awk_script input_file
+#mv sorted_output somewhere_else
+#.DE
+#and the
+#.B awk
+#script
+#.DS
+#print output_line | "sort -o sorted_output"
+#.DE
+#If
+#.I input_file
+#is large
+#.B awk
+#will exit long before
+#.B sort
+#is finished.  That means that the
+#.B mv
+#command will be executed before
+#.B sort
+#is finished, and the result is unlikely to be what you wanted.
+#Other than fixing the source, there is no way to avoid this
+#problem except to handle such pipes outside of the awk script, e.g.
+#.DS
+#awk -f awk_file input_file | sort -o sorted_output
+#mv sorted_output somewhere_else
+#.DE
+#which is not wholly satisfactory.
+#.LP
+#See
+#.I
+#Sketchily Documented Features
+#.R
+#below for other considerations in redirecting
+#output from within an
+#.B awk
+#script.
+#.NH 2
+#Printf Field Width and Precision Specification With '*'
+#.LP
+#The document says that the \fIprintf\fR function provided is
+#identical to the \fIprintf\fR provided by the \fIC\fR language
+#\fBstdio\fR package.  This is not true for the case of using '*' to
+#specify a field width or precision.  The command
+#.DS
+#printf("%*.s", len, string)
+#.DE
+#will cause a core dump.  Given \fBawk\fR's age, it is likely
+#that its \fIprintf\fR was written well before the use of '*'
+#for specifying field width and precision appeared in the \fBstdio\fR
+#library's \fIprintf\fR.  Another possibility is that it wasn't
+#implemented because it isn't really needed to achieve the same effect.
+#.LP
+#To accomplish this effect, you can utilize the fact that \fBawk\fR
+#concatenates variables before it does any other processing on them.
+#For example, assume a script has two variables \fIwid\fR and
+#\fIprec\fR which control the width and precision used for printing
+#another variable \fIval\fI:
+#.DS
+#[code to set "wid", "prec", and "val"]
+#
+#printf("%" wid "." prec "d\en", val)
+#.DE
+#If, for example, \fIwid\fR is 8 and \fIprec\fR is 3, then /fBawk\fR
+#will concatenate everything to the left of the comma in
+#the \fIprintf\fR statement, and the statement will really be
+#.DS
+#printf(%8.3d\en, val)
+#.DE
+#These could, of course, been assigned to some variable \fIfmt\fR before
+#being used:
+#.DS
+#fmt = "%" wid "." prec "d"
+#
+#printf(fmt "\en", val)
+#.DE
+#Note, however, that the newline ("\en") in the second form \fIcannot\fR
+#be included in the assignment to \fIfmt\fR.
+#.bp
+#.NH
+#Undocumented Features
+#.LP
+#There are several undocumented features:
+#.IP
+#Variable values may be established on the command line.
+#.IP
+#A
+#.B getline
+#function exists that reads the next input line and starts processing it
+#immediately.
+#.IP
+#Regular expressions accept octal representations of characters.
+#.IP
+#A
+#.B -d
+#flag argument produces debugging output if
+#.B awk
+#was compiled with "DEBUG" defined.
+#.IP
+#Scripts may be "compiled" and run later (providing the installer
+#did what is necessary to make this work).
+#.NH 2
+#Defining Variables On The Command Line
+#.LP
+#To pass variable values into a script at run time, you may use
+#.IP
+#.I variable=value
+#.LP
+#(as many as you like) between any "\fB-f \fIscriptname\fR" or
+#.I program
+#and the names of any files to be processed.  For example,
+#.DS
+#awk -f awkscript today=\e"`date`\e" infile
+#.DE
+#would establish for
+#.I awkscript
+#a variable named
+#.B today
+#that had as its value the output of the
+#.B date
+#command.
+#.LP
+#There are a number of caveats:
+#.IP
+#Such assignments may appear only between
+#.B -f
+#.I awkscript
+#(or \fIprogram\fR or [see below] \fB-R\fIawk.out\fR)
+#and the name of any
+#input file (or '-').
+#.IP
+#Each
+#.I variable=value
+#combination must be a single argument (i.e. there must not be spaces
+#around the '=' sign);
+#.I value
+#may be either a numeric value or a string.  If it is a string,
+#it must be enclosed in
+#double quotes at the time \fBawk\fR reads the argument.  That means
+#that the double quotes enclosing \fIvalue\fR on the command line
+#must be protected from the shell as in the example above or it will
+#remove them.
+#.IP
+#.I Variable
+#is not available for use within the script until after the first record
+#has been read and parsed, but it is available as soon as
+#that has occurred so that it may be used before any other
+#processing begins.  It does not exist at the time the
+#.B BEGIN
+#block is executed, and if there was no input it will not exist in the
+#.B END
+#block (if any).
+#.NH 2
+#Getline Function
+#.LP
+#.B Getline
+#immediately reads the next input line (which is parsed into \fI$1\fR,
+#\fI$2\fR, etc) and starts processing it at the location of the call
+#(as opposed to
+#.B next
+#which immediately reads the next input line but starts processing
+#from the start of the script).
+#.LP
+#.B Getline
+#facilitates performing some types of tasks such as
+#processing files with multiline records and merging
+#information from several files.  To use the latter as an example,
+#consider a case where two files, whose lines do not share
+#a common format, must be processed together.  Shell and \fBawk\fR
+#scripts to do this might look something like
+#.sp
+#In the shell script
+#.DS
+#( echo DATA1; cat datafile1; echo ENDdata1 \e
+#  echo DATA2; cat datafile2; echo ENDdata2 \e
+#) | \e
+#    awk -f awkscript - > awk_output_file
+#.DE
+#In the
+#.B awk
+#script
+#.DS
+#/^DATA1/  {       # Next input line starts datafile1
+#          while (getline && $1 !~ /^ENDdata1$/)
+#                 {
+#                 [processing for \fIdata1\fR lines]
+#                 }
+#          }
+#.sp 1
+#/^DATA2/  {       # Next input line starts datafile2
+#          while (getline && $1 !~ /^ENDdata2$/)
+#                 {
+#                 [processing for \fIdata2\fR lines]
+#                 }
+#          }
+#.DE
+#There are, of course, other ways of accomplishing this particular task
+#(primarily using \fBsed\fR to preprocess the information),
+#but they are generally more difficult to write and more
+#subject to logic errors.  Many cases arising in practice
+#are significantly more difficult, if not impossible, to handle
+#without \fBgetline\fR.
+#.NH 2
+#Regular Expressions
+#.LP
+#The sequence "\fI\eddd\fR" (where 'd' is a digit)
+#may be used to include explicit octal
+#values in regular expressions.  This is often useful if "nonprinting"
+#characters have been used as "markers" in a file.  It has not been
+#tested for ASCII values outside the range 01 through 0127.
+#.NH 2
+#Debugging output
+#.LP
+#[This is unlikely to be of interest to the casual user.]
+#.sp
+#If \fBawk\fR was compiled with "DEBUG" defined, then giving it a
+#.B -d
+#flag argument will cause it to produce debugging output when it is run.
+#This is sometimes useful in finding obscure problems in scripts, though
+#it is primarily intended for tracking down problems with \fBawk\fR itself.
+#.NH 2
+#Script "Compilation"
+#.LP
+#[It is likely that this does not work at most sites.  If it does not, the
+#following will probably not be of interest to the casual user.]
+#.sp
+#The command
+#.DS
+#awk -S -f script.awk
+#.DE
+#produces a file named
+#.B awk.out.
+#This is a core image of
+#.B awk
+#after parsing the file
+#.I script.awk.
+#The command
+#.DS
+#awk -Rawk.out datafile
+#.DE
+#causes
+#.B awk.out
+#to be applied to \fIdatafile\fR (or the standard input if no
+#input file is given).  This avoids having to reparse large
+#scripts each time they are used.  Unfortunately, the way this
+#is implemented requires some special action on the part of the
+#person installing \fBawk\fR.
+#.LP
+#As \fBawk\fR is delivered with \fI4.2 BSD\fR (and \fI4.3 BSD\fR),
+#.I awk.out
+#is created by the \fBawk -S ...\fR process by calling
+#.B sbrk()
+#with '0', writing out the returned value, then
+#writing out the core image from location 0 to
+#the returned address.  The \fBawk -R...\fR process
+#reads the first word of
+#.I awk.out
+#to get the length of the image, calls
+#.B brk()
+#with that length, and
+#then reads the image into itself starting at location 0.
+#For this to work, \fBawk\fR must have been loaded with its
+#text segment writeable.  Unfortunately,
+#the \fIBSD\fR default for \fBld\fR is to load with the text
+#read-only and shareable.  Thus, the installer must remember to take
+#special action (e.g. "cc -N ..."
+#[equivalently "ld -N ..."] for \fI4BSD\fR) if these
+#flags are to work.
+#.LP
+#[Personally, I don't think it is
+#a very good idea to give \fBawk\fR the opportunity
+#to write on its text segment; I changed it so that
+#only the data segment is overwritten.]
+#.LP
+#Also, due to what appears to be a lapse in logic, the first
+#non-flag argument following \fB-R\fIawk.out\fR is discarded.
+#[Disliking that behavior, the I changed it so that the \fB-R\fR flag
+#is treated like the \fB-f\fR flag:  no flag arguments may follow it.]
+#.bp
+#.NH
+#Sketchily Documented Features
+#.LP
+#.NH 2
+#Exit
+#.LP
+#The user manual says that using the
+#.B exit
+#function causes the script to behave as if end-of-input has been reached.
+#Not menitoned explicitly is the fact that this will cause the
+#.B END
+#block to be executed if it exists.
+#Also, two things are ommitted:
+#.IP
+#\fBexit(\fIexpr\fB)\fR causes the script's exit status to be
+#set to the value of \fIexpr\fR.
+#.IP
+#If
+#.B exit
+#is called within the
+#.B END
+#block, the script exits immediately.
+#.NH 2
+#Mathematical Functions
+#.LP
+#The following builtin functions exist and are mentioned in
+#.I awk(1)
+#but not in the user manual.
+#.IP \fBint(\fIx\fB)\fR 10
+#\fIx\fR trunctated to an integer.
+#.IP \fBsqrt(\fIx\fB)\fR 10
+#the square root of \fIx\fR for \fIx\fR >= 0, otherwise zero.
+#.IP \fBexp(\fIx\fB)\fR 10
+#\fBe\fR-to-the-\fIx\fR for -88 <= \fIx\fR <= 88, zero
+#for \fIx\fR < -88, and dumps core for \fIx\fR > 88.
+#.IP \fBlog(\fIx\fB)\fR 10
+#the natural log of \fIx\fR.
+#.NH 2
+#OFMT Variable
+#.LP
+#The variable
+#.B OFMT
+#may be set to, e.g. "%.2f", and purely numerical output will be
+#bound by that restriction in
+#.B print
+#statements.  The default value is "%.6g".  Again, this is mentioned in
+#.I awk(1)
+#but not in the user manual.
+#.NH 2
+#Array Elements
+#.LP
+#The user manual states that "Array elements ... spring into existence by
+#being mentioned."  This is literally true;
+#.I any
+#reference to an array element causes it to exist.
+#("I was thought about, therefore I am.")
+#Take, for example,
+#.DS
+#if(array[$1] == "blah")
+#	{
+#	[process blah lines]
+#	}
+#.DE
+#If there is not an existing element of
+#.B array
+#whose subscript is the same as the contents of the
+#current line's first field,
+#.I
+#one is created
+#.R
+#and its value (null, of course) is then compared
+#with "blah".  This can be a bit
+#disconcerting, particularly when later processing is using
+#.DS
+#for (i in \fBarray\fR)
+#        {
+#        [do something with result of processing
+#	"blah" lines]
+#        }
+#.DE
+#to walk the array and expects all the elements to be non-null.
+#Succinct practical examples are difficult to construct, but
+#when this happens in a 500 line
+#script it can be difficult to determine what has gone wrong.
+#.NH 2
+#FS and Input Fields
+#.LP
+#By default any number of spaces or tabs can separate fields (i.e.
+#there are no null input fields) and trailing spaces and tabs
+#are ignored.  However, if
+#.B FS
+#is explicitly set to any character other than a space
+#(e.g., a tab: \fBFS = "\et"\fR), then a field is defined
+#by each such character and trailing field separator characters are
+#not ignored.  For example, if '>' represents a tab then
+#.DS
+#one>>three>>five>
+#.DE
+#defines six fields, with fields two, four, and six being empty.
+#.LP
+#If
+#.B FS
+#is explicitly set to a space (\fBFS\fR = "\ "), then
+#the default behavior obtains (this may be a bug); that
+#is, both spaces
+#and tabs are taken as field separators, there can be no
+#null input fields, and trailing spaces and tabs are ignored.
+#.NH 2
+#RS and Input Records
+#.LP
+#If
+#.B RS
+#is explicitly set to the null string (\fBRS\fR = ""), then the input
+#record separator becomes a blank line, and the newlines at the end
+#of input lines is a field separator.  This facilitates
+#handling multiline records.
+#.NH 2
+#"Fall Through"
+#.LP
+#This is mentioned in the user manual, but it is important
+#enough that it is worth pointing out here, also.
+#.LP
+#In the script
+#.DS
+#/\fIpattern_1\fR/  {
+#             [do something]
+#             }
+#.sp
+#/\fIpattern_2\fR/  {
+#             [do something]
+#             }
+#.DE
+#all input lines will be compared with both 
+#.I pattern_1
+#and
+#.I pattern_2
+#unless the
+#.B next
+#function is used before the closing '}' in the
+#.I pattern_1
+#portion.
+#.NH 2
+#Output Redirection
+#.LP
+#Once a file (or pipe) is opened by
+#.B awk
+#it is not closed until
+#.B awk
+#exits.  This can occassionally cause problems.  For example,
+#it means that a script that sorts its input lines into
+#output files named by the contents of their first fields
+#(similar to an example in the user manual)
+#.DS
+#{ print $0 > $1 }
+#.DE
+#is going to fail if the number of different first fields exceeds
+#about 10.
+#This problem
+#.I cannot
+#be avoided by using something like
+#.DS
+#{
+#command = "cat >> " $1
+#print $0 | command
+#}
+#.DE
+#as the value of the variable
+#.B command
+#is different for each different value of
+#.I $1
+#and is therefore treated as a different output "file".
+#.LP
+#[I have not been able to create a truly satisfactory
+#fix for this that doesn't involve having \fBawk\fR treat output
+#redirection to pipes differently from output to files; I
+#would greatly appreciate hearing of one.]
+#.NH 2
+#Field and Variable Types, Values, and Comparisons
+#.LP
+#The following is a synopsis of notes included with \fBawk\fR's
+#source code.
+#.NH 3
+#Types
+#.LP
+#Variables and fields can be strings or numbers or both.
+#.NH 4
+#Variable Types
+#.LP
+#When a variable is set by the assignment
+#.DS
+#\fIvar\fR = \fIexpr\fR
+#.DE
+#its type is set to the type of
+#.I expr
+#(this includes +=, ++, etc). An arithmetic
+#expression is of type
+#.I number,
+#a concatenation is of type
+#.I string,
+#etc.
+#If the assignment is a simple copy, e.g.
+#.DS
+#\fIvar1\fR = \fIvar2\fR
+#.DE
+#then the type of
+#.I var1
+#becomes that of
+#.I var2.
+#.LP
+#Type is determined by context; rarely, but always very inconveniently,
+#this context-determined type is incorrect.  As mentioned in
+#.I awk(1)
+#the type of an expression can be coerced to that desired.  E.g.
+#.DS
+#{
+#\fIexpr1\fR + 0
+#.sp 1
+#\fIexpr2\fR ""    # Concatenate with a null string
+#}
+#.DE
+#coerces
+#.I expr1
+#to numeric type and
+#.I expr2
+#to string type.
+#.NH 4
+#Field Types
+#.LP
+#As with variables, the type of a field is determined by
+#context when possible, e.g.
+#.RS
+#.IP $1++ 8
+#clearly implies that \fI$1\fR is to be numeric, and
+#.IP $1\ =\ $1\ ","\ $2 16
+#implies that $1 and $2 are both to be strings.
+#.RE
+#.LP
+#Coercion is done as needed.
+#In contexts where types cannot be reliably determined, e.g.,
+#.DS
+#if($1 == $2) ...
+#.DE
+#the type of each field is determined on input by inspection.  All fields are
+#strings; in addition, each field that contains only a number
+#is also considered numeric.  Thus, the test
+#.DS
+#if($1 == $2) ...
+#.DE
+#will succeed on the inputs
+#.DS
+#0       0.0
+#100     1e2
+#+100    100
+#1e-3    1e-3
+#.DE
+#and fail on the inputs
+#.DS
+#(null)      0
+#(null)      0.0
+#2E-518      6E-427
+#.DE
+#"only a number" in this case means matching the regular expression
+#.DS
+#^[+-]?[0-9]*\e.?[0-9]+(e[+-]?[0-9]+)?$
+#.DE
+#.NH 3
+#Values
+#.LP
+#Uninitialized variables have the numeric value 0 and the string value "".
+#Therefore, if \fIx\fR is uninitialized,
+#.DS
+#if(x) ...
+#if (x == "0") ...
+#.DE
+#are false, and
+#.DS
+#if(!x) ...
+#if(x == 0) ...
+#if(x == "") ...
+#.DE
+#are true.
+#.LP
+#Fields which are explicitly null have the string value "", and are not numeric.
+#Non-existent fields (i.e., fields past \fBNF\fR) are also treated this way.
+#.NH 3
+#Types of Comparisons
+#.LP
+#If both operands are numeric, the comparison is made
+#numerically.  Otherwise, operands are coerced to type
+#string if necessary, and the comparison is made on strings.
+#.NH 3
+#Array Elements
+#.LP
+#Array elements created by
+#.B split
+#are treated in the same way as fields.

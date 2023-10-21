@@ -1,0 +1,145 @@
+	.TITLE		LIB_CALL_ANALYZE ** Call frame analyzer
+	.SBTTL		Program Header, Preface and Introduction
+	.IDENT		/1*003/
+;+
+;***************************************************************************
+;
+; Author		: (c) Ramin Firoozye, 1983.
+; Creation Date		: 07-Feb-83
+; Last Edit		: 07-Mar-84
+;
+; Edit History:
+; 001	07-Feb-83	ramin	original
+; 002	06-Mar-84	ramin	added bitmask
+; 003	07-Mar-84	ramin	reversed order of bitmask
+;
+;**************************************************************************
+;
+; General
+; Function:
+;	General purpose function to return values in the caller's CALL
+;	frame and return values. This routine is called from higher level
+;	languages to handle variable parameter list handling.
+;
+; Calling
+; Method:
+;
+;	status.wlc.v = LIB_CALL_ANALYZE(	numparm.wl.r
+;						[,bitmask.wv.r ])
+;	Where:
+;		numparm.wl.r = Number of parameters sent to caller
+;		bitmask.wv.r = 32-bit mask of which params actually
+;			       had values (can not test for address
+;			       validation since data may be passed through
+;			       a number of different mechanisms)
+;		status.wlv.c = Return status, 1 = success or 0 for either
+;			       insufficient arguments or bad flag value.
+;	
+;
+; Limitations:
+;		* Max num of params verified is 32 (if need be bitmask could
+;		  be converted to a longword array to handle more)
+;		* There is no way of telling if LIB_CALL_ANALYZE is called
+;		  from a main routine due to procedure intialization
+;		  discrepancies among different VMS languages.
+;		* Call by value of a variable with a zero value will make
+;		  this routine ignore it in the bitmask. Works best with
+;		  Ref and Desc.
+;
+; EXAMPLE:
+;	In C you would do the following:
+;
+;	main()
+;	{
+;	...
+;	 sub (&x, 0, &y, 0, 0, &z);
+;	}
+;
+;	sub (a,b,c,d,e,f,g,h,i,j,k)
+;	...
+;	{
+;	int status, count, mask;
+;
+;	  status = LIB_CALL_ANALYZE (&count, &mask);
+;	...
+;	} 
+;
+; Result: count = 6; mask = 00101001 (binary), 41 (decimal);
+;
+; The count could be used to skip accessing g-k, and the bitmask 1 values
+; indicates values supplied for implementing default 
+; (omitted parameter) values for b, d, and e (somewhat like the VMS RTL).
+;
+; As far as I know this also works for FORTRAN calls of the form:
+;
+; 	(subroutine or function call) SUB (X,,Y,,,Z)
+;
+;****************************************************************************
+;
+;-
+	.SBTTL	Symbolic constant definitions
+
+	$SFDEF				; Call frame fields
+AP_Count	=	0		; AP Offsets
+AP_Numparm	=	4		;
+AP_Bitmask	=	8		;
+Min_args	=	1		; Minimum allowed arguments
+Max_param	=	32		; Maximum bitmask width
+;+
+;***************************************************************************
+;-
+	.SBTTL	Code section Psect ** CODE
+	.PSECT	_CODE		PIC, USR, CON, REL, LCL, SHR, -
+				EXE, RD, NOWRT
+;+
+;***************************************************************************
+;-
+	.ENTRY	LIB_CALL_ANALYZE,^M<R2,R3,R4,R5,R6>
+
+	Movl	#1,R0			; Assume success
+	Tstl	AP_Count(AP)		; Anything passed down?
+	Bleq	10$			;
+
+	Tstl	AP_Numparm(AP)		; Is there a NUMPARM?
+	Bneq	5$			; Yes ...
+	Clrl	R0			; No, error...
+	Brb	10$			;
+
+5$:	Movl	SF$L_SAVE_AP(FP),R2	; Get count of saved params in (AP)
+	Movl	(R2),@AP_Numparm(AP)	; Load its value in...
+
+	Cmpl	AP_Count(AP),#Min_args	; No Bitmask request
+	Beql	10$			; No...
+	Movl	AP_Bitmask(AP),R4	; Is there a bitmask address supplied
+	Bneq	20$			; Bitmasking requested
+10$:	Ret
+;
+; All conditions are met... now to do the job
+;
+20$:	Tstl	(R2)			; Did we have zero for Numparm
+	Bneq	25$			; No, carry on
+	Clrl	(R4)			; Clear it out
+	Brb	10$			; Return...
+
+25$:	Movl	#Max_param,R3		; Get the MIN of MAX_PARAM
+	Cmpl	(R2),R3			; and actual PARAM
+	Bgeq	30$			;
+	Movl	(R2),R3			;
+30$:	Decl	R3			; Allow for 0-31 range (vs. 1-32)
+	Movl	R3,R5			; Save it for now
+	Addl2	#4,R2			; Jump R2 one to point to 4(AP)
+	Clrl	(R4)			; Clear bitmask location first
+
+40$:	Tstl	(R2)[R3]		; Flag = 0 (default)
+	Beql	50$			; Test parameters by value only
+;
+; Invert the setting order to reflect the correct call ordering rather
+; than the inverted stack order in CALLS
+;
+	Subl3	R3,R5,R6		; Get actual count
+	Bbss	R6,(R4),50$		; One instruction bit set...
+50$:	Sobgeq	R3,40$			; Loop back till done...
+	Ret				; Return success
+	.END
+
+------------------------------------ EOT --------------------------------------

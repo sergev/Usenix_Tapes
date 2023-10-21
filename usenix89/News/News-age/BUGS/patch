@@ -1,0 +1,68 @@
+
+#define	USG	1
+#ifdef USG
+#include	<fcntl.h>			/* file control definitions */
+
+#define	MAXPATHLEN	128
+#define	getwd(a) (void) getcwd(a,sizeof a)
+
+char *getcwd();
+
+struct	dir	{
+	int	fn;					/* file number for directory */
+	struct	direct	dp;	/* directory entry structure */
+	char	null_eos;			/* terminate the directory name for sure */
+};
+
+typedef	struct dir	DIR;	/* define the new type */
+
+DIR *opendir(s) char *s;
+{
+	int fn;
+	DIR *dirp=NULL;
+
+	do {
+		fn = open(s,O_RDONLY);		/* try and open the file */
+		if (fn == -1) break;			/* no good */
+
+		dirp = (DIR *) malloc(sizeof (DIR));	/* alloc the buffer if possible */
+		if (dirp == NULL) break;
+
+		dirp->fn = fn;					/* save the file number */
+	} while(0);
+
+	return dirp;
+}
+
+void closedir(dirp) DIR *dirp;
+{
+	close(dirp->fn);					/* close the file */
+	free(dirp);							/* free the buffer */
+
+	return;
+}
+
+struct direct *readdir(dirp) DIR *dirp;
+{
+	struct direct *dp=NULL;			/* work pointer */
+	int status,directlen;
+
+	directlen = sizeof (struct direct);	/* save the structure length */
+
+	while((status=read(dirp->fn,(char *) &dirp->dp,directlen)) == directlen) {
+		if (dirp->dp.d_ino != 0) {
+			dp = & dirp->dp;					/* return the pointer */
+			dirp->null_eos = '\0';			/* set a null in its place */
+			break;
+		}
+	}
+
+	return dp;
+}
+
+ceiling(n,l) int n,l;
+{
+	return (n+l-1)/l;
+}
+
+#endif

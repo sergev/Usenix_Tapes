@@ -1,0 +1,184 @@
+
+(***************************************************************************)
+(***                                                                     ***)
+(***                                                                     ***)
+(***                     O  S  S  I                                      ***)
+(***                     ==========                                      ***)
+(***                                                                     ***)
+(**)               DEFINITION MODULE SIAdvancedText;                     (**)
+(***               ================================                      ***)
+(***                                                                     ***)
+(***   This module supports advanced text output to windows.             ***)
+(***                                                                     ***)
+(***---------------------------------------------------------------------***)
+(***                                                                     ***)
+(***   Hardware:          independent                                    ***)
+(***   Operating System:  independent                                    ***)
+(***   Compiler:          independent                                    ***)
+(***                                                                     ***)
+(***   Version:      4.0                                                 ***)
+(***   Implemented:  see copyright                                       ***)
+(***   Date:         1986-11-17                                          ***)
+(***                                                                     ***)
+(***---------------------------------------------------------------------***)
+(***                                                                     ***)
+(***   Copyright 1986 by                                                 ***)
+(***      E. S. Biagioni                                                 ***)
+(***      G. Heiser                                                      ***)
+(***      K. Hinrichs                                                    ***)
+(***      C. Muller                                                      ***)
+(***                                                                     ***)
+(***   Institut fuer Informatik                                          ***)
+(***   ETH Zuerich                                                       ***)
+(***   CH 8092 Zuerich                                                   ***)
+(***   Switzerland                                                       ***)
+(***                                                                     ***)
+(***   Department of Computer Science                                    ***)
+(***   University of North Carolina                                      ***)
+(***   Chapel Hill, North Carolina 27514                                 ***)
+(***   U.S.A.                                                            ***)
+(***                                                                     ***)
+(*** Permission to copy without fee all of this material is granted      ***)
+(*** provided that the copies are not made or distributed for direct     ***)
+(*** commercial advantage, that this OSSI copyright notice is            ***)
+(*** included in the copy, that the module is not modified in any way    ***)
+(*** except where necessary for compilation on a particular system,      ***)
+(*** and that the module is always distributed in its original form.     ***)
+(*** Distribution of this module in a modified form without including    ***)
+(*** the original version is a violation of this copyright notice.       ***)
+(***                                                                     ***)
+(***---------------------------------------------------------------------***)
+(***                                                                     ***)
+(***   Updates:                                                          ***)
+(***                                                                     ***)
+(***                                                                     ***)
+(***************************************************************************)
+
+(* This module supports advanced text output to windows. A window used by
+   this module has a current pixel position (in window coordinates) which
+   can be used and changed by procedures of this module only. This pixel
+   position is different from the (line, column) text position of the
+   module SISimpleText. The procedures of this module have no influence on
+   the text position of SISimpleText, and the procedures of SISimpleText
+   have no influence on the pixel position of this module. Text output by
+   the procedures of this module is written at the current pixel position
+   (thereby changing the current pixel position). When a window is created
+   the pixel position is initialized to (0, 0) (i.e. at the top left corner
+   of the inner rectangle). Text may be written outside a window; however,
+   it is clipped to the inner rectangle of the window. *)
+   
+
+FROM SISystem IMPORT
+   SIResult;
+
+FROM SIWindows IMPORT
+   Window;
+
+
+EXPORT QUALIFIED
+   NameLength,
+   Name,
+   Font,
+   FontDescriptor,
+   CharDescriptor,
+   GetAvailableFonts,
+   DefaultFont,
+   LoadFont,
+   ReleaseFont,
+   GetFontDescriptor,
+   GetCharDescriptor,
+   GetPixelPos,
+   SetPixelPos,
+   MovePixelPos,
+   DrawChar,
+   DrawString,
+   StringWidth;
+
+
+CONST NameLength = 16;
+   
+TYPE Name = ARRAY [0..NameLength-1] OF CHAR;
+
+     Font;
+
+     FontDescriptor = RECORD
+                        familyName:   Name;
+                        faceType:     Name;
+                        size:         CARDINAL;
+                        fixedWidth:   BOOLEAN;
+                      END (* FontDescriptor *);
+
+     CharDescriptor = RECORD
+                        height, advance, ascent, overlap: CARDINAL;
+                      END (* CharDescriptor *);
+     (* A character is assumed to be contained in a rectangle of appropriate
+        width. The height of this rectangle is the same for all characters of
+        a font. After a character has been written, the current pixel
+        position is moved by advance pixels. When writing normal text
+        sequentially, the rectangle of a character will overlap the rectangle
+        of its predecessor by overlap pixels. The total width of a character
+        is (overlap + advance) pixels. If a character is written at a position
+        (h, v), the upper left pixel in the character rectangle has coordinate
+        (h - overlap, v) and the pixel position will be moved to
+        (h + advance, v). If the vertical component of the current pixel
+        position is not changed all characters of a font will be written on a
+        baseline, only characters like p, q, y etc. may extend beyond this
+        baseline. The number of pixel rows above the baseline in a character
+        rectangle is given by ascent; it is the same for all characters of a
+        font. ascent can be used to find the vertical coordinate for an
+        underline. *)
+
+ 
+PROCEDURE GetAvailableFonts (VAR fonts: ARRAY OF FontDescriptor;
+                             VAR totNbrFonts, nbrFontsReturned: CARDINAL);
+(* returns the descriptions of available fonts. totNbrFonts returns the
+   total number of fonts available, nbrFontsReturned the number of font
+   descriptions returned. The latter may be smaller than the former if
+   fonts is too small to hold all fonts. *)
+
+PROCEDURE DefaultFont (VAR fD: FontDescriptor);
+(* returns the descriptor of the default font. The default font must
+   be loaded like all other fonts. *)
+
+PROCEDURE LoadFont (fD: FontDescriptor; VAR f: Font; VAR result: SIResult);
+(* returns an identifier by which the font can be referenced later on. Note
+   that this identifier is only valid until the procedure ReleaseFont is
+   called. *)
+
+PROCEDURE ReleaseFont (VAR f: Font);
+(* releases the font and deallocates its resources. f is set to an invalid
+   value and may not be used later on. *)
+
+PROCEDURE GetFontDescriptor (f: Font; VAR fD: FontDescriptor);
+(* returns the description of the font with the given identifier. *)
+
+PROCEDURE GetCharDescriptor (ch: CHAR; f: Font; VAR chD: CharDescriptor);
+(* returns the description of the character in a given font. *)
+
+PROCEDURE GetPixelPos (w: Window; VAR h, v: INTEGER);
+(* returns current pixel position (in window coordinates). *)
+
+PROCEDURE SetPixelPos (w: Window; h, v: INTEGER);
+(* sets pixel position absolutely (in window coordinates). *)
+
+PROCEDURE MovePixelPos (w: Window; dh, dv: INTEGER);
+(* sets pixel position relative to the current pixel position. *)
+
+PROCEDURE DrawChar (w: Window; f: Font; ch: CHAR);
+(* writes ch at the current pixel position in w using font f and the current
+   paint mode of w; the pixel position is advanced. Special characters like
+   EOL, DEL or FF are not interpreted and the result of writing them to a
+   window is undefined. *)
+
+PROCEDURE DrawString (w: Window; f: Font; s: ARRAY OF CHAR);
+(* is equivalent to
+      FOR i := 0 TO StringLength(s) - 1 DO  DrawChar (w, f, s[i])  END
+   but possibly faster. *)
+
+PROCEDURE StringWidth (f: Font; s: ARRAY OF CHAR): CARDINAL;
+(* returns the width of the string in font f. This width is the
+   sum of the advances of all characters in the string added to
+   the overlap of the first character. *)
+
+
+END SIAdvancedText.

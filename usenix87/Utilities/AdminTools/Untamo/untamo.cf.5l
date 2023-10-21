@@ -1,0 +1,170 @@
+.TH UNTAMO.CF 5L "PUCC
+.SH NAME
+/usr/local/lib/untamo.cf \- untamo configuration file format
+.SH DESCRIPTION
+.IR Untamo,
+the login monitor daemon, decides how it should act based on the file
+untamo.cf.
+.PP
+The file untamo.cf consists of a series of specifications which each
+describe an aspect of untamo's actions.  There are four types of commands: 
+.IP 1.
+.B Exemption  
+commands
+specify login ids that are exempt from untamo's actions.
+.IP 2.
+.B Timeout
+commands
+define how long a terminal must be idle before it is logged out.
+.IP 3.
+.B Sleep
+commands
+set the number of minutes untamo should sleep between checks, 
+as well as the amount of time between warnings and logouts.
+.IP 4.
+.B Threshold
+commands
+set the threshold number of users who must be logged in before multiple
+login control takes effect.  If the number of users on the system exceeds
+the threshold, then warnings and logouts for multiple logins will be issued.
+.PP
+Lines beginning with an asterisk in column one are comments.
+Other lines may be indented for readability.
+.SH EXEMPTIONS
+
+.PP
+Exemptions have the form:
+
+.IP
+.B exempt
+.I who
+.I from
+
+.PP
+.I Who
+must be one of:
+.IP
+.B cluster 
+.I name
+.IP
+.B login
+.I id
+.IP
+.B group
+.I groupname
+.IP
+.B tty
+.I ttyname
+.IP
+.B rld
+.I num
+.PP
+where
+.I name 
+must be a terminal cluster name such as \*(lqpublic\*(rq or \*(lqstaff\*(rq.
+(See the PUCC in-house document Z0-TERMFIL for more information about clusters.)
+.I Id
+must be a valid login id as in /etc/passwd.
+.I Groupname
+must be a valid group name as in /etc/groups.
+.I Ttyname
+is a terminal name as in /etc/utmp (e.g., \*(lqtty\fIXX\fP\*(rq).
+.I Num
+must be an rld (terminal) number.
+
+.I From 
+must be one of:
+.IP
+.B multiple
+.IP
+.B idle
+.IP
+.B session
+.IP
+.B all
+.PP
+which specify that
+.I who
+is exempt from being logged off for maintaining multiple logins,
+remaining idle longer than the idle timeout period, exceeding a login
+session limit, or all three.
+
+.SH TIMEOUTS 
+.PP
+Timeouts are of the form:
+.IP
+.B timeout
+.I who
+.I minutes
+.br
+.B timeout default
+.I minutes
+.PP
+In the first form,
+.I who
+must be a valid login id and 
+.I minutes 
+a decimal number.
+This form indicates that
+.I who
+will be logged off after remaining idle for
+.I minutes
+minutes.  The second form sets a default idle timeout that affects
+anyone not otherwise exempted from timeouts or mentioned by login id
+in an explicit timeout rule.
+
+.SH SLEEP
+.PP
+Sleep commands are of the form:
+.IP
+.B sleep
+.I minutes
+.PP
+and specify that untamo will sleep 
+.I minutes
+minutes between its checks.
+If there is more than one sleep specification, only the last one is used.
+.PP
+.SH THRESHOLD
+Threshold commands are of the form:
+.IP
+.B threshold 
+.I number 
+.PP
+This specifies that at least 
+.I number
+ttys must be active before untamo will check for multiple logins.
+If there is more than one
+.I threshold
+command, only the last one is used.
+.SH EXAMPLE
+.PP
+A sample untamo configuration file follows:
+.br
+.nf
+   *
+   * sleep 5 minutes between checks
+   *
+       sleep 5
+
+   *
+   * 30 users must be logged on before
+   * multiple login checks will begin
+   *
+       threshold 30
+   *
+   * Set the default idle timeout to 60 mintes.  For the
+   * public cluster, set the idle timeout to 45 minutes.
+   *
+       timeout cluster public 45
+       timeout default 60
+   *
+   * Necessary exemptions to make sure the console doesn't
+   * get logged off and staff members can log in more than once.
+   *
+       exempt tty console all
+       exempt group staff multiple
+
+.fi
+.SH "SEE ALSO"
+untamo(8L), utmp(5), rld(1L)

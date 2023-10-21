@@ -1,0 +1,1586 @@
+
+
+
+
+
+
+          
+
+
+
+
+
+
+
+
+
+                   A GUIDE TO THE PC-LISP INTERPRETER  (V2.07)
+                   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+                             By Peter Ashwood-Smith  
+                             ~~~~~~~~~~~~~~~~~~~~~~ 
+
+                             University of Toronto,     
+                             ~~~~~~~~~~~~~~~~~~~~~
+
+                                Ontario, Canada.                
+                                ~~~~~~~~~~~~~~~
+             
+
+                                 
+                                 
+             With thanks to Brian Robertson for the math functions.
+
+                            
+                                   Feb 01/86.
+
+
+
+
+
+                        email: petera!utcsri or br!utcsri
+
+                           mail:  Peter Ashwood-Smith
+                            #811, 120 St. Patrick St. 
+                                Toronto, Ontario,
+                                     Canada,
+                                    M5T-2X7.
+
+                             phone: (416) 593-7574.
+
+
+
+
+
+
+
+
+
+
+
+                                        1
+
+
+
+             INTRODUCTION
+             ~~~~~~~~~~~~
+             PC-LISP  is  a small implementation of LISP for  any  MS-DOS 
+        machine.  While  small,  it  is capable of running  a  reasonable 
+        subset  of Franz LISP.  It  is not 100% compatible with Franz but 
+        the functions have the same names and do the same things as Franz 
+        when  possible.  This is version 2.07 and is the result of  about 
+        1.5 years of work. Version 2.07 has these features:    
+             
+                  - types float, alpha, list, and port, function bodies 
+                    lambda, nlambda and macro.   
+             
+                  - full garbage collection of all types.     
+
+                  - compacting, relocating heap space for all strings.     
+
+                  - shallow binding techniques for O(1) symbol value
+                    lookup. (Dynamic scoping).  
+             
+                  - access to some MSDOS BIOS graphics routines.
+            
+                  - sufficient built in functions to allow implementation
+                    in LISP of most Franz or other functions. Includes
+                    prog,eval,apply,defun and def. 
+
+                  - stack overflow detection & full error checking
+                    on all calls, tracing of user defined functions,
+                    and dumping of stack via (showstack).
+
+                  - One level of break from which bindings at point
+                    of error can be seen.
+
+                  - Access to as much (non extended) memory as you've 
+                    got and control over how this memory is spread 
+                    among the various data types.
+                       
+                  - Requires a bare minimum of 256K but the garbage    
+                    collection frequency is most bearable with 512K+.
+
+             This version is ShareWare.  The idea is that you can make as 
+        many  copies as you like and distribute them to anyone or any BBS 
+        you please,  the more the better.  My only requests are that  you 
+        not  use  it  for profit of any kind,  or remove the  name(s)  of 
+        myself  or  any contributing authors from the program  header  or 
+        from  this  manual.  If you decide that you like the program then 
+        send  us  15$ to contribute to future development  costs.  Future 
+        development will consist of adding more types including  strings, 
+        arrays and the functions that operate on them. If I have time and 
+        there is enough interest I may also add a compiler.
+
+            The  program  is  written 98% in C using the Lattice  C  2.03 
+        compiler  with some extra assembly language routines to  make  up 
+        for  the otherwise excellent Lattice compiler and libraries.  The 
+        math  library was written for me by Brian Robertson also  of  the 
+        University of Toronto.
+
+
+                                        2
+
+
+
+             A WARNING
+             ~~~~~~~~~
+             As I mentioned previously this program was compiled with the 
+        Lattice  C compiler,  as such the program contains code to  which 
+        Lattice Inc.  holds a copyright.  If you sell it I can  only  get 
+        angry  but  Lattice could take you to court.  And,  as  with  all 
+        software  you  use  it  at your own risk.  I  will  not  be  held 
+        responsible  for  loss of any kind as a result of the correct  or 
+        incorrect use of this program.
+                  
+             A NOTE
+             ~~~~~~
+             The  rest  of this manual assumes some  knowledge  of  LISP, 
+        MSDOS and a little programming experience. If you are new to LISP 
+        or programming in general you should work your way through a book 
+        on  LISP such as LISPcraft by Robert Wilensky.  You can  use  the 
+        interpreter  to  run  almost all of the examples in  the  earlier 
+        chapters.  I  obviously  cannot attempt to teach  you  LISP  here 
+        because  it  would require many hundreds of pages and  there  are 
+        much better books on the subject than I could write.  Also, there  
+        are  other good books on Franz LISP besides LISPcraft so I am not 
+        endorsing it. It just happens to be the book that I use.
+
+             EXAMPLE FUNCTIONS INCLUDED IN EXTFUNC.L
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             For  those of you that are like me and hate to read a manual 
+        you  can  take a look in the file  EXTFUNC.L  which  should  have 
+        come  with the interpreter.  This file contains lots of  function 
+        definitions  to help fill the gap between PC and Franz  LISP.  It 
+        also contains a small Turtle Graphics demonstration.  If you want 
+        to  start learning LISP or try out the demonstration  you  should 
+        start  PC-LISP by typing "PC-LISP EXTFUNC.L"  from  MS-DOS.  Then 
+        wait a bit until you see the "-->" prompt. Be patient if you have 
+        512K or more memory because it takes a few seconds for PC-LISP to 
+        organize your memory. If you only have a 256K machine, now is the 
+        time to start thinking about an extra 256K.  PC-LISP will be much 
+        faster not having to garbage collect all the time. Anyway you now 
+        have  the  prompt  "-->" and EXTFUNC.L  is  loaded.  To  run  the 
+        graphics  demo you just type "(GraphicsDemo)" without the quotes, 
+        followed by ENTER. You must have a graphics adapter for this demo 
+        to  run.  Don't  even  try  it if your machine  has  no  graphics 
+        capability. (Graphics are slow but thats the price of portability 
+        across MS-DOS machines).  Note that if you want to start learning 
+        LISP  from  a  book  such as  LISPcraft,  you  should  also  load 
+        "EXTFUNC.L"  as functions that are referenced in the first couple 
+        of  chapters are defined in this file.  The functions defined  in 
+        EXTFUNC.L are not very effecient so you may want to replace  them 
+        with your own definitions.
+
+
+
+
+
+
+
+
+
+                                        3
+
+
+
+             USERS GUIDE
+             ~~~~~~~~~~~
+             The  PC-LISP program is self contained.  To run it just type 
+        the command PC-LISP or whatever you called it.  When it starts it 
+        will start grabbing memory in chunks of 16K each.  These will  be 
+        allocated  to the three basic data types in percentages that  you 
+        can specify via 2 environment variables.  The default is that 25% 
+        of  the  memory will be allocated for alpha atoms.  15%  will  be 
+        allocated for heap space,  and the rest for cons,port,  and float 
+        cells.  If  you  set  the  environment  variables  LISP%HEAP  and 
+        LISP%ALPH  to  an integer between 1 and 90 these will become  the 
+        new  percentages for the heap and alpha  respectively,  the  rest 
+        going to cons,  port,  and float cells. Note that the percentages 
+        are only accurate to the nearest 16K boundary. In other words the 
+        set of 16K blocks are divided among the three types as closely to 
+        the percentages that you specify as possible.   PC-LISP will then 
+        print  the  banner message,  the total memory available  and  the 
+        percentages that are allocated to each object. Next it will begin 
+        to read the parameters from the command line.  The command  usage 
+        is:
+                                              *
+             PC-LISP [=n..n] [ [+s][-s] file ]
+             
+             The  optional parameter =nnnn is the Lattice set stack  size 
+        option.  It  is preset to 32K and cannot be set smaller.  You may 
+        set it larger up to 64K if you wish.  A 32K stack gives you about 
+        466 recursive calls,  50K = 731 calls, 60K = 878 calls, and 64K = 
+        936  calls.  The  Lattice C compiler does not generate code  that 
+        will handle stacks larger than 64K.
+                  
+             The  +s  and  -s options turn on and  off  the  printing  of 
+        statistical  information while the file 'file' is being read  and 
+        evaluated.  Statistical  information is just a line telling  what 
+        percentage of cell,  alpha and heap space you have used.  Garbage 
+        collection occurs at 100% use for a given object. The statistical 
+        info  is  useful  to  see  just  how  efficient/inefficient  your 
+        functions  are.  You can get the same information in list form by 
+        calling  the PC-LISP function (memstat) where the  three  numbers 
+        returned  correspond to the percentage of cell,  alpha  and  heap 
+        space used so far.
+
+             The files on the command line are processed one by one. This 
+        consists of reading each list in the file and evaluating it.  The 
+        results  are  not printed on the console.  Finally when  all  the 
+        files  have  been processed you will find yourself with the  LISP 
+        top level prompt '-->'. Typing control-Z and ENTER (MS-DOS end of 
+        file) when you see the '-->' prompt will cause PC-LISP to exit to 
+        whatever program called it.   If an error occurs you will see the 
+        prompt 'er>'.  For more info see the 'TERMINATION OF  EVALUATION' 
+        section of this manual and the commands (showstack), (trace), and 
+        (untrace).
+
+
+
+
+
+
+                                        4
+
+
+
+             SYNTAX
+             ~~~~~~ 
+             You  will  now be in the LISP interpreter and can  start  to 
+        play  with  it.  Basically  it is expecting you  to  type  an  S-
+        expression. Where an S-expression is an atom, or a list and:   
+
+             An atom may be one of three kinds. It may be an alpha atom ,  
+        a  real number atom,  or a literal alpha atom.  An alpha atom  is 
+        just  a  letter  followed by letters/digits and  certain  special 
+        symbols.  There  may be no more than 254 characters in the  alpha 
+        atom.  To allow you to enter any text as an atom you may  delimit  
+        the  atom  with |'s.  These will define a literal alpha  atom  in 
+        which  you may place any character between the delimiters (except 
+        |  itself).  A real atom is just as you might think  an  optional 
+        plus  or  minus sign followed by a sequence of  digits,  followed 
+        optionally by a radix point and more digits.  Sorry,  exponential 
+        notation is not supported. It should get into the next version.
+             
+             A  list is just a left ( followed by a of sequence of  atoms 
+        or lists followed by a right ).  A list may also be a sequence of 
+        atoms or lists followed by a '.' followed by an atom followed  by 
+        a right parenthisis ).  This is called a dotted pair and it means 
+        that the CAR and CDR of a list are both atoms.  Note that a space 
+        on  either  side of the dot is essential syntactically.  You  may 
+        optionally  place  [  and  ]  in  the  list  to  represent  meta-
+        parenthesis. Basically the ] just closes all open lists up to the 
+        nearest  [,  or to the beginning of the list if no [ is  present. 
+        Here are some example legal lists.
+
+             (now is (the . time))         ; dotted pair (the . time)
+             (1 now16 (is (the (time ]     ; the ] closes all 4 ('s
+             (car [quote(a b c d])         ; the ] closes 2 ('s to ]    
+             (ThisIsBiggerAtom012345678)   ; Upper case is ok    
+             ()                            ; empty list is equiv to 'nil
+             (1 (-2.2 +3.333))             ; some numbers all floats!
+             ((((((|all one atom|]         ; "all one atom" spaces too!
+
+             Note that you are allowed to mix any number of spaces, line-
+        feeds,  carriage returns,  form feeds, tabs etc. into your input. 
+        Comments may start at any point in a line and will continue until 
+        the end of the line as shown in the above example lists.
+
+             READ MACRO QUOTE
+             ~~~~~~~~~~~~~~~~
+             PC-LISP  supplies one read macro called 'quote' and  written 
+        using the little ' symbol.  (User read macros in later  versions) 
+        This  read  macro  is just a short hand way of writing  the  list 
+        (quote  XX).  Where  XX  is what follows the  '.  Here  are  some 
+        examples  of  what  the read macro will do to your  input  before 
+        passing it to the evaluator.
+
+             'apples        -- goes to -->    (quote apples)
+             '|too late|                      (quote |too late|)
+             '(1 2 3)                         (quote (1 2 3))
+
+
+
+                                        5
+
+
+
+             SYNTAX ERRORS
+             ~~~~~~~~~~~~~
+             When  you  enter  a list which is not correctly  nested  the 
+        interpreter  will  return  the  wonderfully  informative  'syntax 
+        error'  message.  You will have to figure out where it is in  the 
+        input  list.  Note that if you do not finish entering a list,  ie 
+        you put one too few closing )'s on the end,  the interpreter will 
+        wait  until you enter it before continuing.  If you are not  sure 
+        what has happened just type "]]" and all lists will be closed and 
+        the  interpreter will try to do something with the list.  If  you 
+        are running input from a file the interpreter will detect the end 
+        of  file  and  give  you a 'syntax error' because  the  list  was 
+        unclosed.
+
+             EVALUATING S-EXPRESSIONS
+             ~~~~~~~~~~~~~~~~~~~~~~~~
+             An  S-expression may be an atom or a list.  If it is an atom 
+        the  evaluation of it is its current binding. Most atoms are  not 
+        bound  to begin with so just entering an atom will result in  the 
+        error  'unbound  atom'.  Float atoms are bound  to  their  actual 
+        values so when you enter 2 you will get 2 back again.  Evaluating 
+        a  list  consists of calling the function named or given  by  the 
+        first  element  in the list with parameters given by the rest  of 
+        the list.  For example there is a function called '+' which takes 
+        any number of float  values  and returns their sum. So:
+
+             -->(+ 2 4 6 8)
+
+             Would  return  the result of 2+4+6+8 ie  20.   We  can  also 
+        compose these function calls by using list nesting.  For  example 
+        we can subtract  2+4 from 6+8 as follows:
+
+             -->(- (+ 6 8) (+ 2 4))
+
+             We  can  also  perform operations on other types  of  atoms. 
+        Suppose  that  we wanted to reverse the list (now is  the  time). 
+        There is a built in function called 'reverse' that does just what 
+        we want. So we could try typing.
+             
+             -->(reverse (now is the time))
+
+             But the interpreter will be confused!  It does not know that 
+        'now'  is data and not a function taking arguments   'is',  'the' 
+        and  'time'.  We must use the function 'quote' which returns  its 
+        arguments unevaluated, hence its name "quote".
+
+             -->(reverse (quote (now is the time)))
+
+             Will  give us the desired result (time the is now).  But  we 
+        can  do  the  same  thing  without  using  the  (quote)  function 
+        directly.  Remember the read macro ' above?  Well it will replace 
+        the  entry  '(now is the time) with (quote (now  is  the  time)). 
+        Hence we type:
+
+             -->(reverse '(now is the time))
+
+
+                                        6
+
+
+
+             EVALUATING S-EXPRESSIONS CONT'D
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             This gives us the correct result without as much typing. You 
+        will  note that the subtraction of 2+4 from 6+8 could  also  have 
+        been entered as:
+             
+             -->(- (+ '6 '8) (+ '2 '4))
+
+             However,   the  extra  's  are  redundant  because  a  float 
+        evaluates to itself. In general a LISP expression is evaluated by 
+        first  evaluating each of its arguments,  and then  applying  the 
+        function to the arguments,  where the function is the first thing 
+        in the list.  Remember that evaluation of the function (quote s1) 
+        returns  s1 unevaluated.   LISP will also allow the function name 
+        to be replaced by a function body called a lambda expression.  So 
+        a legal input to the interpreter could be:
+
+             -->((lambda(x)(+ x 10)) 14)
+
+             Which would be processed as follows. First the parameters to 
+        the lambda expression are evaluated.  That just 14. Next the body 
+        of the lambda expression is evaluated but with the value 14 bound 
+        to  the formal parameter given in the lambda expression.  So  the 
+        body evaluated is (+ x 10) where x is bound to 14.  The result is 
+        just 24. Note that lambda expressions can be passed as parameters 
+        as  can  built in functions or user defined functions.  So I  can 
+        evaluate the following expression. 
+
+             -->((lambda(f x)(f (car x))) '(lambda(l)(car l)) '((hi)))
+
+             Which evaluates as follows. The parameters to the call which 
+        are   the   expressions  '(lambda(l)(cdr  l))  and  '((hi))   are 
+        evaluated. This results in the expressions being returned because 
+        they are quoted.  These are then bound to 'f and 'x  respectively 
+        and  the body of the first lambda expression is  evaluated.  This 
+        means  that  the  expression ((lambda(l)(car l))(car  ((hi)))) is 
+        evaluated. So again the parameters to the function are evaluated. 
+        Since  the  only  parameter  is  (car  ((hi)))  it  is  evaluated 
+        resulting  in  (hi).  This  is then bound to l  and  (car  l)  is 
+        evaluated giving "hi".
+
+             PC-LISP  is also capable of handling lambda expressions with 
+        multiple  bodies,  nlambda  expressions with multiple bodies  and 
+        labeled  lambda  and  nlambda  expressions.   See  the  Built  In 
+        Functions  Section which follows for more details on  lambda  and 
+        nlambda. A slightly restricted macro form is also permitted.  For 
+        information on macros see the MACRO section of the manual.
+
+
+
+
+
+
+
+
+
+
+                                        7
+
+
+
+             TERMINATION OF EXPRESSION EVALUATION
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             There are three distinct ways that evaluation can terminate. 
+        First, evaluation can end naturally when there is no more work to 
+        do.  In  this  case the resulting S-expression is printed on  the 
+        console and you are presented with the prompt "-->".  Second, you 
+        can request premature termination by hitting the CONTROL-BREAK or 
+        CONTROL-C keys simultaneously (hereafter referred to as  CONTROL-
+        BREAK).  Note  that this will only interrupt list evaluation,  it 
+        will   not  interrupt  garbage  collection  which  continues   to  
+        completion.  So,  if  you hit CONTROL-BREAK or CONTROL-C and  you 
+        don't  get  any response,  wait a second or two because  it  will 
+        respond  after garbage collection ends.  Finally,  execution  can 
+        terminate  when  PC-LISP detects a bad parameter to  a  built  in 
+        function,  a stack overflows, a division by zero is attempted, or 
+        an atom is unbound etc. In all cases but a normal termination you 
+        will be returned to a break error level.  This is when the prompt 
+        looks  like  'er>'.  This means that variable bindings are  being 
+        held  for you to examine.  So if the evaluation aborts  with  the 
+        message  "error in built in function [car]",  you can examine the 
+        atom  bindings  that were in effect when this error  occurred  by 
+        typing the name of the atom desired.  This causes its binding  to 
+        be displayed. When you are finished with the break level just hit 
+        CONTROL-Z  plus  ENTER and you will be placed back in the  normal 
+        top  level  and all bindings that were non global will  be  gone. 
+        Note  you can do anything at the break level that you can  do  at 
+        the top level. If further errors occur you will stay in the break 
+        level and any bindings at the time of the second error will be in 
+        effect  as  well  as  any bindings that were  in  effect  at  the 
+        previous  break level.  If bindings effecting atoms whose  values 
+        are being held in the first break level are rebound at the second 
+        break  level these first bindings will be hidden by the secondary 
+        bindings.
+
+             It  is worth noting that when an error occurs in  'eval'  or 
+        'apply'  it  usually  means  that a  parameter  is  being  passed 
+        incorrectly  to a user defined function.  Since the error message 
+        will  refer  to a built in function when it tells  you  about  an 
+        error  you  will have to figure out which one of  your  functions 
+        made that call.
+
+             It  is  also useful to know what the  circumstances  of  the 
+        failure  were.  You can display the last 20 evaluations with  the 
+        command  (showstack).  This will print the stack from the top  to 
+        the  20th  element  of the stack.  This gives  you  the  path  of 
+        evaluation  that lead to the error.  For more information on  the 
+        (showstack)  command  look  in the section  FUNCTIONS  WITH  SIDE 
+        EFFECTS OR THAT ARE EFFECTED BY SYSTEM.
+
+
+
+
+
+
+
+
+
+                                        8
+
+
+
+             THE BUILT IN FUNCTIONS AND VARIABLES
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+             Following is a list of each built in function. I will denote
+        the  allowed  arguments  as follows:  
+
+           - a1...aN are alpha atom parameters. 
+
+           - f1...fN are float atom parameters.
+
+           - l1...lN are list expression parameters.
+
+           - p1...pN are port atom parameters.
+
+           - s1...sN  are  S-expressions (any atom type or list)
+
+           - {a|d}+  means  any sequence of characters of length  greater 
+             than  0 consisting of a's and d's in any  combination.  This 
+             defines  the car,cdr,cadr,caar,cadar...  function  class  as 
+             follows: "c{a|d}+r".
+
+           - [a1], [f1], [l1], [p1], [s1], etc... are optional parameters 
+             of  the indicated type.  A default will be provided if  they 
+             are  not  present  in the parameter list for  the  indicated      
+             function.
+             
+           - *a1*, *f1*, *l1*, *p1* or *s1* this means that the arguments 
+             of the function are NOT evaluated prior to the function call 
+             hence it is not necessary to quote them.
+
+             For  the  simpler functions I will describe  the   functions 
+        using  a sort of "if (condition) result1 else  result2"  notation 
+        which should be pretty obvious to most people. For functions that 
+        are a little more complex I will give a short English description 
+        and  perhaps  an  example.  If the example code shows  the  '-->' 
+        prompt  you  should  be able to type exactly  what  follows  each 
+        prompt  and get the same responses from PC-LISP.  If the  example 
+        does not show a '-->' prompt the example is a code fragment which 
+        requires additional code to function.
+
+             The  functions  are placed into 7 categories.  These are  as 
+        follows: The math functions, the boolean functions, list and atom 
+        creators and selectors,  file I/O functions,  functions with side 
+        effects or that are effected by state of system,  list evaluation 
+        control  functions and the MSDOS bios calls for graphics  output. 
+        Note  that the BIOS calls are still  experimental.   Specifically 
+        the  line drawing algorithm does not draw lines as smooth  or  as 
+        fast as I would like. This should be fixed by the next release.
+
+
+
+
+
+
+
+
+
+                                        9
+
+
+
+             THE MATH FUNCTIONS
+             ~~~~~~~~~~~~~~~~~~
+
+             The  functions  manipulate floats. They are mostly  obvious. 
+        Note that these function work on floats while the Franz functions 
+        work  on  -numbers-.  Anywhere in PC-LISP where the parameter  is 
+        giving  position  or ordinal information the nearest  integer  to 
+        the  float parameter is taken as the correct value.  
+
+             (abs  f1)    ----> absolute value of f1 is returned.
+             (acos f1)    ----> arc cosine of f1 is returned.
+             (asin f1)    ----> arc sine of f1 is returned.
+             (atan f1 f2) ----> arc tangent of ( f1 divided by f2 ).
+             (cos f1)     ----> cosine of f1, f1 is radians
+             (exp f1)     ----> returns e to the power f1.
+             (expt f1 f2) ----> returns f1**f2 using: exp(f2*log(f1))
+             (fact f1)    ----> returns factorial of nearest int to f1.
+             (log f1)     ----> natural logarithm of f1.
+             (log10 f1)   ----> base 10 logarithm of f1.
+             (max f1..fn) ----> largest of f1...fn.
+             (min f1..fn) ----> smallest of f1...fn.
+             (mod f1 f2)  ----> r1 modulo r2.
+             (random [f1])----> random float in 0..32K or 0..f1
+             (sin f1)     ----> sine of f1, f1 is radians.
+             (sqrt f1)    ----> square root of f1.
+             (* f1 .. fn) ----> f1*f2*f3*.....fn (or 1 if n = 0)  
+             (+ f1 .. fn) ----> f1+f2+f3+.....fn (or 0 if n = 0)  
+             (- f1 .. fn) ----> f1-f2-f3-.....fn (or 0 if n = 0)  
+             (/ f1 .. fn) ----> f1/f2/f3/.....fn (or 1 if n = 0)
+             (< f1 f2)    ----> if (f1 < f2) t else nil;
+             (= f1 f2)    ----> if (f1 = f2) t else nil;
+             (> f1 f2)    ----> if (f1 > f2) t else nil;
+
+             One  thing worth noting is that when you compare two  floats 
+        you must use = or equal.  You cannot use eq because the two float 
+        values will almost certainly be stored in different cells even if 
+        they  have the same value.  Hence eq will return nil because they 
+        are not the same object.  Note that Franz will return 't when you 
+        compare  two  fixnums using eq because car and cdr  pointers  are 
+        used  to  store the actual fixnum itself hence they appear to  be 
+        the same object.  This is an interpreter dependent trick and  PC-
+        LISP does not do it.
+
+             Consider this example which computes the sum of the cubes of 
+        a list of floats called X which is setq'ed to (1 2 3 4 5):
+
+             -->(setq X '(1 2 3 4 5))
+             (1 2 3 4 5)
+             -->(eval (cons '+ (mapcar '* X X X)))
+             225
+
+             It  operates as follows:  First mapcar computes the products 
+        1*1*1, 2*2*2,... 5*5*5 and creates the list (1 8 27 64 125). Then 
+        cons  splices  a '+ onto the front creating (+ 1 8  27  64  125). 
+        Finally eval gets the list and computes the result 225.
+
+
+                                       10
+
+
+
+             THE BOOLEAN FUNCTIONS
+             ~~~~~~~~~~~~~~~~~~~~~
+
+             These functions all return boolean values. The values 't and 
+        'nil  represent  true  and false respectively. 't  and  'nil  are 
+        predefined atoms whose bindings are exactly themselves. Note that 
+        'nil  is equivalent to the empty list ().  It is the only  object 
+        that is both at atom and a list.
+
+
+             (alphalessp a1 a2) ---> if (ASCII a1 < a2) t else nil;
+             (atom s1)          ---> if (s1 of type atom) t else nil;
+             (and s1 s2 .. sN)  ---> if (a1...aN all != nil) t else nil;
+             (boundp a1)        ---> if (a1 bound) (a1.eval(a1)) else nil;
+             (eq s1 s2)         ---> if (s1 & s2 same object) t else nil;
+             (equal s1 s2)      ---> if (s1 looks like s2) t else nil;
+             (floatp s1)        ---> if (s1 of type float) t else nil;
+             (listp s1)         ---> if (s1 of type list) t else nil;
+             (not s1)           ---> if (s1 != nil) nil else t;
+             (null s1)          ---> if (s1 != nil) nil else t;  
+             (or s1 s2 .. sN)   ---> if (any si != nil) t else nil;
+             (portp s1)         ---> if (s1 of type port) t else nil;
+
+
+             Where ASCII a1 < a2 means that string a1 comes before string 
+        a2  using  the ASCII codes for the characters in both a1 and  a2. 
+        And,  a1 bound means that a1 has been assigned a value.  And,  s1 
+        looks  like s2 means that s1 and s2 have the same list  structure 
+        and the leaves point to the same atoms.  And,  s1 and s2 the same 
+        object  means  that they are exactly the same list  or  the  same 
+        atom.
+
+             Note  that  (eq  'a 'a) will always return  't  because  the 
+        object  'a is unique to the LISP interpreter.  On the other  hand 
+        the  call (eq '(a) '(a)) will always return 'nil because the  two 
+        parameters  '(a) and '(a) are distinct lists created by the  read 
+        function.  However  (equal '(a) '(a)) will return 't because  the 
+        two lists are of the same form and have the same leaves.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       11
+
+
+
+             LIST & ATOM CREATORS AND SELECTORS
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             These functions will take lists and atoms as parameters  and 
+        return  larger  or  smaller lists or atoms.  They  have  no  side 
+        effects  on  the  LISP system nor are their results  affected  by 
+        anything other than the values of the parameters given to them.
+
+             (append l1..ln)    ---> list made by joining all of l1..ln.
+
+             (ascii f1)         ---> atom with name 'char' where 'char' 
+                                     has ordinal value f1:(0 < f1 < 255).
+
+             (assoc a1 s2)      ---> if s2 is a list of (atom.value) pairs
+                                     then assoc --> (a1.value) from s2.
+
+             (car l1)           ---> first element in l1
+
+             (cdr l1)           ---> l1 without first element of l1.
+
+             (c{a|d}+r l1)      ---> performs repeated car or cdr's on
+                                     l1 as given by reverse of {a|d}+.
+
+             (cons s1 s2)       ---> list with s1 as 1st elem s2 is rest. 
+
+             (explode a1)       ---> list of chars in name of a1.
+
+             (exploden a1)      ---> list of ascii values of chars in a1.
+
+             (implode l1)       ---> atom with name formed by compressing
+                                     all atom elements of l1.
+
+             (length l1)        ---> float atom = # of elements of l1 
+
+             (list s1 s2...sN)  ---> a list with elements (s1 s2 ...sN)
+
+             (nth f1 l1)        ---> f1'th element of l1 (indexed from 0)
+
+             (nthchar a1 f1)    ---> f1'th char in name of a1 (from 0) 
+
+             (pairlis l1 l2 l3) ---> l1 is list of atoms. l2 is a list 
+                                     of S-expressions. l3 is a list of
+                                     ((a1.s1)....) The result is the
+                                     pairing of atoms in l1 with values
+                                     in l2 with l3 appended (see assoc).
+             
+             (quote *s1*)       ---> exactly s1 unevaled without changes.
+
+             (reverse l1)       ---> the list l1, reversed at top level.
+             
+             (type s1)          ---> list,float,port,alpha or other as
+                                     determined by type of parameter s1.
+
+
+
+
+
+
+                                       12
+
+
+
+             FILE I/O FUNCTIONS
+             ~~~~~~~~~~~~~~~~~~
+             These  functions perform simple list/atom and character  I/O 
+        you must be careful when writing lists to files to terminate with 
+        a  new  line before closing the file.  Otherwise they  may  cause 
+        problems for some MS-DOS editors etc.  These functions operate on 
+        type  'port'  which  is  returned by 'fileopen'  and  which  when 
+        printed  is  just %file% where 'file' is the name  of  associated 
+        port.
+
+             (close p1)            ---> closes the port p1 and returns t.
+
+             (fileopen a1 a2)      ---> port to read write to/from to
+                                        file a1 using mode a2. Where
+                                        modes are 'r 'w 'rw 'rwa ...
+
+             (load a1)             ---> The file a1 is read and all lists 
+                                        are  evaluated.  LISP  will  look 
+                                        first  for  file  a1,  then  a1.l
+                                        then for LIB/a1 and finally for
+                                        LIB/a1.l. Where LIB is the value
+                                        of the environment variable :
+                                        LISP%LIB
+
+             (patom a1 [p1])       ---> print atom without delimiters
+                                        to port p1. Default to standard
+                                        output if p1 not present. returns
+                                        a1.
+
+             (print s1 [p1])       ---> print list with delimiters on
+                                        atoms to p1 or standard out.
+
+             (read [p1 [s1]])      ---> returns S-expression read from
+                                        p1 or standard input and returns
+                                        it or nil on end of file. If s1
+                                        is present it returns s1 on EOF.
+
+             (readc [p1 [s1]])     ---> returns character read from p1
+                                        or standard input and returns it
+                                        or nil on end of file. If s1 is
+                                        present it returns s1 on EOF.
+
+             
+             A word about delimiters.  Unless you use the patom  function 
+        all printing of atoms will be done in such a way that they can be 
+        read again and produce the same structure. This means that if the 
+        atom  was  originally  entered with the | delimiters it  will  be 
+        printed with them.  Or,  if you created an atom via an implode or 
+        ascii function call that has a funny value in it,  it will  print 
+        with  the  delimiters.  So if you want to print a prompt  on  the 
+        screen  with  spaces in it the best way is to enter  (patom  '|my 
+        prompt|).  Note also that 'r 'w and 'a stand for read,  write and 
+        append respectively.
+
+
+
+
+                                       13
+
+
+
+             FUNCTIONS WITH SIDE EFFECTS OR THAT ARE EFFECTED BY SYSTEM
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             These  functions  will either have an effect on the way  the 
+        system behaves in the future or will give you a result about  the 
+        way  the system has behaved in the past and future calls will not 
+        necessarily give the same results.
+
+             (def *a1* *l1*)    
+             ~~~~~~~~~~~~~~~    
+             a1 is a function name and l1 is a lambda,  nlambda or  macro 
+        body. The body is associated with the atom a1 from now on and can 
+        be used as a user defined function. Def returns a1.            
+
+               -->(def first  (lambda(x)(car x)))
+               -->(def second (lambda(x)(first(cdr x))))
+               -->(def sideff (lambda(x)(print x)(caddar x))))
+               -->(def plus   (nlambda(l)(eval(cons '+ l))))
+               -->(def firstm (macro(l)(cons 'car (cdr l))))
+
+             (defun *a1* [*a2*] *l1* *s1* *s2* ....*sN*)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             Defun  will  do the same job as "def" except  that  it  will 
+        build the lambda or nlambda expression for you. a1 is the name of 
+        the function.  a2 if present must be one of expr or fexpr.  If it 
+        is  not  present it defaults to expr.  l1 is the list  of  formal 
+        parameters  which for an fexpr (nlambda) should contain one  atom 
+        formal  parameter  name.  s1...sn are bodies for  the  lambda  or 
+        nlambda  expression.  The  following  example produces  the  same 
+        effects as the above "def" calls.  Defun returns the atom name of 
+        the function that it defines. See MACROS for (defun x macro...)
+
+               -->(defun first(x)(car x))
+               -->(defun second(x)(first(cdr x)))
+               -->(defun sideff(x)(print x)(caddar x)))
+               -->(defun plus fexpr(l)(eval(cons '+ l)))
+               -->(defun firstm macro(l)(cons 'car (cdr l)))
+
+             (exit)
+             ~~~~~~
+             The  LISP interpreter will exit to MSDOS.  Depending on  how 
+        much  memmory  you  have it may ask for a system disk  to  reload 
+        COMMAND.COM.  Note  that the video mode will not be reset if  you 
+        call  (exit).  It will however be reset to 80x25B&W if  you  quit 
+        with a control-Z from the top level.  
+
+             (gc)
+             ~~~~
+             Starts garbage collection of alpha and cell space. Returns t 
+
+             (gensym [a1])
+             ~~~~~~~~~~~~~
+             Will  generate  a new alph atom whose name is  gnnnnn  where 
+        nnnnn will be different each time. It is guaranteed to generate a 
+        new atom.  If a1 is present then the atoms have the form (name of 
+        a1)nnnnn.
+
+
+                                       14
+
+
+
+             FUNCTIONS WITH SIDE EFFECTS OR THAT ARE EFFECTED BY SYSTEM
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             CONT'D
+             ~~~~~~
+             (get a1 a2)
+             ~~~~~~~~~~~
+             Will  return  the value associated with property key a2   in 
+        a1's property list.  This value will have been set by a  previous 
+        call to (putprop a1 s1 a2). Example:
+
+             -->(get 'frank 'lastname)
+
+             (getd a1)
+             ~~~~~~~~~
+             Will return the lambda,  nlambda or macro expression that is 
+        associated  with  a1 or nil if no such expression  is  associated 
+        with a1.
+
+             (getenv a1)
+             ~~~~~~~~~~~
+             Will  return  an atom whose print name is the string set  by 
+        environment variable a1. For example we can get the PATH variable 
+        setting  by entering (getenv 'PATH).  Note that these must be  in 
+        upper case for MSDOS.
+
+             (hashtabstat)
+             ~~~~~~~~~~~~~
+             Will  return a list containing 250 float atoms.  Each  float 
+        atoms  value represents the number of elements in the bucket  for 
+        that hash location in the atom hash table. 250 is the size of the 
+        hash table. This is not especially useful for you but it gives me 
+        a  way of checking how the hashing function is  distributing  the 
+        atoms.  Large  bucket values will not effect any execution  times 
+        except  those of explode,  implode,  ascii and gensym.  In  other 
+        words only functions that create new atoms will be slowed down by 
+        poor  hashing.  Reading will always suffer from large hash bucket 
+        values.
+
+             (memstat)      { not present in Franz }
+             ~~~~~~~~~
+             returns  three floats.  The first is the percentage of  cell 
+        space that is in use.  The second is the percentage of alpha cell 
+        space and the third is the percentage of heap space in use.  When 
+        any of these reach 100%, garbage collection will occur. Alpha and 
+        cell  space is collected together.  Heap space is only  collected 
+        when  you run out.  After garbage collection you will  see  these 
+        three  percentages  drop.  The alpha and cell percentages  should 
+        drop  to  tell  you how much memory is actually in  use  at  that 
+        moment.  The  heap  space when compacted and  gathered  will  not 
+        necessarily drop to indicate how much you really have left.  This 
+        is  because heap space is gathered in blocks of 16K,  not all  at 
+        once as with atoms and cells.  So, there will almost certainly be 
+        more  than 20% free heap space in other non compacted blocks even 
+        if memstat reports 80% of the heap space is in use.                   
+
+
+
+                                       15
+
+
+
+             FUNCTIONS WITH SIDE EFFECTS OR THAT ARE EFFECTED BY SYSTEM
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             CONT'D
+             ~~~~~~
+
+             (oblist)
+             ~~~~~~~~
+             Returns  a  list of every known object in the system at  the 
+        current  moment.  Note  that if you call oblist  and  assign  the 
+        result  somewhere you will cause every one of those objects to be 
+        kept  by the system.  If there are lots of large alpha atoms  the 
+        heap  and alpha space will be tied up until you set the  assigned 
+        variable to some other value.
+
+             (plist a1)
+             ~~~~~~~~~~
+             Will return the property list for atom a1. The property list 
+        is of the form ((ke1 . value1)(key2 . value2)...(keyn . valuen)). 
+        Note  that  plist returns a top level copy of the  property  list 
+        because remprop destroys this lists top level structure. 
+
+             (putd a1 l1)
+             ~~~~~~~~~~~~
+             Identical  to "def" except that the parameters a1 and l1 are 
+        evaluated.  This  allows  you  to  write  functions  that  create 
+        functions and add them to the LISP interpreter.
+             
+             (putprop a1 s1 a2)
+             ~~~~~~~~~~~~~~~~~~
+             Adds to the property list of a1 the value s1 associated with 
+        the  property  indicator a2.  It returns the  value  of  a1.  For 
+        example: (putprop 'Peter 'AshwoodSmith 'lastname)
+
+             (remprop a1 a2)
+             ~~~~~~~~~~~~~~~
+             Removes  the  property  associated  with  key  a2  from  the 
+        property list of atom a1. The top level structure of the property 
+        list  is  actually destroyed.  It returns the old  property  list 
+        starting at the point where the deletion was made.
+
+             (set a1 s1)
+             ~~~~~~~~~~~  
+             Will  bind a1 to s1 at current scope level or globally if no 
+        scope exists for a1 yet. Set returns s1.
+
+             (setplist a1 l1)
+             ~~~~~~~~~~~~~~~~
+             Will  set the property list of atom a1 to the list l1  where 
+        the  list must be ((keyn.valn)..). It returns this new list l1.
+
+             (setq *a1* s1 *a2* s2 ..... *an* sn)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             Allows an infinite number of variable and value pairs and it 
+        does  not  evaluate the variables a1...an.  So (setq  a  'val1  b 
+        'val2) binds val1 to a and val2 to b. Setq will return sn.
+
+
+                                       16
+
+
+
+             FUNCTIONS WITH SIDE EFFECTS OR THAT ARE EFFECTED BY SYSTEM
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             CONT'D
+             ~~~~~~
+             
+             (trace [*a1* *a2* *a3* ..... *an*])
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             Will  turn on tracing of the user defined functions a1...an. 
+        Note that you cannot trace built in functions.  If you call trace 
+        with  no  parameters it will return a list of  all  user  defined 
+        functions  that  have been set for tracing by a previous call  to 
+        trace,  otherwise  trace  returns exactly the list  (a1  a2...an) 
+        after  enabling tracing of each of these user defined  functions. 
+        If  any  of the atoms is not a user defined function trace  stops 
+        and returns an error.  All atoms up to the point of error will be 
+        traced.   
+             
+             (untrace [*a1* *a2* *a3* ..... *an*])
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             Will  disable tracing of the listed functions which must all 
+        be user defined.  If no parameters are given it disables  tracing 
+        of  all functions.  Untrace returns a list of all functions whose 
+        tracing has been disabled. Here is a demonstration of how you can 
+        use  them.  The  -->  is the LISP prompt.  This is  the  sort  of 
+        sequence  that you should see on the console.  The comments  ;... 
+        were added to tell you what is going on.
+
+          -->(defun factorial(n)                ; define n! = n * (n-1)!
+                    (cond ((= n 0) 1)
+                          (t (* n (factorial (- n 1))))))
+
+          factorial
+          -->(trace factorial)                  ; ask LISP to trace n!
+          (factorial)
+          -->(factorial 5)                      ; ask LISP for 5!
+          <enter> factorial( 5 )                ; entered with parm=5
+           <enter> factorial( 4 )               ;    "      "    "  4
+            <enter> factorial( 3 )              ;    "      "    "  3
+             <enter> factorial( 2 )             ;    "      "    "  2
+              <enter> factorial( 1 )            ;    "      "    "  1
+               <enter> factorial( 0 )           ;    "      "    "  0
+               <EXIT>  factorial 1              ; exit 0! = 1
+              <EXIT>  factorial 1               ; exit 1! = 1
+             <EXIT>  factorial 2                ; exit 2! = 1
+            <EXIT>  factorial 6                 ; exit 3! = 6
+           <EXIT>  factorial 24                 ; exit 4! = 24
+          <EXIT>  factorial 120                 ; exit 5! = 120
+          120
+          -->(untrace factorial)                ; ask LISP to shut up
+          (factorial)
+          -->(factorial 5)                      ; now it is quiet again.
+          120
+          -->   
+
+
+
+
+                                       17
+
+
+
+             FUNCTIONS WITH SIDE EFFECTS OR THAT ARE EFFECTED BY SYSTEM
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             CONT'D
+             ~~~~~~
+
+             (showstack)
+             ~~~~~~~~~~~
+                  This  function will display a copy of the last 20  eval 
+        and  apply  evaluations from the internal stack.  The top of  the 
+        internal  stack  is copied whenever LISP is about  to  enter  the 
+        break level (prompt 'er>').   This means that if you execute some 
+        function  and  it aborts prematurely you can call showstack  from 
+        the break level and see exactly what lead to the error.  Whenever 
+        a  new  error occurs the old copy of the top 20 elements  on  the 
+        internal  stack  is  lost and a new trace is copied  for  you  to 
+        display  via  (showstack).  This  is unlike  Franz  which  allows 
+        infinite break levels.  For example consider this example session 
+        with PC-LISP which is similar to an example in LISPcraft.
+                       
+             -->(defun foobar(y)(prog(x)(setq x (cons (car 8) y]
+             foobar
+             -->(foobar '(a b c))
+             --- error evaluating built in function [car] ---
+             er>x
+             ()
+             er>y
+             (a b c)
+             er>(showstack)
+
+             [] (car 8)
+             [] (car 8)
+             [] (cons <**> y)
+             [] (setq x <**>)
+             [] (prog(x) <**>)
+             [] (foobar '(a b c))
+
+             t 
+
+             In  this example I declared a function called 'foobar' which 
+        runs a prog and does a single assignment to x.  When I execute it 
+        with  parameter '(a b c).  PC-LISP correctly tells me that  there 
+        was  an  error  evaluating the built in  function  'car'.  I  can 
+        examine  the values of x and y and see that x is still set to the 
+        empty  list () that the prog call set it to.  y is bound  to  the 
+        parameter passed to foobar as expected. Next I called (showstack) 
+        to see the trace of execution. I see that the top evaluation (car 
+        8)  is the culprit.  The evaluation previous to that is also (car 
+        8)  but  this  evaluation  was  before  the  arguments  had  been 
+        evaluated.  Remember  that floats eval to  themselves.  The  <**> 
+        symbols  in  the show stack are just a short hand way  of  saying 
+        look  at the entry above to see what the <**> should be  replaced 
+        with.  This  greatly  reduces the amount of information that  you 
+        have to look at when you read a stack dump. It also allows you to 
+        follow the stream of partial evaluations by looking at each  <**> 
+        in turn. Note that infinite recursion leaves a stream of <**>'s.
+
+
+                                       18
+
+
+
+             LIST EVALUATION CONTROL FUNCTIONS
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             These functions are the control flow functions for LISP they 
+        effect  which  lists are evaluated and how.  They operate on  the 
+        basic  LISP function type which is a lambda  expression.  Labeled 
+        lambda expressions are also allowed.
+
+             (lambda l1 s1....sn)
+             ~~~~~~~~~~~~~~~~~~~~
+             This  is  not a function but it is a  list  construct  which      
+        can act as a function in any context where a function is legal. A 
+        lambda  expression is a function body.  The S-expressions  s1..sn 
+        are  expressions  that are evaluated in the  order  s1...sn.  The 
+        result  is  the evaluation of sn.  The atoms in the list  l1  are 
+        called  bound variables.  They will be bound to values that occur 
+        on  the right of the lambda expression before  the  S-expressions 
+        s1..sn  are  evaluated  and  unbound after the  value  of  sn  is 
+        returned. 
+
+             (nlambda l1 s1....sn)
+             ~~~~~~~~~~~~~~~~~~~~~
+             This is a function body construct similar to lambda but with 
+        a few major differences.  The first is that the list l1 must only 
+        specify  one formal parameter.  This will be set to a list of the 
+        UNEVALUATED  parameters  that  fall on the right of  the  nlambda 
+        expression when it is being evaluated.  This function allows  you 
+        to  write  functions with a variable number of parameters and  to 
+        control  the evaluation of these parameters.  For example we  can 
+        write a function called 'plus that behaves the same way as '+  in 
+        all contexts as follows:
+
+             -->(def plus (nlambda(l)(eval(cons '+ l))))  
+        or   
+             -->(defun plus fexpr(l)(eval(cons '+ l)))
+
+             Both  of  which create the  same  nlambda  expression.  This 
+        function  will  behave as follows when spotted on the left  of  a 
+        sequence  of parameters 1 2 3 4.  First it will not evaluate  the 
+        sequence of parameters 1 2 3 4. Second it makes these into a list 
+        (1  2  3  4).  It then binds 'l to this list  and  evaluates  the 
+        expression (eval(cons( '+ l))).  This expression results in (eval 
+        (+ 1 2 3 4)). Which is just the desired result 10.
+
+             (label a1 (lambda|nlambda l1 s1..sn)) 
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             This acts just like a lambda expression except that the body 
+        is  temporarily  bound to the name a1 for evaluation of the  body 
+        s1.  This allows recursive calls to the same body. The binding of 
+        the  body  to  the  name a1 will be  forgotten  as  soon  as  the 
+        expression s1 terminates the recursion. For example:   
+
+             (label LastElement (lambda(List)
+                                (cond ((null (cdr List))(car List))
+                                      (t (LastElement (cdr List))))))
+
+
+
+                                       19
+
+
+
+             LIST EVALUATION CONTROL FUNCTIONS CONT'D
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             (apply s1 l1)
+             ~~~~~~~~~~~~~
+             The  function s1 is evaluated in the context resulting  from 
+        binding  its formal parameters to the values in l1. The result of 
+        this evaluation is returned. Example:
+
+             -->(apply '(lambda(x y z)(* (+ x y) z)) '(2 3 4))
+             20
+             
+             (cond l1 l2 ... ln)
+             ~~~~~~~~~~~~~~~~~~~
+             The lists l1 ...  ln  are checked on by one. They are of the 
+        form  (s1 s2). Cond  evaluates the s1's one by one until it finds 
+        one  that does not eval to nil.  It then returns the  result   of  
+        evaluating   the corresponding  s2.  If all of the  s1's  (called 
+        guards) evaluate to nil, it returns 'nil. For example:
+                  
+              -->(cond ((eq (type t) 'float) '|t is a float|)
+                       ((eq (type t) 'list)  '|t is a list |)
+                       (t '|t not list or float|)))
+             |t not list or float|
+
+             (eval s1) 
+             ~~~~~~~~~
+             Runs  the LISP interpreter on the S-expression s1.  It  just 
+        removes a quote from the expression s1. For example:
+             
+             -->(eval '(+ 2 4))
+             6
+
+             (mapcar s1 l1 l2 l3 .... ln)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             This  function  will map the function s1 onto the  parameter 
+        list made by taking the car of each of l1...ln.  It forms a  list 
+        of  the  results  of the repeated application of s1 to  the  next 
+        elements in the lists l1...ln. It stops when the list l1 runs out 
+        of  elements.  Note  that each of l1...ln should  have  the  same 
+        number  of elements,  although this condition is not checked  for 
+        and nil will be substituted if a list runs out of elements before 
+        the others. Extra elements in any list are ignored. For example:
+
+             -->(mapcar '< '(10 20 30) '(11 19 30))
+             (t nil nil)
+
+             Which  returns the results of (< 10 11) (< 20 19) and (<  30 
+        30) as the list (t nil nil).  Note that s1 could be any built  in 
+        function,   user  defined  function  or  lambda  expression.  For 
+        example:
+
+             -->(mapcar 'putprop '(John Fred Bill)
+                                 '(Mary Sue Linda)
+                                 '(mother sister daughter))
+             (Mary Sue Linda) 
+
+
+                                       20
+
+
+
+             LIST EVALUATION CONTROL FUNCTIONS  CONT'D
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+             (defun a1 macro l1 s1 s2 ... sn)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     
+             Macro  is a special body,  similar to nlambda except that it 
+        causes code replacement when it is evaluated.  An example is  the 
+        best explanation  I can give you: (Read LISPcraft example)
+
+             -->(defun first-elemet macro(l)(cons 'car (cdr l)))
+             first-element
+             -->(setq x '(first-element '(a b c)))
+             (first-element '(a b c)) 
+             -->(eval x)
+             a
+             -->x
+             (car '(a b c)) 
+             -->(eval x)
+             a
+
+             In  the  example above I have first declared a macro  called 
+        'first-element'  which  when run given a  list  parameter  should 
+        return  the  first element in the list.  I could have  done  this 
+        using  a  lambda  expression  but this  would  require  parameter 
+        binding etc every time I execute 'first-element'.  Rather, what I 
+        have chosen to do is to cause (first-element x) to be replaced by 
+        the  code  (car  x) everywhere it  is  encountered.  Then  future 
+        execution of (first-element x) is just as costly as an  execution 
+        of  (car  x).  This is accomplished as follows:  When a macro  is 
+        encountered,  eval  passes the entire  expression  (first-element 
+        (quote  a b c)) to the macro body.  This body is (cons 'car  (cdr 
+        l))  and is evaluated in the context where the entire  expression 
+        is  bound  to  the macro parameter l.  This results in  the  code 
+        fragment (car (quote a b c)) which is substituted in the code for 
+        the  original  (first-element  (quote (a b  c)))  expression  and 
+        evaluated  giving  'a.  The above example  demonstrates  this  by 
+        showing  what  happens to the value of a variable 'x  before  and 
+        after evaluation of the macro.  Note the change in the value of x 
+        but  that  the result of (eval x) remains the same.  That is  the 
+        whole purpose of macros.
+
+             PC-LISP macros have two limitations that Franz macros do not 
+        have. A PC-LISP macro MUST return a piece of code that is a list. 
+        YOU CANNOT RETURN AN ATOM FROM A MACRO.  Secondly a PC-LISP macro 
+        must  have been def'ined,  defun'ed,  or  putd'ed,  otherwise  it 
+        will  not function correctly.  Ie YOU CANNOT USE IT LIKE A LAMBDA 
+        OR NLAMBDA BODY WITHOUT A NAME.
+
+             (macroexpand s1)
+             ~~~~~~~~~~~~~~~~     
+             This function lets you see at what the macro expansion of s1 
+        looks like prior to evaluation and substitution. For example:
+
+             -->(macroexpand '(first-element '(a b c)))
+             (car '(a b c))
+
+
+                                       21
+
+
+
+             LIST EVALUATION CONTROL FUNCTIONS  CONT'D
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+             (prog l1 s1.....sn)
+             ~~~~~~~~~~~~~~~~~~~
+             Prog  is  a  way  of  escaping  the  pure  LISP  applicative 
+        programming environment.  It allows you to evaluate a sequence of 
+        S-expressions  one after the other in true imperative  style.  It 
+        allows you to use the functions (go..) and (return ..) to perform 
+        the  goto and return functions that imperative languages  permit. 
+        Prog  operates  as follows:  The list l1 which is a list of  atom 
+        names  is  scanned and each atom is bound to nil  at  this  scope 
+        level.  Next the S-expressions s1..sn are scanned once. If any of 
+        s1..sn  are atoms they are bound to the S-expression that follows 
+        them.  Next we start evaluating lists s1...sn ignoring  the atoms 
+        which  are  assumed  to  be labels.  If we  ever  evaluate  a  S-
+        expression and it has the form (return Z) we unbind all the atoms 
+        in  l1  and  all labels,  and return the result  Z.  If  we  ever 
+        encounter  a list of the form (go loc) we reset our next list  to 
+        be the location given by loc.  If at any time we reach sn, and it 
+        is  not  a go or a return,  we simply unbind all of  l1  and  the 
+        labels  in  s1...sn  and  return the  result  of  evaluating  sn. 
+        Entering and exiting progs is a little expensive time wise, it is 
+        probably  better  not  to  nest them if  you  are  interested  in 
+        performance.  Note  prog  labels must be alpha or  literal  alpha 
+        atoms:
+             
+             For example:
+
+               -->(prog (List SumOfAtoms)
+                        (setq List (hashtabstat))
+                        (setq SumOfAtoms 0)
+                   LOOP (cond ((null List) (return SumOfAtoms)))
+                        (setq SumOfAtoms (+ (car List) SumOfAtoms))
+                        (setq List (cdr List))
+                        (go   LOOP)
+                  )
+               306  
+
+             This peice of code operates as follows. First it creates two 
+        local variables.  Next it binds the variable List to the list  of 
+        hash bucket totals from the alpha hash table.  It then sets a sum 
+        counter  to 0.  Next it checks the List variable to see if it  is 
+        nil. If so it returns the Sum Of all the Atoms. Otherwise it adds 
+        the first float in the list List to the running SumOfAtoms, winds 
+        in the list List by one, and jumps to LOOP. Note also that we can 
+        accomplish the same thing as the above prog with the much simpler 
+        examples which follow:
+
+             -->(eval (cons '+ (hashtabstat)))
+             306
+             -->(length(oblist))
+             306
+
+
+
+
+                                       22
+
+
+
+             MSDOS BIOS CALLS FOR GRAPHICS OUTPUT
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             These  functions  are still experimental.  They  do  however 
+        allow  you  to  play  with drawing  recursive  curves  etc.  They      
+        all  result  in  an  INT  10H.   This  means  that  the  graphics      
+        should be portable to any MSDOS machine and should run under  any 
+        windowing environment like topview or mswindows. This is why they 
+        are so slow.  Note that they all return 't.  They do not check to 
+        see if the INT call was successful or not.
+
+             (#scrline# f1 f2 f3 f4 f5)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~
+             Draws a line on the screen connecting (f1,f2) with the point 
+        (f3,f4) using attribute f5.  This function calls the BIOS set dot 
+        function for each point. Hence it is not very fast.
+
+             (#scrmde# f1)
+             ~~~~~~~~~~~~~
+             Sets the video mode to f1. Modes are values between 0 and 9. 
+        (8 and 9) are high resolution for the Tandy2000 and I suppose are 
+        high  resolution modes on other machines that support  the (640 x 
+        400)  or greater graphics resolutions.  These are all  listed  in 
+        your  hardware  reference  manual but basically  they  are:  0  = 
+        40x25B&W,  1=40x25COL,  2=80x25B&W  3=80x25COL,   4  =320x200COL,  
+        5=320x200B&W,      6=640x200B&W,     7=reserved,    8=640x400COL, 
+        9=640x400B&W. This is as of DOS 2.11.
+
+             (#scrsap# f1)
+             ~~~~~~~~~~~~~
+             Sets the active video page to f1. f1 should be between 0 and 
+        8.  This  is valid for text modes only.  Versions of MSDOS  other 
+        than 2.11 may not support this call.
+
+             (#scrscp# f1 f2 f3)
+             ~~~~~~~~~~~~~~~~~~~
+             Sets  the cursor position to be in page f1 at row f2 and  in 
+        column f3. Where 0 is the top row and 0 is leftmost col.
+
+             (#scrsct# f1 f2)
+             ~~~~~~~~~~~~~~~~
+             Sets  the  cursor  type to agree with the following:  f1 bit 
+        5  (0 = blink 1 = steady),  bit 6 (0 = visible,  1 =  invisible), 
+        bits  4-0 = start line for cursor within character cell.  f2 bits 
+        4-0 = end line for cursor within character cell.
+
+             (#scrwdot# f1 f2 f3)
+             ~~~~~~~~~~~~~~~~~~~~
+             Write a dot (pixel).  The pixel at row f1 and column f2  has 
+        its  color  value XORed with the color attribute  f3.  Since  the 
+        color  attributes  vary from machine to machine you will have  to 
+        look up the correct values for this parameter.
+
+
+
+
+
+
+                                       23
+
+
+
+             TECHNICAL INFORMATION
+             ~~~~~~~~~~~~~~~~~~~~~
+
+             The  interpreter  is written using the  Lattice  C  compiler 
+        version  2.03.  It  consists of 7 separate  modules.  A  scanner, 
+        parser,  memory  manager,  list evaluator and critical  functions 
+        module, a built in functions module, a library of extra Unix libc 
+        functions not  provided  by  Lattice  C  consisting  of  assembly 
+        language  routines  for setjmp(),  longjmp()  and  getenv(),  and 
+        finally a modified C start up assembly language module to provide 
+        signal trapping for stack overflow and control-break.
+
+             Memory is organized as follows.  Alpha cells have fields for 
+        a  shallow  stack of bindings,  a pointer to heap space  for  the 
+        print names, a pointer to any built in or user defined functions, 
+        and a pointer to any property lists.  Alpha cells are the largest 
+        of  all  the cells and have their own fixed  storage  area.  Heap 
+        space  which  is just the space used for the print names  of  the 
+        alpha cells may be variable sized blocks of up to 254 bytes long. 
+        These  will  be extended in future versions of PC-LISP  to  allow 
+        allocation of up to 64K blocks for use by arrays etc. The rest of 
+        the  cells  used  by  PC-LISP are all  considered  as  one.  This 
+        consists of the float,  cons, and port cells. They have their own 
+        contiguous  slice  of memory.  This means  that  three  different 
+        contiguous  types  of memory are required.  It is managed in  the 
+        following  way.  At start up time the percentages of  memory  are 
+        read  from  the  default settings or  the  environment  variables 
+        LISP%HEAP and LISP%ALPH.  Next memory is allocated in 16K  chunks 
+        these   are  the  largest  contiguous  pieces  handled   by   the 
+        memory manager.  These are all kept track of in a large vector of 
+        pointers.  Next  groups  of  these blocks are primed for  use  by 
+        alpha,cell,   or  heap  managers.   These  managers  handle   the 
+        distribution and reclamation  of memory in their block.  The heap 
+        manager will perform compaction and relocation to get free space. 
+        The  alpha and cell managers will perform mark and gather garbage 
+        collection  to get space.  The heap manager may request mark  and 
+        gather collection if there is a real shortage of heap space.
+
+             Stack overflow detection is done by intercepting the call to 
+        the  Lattice C stack overflow routine,  temporarily resetting the 
+        stack, and them making a call to my own C stack overflow routine. 
+        This then longjmps out of the error condition.  The Unix  version 
+        handles  the  error  in  the same way except  that  the  overflow 
+        results in a SIGSEGV which then calls the same routine.
+
+             Control-BREAK detection is done via periodic testing of  the 
+        status in the evaluator main loop, and the read main loop. When a 
+        break  is  detected control is transferred to the  break  handler 
+        which  prints  a message and longjmps back to the mainline  code. 
+        The  Unix  version will have made a signal call asking  that  the 
+        break handler be executed when a user break key is hit. Hence the 
+        results are the same.  CONTROL-C checking is done in the same way 
+        except that a CONTROL-C will only be spotted on I/O so a  looping 
+        non  printing  function can only be stopped  with  CONTROL-BREAK. 
+        Note that CONTROL-BREAK is INT 1BH and CONTROL-C is INT 23H.
+
+
+                                       24
+
+
+
+             KNOWN BUGS OR LACKING FEATURES OF V2.07
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+            -It  is  possible  to run out of stack  space  while  garbage 
+        collecting.  This  occasionally  happens with machines that  have 
+        only 256K of RAM. I have never seen it happen with >  256K of RAM 
+        however it can probably still happen. This is because the garbage 
+        collector  requires stack space to operate.  A better version  of 
+        the  garbage  collection  that  uses  no  stack  space  will   be 
+        introduced in a later version.  If the stack does overflow during 
+        garbage  collection, an appropriate error message is  printed.  A 
+        link  inverting marking traversal is slated for the next  version 
+        of PC-LISP and will fix this problem.
+
+            -You  cannot  input floats in exponential notation.  This  is 
+        because the LISP lexical analyzer does not yet recognize them.
+
+            -Line drawing is not too quick,  or too clean. The lines take 
+        time to draw because they go through the BIOS,  they are not very 
+        clean at certain slopes due to some bugs.  But the video graphics 
+        routines  are still experimental so do not rely on them too much. 
+        You  will  also  note  that several other  video  INT  calls  are 
+        missing.
+
+            -If  too  many  (load 'file) calls fail you will run  out  of 
+        available ports. This is because they are left open. PC-LISP does 
+        not  close open load ports if an error occurs while reading  from 
+        them.
+
+            -Two  special atoms with rather obscure names should never be 
+        printed from within a prog.  These are $[|return|]$ and $[|go|]$. 
+        If  you  attempt to print these from within  a  prog,  the  print 
+        function  will return them and this will confuse the heck out  of 
+        prog which uses them for internal purposes. This can occur if you 
+        try  to use a prog to print the contents of the  oblist.  If  you 
+        must print the oblist atom by atom to a file or the screen,  make 
+        sure you 'absorb' the result of any print or patom calls.
+
+            -You  are  not prevented from altering the bindings of t  and 
+        nil.  This  means  that  if you use t or nil as  the  name  of  a 
+        parameter  somewhere  it will get temporarily bound to  something 
+        else while that procedure is executing.  You can also set or setq 
+        them  to other values.  Attempts to alter their  bindings  should 
+        obviously be trapped but are not in V2.07.
+
+            -Macros  must return a peice of code which is a  list.  Atoms 
+        cannot  be  returned.  Franz allows either but to  alter  PC-LISP 
+        would  require  some medium scale surgery that I do not  want  to 
+        undertake unless the feature is really missed.
+
+
+
+
+
+
+
+
+                                       25
+
+
+
+             KNOWN BUGS OR LACKING FEATURES OF V2.07 (CONT'D)
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+            -The  interpreter  is  pretty slow.  This is  caused  by  the 
+        continuous  error  checking,  and the use of an extra  stack  for 
+        marking intermediate results. Speed-ups are possible but make the 
+        program  less robust so I am hesitant to add them.  The fact that 
+        there  is  no integer type also causes slow-downs  when  you  are 
+        using  a float as a loop counter.  Floats however are more useful 
+        in general than ints so of the two I decided to omit integers for 
+        the  first large scale release.  It is interesting to  note  that 
+        some benchmarks that I ran on a not too busy Vax 11/750 were only 
+        about  2 times as fast (waiting time) as my Tandy 2000  (80186  @ 
+        8Mhz). This is not really a fair comparison  though because Franz 
+        is a much bigger and more complex program.  I would be interested 
+        to know how PC-LISP performs on other MS-DOS machines.
+             
+             RE BUGS OR DESIRED ENHANCMENTS
+             ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+             I have tried to think of everything that a user could do  to 
+        crash  the  system  and protect him/her from it but I'm  sure  my 
+        imagination  has only covered half of the possibilities.  If  you 
+        find  any other bugs or if you think some features would be  nice 
+        to  add  to  PC-LISP,  I will consider them for  the  next  major 
+        release (which will probably not be until September  86).  Please 
+        don't  hesitate to let me know what you think,  good or bad.  I'd 
+        appreciate  the feed back as I have put a lot of work  into  this 
+        program and want to know what you people out there think of it.
+             
+
+
+                               Regards  
+
+             
+                          Peter Ashwood-Smith.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                       26

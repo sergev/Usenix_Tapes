@@ -1,0 +1,117 @@
+*** tty_set.c.old	Thu Sep  4 20:22:32 1986
+--- tty_set.c	Thu Sep  4 20:22:32 1986
+***************
+*** 1,4
+! #include <sgtty.h>
+  #include "tty.h"
+  
+  extern char Erasekey,Killkey;
+
+--- 1,4 -----
+! #include <termio.h>
+  #include "tty.h"
+  
+  extern char Erasekey,Killkey;
+***************
+*** 3,9
+  
+  extern char Erasekey,Killkey;
+  
+! static struct sgttyb C_tp;
+  static unsigned short O_lflag;
+  static unsigned S_flag=0;
+  static int R_ignore=0;		/* up/down counter of reset calls to ignore */
+
+--- 3,9 -----
+  
+  extern char Erasekey,Killkey;
+  
+! static struct termio C_tp, C_sav;
+  static unsigned short O_lflag;
+  static unsigned S_flag=0;
+  static int R_ignore=0;		/* up/down counter of reset calls to ignore */
+***************
+*** 32,41
+  	switch (cmd)
+  	{
+  	case BACKSTOP:
+- 		if ((rc = ioctl(1,TIOCLGET,&mask)) != 0)
+- 			break;
+- 		mask |= LTOSTOP;
+- 		rc = ioctl(1,TIOCLSET,&mask);
+  		break;
+  	case RAWMODE:
+  		if ((S_flag & IO_RAW) != 0)
+
+--- 32,37 -----
+  	switch (cmd)
+  	{
+  	case BACKSTOP:
+  		break;
+  	case RAWMODE:
+  		if ((S_flag & IO_RAW) != 0)
+***************
+*** 45,54
+  		}
+  		if ((S_flag & IO_GOT) == 0)
+  		{
+! 			rc = ioctl(0,TIOCGETP,&C_tp);
+! 			O_lflag = C_tp.sg_flags;
+! 			Erasekey = C_tp.sg_erase;
+! 			Killkey = C_tp.sg_kill;
+  		}
+  		C_tp.sg_flags |= CBREAK;
+  		C_tp.sg_flags &= ~ECHO;
+
+--- 41,50 -----
+  		}
+  		if ((S_flag & IO_GOT) == 0)
+  		{
+! 			rc = ioctl(0,TCGETA,&C_tp);
+! 			C_sav = C_tp;
+! 			Erasekey = C_tp.c_cc[VERASE];
+! 			Killkey = C_tp.c_cc[VKILL];
+  		}
+  		C_tp.c_lflag = 0;
+  		C_tp.c_cc[VEOF]=1;
+***************
+*** 50,58
+  			Erasekey = C_tp.sg_erase;
+  			Killkey = C_tp.sg_kill;
+  		}
+! 		C_tp.sg_flags |= CBREAK;
+! 		C_tp.sg_flags &= ~ECHO;
+! 		rc = ioctl(0,TIOCSETP,&C_tp);
+  		S_flag = IO_GOT|IO_RAW;
+  		break;
+  	case COOKED:
+
+--- 46,54 -----
+  			Erasekey = C_tp.c_cc[VERASE];
+  			Killkey = C_tp.c_cc[VKILL];
+  		}
+! 		C_tp.c_lflag = 0;
+! 		C_tp.c_cc[VEOF]=1;
+! 		rc = ioctl(0,TCSETA,&C_tp);
+  		S_flag = IO_GOT|IO_RAW;
+  		break;
+  	case COOKED:
+***************
+*** 58,65
+  	case COOKED:
+  		if ((S_flag & IO_RAW) != 0)
+  		{
+! 			C_tp.sg_flags = O_lflag;
+! 			rc = ioctl(0,TIOCSETP,&C_tp);
+  			S_flag &= ~IO_RAW;
+  		}
+  		else
+
+--- 54,60 -----
+  	case COOKED:
+  		if ((S_flag & IO_RAW) != 0)
+  		{
+! 			rc = ioctl(0,TCSETA,&C_sav);
+  			S_flag &= ~IO_RAW;
+  		}
+  		else

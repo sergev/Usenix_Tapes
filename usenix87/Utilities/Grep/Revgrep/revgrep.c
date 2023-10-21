@@ -1,0 +1,491 @@
+
+static char rcsid[] = " $Header: revgrep.c 1.1 $";
+
+/* **************************************************************
+ * revgrep: search files for a pattern backwards
+ *
+ *        revgrep is a variant of the grep(1) family, designed
+ *    to behave like grep, but do all line input in reverse.
+ *    (regular expression are matched left-to-right, as usual.)
+ *    the library routines re_comp and re_exec are the basis for
+ *    the regular-expression matching.
+ *
+ *    in addition to the functionality of grep, revgrep provides
+ *    the functionality of tail(1), but with the option to base
+ *    the length of the tail on a match of a regular expression
+ *    as well as on the line count.  further, revgrep does not
+ *    have tail's buffer-size limitations (at the price of being
+ *    a little slower).
+ *
+ *    the basic calling syntax for revgrep is as follows:
+ *
+ *            % revgrep [ options ] [ expression ] [ file ... ]
+ *
+ *    if no files are given, revgrep reads the std. input.
+ *    meaningful options are:
+ *
+ *           -v		print only lines that don't match
+ *           -c         print only a count of matching lines
+ *           -l         print only filenames of files with matches
+ *           -n         print relative line number with matches
+ *           -b		print block number in file with matches
+ *           -s         no output, only status
+ *           -h         don't print filenames with matches
+ *           -y         fold upper case to lower on input
+ *           -e         next argument is the expression
+ *
+ *           -t         text from first match (backwards) to
+ *                      end is printed in correct order.
+ *           -nnn       forego matches, do a -t on this many lines
+ */
+
+#include <stdio.h>
+#include <ctype.h>
+#include <signal.h>
+#ifdef USG
+#include <sys/types.h>
+#include <string.h>
+#include <fcntl.h>
+#else
+#include <strings.h>
+#endif
+#include <sys/param.h>
+#include <sys/stat.h>
+#include <sys/file.h>
+
+#ifdef USG
+#define RBUF 1024
+char *compiled_re, *regex();
+#else
+#define RBUF 2048
+#endif
+
+#define NO_FILE_FLAG -10
+
+int rev_fd = -1;
+int sty    =  0;
+int fflag  =  1;
+extern int errno;
+int exitval = 1;
+#ifdef USG
+#define Is_nonseek(FD,SB) \
+  ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFIFO) || (isatty(FD))  )
+#else
+#define Is_nonseek(FD,SB) \
+  ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFSOCK) || (isatty(FD)) )
+#endif USG
+
+
+char dont_match = 0;
+char print_count= 0;
+char print_names= (char) 4;
+char print_blocks=0;
+char print_lnum = 0;
+char print_matches= 1;
+char fold_upper = 0;
+char use_stdin  = 1;
+char do_tail    = 0;
+char silent_mode= 0;
+int  tail_cnt   = 0;
+char *tmp_name   = NULL;
+
+ main(argc,argv)
+     int argc;
+     char *argv[];
+{
+    char *s1, *s2;
+    char *expr = NULL;
+    int i;
+    struct stat sb;
+
+    /* first try to process options */
+    for(s1 = *++argv, argc--; argc > 0 && s1 != NULL; s1 = *++argv, argc--) {
+	if (*s1 != '-') break;
+	for(s2=s1; *++s2 != '\0'; ) {
+
+	    switch (*s2) {
+	      case 'v':
+		dont_match++;
+		break;
+	      case 'c':
+		print_count++;
+		print_matches=0;
+		break;
+	      case 'n':
+		print_lnum = 1;
+		break;
+	      case 'l':
+		print_names = 1;
+		print_matches=0;
+		break;
+	      case 'b':
+		print_blocks++;
+		break;
+	      case 's':
+		print_names = 0;
+		print_matches=0;
+		print_blocks = 0;
+		print_count = 0;
+		do_tail     = 0;
+		silent_mode = 1;
+		break;
+	      case 'h':
+		print_names = 0;
+		break;
+	      case 'i':
+	      case 'y':
+		fold_upper = 1;
+		break;
+	      case 't':
+		do_tail = 1;
+		print_matches = 0;
+		break;
+	      case 'e':
+		expr = *++argv;
+		break;
+	      default:
+		if ( isdigit(*s2) ) {
+		    do_tail = 1;
+		    print_matches = 0;
+		    tail_cnt = atoi(s2);
+		    for( ; *s2 != '\0' ; s2++);
+		    s2--;
+		}
+		else {
+		    if (silent_mode) exit(2);
+		    fprintf(stderr,"revgrep: Unknown flag, '%c'.\n",*s2);
+		    fprintf(stderr,
+		       " usage: revgrep [ -slbchnyet# ] expr [ file ] ...\n");
+		    exit(2);
+		}
+	    }
+	}
+    }
+
+    if (s1 != NULL && expr == NULL && tail_cnt == 0) {
+	expr = s1;
+	argv++; argc--;
+    }
+    if (expr == NULL && tail_cnt == 0) exit(2);
+    if (expr != NULL) {
+#ifdef USG
+	char *regcmp();
+	if ( (compiled_re = regcmp(expr,NULL)) == NULL) {
+	    if ( ! silent_mode ) fprintf(stderr,"revgrep: bad expression.\n");
+	    exit(2);
+	}
+#else
+	char *re_comp();
+	if ( (s1 = re_comp(expr)) != NULL) {
+	    if ( ! silent_mode ) fprintf(stderr,"revgrep: %s \n",s1);
+	    exit(2);
+	}
+#endif
+    }
+
+    if (print_names > 1  &&
+	( (*argv == NULL)?(1):(*(argv+1) == NULL))) print_names = 0;
+
+    if (*argv == NULL) {
+	rev_fd = 0;
+	sty = 0;
+	if ( fstat(0,&sb) >= 0 ) {
+	    if ( Is_nonseek(0,sb) )
+	      {
+		if (  tmp_setup(0) < 0 ) {
+		    if ( ! silent_mode ) perror("revgrep: tmp_setup");
+		    exit(2);
+		}
+	      }
+	}
+	else {
+	    exit(2);
+	}
+    }
+    i = rgrep(argv);
+
+    if ( tmp_name != NULL )
+      unlink(tmp_name);
+
+    exit(i);
+}
+
+
+/* **************************************************************
+ * tail: print a tail, given a file position
+ *
+ *       This routine copies to stdout all the data after a
+ *   certain file position.  It checks various global flags
+ *   before starting the copy, and prints a message if
+ *   appropriate.  The file of which a tail is to be done
+ *   is assumed to be open on rev_fd.
+ */
+ tail(fpos,fname)
+     int fpos;
+     char *fname;
+{
+    int len;
+    char buf[RBUF];
+
+    if (print_names) printf("%s:",fname);
+    if (print_blocks) printf("starting in %d",fpos/512);
+    if (print_names || print_blocks) putchar('\n');
+
+    if (lseek(rev_fd,(fpos==0)?(0):(fpos+1),0) < 0) {
+	perror("revgrep: tail");
+	return(-1);
+    }
+    while( (len=read(rev_fd,buf,RBUF)) > 0)
+	fwrite(buf,sizeof(char),len,stdout);
+
+    return(0);
+}
+
+
+
+/* **************************************************************
+ * rgrep: backwards grep a set of files, or stdin
+ *
+ *      Rgrep performs a backwards grep on an input vector
+ *   of files.  If the input vector is Null, then the stdin
+ *   is assumed to be the input file.
+ *   This routine uses rline() to get the next line backwards,
+ *   and uses doline() to do pattern-matching and output on
+ *   the line received.
+ */
+ rgrep(files)
+     char *files[];
+{
+    char *s1, *s2;
+    char *lbuf;
+    int  pos, lcnt, match, match_cnt;
+    char didone = 0;
+
+    for(didone = 0;
+	didone == 0 || *files != NULL;
+	files += ((*files==NULL)?0:1))
+    {
+	char *f, *rline();
+	f = *files;
+	for(lcnt=0, match_cnt=0, didone = 1;
+	    ( lbuf = rline(&pos,f) ) != NULL;
+	    f=NULL, lcnt++)
+	  {
+	      if (match = doline(lbuf,pos,lcnt,*files)) {
+		  match_cnt++;
+		  exitval=0;
+		  if (do_tail) {
+		      tail(pos,*files);
+		      didone = 1;
+		      break;
+		  }
+		  if (print_names && print_matches == 0 && print_count == 0) {
+		      printf("%s\n",*files);
+		      break;
+		  }
+	      }
+	  }
+	if (print_count) {
+	    if (print_names) printf("%s:%d\n",*files,match_cnt);
+	    else printf("%d\n",match_cnt);
+	}
+    }
+    return(exitval);
+}
+
+/* **************************************************************
+ * doline: match and handle a single line of input
+ *
+ *       This line receives a single text line, and performs
+ *    pattern matches on it if necessary.  Depending on the
+ *    various options, the line may be output with a message
+ *    two.
+ *       When a match of any kind occurs, 1 is returned.
+ *    Otherwise 0 is returned.
+ */
+ doline(lbuf,pos,lin,fname)
+     char *lbuf;
+     int pos, lin;
+     char *fname;
+{
+    register char *s1, *s2;
+    int i,j,m;
+
+    if (tail_cnt > 0) {
+	    if (lin >= tail_cnt || pos <= 1) return(1);
+	    else return(0);
+    }
+
+    if (fold_upper) {
+	    char cmpbuf[RBUF*2];
+	    for(s1=lbuf, s2=cmpbuf;
+		*s1 != '\0' && (s2-cmpbuf) < (RBUF*2); s1++, s2++ )
+	      *s2 = (isupper(*s1))?(tolower(*s1)):(*s1);
+	    *s2 = '\0';
+	    s1 = cmpbuf;
+    }
+    else  s1 = lbuf;
+
+#ifdef USG
+    m = (regex(compiled_re,s1)==NULL)?(0):(1);
+#else
+    m = re_exec(s1);
+#endif
+
+    m = (dont_match)?(! m):(m);
+    if (! m) return(0);
+
+    if (print_matches) {
+	if (print_names) printf("%s:",fname);
+	if (print_lnum) printf("-%d:",lin);
+	if (print_blocks) printf("%d:",pos/512);
+	printf("%s\n",lbuf);
+    }
+    return(1);
+}
+
+
+/* **************************************************************
+ * tmp_setup: read a non-seekable channel into a temp file
+ *
+ *       This routine reads the contents of a file descriptor
+ *  into a temporary file, and then passes back the name of the
+ *  file in a NULL-terminated vector.
+ *
+ *       A signal catcher is set up to delete the file if
+ *  the user hits ^C or ^\
+ */
+ tmp_setup(ifd)
+     int ifd;
+{
+    static char nambuf[60];
+    int ofd, len;
+    int sig_exit();
+    char dbuf[RBUF];
+
+    sprintf(nambuf,"/tmp/rvg.a%d",getpid());
+    if ( (ofd = open(nambuf,O_RDWR | O_CREAT,0600)) < 0) return(-1);
+
+    if ( signal(SIGINT,sig_exit) == SIG_IGN) signal(SIGINT,SIG_IGN);
+    if ( signal(SIGQUIT,sig_exit) == SIG_IGN) signal(SIGQUIT,SIG_IGN);
+    if ( signal(SIGHUP,sig_exit) == SIG_IGN) signal(SIGHUP,SIG_IGN);
+
+    for( ; (len = read(ifd,dbuf,RBUF)) > 0; write(ofd,dbuf,len));
+    tmp_name = nambuf;
+    rev_fd = ofd;
+    return (ofd);
+}
+
+sig_exit()
+{
+    close(0); close(1); close(2); close(3); close(4); close(5); close(6);
+    close(rev_fd);
+    if (tmp_name != NULL) unlink(tmp_name);
+    exit(2);
+}
+
+
+
+/* **************************************************************
+ * rline: get next line going backwards, return pertinent info
+ *
+ *        This routine returns the next line going backwards from
+ *   the end of a file.  It also will open a new file, if
+ *   neccesary, and if given a file name as a parameter.
+ *
+ *   The line is written into a static buffer, and a pointer to
+ *   that small buffer is returned.  Also, the position in the
+ *   file of the start of the line is returned.
+ */
+ char *rline(posp, fname)
+     int *posp;
+     char *fname;
+{
+	register char  *s1, *s2;
+	static char *bufp;
+	static char bf[RBUF];
+	static char lbf[RBUF * 2], rlbf[RBUF * 2];
+	static int  bf_len, fpos;
+
+	if (fname != NULL || fflag) {
+		if ( (bf_len = rblock(&fpos, bf, fname)) < 0) return(NULL);
+		bufp = bf + (bf_len - 1);
+		fflag = 0;
+	}
+
+	/* by now we have a block, so search backwards for newline */
+	for(s1=lbf, s2=s1 + (2*RBUF - 1), *s2-- = '\0';
+	    *bufp != '\n' &&   s2 >= s1;
+	    bufp--, fpos--)
+	  {
+		*s2-- = *bufp;
+		if (bufp == bf) {
+			if ((bf_len = rblock(&fpos,bf,NULL)) < 0) {
+				fflag = 1;
+				if (bf_len == NO_FILE_FLAG)
+				  return(NULL);
+				break;
+			}
+			bufp = bf + bf_len;
+			fpos++;
+		}
+	}
+	fpos--;
+	if ( --bufp < bf ) fflag = 1;
+	*posp = fpos;
+
+	return(++s2);
+}
+
+/* **************************************************************
+ * rblock: return next block going backward in a file
+ *
+ *       This routine reads the next-last block in a file,
+ *    or starts a new file, given a name.
+ *    The flag  sty  tells whether the current file descriptor
+ *    has been stat-ed yet.  If not, it is implicit that the
+ *    blocks will be taken from the end of the file.
+ *
+ *       Note, if this routine fails with errors 29 or 5 then
+ *    a message is printed and the whole program aborts.
+ *
+ *      The length of the block read-and-returned is returned.
+ */
+ rblock(fposp, buf, fname)
+     int *fposp;
+     char *buf, *fname;
+{
+	static int nbp;
+	int    len;
+
+	if (fname != NULL) {
+		if ( rev_fd > -1 ) close(rev_fd);
+		if ( (rev_fd=open(fname,O_RDONLY,0)) < 0) {
+			fprintf(stderr,"revgrep: ");
+			perror(fname);
+			return(NO_FILE_FLAG);
+		}
+		sty = 0;
+	}
+
+	if (! sty) {
+		struct stat sb;
+		if (fstat(rev_fd, &sb) < 0) return(-1);
+		nbp = (sb.st_size  / RBUF ) * RBUF;
+		sty = 1;
+	}
+
+	if (nbp < 0) return(-1);
+	if ( lseek(rev_fd,nbp,0) < 0) {
+		if (errno == 29  ||  errno == 5) {
+			perror("revgrep: rblock");
+			exit(1);
+		}
+		else return(-1);
+	}
+
+	if ( (len = read(rev_fd,buf,RBUF)) < 0) return(-1);
+	*fposp = nbp + len;
+	nbp = nbp - RBUF;
+	return( len );
+}

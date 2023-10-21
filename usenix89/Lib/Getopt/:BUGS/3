@@ -1,0 +1,141 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site seismo.CSS.GOV
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!seismo!keith
+From: keith@seismo.CSS.GOV (Keith Bostic)
+Newsgroups: net.sources.bugs
+Subject: Re: getopt(3) posting FLAME
+Message-ID: <444@seismo.CSS.GOV>
+Date: 16 Oct 85 23:31:26 GMT
+Date-Received: 17 Oct 85 11:07:05 GMT
+References: <910@utcs.uucp> <306@graffiti.UUCP>
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 127
+Summary: getopt(3) posting bucket of water
+
+In article <306@graffiti.UUCP>, peter@graffiti.UUCP (Peter da Silva) writes:
+
+> Disclaimer: the following text should be ignored by 90% of the readers of
+> mod.std.c, since they've already gone through this.
+
+Disclaimer: the following text should be read by 90% of the readers of
+mod.std.c, 'cause they're purely wrong.
+
+> Not when (as has been pointed out by many people) the standard argument parser
+> does the wrong thing. It can't even handle the arguments that sort(1) (V7)
+> uses, to wit:
+> 
+> 	sort -mubdfincrtx
+> 
+> Where the final 'tx' means 'tab character <x>'.
+
+Wrong.  What you're trying to do is assign the character 'x' to a char
+variable, correct?  Code can be written to use getopt that does this quite
+nicely.  Important code fragment:
+
+		case 't':	/* tab char */
+			tabch = *optarg;
+			break;
+
+> The rest of sort's arguments are even less parsable by getopt.
+
+Wrong again.  The *only* arguments that sort has that getopt can't handle
+are the +/- flags.  No, I take that back.  The V7 sort also allowed you
+"-mutxbd" where you could insert the argument into the flag string, and
+the program realized the length of the argument as a single character and
+simply picked up the next character and continued on.  I think that "feature"
+can wander on out of our lives, don't you?
+
+> There is no reason for getopt's insistence on lots of whitespace,
+
+Wrong.  It doesn't insist on lots of whitespace, any more than any other
+command interface.  You can group flags together, e.g. "sort -efghi",
+until you enter a flag that requires an argument.  Then, you have to have
+whitespace, otherwise there's no way to know when the argument terminates.
+That's nothing new.
+
+> nor for its ignoring argument order,
+
+Wrong again.  Why should getopt pay any attention whatsoever to argument
+order?  It's easy enough to implement if you really care about it:
+
+	short	sflag = 0;
+
+		case 's':	/* sflag */
+			++sflag;
+			break;
+		case 't':	/* tflag */
+			if (sflag) {
+				puts("no.");
+				exit(-1);
+			}
+
+but that has nothing to do with getopt.  All getopt is supposed to do is
+provide an interface to the user's command line.  *Not* decide that the
+flags are incorrectly ordered.  Besides, there's a very valid reason for
+programs ignoring argument order in general; it complicates the user interface
+unnecessarily.
+
+> nor for its inability to handle '+' and '-' type command flags...
+
+Here, you may have a point.  Getopt requires that all flags be preceded
+by a '-', and that "--" denote the end of the arguments.  Now, you can
+certainly have "sort -+3.5"
+
+	while ((ch = getopt(argc,argv,"t+:")) != EOF)
+		switch((char)ch) {
+			case '+':
+				printf("got +: arg was <%s>\n",optarg);
+				break;
+
+but not "sort --3.5".  Now... how many programs really use '+' and '-'?  And
+just how much heartbreak is it going to cause you to enter "sort -mubd -s3.5
+-e3.5" as opposed to the current "sort -mubd +3.5 -3.5"?  There's a difference
+of exactly two characters.  I think this is a minor price to pay for a
+consistent user interface.
+
+> And finally it's too big. If your program takes the following arguments:
+> 
+> 	foo [-someflags] [file]...
+
+> Which is the usual case, what's wrong with:
+
+... insert large example ...
+
+> which is not much more complex than the main you have to write with getopt to
+> do the same thing, allows more flexibility (foo -s -g:; foo -s -g :; foo -sg:;
+> foo -sg :), and produces a program that needs less core. If you think that's
+> a minor consideration, remember why vi doesn't use stdio on a PDP-11.
+
+First off, the code to parse a command list sanely is fairly complex.  Argv
+is not an that easy a variable to handle, especially for novice programmers.
+Getopt offers a clean, simple interface to command lines.  Secondly, your
+code is no more flexible than getopt.  The following code fragment will
+handle all of your examples.
+
+	while ((ch = getopt(argc,argv,"sg:")) != EOF)
+		switch((char)ch) {
+			case 's':
+				puts("got s");
+				break;
+			case 'g':
+				printf("got g: arg was <%s>\n",optarg);
+				break;
+			default:
+				puts("got nothing");
+				exit(ERR);
+		}
+
+Secondly, the size differences are negligible.  On a PDP or anywhere else.
+Getopt doesn't use stdio, therefore your code isn't going to improve it
+a lot.
+
+Getopt is a good idea, folks.
+	-- it provides consistent syntax error messages
+	-- most programmers don't handle bizarre flag/argument combinations;
+		getopt takes care of that problem.
+	-- simplifies the effort of writing a command interface to the
+		copying of a while loop from your last program and editing
+		a couple of lines.
+
+Keith Bostic
+	keith@seismo.CSS.GOV

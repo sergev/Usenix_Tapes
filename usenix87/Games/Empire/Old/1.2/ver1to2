@@ -1,0 +1,880 @@
+# This shell script converts the unmodified contents of an
+# Old Empire Version 1.1 directory structure to Old Empire Version 1.2.
+# This probably only works on Old Empire 1.1 as distributed from
+# ihnp4!druxn!tsf.  That is, if the original distribution was hacked
+# upon, this script might do more harm than good.
+# You don't have to blow away an active game database.  If you have a game
+# in progress, just remake and install the commands, being careful to
+# get the changes in EMPGLB/*glb.c into your EMPGLB/empglb.c .
+# If you have problems, please send email to ihnp4!drutx!tsf .
+#
+#	sh mailfile				Unpack the shar'd script
+#	echo "Don't clobber your V1.1 until"	Warning..
+#	echo "you're sure V1.2 works!"		..common sense..
+#	mkdir V1.2				Create directory for V1.2
+#	cd V1.1					Get into V1.1 directory
+#	find . -print | cpio -pumd ../V1.2	Copy V1.1 into V1.2
+#	cd ..					Position just above V1.2
+#	chmod 000 V1.1				Do something to protect V1.1
+#	sh upg1.1-1.2				Convert V1.1 to V1.2
+#	chmod 755 V1.1				Undo V1.1 protection
+#
+echo "Copying Buglist into 1.1Buglist"
+cp Buglist 1.1Buglist
+echo "Updating Buglist"
+ed - Buglist <<'!DONE!'
+379,420c
+36) If a player uses the "shell" command, he/she can then execute empire
+    from the shell to enter the game a second time.  This might cause a
+    problem.
+.
+376,377c
+	Fix: Change the manual page.
+.
+373,374c
+35) The innards manual page states that iwork * efficiency units of
+    ore are turned into production units.  That's 100 times more than
+    the program actually does.
+.
+367,371c
+	Fix: In cens.c and rout.c, take out the check for S_XCHNG and
+	     subsequent clearing of the delivery bytes.
+.
+364,365c
+34) The census and route commands don't show the civilian and military
+    delivery routes through an exchange sector.
+.
+360,362c
+	Fix: In empdis.c and empire.c where the empup and/or empdown files
+	     are read, use an automatic buf[514] to hold the contents.
+	     The code should use a symbolic constant (MAXTELSZ) to hold
+	     the maximum telegram size, but for now minimize the number of
+	     files hit.
+.
+356,358c
+33) The empup or empdown messages can be up to 512 characters long, but
+    the files are read into a buffer (junk[80]) only 80 characters long.
+.
+351,354c
+	Fix: This happens when the privuid logs in as any country other
+	     than the Deity and the empdown file exists.  In empdis.c, rework
+	     the section right after the check for the empdown file.  Instead
+	     of exec'ing emprog[0] just to get the empdown file printed out,
+	     read the file in empdis.c, close it, then call bye() to clean
+	     up properly.
+.
+348,349c
+32) If there is a empdown file, it prints out the empdown message
+    twice, asks for the rep's name twice, then says that there is no
+    'empire' in the records, please see "privname".  Also, when a player
+    is bounced out because the empdown file shows up, the nation status
+    still shows that country logged in.
+.
+344,346c
+	Fix:  Add check in boar.c to make Deity-owned ships invisible.
+.
+342c
+31) You can board a ship owned by the Deity.
+.
+339,340c
+30) If a grant is in an exec script, the Rep's name isn't obtained
+    properly.  The message "Eek, an imposter.." is printed.
+.
+337c
+	Fix:  The manual page says each gold bar should be worth 5 points.
+	      Change powe.c to match the manual page (used to be 3 points
+	      per bar).
+.
+331,335c
+29) The power formula in the manual page doesn't match the code in powe.c
+.
+328,329c
+	Fix:  When the new designation is a gold mine, the ore gets
+	      set to zero.  Add a putsect to make the change permanent,
+	      and also set goods[5] = 0 to make sure ore in a warehouse
+	      doesn't also become gold dust.
+.
+325,326c
+28) You can make gold dust out of ordinary ore by changing a sector
+    containing ordinary ore to a bridge head, and then into a gold mine.
+    A message claims that ore has been lost, but in fact, it's still
+    there.  It becomes gold dust by its presence in the gold mine.
+    It turns out that ore in a warehouse, bank, or urban area can also
+    become gold dust.
+.
+317,323c
+	Fix: In trad.c add a check to disallow buying ships from the Deity.
+.
+311,315c
+27) You can buy a ship from the Deity.  When a country puts ships up for
+    sale, then dissolves its government, some of the ships become owned
+    by the Deity, and they're still for sale.  This could also be used to
+    buy back your ship after it sinks.  When you know your ship's about to
+    be sunk, put it up for sale.  After it sinks and then regains enough
+    efficiency to stay afloat, and before anyone builds another ship, buy
+    it back.
+.
+306,309c
+	Fix: In upda.c, instead of changing realm 0 to 127:-127,127:-127,
+	     and then leaving it that way when no sectors are found,
+	     only change realm 0 if sectors are found.  In addition, if
+	     no sectors are found, print "No sectors".
+.
+294,304c
+26) After updating a sector with the "update" command that wasn't owned,
+    cen #0 produced output with coordinates greater than the max world
+    dimensions.
+.
+292c
+	Fix: Cast comaddr to int in switch statement.
+.
+287,290c
+25) Compiler warning on line 397 of empdis.c.
+.
+281,285c
+	Fix: In desi.c, change to "... capital".
+.
+279c
+24) Spelling error in designate command: "You are now without a capitol"
+.
+274,277c
+23) Various cheating opportunities exist because of no mutual exclusion
+    enforcement on database.
+.
+272c
+	Fix: In empcre.c the scts, elcnts, type, and powbuf arrays were
+	     on the stack and uninitialized.  This caused garbage to be
+	     written to the sector file (empsect).  Initialize the arrays
+	     with zeros.
+.
+269,270c
+22) On a 3b2, empcre reports screwy statistics right after making the
+    world, random sectors have the plague right after creation, the census
+    command shows strange values for commodities in brand new sectors,
+    and the power command dumps memory.
+.
+266,267c
+	Fix: Make both libraries the target of .PRECIOUS in both the local
+	     and top-level makefiles.
+.
+262,264c
+21) If the make is interrupted during the empsub.a make, empsub.a is
+    removed.
+.
+239,260c
+	Fix: This broke when the mobility of sectors and ships was made
+	     a short instead of a character to port the game to machines
+	     with unsigned characters.
+	     In empglb.c (sysglb.c and myglb.c), change the i_shp member
+	     of the ichr[6] element ("mobility") from 0 to
+	     (char *)&(((struct shpstr *)0)->shp_mbl). (Hard to believe, isn't
+	     it?).  Also, in nxtsct.c in the decode function, check to see if
+	     the cp pointer is pointing to sect.sct_mobil.  If it is, set
+	     code directly (code = sect.sct_mobil).  Similarly, in nxtshp.c
+	     in the bdecode function, check to see if the cp pointer is
+	     pointing to the shp_mbl member.  If it is, set code directly
+	     (code = sp->shp_mbl).
+.
+232,237c
+20) Tried to nav all ships at -13,-11 with mobility greater than 100.
+      nav -13,-11 ?mob>100 lle
+    This command didn't work.  It didn't seem to understand the mobility.
+    Upon further invstigation, a mobility condition on sectors isn't
+    understood either.
+.
+209,230c
+	Fix: In loans.c, change the wordfix for loner and lonee to
+             bytefix.
+.
+207c
+19) Empfix doesn't handle loans quite right.
+.
+200,205c
+	Fix: In fly.c, right before X3612, the sector efficiency gets
+	     right shifted 2.  It should have been left shifted (i.e.
+	     multiplied by 4).   Use (500 - (sect.sct_effic*4))/10  to
+	     specify the chances of landing successfully.
+	     This makes kamikazi attacks on 100% sectors more effective
+	     since more planes crash and blow up.  More planes are lost.
+.
+197,198c
+18) Crash landing on a 100% fort gives you 47% chance of making it.
+    The "fly" manual page says it should be 10%.
+.
+192,195c
+17) You can log in using two terminals and keep the time from accumulating.
+    You can also save BTU's, build more than one battleship with 127
+    production units, etc.  Anywhere there is a prompt, there is a potential
+    cheating opportunity with two or more terminals.
+.
+190c
+	Fix: Update to use the Bourne shell.  Fix typos in sector-types,
+	     innards, ship-types, designate, collect, and ship.
+.
+188c
+16) The MAN.CCL command in the INFO directory doesn't work anymore. And
+    some of the manual pages have typos, misaligned text, etc.
+.
+185,186c
+	Fix: Put a dependency on _unix.O in all the appropriate
+	     Makefiles.
+.
+183c
+15) The makefiles should compensate for missing _unix.O directories.
+.
+180,181c
+14) There should be a way of combining the 6 modules into one so that
+    the smaller machines like the 3b2 will run faster and use less disk
+    space.
+.
+178c
+	Fix: Put a note in the README for 3b2 users.  Set CC="cc -f"
+	     and export it.  Then do a make -e all.
+.
+175,176c
+13) The 3b2 final load needs to use the -f option to get floating point.
+    Otherwise, it will core dump on the first floating point operation.
+.
+165,173c
+	Fix:  In sigsave.c, change the -1's to 1's.
+.
+162,163c
+12) The sigsave function has a signal(-1, 1) call.  The -1 causes the
+    3b2 to core dump on the next exec.
+.
+158,160c
+11) In empdis.c, main(argc, argv) is called recursively after "shell",
+    "fixup", etc.  There's a better way to do this.  This way, the stack
+    grows on every shell command until a switch is made to a new module.
+.
+153,156c
+	Fix: In update.c, when delivering civ or mil, get the destination
+	     sector with a special UP_WFDEL flag set.  In getsect.c,
+	     call update if UP_WFDEL is set.  Back in update, if an
+	     update is being done with UP_WFDEL set, inhibit delivery
+	     of civ or mil (recursion stopper), and update sector to
+	     within 4 time units of curup.  This also requires a new
+	     flag, UP_WFDEL, in empdef.h.  The result is that whenever
+	     civ or mil are delivered into a sector that hasn't been
+	     updated lately, a sector update is forced (to within 4
+	     time units), and all normal updating functions are performed
+	     except for civ or mil delivery.  By leaving the sector
+	     4 units behind the current time, the civ or mil delivery will
+	     take place when the sector is updated by a census.
+.
+151a
+    Similarily, military can be reused to increase efficiency in a long
+    chain of sectors.
+.
+130,147c
+10) You can use civilians more than once - (the "rolling civilians" bug).
+.
+58,125c
+9)  One recipient of Version 1.0 would like all the ^G characters
+.
+52c
+	No Change: Hasn't been seen in a long while.  Probably got
+	   fixed when the other printf related bugs were fixed.
+
+8) You get a core dump if you enter numbers that are greater than +127
+.
+47c
+	Fix: Change the algorithm for determining gold mineral content
+	     so that there are similar distributions for 32x32, 64x64,
+	     and 128x128 worlds.  Changes are in empcre.c.
+	     Also in empcre.c, change the arrays sizes for gold[], river[],
+	     and volc[] from 50 to 200.  This reduces the total world
+	     gold content in the 64x64 world, but the result is (my guess)
+	     more what was intended: localized gold strikes and mineral
+	     content, rather than worldwide gold veins as it is now.
+	     This means that some countries will find themselves in a
+	     gold-poor region.  They will have to trade with other countries,
+	     or follow the gold veins (expand in the direction of increasing
+	     gold content) to get enough gold bars to survive.  The change
+	     is noticeable to anyone who expects every sector to have a
+	     gmin of 80 or better.
+
+7) Telegrams get screwed up.  It appears to be placing data from initial-
+.
+38,42c
+6) World of size other than 64,64 never tested after decompilation.
+.
+34,36c
+	No Change:  This is appropriate since the poor guys are probably
+		    unconscious for a while.
+.
+30c
+    the welcome message still claims you have 0,0 and 1,0.
+.
+28a
+	Fix:  In coun.c, change it to BTU so one doesn't confuse it
+	      with accumulated session time.
+
+.
+23a
+	Fix:  In update.c, right where the miners dig up some more ore
+	      in a gold mine, no check was made to see if all the new ore
+	      would fit in the sector.  On machines with negative characters,
+	      this results in negative ore, negative production, and possibly
+	      negative gold bars.  What fun!  Spoil the fun by adding a check
+	      to make sure all the new ore will fit.
+
+.
+2c
+
+Version 1.2 Old Empire (Empire Classic!) - circa 1978, decompiled from 
+.
+w
+!DONE!
+echo "Updating COMMANDS/boar.c"
+ed - COMMANDS/boar.c <<'!DONE!'
+19c
+	if( vship == -1 || vs.shp_own == 0 ) {
+.
+w
+!DONE!
+echo "Updating COMMANDS/cens.c"
+ed - COMMANDS/cens.c <<'!DONE!'
+40,42d
+w
+!DONE!
+echo "Updating COMMANDS/coun.c"
+ed - COMMANDS/coun.c <<'!DONE!'
+13c
+	printf("  #   last access       BTU \tstatus\t country name\n");
+.
+w
+!DONE!
+echo "Updating COMMANDS/desi.c"
+ed - COMMANDS/desi.c <<'!DONE!'
+109c
+			printf("You are now without a capital.\n");
+.
+102a
+			putsect(nsct.n_x, nsct.n_y);
+			goods[5] = 0;
+.
+87c
+			printf("Capital at %d,%d (old system)", nsct.n_x, nsct.n_y);
+.
+w
+!DONE!
+echo "Updating COMMANDS/fly.c"
+ed - COMMANDS/fly.c <<'!DONE!'
+243c
+		i = (500 - (sect.sct_effic * 4)) / 10;
+.
+w
+!DONE!
+echo "Updating COMMANDS/powe.c"
+ed - COMMANDS/powe.c <<'!DONE!'
+132c
+	k->p_power += k->p_gold * 5. + k->p_money * 10.;
+.
+w
+!DONE!
+echo "Updating COMMANDS/rout.c"
+ed - COMMANDS/rout.c <<'!DONE!'
+54d
+w
+!DONE!
+echo "Updating COMMANDS/trad.c"
+ed - COMMANDS/trad.c <<'!DONE!'
+87c
+	if( ship.shp_spric == 0 || ship.shp_own == 0 ) goto X1330;
+.
+w
+!DONE!
+echo "Updating COMMANDS/upda.c"
+ed - COMMANDS/upda.c <<'!DONE!'
+53a
+	if( num == 0 ) {
+		printf("No sectors\n");
+		return(NORM_RETURN);
+	}
+	nrealm[0].b_xl = upxl;
+	nrealm[0].b_xh = upxh;
+	nrealm[0].b_yl = upyl;
+	nrealm[0].b_yh = upyh;
+.
+50,51c
+		if( j < upyl ) upyl = j;
+		if( j > upyh ) upyh = j;
+.
+45,46c
+			if( i < upxl ) upxl = i; 
+			if( i > upxh ) upxh = i;
+.
+37,38c
+	upxl = upyl = 127;
+	upxh = upyh = -127;
+.
+9a
+	int	upxl, upxh, upyl, upyh;
+.
+w
+!DONE!
+echo "Updating COMMANDS/vers.c"
+ed - COMMANDS/vers.c <<'!DONE!'
+3c
+char	Version[] = "~@(#)Version 1.2 Old Empire\nDec 1986\n (decompiled 1983 from PDP 11/70 object)";
+.
+w
+!DONE!
+echo "Updating EMPCRE/Makefile"
+ed - EMPCRE/Makefile <<'!DONE!'
+9a
+
+_unix.O:
+	mkdir _unix.O
+.
+8c
+$(INSDIR)/empcre:	_unix.O _unix.O/empcre.o $(EMPGLB) $(EMPSUB)
+.
+w
+!DONE!
+echo "Updating EMPCRE/empcre.c"
+ed - EMPCRE/empcre.c <<'!DONE!'
+132c
+			scts[i].sct_gmin = max127(e/14 + rand()%29);
+.
+130c
+				dist = dfact * dst(i-gold[k].x, j-gold[k].y);
+				e += 5000 / (dist + rand()%5 + 5);
+.
+128a
+			dfact = ( w_xsize > w_ysize ) ? w_xsize : w_ysize;
+			dfact = dfact/16 + 1;
+.
+38a
+	for( i = 0; i < 128; i++ ) {
+		scts[i].sct_owned = scts[i].sct_desig = scts[i].sct_effic = 0;
+		scts[i].sct_miner = scts[i].sct_gmin = scts[i].sct_prdct = 0;
+		scts[i].sct_mobil = scts[i].sct_chkpt = 0;
+		scts[i].sct_dfend = scts[i].sct_contr = scts[i].sct_civil = 0;
+		scts[i].sct_milit = scts[i].sct_shell = scts[i].sct_guns = 0;
+		scts[i].sct_plane = scts[i].sct_ore = scts[i].sct_gold = 0;
+		scts[i].sct_c_use = scts[i].sct_m_use = scts[i].sct_s_use = 0;
+		scts[i].sct_g_use = scts[i].sct_p_use = scts[i].sct_o_use = 0;
+		scts[i].sct_b_use = 0;
+		scts[i].sct_p_stage = scts[i].sct_p_time = 0;
+		scts[i].sct_lstup = 0;
+	}
+	for( i = 0; i < 1024; i++ ) elcnts[i] = 0;
+	for( i = 0; i < 23; i++ ) type[i] = 0;
+	for( i = 0; i < 48; i++ ) powbuf[i] = 0;
+.
+34a
+	int	dist, dfact;
+.
+21c
+} volc[200], gold[200], river[200];
+.
+w
+!DONE!
+echo "Updating EMPDIS/empdis.c"
+ed - EMPDIS/empdis.c <<'!DONE!'
+397c
+	switch( (int)comaddr ) {
+.
+188,192d
+186a
+	if( nstat != STAT_GOD ) {
+		read(n, &tgm, (sizeof tgm));
+		printf("Empire down for repairs as of %s", ctime(&tgm.tel_date));
+		read(n, buf, tgm.tel_length);
+		printf("%s\n", buf);
+		close(n);
+		bye();
+	}
+.
+102c
+	char	*copy(), *ctime();
+	char	buf[514];
+.
+99a
+	struct	telstr	tgm;
+.
+6a
+#define	D_TELSTR
+.
+w
+!DONE!
+echo "Updating EMPFIX/4.2mkfile"
+ed - EMPFIX/4.2mkfile <<'!DONE!'
+29a
+
+_unix.O:
+	mkdir _unix.O
+.
+28c
+$(INSDIR)/empfix:   _unix.O _unix.O/main.o _unix.O/fixlib.a $(EMPGLB) $(EMPSUB)
+.
+w
+!DONE!
+echo "Updating EMPFIX/Makefile"
+ed - EMPFIX/Makefile <<'!DONE!'
+16a
+
+_unix.O:
+	mkdir _unix.O
+.
+15c
+$(INSDIR)/empfix: _unix.O _unix.O/main.o _unix.O/fixlib.a $(EMPGLB) $(EMPSUB)
+.
+w
+!DONE!
+echo "Updating EMPFIX/loans.c"
+ed - EMPFIX/loans.c <<'!DONE!'
+27,28c
+	bytefix("loner", &loan.l_loner, 0);
+	bytefix("lonee", &loan.l_lonee, 0);
+.
+w
+!DONE!
+echo "Updating EMPFIX/main.c"
+ed - EMPFIX/main.c <<'!DONE!'
+49d
+19,47c
+	for( ;; ) {
+		time(&now);
+		lseek(natf, 0L, 0);
+		if( read(natf, &nat, sizeof(nat)) < sizeof(nat) ) {
+			printf("Too few bytes in nation #0...\n");
+		}
+		up_offset = nat.nat_up_off;
+		printf("Curup is %.0f\n", now / 1800. - up_offset);
+		cp = getstri("1:nation 2:sector 3:ship 4:treaty 5:loan  : ");
+		switch( *cp ) {
+		case '\0':
+			execl("/bin/date", "", 0);
+		case '1':
+			nations();
+			break;
+		case '2':
+			sectors();
+			break;
+		case '3':
+			ships();
+			break;
+		case '4':
+			treats();
+			break;
+		case '5':
+			loans();
+			break;
+		default:
+			printf("Huh?\n");
+		}
+.
+14,17c
+	if( privuid != myruid() ) {
+		printf("%d != %d\n", myruid(), privuid);
+		exit(1);
+	}
+.
+w
+!DONE!
+echo "Updating EMPGLB/myglb.c"
+ed - EMPGLB/myglb.c <<'!DONE!'
+148c
+    0,   0,         0,     (char *)&(((struct shpstr *)0)->shp_mbl),  0,    0,   1,  0, { 1, 1, 1, 1},       "mobility",
+.
+w
+!DONE!
+echo "Updating EMPGLB/sysglb.c"
+ed - EMPGLB/sysglb.c <<'!DONE!'
+148c
+    0,   0,         0,     (char *)&(((struct shpstr *)0)->shp_mbl),  0,    0,   1,  0, { 1, 1, 1, 1},       "mobility",
+.
+w
+!DONE!
+echo "Updating EMPIRE/Makefile"
+ed - EMPIRE/Makefile <<'!DONE!'
+9a
+
+_unix.O:
+	mkdir _unix.O
+.
+8c
+$(INSDIR)/empire:  _unix.O _unix.O/empire.o $(EMPGLB) $(EMPSUB)
+.
+w
+!DONE!
+echo "Updating EMPIRE/empire.c"
+ed - EMPIRE/empire.c <<'!DONE!'
+40,41c
+		read(telf, buf, tgm.tel_length);
+		printf("%s\n", buf);
+.
+32,33c
+		read(telf, buf, tgm.tel_length);
+		printf("%s\n", buf);
+.
+17a
+	char	buf[514];
+.
+w
+!DONE!
+echo "Updating EMPN/Makefile"
+ed - EMPN/Makefile <<'!DONE!'
+48a
+
+_unix.O:
+	mkdir _unix.O
+.
+47c
+$(INSDIR)/emp7:	_unix.O $(EMPDIS) _unix.O/emp7.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+44c
+$(INSDIR)/emp5:	_unix.O $(EMPDIS) _unix.O/emp5.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+41c
+$(INSDIR)/emp4:	_unix.O $(EMPDIS) _unix.O/emp4.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+38c
+$(INSDIR)/emp3:	_unix.O $(EMPDIS) _unix.O/emp3.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+35c
+$(INSDIR)/emp2:	_unix.O $(EMPDIS) _unix.O/emp2.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+32c
+$(INSDIR)/emp1:	_unix.O $(EMPDIS) _unix.O/emp1.o $(EMPCOM) $(EMPSUB) $(EMPGLB)
+.
+w
+!DONE!
+echo "Updating EMPSUBS/getsect.c"
+ed - EMPSUBS/getsect.c <<'!DONE!'
+35c
+	if( cnum != 0 || (selup & (UP_OWN|UP_ALL|UP_TIME|UP_GOD|UP_WFDEL)) ) {
+.
+w
+!DONE!
+echo "Updating EMPSUBS/nxtsct.c"
+ed - EMPSUBS/nxtsct.c <<'!DONE!'
+141c
+	/* horrible kluge for handling mobility as a short */
+		if( cp == (char *)&sect.sct_mobil ) {
+			code = sect.sct_mobil;
+		} else {
+			code = ichr[code].i_pkg[pkgs] * *cp;
+		}
+.
+w
+!DONE!
+echo "Updating EMPSUBS/nxtshp.c"
+ed - EMPSUBS/nxtshp.c <<'!DONE!'
+245,246c
+		cp = (int)ichr[code].i_shp + (char *)sp;
+	/* horrible kluge for handling mobility as a short */
+		if( cp == (char *)&sp->shp_mbl ) {
+			code = sp->shp_mbl;
+		} else {
+			code = *cp;
+		}
+.
+239c
+struct	shpstr	*sp;
+.
+w
+!DONE!
+echo "Updating EMPSUBS/sigsave.c"
+ed - EMPSUBS/sigsave.c <<'!DONE!'
+12c
+	signal(1, sigaddr[0]);
+.
+5c
+	sigaddr[0] = signal(1, 1);
+.
+w
+!DONE!
+echo "Updating EMPSUBS/update.c"
+ed - EMPSUBS/update.c <<'!DONE!'
+339a
+		if( sect.sct_ore + q > 127 ) q = 127 - sect.sct_ore;
+.
+199c
+/*
+*	If we're delivering workforce (civilians or military), we have to
+*	get the destination sector with the special UP_WFDEL flag set.
+*	This tells getsect to call update with the same flag.  This will
+*	cause the destination sector to be updated to within 4 time units
+*	of curup.  This will prevent the re-use of civilians along a civilian
+*	delivery chain (the "rolling civilians" bug), or re-use of military
+*	to increase sector efficiencies.
+*/
+	if( i == 0 || i == 1 ) {
+		if( getsect(dx, dy, UP_WFDEL) == -1 ) goto X3404;
+		getnat(sectowner);
+	} else {
+		if( getsect(dx, dy, UP_NONE) == -1 ) goto X3404;
+	}
+.
+177a
+	if( selup & UP_WFDEL && ( i == 0 || i == 1 ) ) goto X4266;
+.
+176a
+/*
+*	If this is the destination sector in a workforce (civ or mil)
+*	delivery, don't deliver workforce.  This is the recursion stopper.
+*/
+.
+44c
+	if( (selup & (UP_TIME | UP_WFDEL)) == 0 ) goto X310;
+	if( selup & UP_WFDEL ) { /* being updated for wrkforce delivery */
+		dt -= 4; /* update sector to within 4 time units */
+		if( dt <= 0 ) return(0);
+	}
+.
+w
+!DONE!
+echo "Updating INFO/MAN.CCL"
+ed - INFO/MAN.CCL <<'!DONE!'
+7,29d
+1c
+if [ -n "$1" ];then
+	case $1 in
+	P0)	nroff -rP0 MANFP.NR overview commands syntax time sector-types ship-types research technology plague innards;;
+	P1)	nroff -rP1 MANFP.NR `ls [a-c]* | grep -v "^commands"`;;
+	P2)	nroff -rP2 MANFP.NR `ls [d-i]* | grep -v "^innards"`;;
+	P3)	nroff -rP3 MANFP.NR `ls [j-p]* | egrep -v "^overview|^plague"`;;
+	P4)	nroff -rP4 MANFP.NR `ls [q-s]* | egrep -v "^research|^syntax|^sector-types|^ship-types"`;;
+	P5)	nroff -rP5 MANFP.NR `ls [t-z]* | egrep -v "^technology|^time"`;;
+	*)	nroff -rP0 MANFP.NR $1 $2 $3 $4 $5 $6 $7 $8 $9;;
+	esac
+	exit
+fi
+
+MAN.CCL P0
+.
+w
+!DONE!
+echo "Updating INFO/MANFP.NR"
+ed - INFO/MANFP.NR <<'!DONE!'
+5c
+OLD EMPIRE INFORMATION MANUAL
+.
+w
+!DONE!
+echo "Updating INFO/collect"
+ed - INFO/collect <<'!DONE!'
+8c
+someone's capital may do the trick!
+.
+w
+!DONE!
+echo "Updating INFO/designate"
+ed - INFO/designate <<'!DONE!'
+22c
+three sectors of your capital to be roads.
+.
+w
+!DONE!
+echo "Updating INFO/innards"
+ed - INFO/innards <<'!DONE!'
+182c
+update routine; that is the update of bureaucratic time units (B.T.U.).
+.
+137c
+turn up to effic * iwork / 100 units of ore into production units
+.
+132c
+turn up to effic * iwork / 100 units of ore into production units
+.
+128c
+turn up to effic * iwork / 100 units of ore into production units
+.
+124c
+and then turn up to effic * iwork / 100 units of ore into production units
+.
+55c
+    does not belong to the current player and iwork is less than 48
+.
+46c
+If lstup == 0 (i.e. never been updated) go away and don't update anything
+.
+w
+!DONE!
+echo "Updating INFO/sector-types"
+ed - INFO/sector-types <<'!DONE!'
+55c
+-capital- Capitals are the source of bureaucratic
+.
+w
+!DONE!
+echo "Updating INFO/ship"
+ed - INFO/ship <<'!DONE!'
+17c
+x,y is its location (relative to your capital), f is the fleet
+.
+w
+!DONE!
+echo "Updating INFO/ship-types"
+ed - INFO/ship-types <<'!DONE!'
+40c
+.sp
+.
+37c
+.sp
+.
+35c
+.sp
+.
+33c
+.sp
+.
+31c
+.sp
+.
+29c
+.sp
+.
+8a
+.tr ~~
+.
+6c
+	pt~boat		submarine	battleship
+.
+4a
+.tr ~
+.
+w
+!DONE!
+echo "Updating Makefile"
+ed - Makefile <<'!DONE!'
+74a
+
+.PRECIOUS:	$(EMPSUB) $(EMPCOM)
+.
+21a
+BIN:	
+	mkdir BIN
+
+DATA:
+	mkdir DATA
+
+_unix.O:
+	mkdir _unix.O
+
+.
+17c
+all:	BIN DATA _unix.O $(EMPGLB) $(EMPDIS) $(EMPSUB) $(EMPCOM) \
+.
+w
+!DONE!
+echo "Updating README"
+ed - README <<'!DONE!'
+23a
+   If you have a 3b2, to avoid core dumps on floating point operations,
+   set CC="cc -f", then export CC, then make -e all.
+
+.
+w
+!DONE!
+echo "Updating hdrs/empdef.h"
+ed - hdrs/empdef.h <<'!DONE!'
+52a
+#define	UP_WFDEL	64	/* update a wrkforce delivery destination */
+.
+w
+!DONE!

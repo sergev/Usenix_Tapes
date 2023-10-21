@@ -1,0 +1,200 @@
+# @(#) Makefile 1.33 85/12/09
+SHELL=/bin/sh
+
+# Settable parameters.
+
+# Default pager for use if PAGER environment variable is not set.
+DEFPAGER=more	# BSD systems
+#DEFPAGER=pg	# AT&T systems
+#DEFPAGER=cat	# systems with paging in the kernel
+# Set this if you have look(1).
+LOOK=1
+# Set this to compress the map files.
+COMPRESS=yes
+#COMPRESS=
+
+# BIN should be either /usr/local or /usr/local/bin
+BIN=/usr/local
+LIB=/usr/local/lib
+
+# Routing information produced by pathalias.
+PATHS=$(LIB)/nmail.paths
+
+# If you do not have dbm(3), i.e., -ldbm, set UUWHERE to nothing.
+UUWHERE=uuwhere
+# UUWHERE=
+# Munged by uuwhere for location information.
+WHERE=$(LIB)/nmail.where
+# TMP should be in the same directory as WHERE.
+TMP=$(LIB)/nmail.tmp
+# -ldbm DATABASE used by uuwhere.
+DATABASE=$(LIB)/uuindex
+
+# Most of the news parameter files and mapsh are in this directory.
+NEWS=$(LIB)/news
+# The maps from mod.map are under this directory.
+MAPS=/usr/spool/news/maps
+#MAPS=$(NEWS)/maps	# another possibility
+
+# The filename of the manual entry.
+UUHOSTSMAN=uuhosts.1
+UUWHEREMAN=uuwhere.1
+MAN=$(UUHOSTSMAN) $(UUWHEREMAN)
+MANSOURCES=uuhosts.man uuwhere.man
+# The manual directory for local entries.
+MANDIR=/usr/man/manl
+
+# This is a very local UT hack which is meaningless on your system.
+RUUHOSTS=uuhosts.CS.UTEXAS.EDU
+
+# The rest of the Makefile shouldn't need to be changed.
+
+UUCPMAPGROUP=mod.map
+# This can't be the same as UUCPMAPGROUP
+OLDUUCPMAPGROUP=mod.map.uucp
+# USENET spool directory containing articles from newsgroup $(UUCPMAPGROUP).
+# Must match $(UUCPMAPGROUP)!
+UUCPSPOOL=/usr/spool/news/mod/map
+# The place uuhosts stores the $(UUCPMAPGROUP) information for later retrieval.
+UUCPMAP=$(MAPS)/$(UUCPMAPGROUP)
+
+SOURCES=uuhosts.sh mapsh.c uuwhere.c $(MANSOURCES) maps.ls
+ALL= uuhosts mapsh $(UUWHERE) $(MAN)
+
+all: $(ALL)
+
+uuhosts: Makefile uuhosts.sh
+	sed -e '/^DEFPAGER=/s%=.*%=$(DEFPAGER)%' \
+		-e '/^LOOK=/s%=.*%=$(LOOK)%' \
+		-e '/^COMPRESS=/s%=.*%=$(COMPRESS)%' \
+		-e '/^RUUHOSTS=/s%=.*%=$(RUUHOSTS)%' \
+		-e '/^UUCPMAPGROUP=/s%=.*%=$(UUCPMAPGROUP)%' \
+		-e '/^UUCPSPOOL=/s%=.*%=$(UUCPSPOOL)%' \
+		-e '/^BIN=/s%=.*%=$(BIN)%' \
+		-e '/^LIB=/s%=.*%=$(LIB)%' \
+		-e '/^PATHS=/s%=.*%=$(PATHS)%' \
+		-e '/^WHERE=/s%=.*%=$(WHERE)%'\
+		-e '/^NEWS=/s%=.*%=$(NEWS)%' \
+		-e '/^MAPS=/s%=.*%=$(MAPS)%'\
+		uuhosts.sh > uuhosts
+	chmod +x uuhosts
+
+mapsh: Makefile mapsh.c
+	$(CC) -o mapsh -DMAPS=\"$(MAPS)\" mapsh.c
+
+uuwhere: Makefile uuwhere.c
+	$(CC) -DUUCPINDEX=\"$(UUCPMAP)/Index\" \
+		-DPATHS=\"$(PATHS)\" \
+		-DWHERE=\"$(WHERE)\" \
+		-DTMP=\"$(TMP)\" \
+		-DDATABASE=\"$(DATABASE)\" \
+		uuwhere.c -ldbm -o uuwhere
+
+where:	$(LIB)/uuwhere
+
+$(UUHOSTSMAN):	Makefile uuhosts.man
+	sed -e 's%UUCPMAPGROUP%$(UUCPMAPGROUP)%' \
+		-e 's%UUCPMAP%$(UUCPMAP)%' \
+		-e 's%DEFPAGER%$(DEFPAGER)%' \
+		-e 's%BIN%$(BIN)%' \
+		-e 's%LIB%$(LIB)%' \
+		-e 's%PATHS%$(PATHS)%' \
+		-e 's%WHERE%$(WHERE)%' \
+		-e 's%TMP%$(TMP)%' \
+		-e 's%DATABASE%$(DATABASE)%' \
+		-e 's%NEWS%$(NEWS)%' \
+		-e 's%MAPS%$(MAPS)%'\
+		uuhosts.man > $(UUHOSTSMAN)
+
+$(UUWHEREMAN):	Makefile uuwhere.man
+	sed -e 's%UUCPMAP%$(UUCPMAP)%' \
+		-e 's%BIN%$(BIN)%' \
+		-e 's%LIB%$(LIB)%' \
+		-e 's%PATHS%$(PATHS)%' \
+		-e 's%WHERE%$(WHERE)%' \
+		-e 's%TMP%$(TMP)%' \
+		-e 's%DATABASE%$(DATABASE)%' \
+		-e 's%NEWS%$(NEWS)%' \
+		-e 's%MAPS%$(MAPS)%'\
+		uuwhere.man > $(UUWHEREMAN)
+
+inst_:
+
+inst_uuwhere: $(UUWHERE)
+	-rm -f $(LIB)/uuwhere
+	cp uuwhere $(LIB)/uuwhere
+	chmod 555 $(LIB)/uuwhere
+	cp /dev/null $(WHERE)
+	-chmod 666 $(WHERE)
+	-rm -f $(MANDIR)/$(UUWHEREMAN)
+	-cp $(UUWHEREMAN) $(MANDIR)
+	-chmod 444 $(MANDIR)/$(UUWHEREMAN)
+
+install: $(ALL) inst_$(UUWHERE) inst_most $(UUCPMAP)/path.local recover
+
+inst_most:
+	-rm -f $(BIN)/uuhosts
+	cp uuhosts $(BIN)/uuhosts
+	chmod 555 $(BIN)/uuhosts
+	-rm -f $(MANDIR)/$(UUHOSTSMAN)
+	-cp $(UUHOSTSMAN) $(MANDIR)
+	-chmod 444 $(MANDIR)/$(UUHOSTSMAN)
+	@echo "Rest of installation has to be done as root."
+	cp mapsh $(NEWS)/mapsh
+	-strip $(NEWS)/mapsh
+	chown root $(NEWS)/mapsh
+	chgrp news $(NEWS)/mapsh
+	chmod 4750 $(NEWS)/mapsh
+	ls -lg $(NEWS)/mapsh
+	-mkdir $(MAPS)
+	-mkdir $(MAPS)/bin $(MAPS)/tmp $(UUCPMAP)
+	chgrp news $(MAPS) $(MAPS)/*
+	chmod 555 $(MAPS)
+	chmod 775 $(UUCPMAP)
+	chmod 777 $(MAPS)/tmp
+	chmod 555 $(MAPS)/bin
+	cp /bin/cat $(MAPS)/bin
+	cp /bin/echo $(MAPS)/bin
+	cp /bin/sed $(MAPS)/bin
+	cp /bin/sh $(MAPS)/bin
+	-strip $(MAPS)/bin/*
+	chgrp news $(MAPS)/bin/*
+	chmod 555 $(MAPS)/bin/*
+	@echo ''
+	@echo 'This is what the things just installed *should* look like:'
+	@cat maps.ls
+	@echo ''
+	@echo 'And here is what they actually *do* look like:'
+	ls -lga $(MAPS)
+	ls -lga $(MAPS)/bin
+	@echo ''
+
+maps.ls: Makefile uuhosts
+	rsh im4u echo $(MAPS): ';' ls -lga $(MAPS) ';' \
+		echo $(MAPS)/bin: ';' ls -lga $(MAPS)/bin \
+		< /dev/null > maps.ls
+
+$(UUCPMAP)/path.local:
+	-cd $(UUCPMAP); umask 002; \
+		cp /dev/null path.local; chgrp news path.local; \
+		cp Local path.local
+	@echo 'See "uuhosts -r README" about path.local.'
+
+recover:
+	@echo "Attempt to recover map data from a previous newsgroup ("$(OLDUUCPMAPGROUP)")."
+	@echo "If it fails, you probably don't have any old map data."
+	mkdir /tmp/$(OLDUUCPMAPGROUP)
+	-cd /tmp/$(OLDUUCPMAPGROUP); cd $(MAPS)/$(OLDUUCPMAPGROUP); \
+		mv * ../$(UUCPMAPGROUP); cd ..;  rmdir $(OLDUUCPMAPGROUP)
+	rmdir /tmp/$(OLDUUCPMAPGROUP)
+
+clean:
+	rm -f $(ALL)
+	rm -f *.pag *.dir
+	rm -f *.o
+	rm -f *.shar
+
+shar: uuhosts.shar
+
+uuhosts.shar: README $(SOURCES) Makefile
+	shar README* $(SOURCES) Makefile > uuhosts.shar

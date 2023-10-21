@@ -1,0 +1,172 @@
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!bellcore!decvax!ittatc!dcdwest!sdcsvax!sdcrdcf!trwrb!trwspp!spp2!hasiuk
+From: hasiuk@spp2.UUCP (Lee Hasiuk)
+Newsgroups: net.sources
+Subject: Loadable Device Drivers for 4.2 (Sun Release 2.0 and 2.2)
+Message-ID: <861@spp2.UUCP>
+Date: 3 Feb 86 07:48:52 GMT
+Distribution: net
+Organization: TRW, Redondo Beach  CA
+Lines: 788
+Posted: Mon Feb  3 01:48:52 1986
+
+[This is an updated version of my earlier posting.  The major changes include:
+1) Support for Sun Release 2.X, instead of 1.X
+2) Support for block (bdevsw) devices
+3) Use of -N flag to /bin/ld - uses less real kernel memory
+4) Fixed bug in print-out of driver entry points]
+
+This package includes the source distribution for loadable device drivers on the
+Sun Workstation.  The principles involved should be applicable to any 
+Unix 4.2 system.  
+
+The idea behind the code is to allow a (super)user to 
+develop and debug a device driver without having to continuously go through
+the link-the-kernel/reboot-the-system cycle.
+
+The basic units are:
+
+1) A device driver 'template' which is configured into the kernel once,
+   after several device specific definitions have been completed.  This 
+   is called the 'ld' device driver.
+
+2) A program which can link and load a device driver into a kernel which
+   has been configured with the above template.  This is the 'load' program.
+
+The programs are specifically designed to run on a Sun Workstation running
+Unix 4.2 Release 2.0 through 2.2 (and can be easily changed to run on previous
+releases the mb_device structure must be changed).  It should also be
+possible to change the ld device driver template to work with any other 4.2
+based system (VAX mods anyone?).
+
+The load program is designed to be compatible with most 4.2 systems, and 
+represents the majority of the loadable device driver code.
+
+Also included is a demo device driver which can be loaded into your Sun,
+once the ld driver has been installed (the ld driver must be compiled with
+DEMO defined, since no hardware will exist when the demo is run), and
+instructions for installing everything.
+
+Despite the apparent simplicity of it all, I would NOT RECOMMEND that
+novice Unix users attempt to use loadable device drivers.  Bugs in your 
+code can and will crash your system.
+
+If used properly, loadable device drivers will save you tremendous amounts
+of time during driver development.  Remember that when you are done debugging
+your driver, you will still have to make changes which allow you to install it
+permanently, as described in the Sun manuals.
+
+Files in the distribution:
+
+1) load.c: loads a device driver into an appropriately built system.
+2) ld.c: device driver to support loadable device drivers
+3) lddefs.h: include file for ld.c and load.c with device specific definitions
+4) demo.c: simple loadable device driver example
+
+To install on a Sun running release 2.X:
+
+1) Run the bottom half of this message through sh to extract the files.
+2) Move ld.c and lddefs.h to /sys/sundev.
+3) Add something resembling the following to the cdevsw structure in
+   /sys/sun/conf.c (consult Sun Device Driver manuals for help):
+
+(For cdevsw entries)
+#include "ld.h"
+#if NLD > 0
+int	ldopen(),ldclose(),ldread(),ldwrite(),ldioctl(),ldmmap();
+#else
+#define	ldopen		nodev
+#define	ldclose		nodev
+#define	ldread		nodev
+#define	ldwrite		nodev
+#define	ldioctl		nodev
+#define ldmmap		nodev
+#endif
+    {
+	ldopen,		ldclose,	ldread,		ldwrite,	/*36*/
+	ldioctl,	nodev,		nulldev,	0,
+	seltrue,	ldmmap,
+    },
+
+*** or ***
+
+(For bdevsw entries)
+#include "ld.h"
+#if NLD > 0
+int	ldopen(),ldstrategy(),ldread(),ldwrite(),ldioctl(),ldsize(),lddump();
+#else
+#define ldopen		nodev
+#define	ldstrategy	nodev
+#define	ldread		nodev
+#define	ldwrite		nodev
+#define	ldioctl		nodev
+#define	lddump		nodev
+#define	ldsize		0
+#endif
+    { ldopen,	nulldev,	ldstrategy,	lddump,		/*7*/
+      ldsize,	0 },
+
+4) Add the following line to /sys/conf/files.sun:
+
+sundev/ld.c		optional ld device-driver
+
+5) Add the following configuration line to you current kernel configuration
+   file in /sys/conf:
+
+device		ld0 at mb0 csr 0xe4000 priority 2
+
+  Note that the address e4000 was arbitrarily picked to not collide with other
+  Sun devices, and should, in general, be changed to the address of your device.
+  This also applies to the 'priority 2'.
+
+6) Edit the lddefs.h file to reflect your device.  The specific variables which
+   you may want to change are:
+
+   LD_SIZE if you think that your driver will take more than 32k.
+
+   LD_DEV_SIZE to reflect the number of bytes which your device uses on the
+   bus.
+
+   LD_PROBE_OFFSET to reflect where your device gets poked at
+   auto-configuration time.  You may also want to modify the ldprobe routine
+   if your device needs special treatment at boot time.
+
+   DEMO should be commented out if you aren't running the 'no hardware
+   required demo'.  This basically tells auto-configuration that your
+   device is there, even if it isn't.
+
+7) Run /etc/config on your configuration file, cd to the configuration
+   directory and run 'make depend' followed by 'make'.  (See the Sun reference
+   manual on 'Building Sun Workstation Kernels with Config' for more info.)
+
+8) Run /etc/mknod for the cdevsw or bdevsw position that step #3 used.
+   If it was a character special device with major number #36, you would type:
+cd /dev
+/etc/mknod ld0 c 36 0
+chmod 666 /dev/ld0
+
+9) Move the new kernel to /vmunix and reboot your system.
+
+10) Compile load.c:
+
+cc -o load load.c
+
+11) Compile and load your loadable driver.  For the demo driver you would:
+
+cc -I/sys/h -I. -DKERNEL -DNDEMO=1 -c demo.c
+<Become super user if you don't have write access to /dev/kmem>
+load demo
+<Ignore error message from /bin/ld about 'text base already given'; it
+ is necessary in order to bypass a bug in Sun's 2.0/2.2 linker>
+
+Try the demo driver:
+cat /etc/hosts > /dev/ld0
+cat /dev/ld0
+<interrupt> to stop 
+
+GOOD LUCK AND HAPPY DEVICE DRIVER MAKING!
+
+
+Lee Hasiuk
+{ucbvax, ihnp4, decvax}!trwrb!trwspp!spp2!hasiuk
+(213)535-6772 
+

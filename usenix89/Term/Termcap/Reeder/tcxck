@@ -1,0 +1,198 @@
+: /bin/sh
+#
+# tcxck
+#
+# Termcap cross check utility.
+#
+# Version 1.1
+#
+# Compares one or two terminal's termcap specifications across a group
+# of termcap files.
+#
+# Provides an alphabetical list of terminal capabilities and values,
+# with notes indicating where the capability and value occurred.
+#
+# Can compare two different terminal types against each other.
+# Useful when coming up with a new termcap entry that is similar to
+# an existing one.
+#
+# Can provide an alphabetical list of a terminal's capabilities and
+# values from a single termcap file.  Useful for debugging purposes.
+#
+# A typical use would be "I have a zen30 termcap entry for product XYZ
+# and it works, why doesn't my zen30 termcap entry for product ABC work?".
+#
+# Accepts from stdin, 'lines' containing the relative pathnames of the
+# termcap files to cross check. 
+# Accepts as parameters, the names of the terminal types to cross check.
+# The report goes to stdout.
+#
+# Typical uses would be:
+#
+#	find . -name termcap -print | tcxck zen30 | pr | lpr
+# or
+#	(echo /etc/termcap; echo /etc/termcapX) | tcxck zen30 | pr | lpr
+# or
+#	echo /etc/termcap | tcxck zen30 adm12 | pr | lpr
+#
+# Author:
+#	Ed Reeder
+#	Intel Corporation
+#	Phoenix, AZ
+#
+
+NAME=$0
+case $# in
+	1) TYPE1=$1 TYPE2=@@NOWAY FILEINCR=1 ;;
+	2) TYPE1=$1 TYPE2=$2 FILEINCR=2 ;;
+	*)
+		{
+		echo "$NAME: usage is $0 TERM1 [TERM2]"
+		echo '	TERM1 is name of the terminal you wish to examine.'
+		echo '	TERM2 is the name of an optional terminal to also examine.'
+		echo '	Standard Input contains lines consisting of the relative'
+		echo '	pathnames of the termcap files to search.'
+		echo '	Typical uses would be:'
+		echo '		find . -name termcap -print | tcxck zen30 | pr | lpr'
+		echo '	 or'
+		echo '		(echo /etc/termcap; echo /etc/termcapX) | tcxck zen30 | pr | lpr'
+		echo '	 or'
+		echo '		echo ../termcap | tcxck zen30 adm12 | pr | lpr'
+		} > /dev/tty
+		exit 1
+esac
+
+FILEID=1
+MAXFILE=`expr 10 + $FILEINCR`
+
+
+echo 'Begin processing . . .' > /dev/tty
+
+# Put all the termcap names in alpha order.
+sort |
+while read FILE
+do
+	# Create a file header entry, followed by the file itself.
+	echo ">>>>>>>><<<<<<<<" $FILE $FILEID $TYPE1 $TYPE2
+	cat $FILE
+	FILEID=`expr $FILEID + $FILEINCR`
+	if [ $FILEID -gt $MAXFILE ] ; then
+		echo "$NAME: No more than 10 termcap files/entries supported, aborted" > /dev/tty
+		exit 1
+	fi
+done |
+# Find the desired terminal type and parse its individual capabilities.
+awk '
+	# Skip comments.
+	/^#/ {
+		next
+	}
+
+	# Get the name of the terminal types
+	# Print Header record(s)
+	/^>>>>>>>><<<<<<<</ {
+		file = $2
+		fileid = $3
+		type1 = $4
+		type2 = $5
+		# Make the second field a 0, so it sorts to the front.
+		# Use a CTRL-V separator, so capabilities with
+		# blanks are properly handled.
+		print file "" "0" "" fileid "" type1
+		# See if a second Header record needed
+		if( type2 != "@@NOWAY" )
+			print file "" "0" "" fileid + "1" "" type2
+		next
+	}
+
+	# Process a non-comment.
+	/^[^#]/ {
+		# See if this is the beginning of the entry I desire.
+		if( $0 ~ /^'$TYPE1'[ 	]*[|:]|.*[|][ 	]*'$TYPE1'[ 	]*[|:]/ ) {
+			foundit = "y"
+			entryid = fileid
+			next
+		}
+		# See if this is the beginning of the entry I desire.
+		if( $0 ~ /^'$TYPE2'[ 	]*[|:]|.*[|][ 	]*'$TYPE2'[ 	]*[|:]/ ) {
+			foundit = "y"
+			entryid = fileid + "1"
+			next
+		}
+		# Process the desired entry.
+		# Put each capability on a separate line.
+		while( foundit == "y" ) {
+			while( substr( $0, 1, 1 ) ~ /[ 	]/ ) {
+				n = split( $0, array, ":" )
+				for( i = 1; i <= n; i++ ) {
+					capab = array[i]
+					if( capab == "	" || capab == "\\" || capab == "")
+						continue
+					# CTRL-V allows blanks in a capability.
+					print entryid "" capab ":" ""
+				}
+				next
+			}
+			# Found the end of the entry.
+			# (1st char not a blank or a tab)
+			foundit = "n"
+		}
+	}
+' |
+# Sort by termcap capability and value, regardless of which entry it came from.
+# Header records will be first (because capability = 0).
+sort -t +1 |		# Sort "Tab Character" is a CTRL-V
+# Print the cross-check report.
+awk '   # The field separator is a CTRL-V, so capabilities with embedded blanks
+	# are properly handled.
+        BEGIN { FS = "" }
+	NR == 1 {
+		printf( "%40s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s\n", "Entry Numbers->", "1", "2", "3", "4", "5", "6", "7", "8", "9", "0" )
+		first = "y"
+		c[1] = " "
+		c[2] = " "
+		c[3] = " "
+		c[4] = " "
+		c[5] = " "
+		c[6] = " "
+		c[7] = " "
+		c[8] = " "
+		c[9] = " "
+		c[10] = " "
+	}
+	{
+		# If this is a header record print out the mapping(s).
+		if( $2 == "0" ) {
+			printf("%-10s, file %s is entry %s\n", $4, $1, $3 )
+			next
+		}
+		if( first == "y" ) {
+			prev = $2
+			first = "n"
+		}
+
+		curr = $2
+		# Only print a line when the capability, or its value, changes.
+		if( curr != prev ) {
+			printf( "%-40s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s\n", prev, c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], substr(prev, 1, 2) )
+			prev = curr
+			c[1] = " "
+			c[2] = " "
+			c[3] = " "
+			c[4] = " "
+			c[5] = " "
+			c[6] = " "
+			c[7] = " "
+			c[8] = " "
+			c[9] = " "
+			c[10] = " "
+		}
+		# Put the entry id in the corresponding array entry, to indicate
+		# that this entry contained the specified capability.
+		c[$1] = $1
+	}
+	END {
+		printf( "%-40s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s  %s\n", prev, c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10], substr(prev, 1, 2) )
+	}
+'
+exit 0

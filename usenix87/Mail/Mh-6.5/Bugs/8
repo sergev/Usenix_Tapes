@@ -1,0 +1,101 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA16756; Mon, 23 Mar 87 11:13:15 EST
+Received: by seismo.CSS.GOV (5.54/1.14) 
+	id AA06839; Mon, 23 Mar 87 11:03:47 EST
+Received: from bboards by ICS.UCI.EDU id a016023; 23 Mar 87 7:01 PST
+Received: from tunnel.cs.ucl.ac.uk by ICS.UCI.EDU id a016011; 23 Mar 87 6:58 PST
+Received: from computer-science.strathclyde.ac.uk by mv1.Cs.Ucl.AC.UK 
+           via Janet with NIFTP  id aa06438; 23 Mar 87 14:54 WET
+Received: from localhost by stracs.cs.strath.ac.uk; Mon, 23 Mar 87 15:52:45 +0100
+Message-Id: <8703231452.AA28939@stracs.cs.strath.ac.uk>
+Date-Received: Mon, 23 Mar 87 15:52:45 +0100
+To: ics.uci.edu!mh-workers
+Cc: ics.uci.edu!mh-bugs
+Subject: Fix to sbr/m_sync.c for Sequents
+Date: Mon, 23 Mar 87 15:52:37 +0000
+From: cs.ucl.ac.uk!jim%computer-science.strathclyde.ac.uk
+
+The file sbr/m_sync.c won't compile with a Sequent C compiler. This is
+because it uses as an identifier the word "private". The Sequent compiler
+has been extended to allow for parallel programming and the words "private"
+and "shared" have been added to the reserved word list.
+
+The fix is simple - just use a different label identifier on Sequents.
+Here's an ifdeffed patch that does just that.
+
+		Jim
+
+*** m_sync.c	Mon Mar 23 13:44:03 1987
+--- m_sync.c.orig	Wed Mar 18 12:45:34 1987
+***************
+*** 39,47
+  	(void) sprintf (attr, "atr-%s-%s", mp -> msgattrs[i], mp -> foldpath);
+  	if (mp -> msgflags & READONLY
+  		|| mp -> attrstats & (1 << (bits + i))) {
+- #ifdef sequent
+-     msgprivate: ;
+- #else
+      private: ;
+  #endif
+  	    if (cp = m_seq (mp, mp -> msgattrs[i]))
+
+--- 39,44 -----
+  	(void) sprintf (attr, "atr-%s-%s", mp -> msgattrs[i], mp -> foldpath);
+  	if (mp -> msgflags & READONLY
+  		|| mp -> attrstats & (1 << (bits + i))) {
+      private: ;
+  	    if (cp = m_seq (mp, mp -> msgattrs[i]))
+  		m_replace (attr, cp);
+***************
+*** 43,49
+      msgprivate: ;
+  #else
+      private: ;
+- #endif
+  	    if (cp = m_seq (mp, mp -> msgattrs[i]))
+  		m_replace (attr, cp);
+  	    else
+
+--- 40,45 -----
+  	if (mp -> msgflags & READONLY
+  		|| mp -> attrstats & (1 << (bits + i))) {
+      private: ;
+  	    if (cp = m_seq (mp, mp -> msgattrs[i]))
+  		m_replace (attr, cp);
+  	    else
+***************
+*** 58,66
+  			&& unlink (seq) != NOTOK 
+  			&& (fp = fopen (seq, "w")) == NULL) {
+  		    admonish (attr, "unable to write");
+- #ifdef sequent
+- 		    goto msgprivate;
+- #else
+  		    goto private;
+  #endif
+  		}
+
+--- 54,59 -----
+  			&& unlink (seq) != NOTOK 
+  			&& (fp = fopen (seq, "w")) == NULL) {
+  		    admonish (attr, "unable to write");
+  		    goto private;
+  		}
+  	    fprintf (fp, "%s: %s\n", mp -> msgattrs[i], cp);
+***************
+*** 62,68
+  		    goto msgprivate;
+  #else
+  		    goto private;
+- #endif
+  		}
+  	    fprintf (fp, "%s: %s\n", mp -> msgattrs[i], cp);
+  	}
+
+--- 55,60 -----
+  			&& (fp = fopen (seq, "w")) == NULL) {
+  		    admonish (attr, "unable to write");
+  		    goto private;
+  		}
+  	    fprintf (fp, "%s: %s\n", mp -> msgattrs[i], cp);
+  	}

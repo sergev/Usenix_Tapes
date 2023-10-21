@@ -1,0 +1,83 @@
+.\"	$Header: fixcpio.1,v 1.1 87/01/05 19:51:00 source Exp $
+.TH FIXCPIO 1 "UNIX-PC" "Public Domain" "David Brower"
+.ta 8n 16n 24n 32n 40n 48n 56n
+.SH NAME
+fixcpio \- repair damaged cpio -c archives
+.SH ORIGIN
+David Brower, {gladys, sun, amdahl, mtxinu}!rtech!daveb
+.SH SYNOPSIS
+.B fixcpio
+[ infile [ outfile ] ]
+.SH DESCRIPTION
+.I Fixcpio
+Reads the standard input (or the named \fIinfile\fP) and writes a cpio
+-c archive to the standard output (or named \fIoutfile\fP).  
+.I Infile
+and
+.I outfile
+may be the dash character (`\-') to signify standard in or out.
+.PP
+The input is presumed to be a \fIcpio -c\fP archive.  While the input
+is copied to the output,
+.I fixcpio
+checks each archive member for sanity, and discards those that appear
+to be bad. The program writes the names of archive members copied on
+stderr, and says
+.nf
+
+	Skipping bad member ``filename''
+	
+.fi
+for each bad record.  This eliminates the cheerful ``Out of phase--get help''
+message from cpio.
+.PP
+The major use for 
+.I fixcpio
+is in recovering multiple floppy backups when one disk in the set goes
+bad.  The process for the UNIX-PC is about as follows.
+
+.PP
+1.  Get images of the remaining floppies in files that are in alphabetical
+order:
+.nf
+
+	# works with up to 99 disk backup sets.
+	#
+	# if, ibs, and count will depend on your machine and
+	# backup procedure.
+	disk=01
+	while :
+	do
+		echo "Interrupt to quit, return to read disk $disk \ec:"
+		read answer
+		dd if=/dev/rfp/021 ibs=1024 count=320 of=disk-$disk
+		dismount -f
+		disk=`awk "{ printf \e"%02d\en\e", $disk + 1 }" `
+	done
+
+.fi
+.PP
+2.  Restore the contents of the disks with
+.I fixcpio's
+help.
+.nf
+
+	cat disk-* | fixcpio | cpio -icdum
+
+.fi
+.SH FILES
+.br
+/tmp Holds a temp file containing the archive member currently being examined.
+.SH BUGS
+.I Fixcpio
+does not understand binary cpio archives.
+.PP
+Getting disk images from the floppies depends on both the machine and
+    your backup procedures.  You need to know how the floppies are
+    written before you start recovering, and this might be awkward if
+    you've lost your hard disk.
+.PP
+Using a temp file is a kludge, needed because you can't seek around on
+input from a pipe.
+.PP
+Status messages should probably be toggled with a -v `verbose' flag.

@@ -1,0 +1,262 @@
+/*****************************  control_procs.c  ******************************/
+#include <sunwindow/notify.h>
+#include "sdi.h"
+
+/*
+ * Copyright 1987 by Mark Weiser.
+ * Permission to reproduce and use in any manner whatsoever on Suns is granted
+ * so long as this copyright and other identifying marks of authorship
+ * in the code and the game remain intact and visible.  Use of this code
+ * in other products is reserved to me--I'm working on Mac and IBM versions.
+ */
+
+/*
+ * All the notification procs for the control panel are here.
+ * Other control panel-related code is in control.c, helpers.c, and main.c.
+ */
+
+extern Panel_item timeout_item, rock_item;
+void suspend_proc(), resume_proc();
+
+/*
+ * Proc called when changing the slider for basic update time of the game display
+ */
+void
+cycle_time_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	blast_delay = value*1000;
+}
+
+/*
+ * Proc called when changing the slider for ballistic flight delay.
+ */
+void
+ballistic_time_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	extern int ballistic_delay;
+	ballistic_delay = value;
+}
+
+/*
+ * Proc called for the 'quit' button.  Tries to completely exit the game.
+ */
+void
+quit_proc(item, event)
+Panel_item item;
+Event *event;
+{
+	update_scores();
+	suspend_proc();
+	window_done(controlframe);
+	do_with_delay(resume_proc, 2, 0); /* in case the quit is refused. */
+}
+
+/*
+ * Proc called to skip to the next round in response to the 'next round' button.
+ */
+void
+next_round_proc()
+{
+	extern void init_blast(), start_running_proc();
+	running = 0;
+	free_all_blasts();
+	free_all_missiles();
+	put_text(75, "Click to start next round.");
+}
+
+/*
+ * Proc called to start a new game, usually in response to the 'new game' button.
+ */
+void
+new_game_proc()
+{
+	extern Panel_item foe_ground_item;
+	extern int restoring_game;
+	extern int time_to_play;
+	void restore_proc();
+	running = 0;
+	if (restoring_game) {
+		restore_proc();
+	} else {
+		update_scores();
+		panel_set_value(level_item, "0");
+		panel_set_value(score_item, "0");
+		panel_set_value(interceptor_item, 0);
+		panel_set_value(laser_item, 0);
+		panel_set_value(foe_ground_item, 0);
+		panel_set_value(foe_item, 0);
+		panel_set_value(total_foe_item, "0");
+		panel_set_value(rock_item, 0);
+		panel_set_value(ballistic_item, 0);
+		
+	}
+
+	while (suspended)
+		resume_proc();
+	free_all_blasts();
+	free_all_missiles();
+	init_intersect();
+
+	num_cities = 0;
+	total_cities_lost = 0;
+	draw_background();
+	init_cities();
+	panel_set(skill_item, PANEL_EVENT_PROC, panel_default_handle_event, 0);
+	panel_set(next_round_item, PANEL_SHOW_ITEM, TRUE, 0);
+
+	put_text(75, "Click to start a new game.");
+	if (time_to_play) {
+		panel_set_value(timeout_item, time_to_play);
+	}
+}
+
+/*
+ * Proc called to temporarily suspend a game, usually from the 'suspend' button.
+ */
+void
+suspend_proc()
+{
+	if (! suspended) {
+		panel_set(suspend_item, PANEL_SHOW_ITEM, FALSE, 0);
+		panel_set(resume_item, PANEL_SHOW_ITEM, TRUE, 0);
+	}
+	suspended += 1;
+}
+
+/*
+ * Proc called to resume a suspended game, usually called via the 'resume' button,
+ * which is only displayed after a 'suspend'.
+ */
+void
+resume_proc()
+{
+	if (suspended) {
+		suspended -= 1;
+		if (! suspended) {
+			panel_set(resume_item, PANEL_SHOW_ITEM, FALSE, 0);
+			panel_set(suspend_item, PANEL_SHOW_ITEM, TRUE, 0);
+		}
+	}
+}
+
+/*
+ * Proc called to display the scores from the score file in a popup window.
+ */
+void
+scores_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	Menu m;
+	int id = event_id(event);
+	char *a;
+	a = (char *)build_scores();
+	easy_pop(a);
+}
+
+/*
+ * Proc called to melt all the cities and then end the game, thus forcing all normal
+ * end-of-game actions.  Usually called via the 'melt' button.
+ */
+void
+end_proc(item, event)
+Panel_item item;
+Event event;
+{
+	free_all_blasts();
+	free_all_missiles();
+	panel_set_value(ballistic_item, 0);
+	melt_all_cities(citypw, 1);
+	finish_round();
+}
+
+/*
+ * Toggle the write-ability of important panel items in response
+ * to the 'gamemaster' toggle (only visible in gamemaster mode.)
+ */
+void
+master_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	extern Panel_item foe_ground_item;
+	if (value) {
+		panel_set(level_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(score_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(interceptor_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(foe_ground_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(foe_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(laser_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+		panel_set(rock_item, PANEL_EVENT_PROC, panel_default_handle_event, 0); 
+	} else {
+		panel_set(level_item, PANEL_EVENT_PROC, (char *)no_events, 0); 
+		panel_set(score_item, PANEL_EVENT_PROC, (char *)no_events, 0); 
+		panel_set(interceptor_item, PANEL_EVENT_PROC, (char *)no_events, 0); 
+		panel_set(foe_ground_item, PANEL_EVENT_PROC, (char *)no_events, 0);
+		panel_set(foe_item, PANEL_EVENT_PROC, (char *)no_events, 0);
+		panel_set(laser_item, PANEL_EVENT_PROC, (char *)no_events, 0);
+		panel_set(rock_item, PANEL_EVENT_PROC, (char *)no_events, 0);
+	}
+}
+
+void
+restore_proc()
+{
+	void restore_timer_proc();
+	if (running) {
+		easy_pop("Can only save or restore between rounds.");
+		return;
+	}
+	restoring_game = 1;
+	restore_game();
+
+	/*
+	 * the kludge below puts us to sleep for a moment, and then turns
+	 * off a control variable.  This helps manage an infinite regress
+	 * which can start if the 'restore_game' call above resizes windows.
+	 *
+	 * What I really need are genuine light-weight processes.
+	 */
+	do_with_delay(restore_timer_proc, 0, 500000);
+}
+
+void
+restore_timer_proc()
+{
+	extern int restoring_game;
+	restoring_game = 0;
+}
+
+void
+save_proc()
+{
+	if (running) {
+		easy_pop("Can only save or restore between rounds.");
+	} else {
+		save_game();
+	}
+}
+
+void
+cursor_notify_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	extern int cursor_type;
+	cursor_type = value;
+	init_cursor();
+	update_cursor();
+}
+
+void
+non_stop_notify_proc(item, value, event)
+Panel_item item;
+Event *event;
+{
+	extern int continuous;
+	continuous = value;
+}

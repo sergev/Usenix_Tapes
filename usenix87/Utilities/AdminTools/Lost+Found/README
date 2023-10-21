@@ -1,0 +1,53 @@
+From: chris@umcp-cs
+Newsgroups: net.sources
+Subject: script to tell people about lost+found files via mail
+Date: Sat, 23-Jun-84 07:59:49 CDT
+Date-Received: Wed, 27-Jun-84 16:39:40 CDT
+Organization: Univ. of Maryland, Computer Science Dept.
+Lines: 43
+
+Here's something that people may find useful:  a shell script for
+scrounging around in fsck ``lost+found'' directories and telling
+people about newly found files.  Basically, you invoke it by running
+it in the lost+found directory.
+
+This works under 4.1BSD.  You might have to change the names assumed
+by the awk script for other Unixes; I don't know whether all fsck's
+are alike.
+
+For example, we have the following in our /etc/rc:
+
+-------------------------this goes in /etc/rc---------------------------
+                                echo notifying about files >/dev/console
+	for lfdir in /lost+found /*/lost+found
+	do
+	    if [ $lfdir != /tmp/lost+found ]
+	    then
+		(cd $lfdir; /etc/recover_notify)	   >/dev/console 2>&1
+	    fi
+	done
+------------------------------------------------------------------------
+
+Now (fanfare) here's /etc/recover_notify:
+
+---------------------this goes in /etc/recover_notify-------------------
+d=`pwd`
+ls -l |\
+awk ' {\
+    if ( length( $3 ) > 0 && length( $8 ) > 0 && substr ($8, 1, 2) != "##") {\
+	print "mail " $3 " << XXXXXXX" ;\
+	print "To: " $3 ; \
+	print "A file of yours was recovered and placed in '$d'/#" $8 "." ;\
+	print "XXXXXXX" ;\
+	print "echo Notifying " $3 " about file '$d'/" $8 "\\" ;\
+	print "mv \\" $8 " \\#" $8 ;\
+    }\
+}' |\
+sh
+------------------------------------------------------------------------
+-- 
+In-Real-Life: Chris Torek, Univ of MD Comp Sci (301) 454-7690
+UUCP:	{seismo,allegra,brl-bmd}!umcp-cs!chris
+CSNet:	chris@umcp-cs		ARPA:	chris@maryland
+
+

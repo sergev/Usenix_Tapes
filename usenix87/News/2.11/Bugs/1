@@ -1,0 +1,324 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA05049; Tue, 3 Feb 87 20:51:55 CST
+Path: plus5!wucs1!cuae2!gatech!lll-lcc!ames!oliveb!jerry
+From: oliveb.UUCP!jerry (Jerry F Aguirre)
+Newsgroups: comp.sources.d,news.software.b
+Subject: Efficiency improvement for rnews unbatching
+Keywords: rnews unbatch fork exec
+Message-Id: <469@oliveb.UUCP>
+Date: 2 Feb 87 20:36:33 GMT
+Organization: Olivetti ATC; Cupertino, Ca
+Lines: 310
+Xref: plus5 comp.sources.d:207 news.software.b:206
+Apparently-To: hokey
+
+When rnews is unpacking a batch of news it execs itself for each
+article.  It seems rather inefficient for rnews to exec itself when it
+is already running.  The following patch to the checkbatch routine will
+cause rnews to fork a copy of itself for each article instead of doing
+an exec.
+
+I ran a performance comparison with the following results:
+
+    old  9.6u 5.2s 0:23 63% 41+69k 80+160io 62pf+0w
+    new  5.5u 3.6s 0:12 71% 68+115k 44+126io 6pf+0w
+
+This was for a uncompressed batch consisting of 6 articles all of which
+were rejected as duplicates.  (This was the only way I could get a
+repeatable test.)  On systems running 4.2BSD with its slow exec the
+improvement should be even better.
+
+I have tested it with "cunbatch", "#! cunbatch", batched, and unbatched
+articles.  They all seem to work OK.  I have not tested the c7batch code
+though most of it is common with the compressed batch code.
+
+I hope I haven't introduced any portability problems.  I tried to use
+basic routines without Berkely frills.  I suspect some independent
+review and testing is what it needs so have at it!
+
+					Jerry Aguirre
+---BEGIN PATCHES---
+*** ifuncs.c.orig	Thu Nov 13 15:43:26 1986
+--- ifuncs.c	Wed Dec 10 15:49:11 1986
+***************
+*** 1008,1077 ****
+  
+  #ifdef BATCH
+  /*
+!  * If the stdin begins with "#", we assume we have been fed a batched
+!  * shell script which looks like this:
+   *	#! rnews 1234
+   *	article with 1234 chars
+   *	#! rnews 4321
+   *	article with 4321 chars
+!  *
+!  * In this case we just exec the unbatcher and let it unpack and call us back.
+!  *
+!  * Note that there is a potential security hole here.  If the batcher is
+!  * /bin/sh, someone could ship you arbitrary stuff to run as shell commands.
+!  * The main protection you have is that the effective uid will be news, not
+!  * uucp and not the super user.  (That, plus the fact that BATCH is set to
+!  * "unbatch" as the system is distributed.)  If you want to run a batched link
+!  * and you are security conscious, do not use /bin/sh as the unbatcher.
+!  * the thing to do is to change BATCH in your localize.sh file from /bin/sh
+!  * to some restricted shell which can only run rnews.
+   */
+  checkbatch()
+  {
+  	int c;
+  
+! 	c = getc(infp);
+  	if (c != EOF)
+  		(void) ungetc(c, infp);
+  	clearerr(infp);
+! 	if (c == '#') {
+! 		char cmd[BUFLEN], unbatcher[BUFLEN], arg1[BUFLEN], arg2[BUFLEN];
+! 		register char *cp;
+! 		int n;
+  
+! 		reset_infp();
+! 		/*
+! 		 * For efficiency, try and recognize the most common
+! 		 * forms of batching and exec them directly
+! 		 */
+! 		n = read(0, cmd, BUFLEN-1);
+! 		if (n <= 0)	/* Can't happen */
+! 			xerror("can't read stdin to unbatch");
+! 		cmd[n] = '\0';
+! 		cp = index(cmd, '\n');
+! 		if (cp)
+! 			*cp = '\0';
+! 		/* now put stdin at the "right" place for the exec */
+! 		(void) lseek(0,1L+(long)(cp - cmd), 0);
+! 		if( strncmp(cmd, "#! cunbatch", 11) == 0) {
+! 			(void) strcpy(unbatcher, "/bin/sh");
+! 			(void) strcpy(arg1, "-c");
+! 			(void) sprintf(arg2, "%s/compress -d | %s/%s",
+! 				LIB, LIB, BATCH);
+! 		} else if (strncmp(cmd, "#! c7unbatch", 12) == 0) {
+! 			(void) strcpy(unbatcher, "/bin/sh");
+! 			(void) strcpy(arg1, "-c");
+! 			(void) sprintf(arg2,
+! 				"%s/decode | %s/compress -d | %s/%s",
+! 				LIB, LIB, LIB, BATCH);
+! 		} else {
+! 			(void) lseek(0, 0L, 0);
+! 			(void) sprintf(unbatcher, "%s/%s", LIB, BATCH);
+! 			arg1[0] = '\0';
+! 			arg2[0] = '\0';
+! 		}
+! 		execl(unbatcher, "news-unpack", arg1, arg2, (char *)0);
+! 		xerror("Unable to exec %s to unpack news.", unbatcher);
+  	}
+  }
+  
+--- 1008,1215 ----
+  
+  #ifdef BATCH
+  /*
+!  * If the stdin begins with "#" the input is some kind of batch.  if
+!  * the first line is:
+!  *	#!cunbatch
+!  * or
+!  *	#!c7unbatch
+!  * then fork off a pipe to do the either a
+!  *	"compress -d"
+!  * or a
+!  *	"decode | compress -d"
+!  * and check their output for more batch headers.  They probably
+!  * contain a batch format that looks like this:
+   *	#! rnews 1234
+   *	article with 1234 chars
+   *	#! rnews 4321
+   *	article with 4321 chars
+!  * If so, then for each article, copy the indicated number of chars into
+!  * a temp file, fork a copy of ourselves, make its input the temp file,
+!  * and allow the copy to process the article.  This avoids an exec of
+!  * rnews for each article.
+   */
+  checkbatch()
+  {
+  	int c;
+  
+! 	while ((c = getc(infp)) == '#') {
+! 	    /* some kind of batch, investigate further */
+! 	    int i;
+! 	    char cmd[BUFLEN];
+! 	    cmd[0] = c;
+! 	    fgets(cmd+1, BUFLEN, infp);
+! 	    if (strncmp(cmd, "#! cunbatch", 11) == 0) {
+! 		reset_infp();
+! 		i = strlen(cmd);
+! 		(void) lseek(0, (long)i, 0); /* position STDIN for exec */
+! 		(void) sprintf(cmd, "%s/compress", LIB);
+! 		input_pipe(cmd, "compress", "-d", (char *)0);
+! 		continue;	/* look for the #! rnews */
+! 	    } else if (strncmp(cmd, "#! c7unbatch", 12) == 0) {
+! 		reset_infp();
+! 		i = strlen(cmd);
+! 		(void) lseek(0, (long)i, 0); /* position STDIN for exec */
+! 		(void) sprintf(cmd, "%s/decode | %s/compress -d", LIB, LIB);
+! 		input_pipe("/bin/sh", "news-unpack", "-c", cmd);
+! 		continue;	/* look for the #! rnews */
+! 	    } else if (strncmp(cmd, "#! rnews", 8) == 0) {
+! 		/* instead of execing unbatch do it ourselves */
+! 		register int fd, rc, wc;
+! 		int piped[2];
+! 		register long size, asize;
+! 		char *filename;
+! 		int pid, wpid, exstat;
+! 		char *mktemp();
+! 		long atol();
+! #define CPBFSZ 8192
+! 		char buf[CPBFSZ];
+! 
+! 		filename = 0;
+! 		do {
+! 		    while (strncmp(cmd, "#! rnews ", 9)) {
+! 			fprintf(stderr, "out of sync, skipping %s\n", cmd);
+! 			if (fgets(cmd, BUFLEN, infp) == NULL) exit(0);
+! 		    }
+! 		    asize = atol(cmd+9);
+! 		    if(asize <= 0)
+! 			xerror("checkbatch: bad batch count %ld", asize);
+! 		    fd = -1;
+! 		    size = asize;
+! 		    do {
+! 			if (size > CPBFSZ) rc = CPBFSZ; else rc = size;
+! 			rc = fread(buf, 1, rc, infp);
+! 			if (rc <= 0) break;
+! 			if (fd < 0) {
+! 			    if (rc == asize) break; /* fits in buffer */
+! 			    if (!filename)
+! 				filename = mktemp("/tmp/unbnewsXXXXXX");
+! 			    if ((fd = creat(filename, 0666)) < 0) {
+! 				fprintf(stderr, "rnews: creat of \"%s\" failed",
+! 								filename);
+! 				perror(" ");
+! 				exit(1);
+! 			    }
+! 			}
+! 			wc = write(fd, buf, rc); /* write to temp file */
+! 			if (wc != rc) {
+! 			    fprintf(stderr, "write of %d to \"%s\" returned %d",
+! 						rc, filename, wc);
+! 			    perror(" ");
+! 			    exit(1);
+! 			}
+! 			size -= rc;
+! 		    } while (size > 0);
+! 		    if (fd >= 0) (void) close(fd);
+! 
+! 		    /*
+! 		     * If we got a truncated batch, don't process the
+! 		     * last article; it will probably be received again.
+! 		     */
+! 		    if ((rc < asize) && (size > 0)) break;
+! 
+! 		    /* This differs from the old unbatcher in that
+! 		     * we don't exec rnews, mainly because we ARE
+! 		     * rnews.  Instead we fork off a copy of
+! 		     * ourselves for each article and allow it to
+! 		     * process.
+! 		     */
+! 		    if (rc == asize) {
+! 			/* article fits in buffer, use a pipe
+! 			 * instead of a temporary file.
+! 			 */
+! 			if (pipe(piped) != 0) {
+! 			    perror("checkbatch: pipe() failed");
+! 			    exit(1);
+! 			}
+! 		    }
+! 		    while ((pid = fork()) == -1) {
+! 			fprintf(stderr, "fork failed, waiting...\r\n");
+! 			sleep(60);
+! 		    }
+! 		    if (pid == 0) {
+! 			if (rc == asize) { /* article fits in buffer */
+! 			    /* make the output of the pipe for STDIN */
+! 			    (void) fclose(infp);
+! 			    (void) close(0); /* redundant but why not */
+! 			    if ((i = dup(piped[0])) != 0)
+! 				xerror("dup() returned %d, should be 0", i);
+! 			    (void) close(piped[0]);
+! 			    (void) close(piped[1]);
+! 			    infp = fdopen(0, "r");
+! 			} else /* supstitute temp file as input */
+! 			    freopen(filename, "r", infp);
+! 			return; /* from checkbatch as if normal article */
+! 		    }
+! 		    /* parent of fork */
+! 		    if (rc == asize) { /* article fits in buffer */
+! 			wc = write(piped[1], buf, rc);
+! 			if (wc != rc) {
+! 			    fprintf(stderr, "write of %d to pipe returned %d",
+! 							rc, wc);
+! 			    perror(" ");
+! 			    exit(1);
+! 			}
+! 			(void) close(piped[0]);
+! 			(void) close(piped[1]);
+! 		    }
+! 		    while ((wpid = wait(&exstat)) >= 0 && wpid != pid)
+! 			    ;
+! 		} while (fgets(cmd, BUFLEN, infp) != NULL);
+! 		unlink(filename);
+! 		exit(0);	/* all done */
+! 
+! 	    } else {	/* Unknown batch format? */
+! 		xerror("checkbatch: unknown batch header \"%s\"", cmd);
+! 	    }
+! 	} /* while a batch */
+  	if (c != EOF)
+  		(void) ungetc(c, infp);
+  	clearerr(infp);
+! }
+  
+! /* The input requires some processing so fork and exec the indicated
+!  * command with its output piped to our input.
+!  */
+! static input_pipe(cmd, arg0, arg1, arg2)
+! 	char *cmd, *arg0, *arg1, *arg2;
+! {
+! 	int i, pid;
+! 	int piped[2];
+! 
+! 	if (pipe(piped) != 0) {
+! 	    perror("checkbatch: pipe() failed");
+! 	    exit(1);
+! 	}
+! 	fflush(stdout);
+! 	while ((pid = fork()) == -1) {
+! 	    perror("checkbatch: fork failed, waiting");
+! 	    sleep(60);
+! 	}
+! 	if (pid == 0) { /* child process */
+! 	    /* setup a pipe such that the exec'ed process will
+! 	     * read our input file and write to the pipe
+! 	     */
+! 	    (void) close(1);
+! 	    if ((i = dup(piped[1])) != 1)
+! 		xerror("dup() returned %d, should be 1", i);
+! 	    (void) close(piped[0]);
+! 	    (void) close(piped[1]);
+! 	    execl(cmd, arg0, arg1, arg2, (char *)0);
+! 	    perror("checkbatch");
+! 	    xerror("Unable to exec %s to unpack news.", cmd);
+! 	} else {	/* parent process */
+! 	    /* make the output of the pipe for STDIN */
+! 	    (void) fclose(infp);
+! 	    (void) close(0); /* redundant but why not */
+! 	    if ((i = dup(piped[0])) != 0)
+! 		xerror("dup() returned %d, should be 0", i);
+! 	    (void) close(piped[0]);
+! 	    (void) close(piped[1]);
+! 	    /* there should be a way to clear any buffered input
+! 	     * and just replace file descriptor 0 but I can't
+! 	     * find a portable way.
+! 	     */
+! 	    infp = fdopen(0, "r");
+  	}
+  }
+  
+---END PATCHES ---

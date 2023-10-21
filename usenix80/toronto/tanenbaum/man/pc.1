@@ -1,0 +1,282 @@
+.th PC I 5/29/79
+.sh NAME
+pc \*- PASCAL compiler
+.sh SYNOPSIS
+pc arguments
+.sh DESCRIPTION
+This program enables you to compile pascal programs.
+It offers you two alternatives to run these programs.
+One is by interpretation:
+your program is compiled into object code for a virtual
+machine, called EM1, which is simulated by an interpreter em1(I).
+This way of compilation is fast and gives you a lot of runtime checks.
+.ti +3
+You can use the other way
+if your program is debugged and you need fast execution:
+you may then recompile it into PDP-11 code.
+Compilation time will be much longer, memory requirements will be
+much bigger and runtime checks are off,
+but your program will run faster.
+Keep these two alternatives in mind while reading.
+.s3
+You may distinguish five phases during compilation:
+.s3
+.lp +8 6
+1 - compile
+.br
+The pascal compiler pc:pem(VI) scans your program producing EM1 assembly
+code in compact form (only machine readable).
+Errors are reported to pc, which can produce a listing.
+.s3
+.lp +8 6
+2 - optimize
+.br
+the compact EM1 assembly code may be optimized by a separate program pc:opt(VI).
+.s3
+.lp +8 6
+3 - translate
+.br
+For interpreted programs this phase does not do anything.
+However, when you specify fast execution, then the compact EM1 code
+is translated into UNIX assembly code and then assembled by as(I) to produce
+an object file.
+.s3
+.lp +8 6
+4 - load
+.br
+Programs to be interpreted are assembled and loaded together with library
+routine modules by pc:ass(VI).
+Note that this program is an assembler and a loader at the same time.
+The output of this program, written on "e.out" by default, may be interpreted
+by em1(I).
+.ti +3
+Object files produced for fast execution are loaded by the UNIX loader ld(I)
+together with some libraries.
+This gives you an "a.out" file by default.
+.s3
+.lp +8 6
+5 - go
+.br
+This phase is optional. It tries to execute the result of the compilation.
+.i0
+.s3
+Pc accepts the following flags:
+.s3
+.lp +6 4
+-C	produce an "a.out" file for fast execution. An "e.out" file
+to be interpreted is default.
+.lp +6 4
+-E	produce a complete listing of the pascal source program.
+Normally, for each error one message including the source line number is given.
+.lp +6 4
+-e	list erroneous lines only.
+.lp +6 4
+-w	suppress warning messages.
+.lp +6 4
+-f	if your machine does not have hardware floating point,
+then you must give this flag whenever you use reals in your program.
+This is only necessary if you want an executable version (-C).
+.lp +6 4
+-o	take the next argument as a name of the object code file,
+instead of the default "e.out" or "a.out".
+Pc passes this flag to the loaders, so it does not work with an old ld(I).
+.lp +6 4
+-{	the string starting after '{' and terminated by a '}' is passed
+as an option string to the compiler and supersedes corresponding
+options given in the pascal source file.
+See the Pascal reference manual [3] for a list of options.
+.lp +6 4
+-+
+.lp +6 4
+--	when you want to interpret your program, you may select some
+option during interpretation, like test, profile, flow and count.
+A short description of these flags follows:
+.lp +20 12
+t(est):	test for undefined, overflow, array bound etc.
+.lp +20 12
+f(low):	keep track of executed source lines.
+.lp +20 12
+c(ount):	count the number of times a source line is executed.
+.lp +20 12
+p(rofile):	count the memory cycles executed per source line.
+.lp +6 0
+Test is on by default, the others are off. Normally, you give these
+flag options each time you run the interpreter.
+The EM1 assembler/loader pc:ass(VI) gives you the opportunity to change
+the defaults per program. The changed options are recorded in the "e.out" header.
+These flags -- and -+ are passed to the assembler for this purpose.
+So, --t and -+pfc invert the defaults.
+.lp +6 4
+-r	try to run the object code file.
+No arguments can be passed this way, so it is only useful in simple cases.
+.lp +6 4
+-ss
+.lp +6 4
+-sm
+.lp +6 4
+-sl	indicates that your program is small, medium or large.
+This causes some of the involved programs to use more or less memory for tables.
+The default is -sm. On machines without separate I and D spaces, the -sl flag
+may cause errors.
+.lp +6 4
+-1
+.lp +6 4
+-2
+.lp +6 4
+-3
+.lp +6 4
+-4
+.lp +6 4
+-5	compile only up to and including the mentioned phase. Default is -4.
+Note that -5 and -r are equivalent.
+.lp +6 4
+-t	preserve all intermediate files. They all have a unique suffix
+(see below).
+.lp +6 4
+-O	optimize. Optimizing is default when the -C flag is provided.
+.lp +6 4
+-L	transform compact EM1 assembly files into library modules.
+These library modules have a slightly different format.
+This format enables the EM1 assembler/loader pc:ass(VI) to do a faster
+search for unresolved global references.
+Library modules are always optimized.
+.lp +6 4
+-D	decode compact EM1 assembly files and library modules to make
+them human readable.
+These human readable files will get suffix ".e".
+The inverse operation, encode, is done when files with suffix ".e"
+are supplied as arguments.
+.lp +6 4
+-I	On machines without separate I and D space, an executable compiler,
+itself a pascal program, will need too much memory to compile big programs.
+The limit is about 1000 source lines.
+An interpreted version of the compiler, however, is able to compile much
+bigger programs.
+The -I option allows you to select the interpreted version (if available).
+.lp +6 4
+-S	This flag is only effective in conjunction with -C.
+It causes translation of compact EM1 code into a UNIX load module to stop
+when the UNIX assembly code has been produced.
+.i0
+.s3
+All flags must be provided as separate arguments.
+Unknown flags are passed to the loader, ld(I) or pc:ass(VI).
+.s3
+Pc recognizes the following suffixes:
+.s3
+.lp +6 5
+ .p	pascal program. See pc:pem(VI) for a description of the
+differences with standard pascal.
+.lp +6 5
+ .e	human readable EM1 assembly programs.
+See [1] for a description of EM1.
+.lp +6 5
+ .k	compact, not optimized EM1 assembly files as produced by pc:pem(VI)
+and pc:encode(VI).
+.lp +6 5
+ .m	compact, optimized EM1 assembly files as produced by pc:opt(VI).
+.lp +6 5
+ .l	library modules constructed by pc:makelib(VI) in cooperation
+with the optimizer.
+These library modules may be archived with the standard UNIX archiver ar(I).
+Archive files are recognized by pc:ass(VI).
+Note that "-lxxx" may be used to select libraries with pathname "/usr/lib/em1:xxx.a".
+.lp +6 5
+ .s	UNIX assembly programs.
+These files are produced by the EM1 to PDP translator pc:pdp(VI) and
+are fed into as(I).
+.i0
+.s3
+All arguments without a suffix or with an unrecognized suffix are passed to
+one of the loaders, as in the case of flags.
+.s3
+.sh FILES
+.lp +24 24
+/usr/bin/as	assembler
+.lp +24 24
+/usr/bin/ld	loader
+.lp +24 24
+/usr/bin/em1	EM1 interpreter
+.lp +24 24
+/usr/ovl/pc:pem	pascal compiler
+.lp +24 24
+/usr/ovl/pc:pem.out	idem, interpreted
+.lp +24 24
+/usr/ovl/pc:opt	optimizer
+.lp +24 24
+/usr/ovl/pc:pdp	translate to PDP-11 code
+.lp +24 24
+/usr/ovl/pc:ass	EM1 assembler and loader
+.lp +24 24
+/usr/ovl/pc:decode	compact to readable
+.lp +24 24
+/usr/ovl/pc:decode.out	idem, interpreted.
+.lp +24 24
+/usr/ovl/pc:encode	readable to compact
+.lp +24 24
+/usr/ovl/pc:encode.out	idem, interpreted
+.lp +24 24
+/usr/ovl/pc:makelib	make library module
+.lp +24 24
+/usr/lib/pc:rt0.o	executable run time startoff
+.lp +24 24
+/usr/lib/pc:frt0.o	executable run time startoff for if you want to use
+the software floating point package
+.lp +24 24
+/usr/lib/pc:bss.o	end of bss segment
+.lp +24 24
+/usr/lib/pc:emlib.a	executable run time library
+.lp +24 24
+/usr/lib/pc:prlib.a	executable pascal run time library
+.lp +24 24
+/usr/lib/em1:pr.a	interpretable pascal run time library
+.lp +24 24
+-lP	library with external pascal routines
+.lp +24 24
+/usr/tmp	used for temporary files
+.sh "SEE ALSO"
+.lp +6 4
+[1]	A.S.Tanenbaum, J.W.Stevenson & J.M. van Staveren
+"Description of an experimental machine architecture for use of
+block structured languages" Informatika rapport IR-??. (To appear shortly).
+.lp +6 4
+[2]	K.Jensen & N.Wirth
+"PASCAL, User Manual and Report" Springer-Verlag.
+.lp +6 4
+[3]	J.W.Stevenson
+"Pascal-VU reference manual", /usr/doc/pc/ref_manual/*
+.lp +6 4
+[4]	ISO standard proposal ISO/TC97/SC5-N462.
+.lp +6 4
+[5]
+.lp +22 16
+em1(I)	EM1 interpreter
+.lp +22 16
+pc:pem(VI)	pascal compiler proper
+.lp +22 16
+pc:opt(VI)	EM1 optimizer
+.lp +22 16
+pc:ass(VI)	EM1 assembler and loader
+.lp +22 16
+pc:pdp(VI)	EM1 to PDP-11 translator
+.lp +22 16
+pc:decode(VI)	decodes compact EM1 code
+.lp +22 16
+pc:encode(VI)	makes EM1 programs compact
+.lp +22 16
+pc:makelib(VI)	produces EM1 library modules
+.lp +22 16
+pc:emlib(VII)	library of EM1 emulating routines
+.lp +22 16
+pc:prlib(VII)	pascal runtime routines
+.lp +22 16
+libP(VII)	library of external routines
+.lp +22 16
+lib2(VII)	library of system call routines
+.i0
+.sh DIAGNOSTICS
+The diagnostics are intended to be self-explanatory.
+.sh AUTHOR
+Johan Stevenson, Vrije Universiteit, Amsterdam.
+.sh BUGS
+Please report bugs to the author.

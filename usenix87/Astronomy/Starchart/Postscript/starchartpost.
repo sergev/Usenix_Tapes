@@ -1,0 +1,190 @@
+/*
+ * PostScript file format driver for startchart.c mainline
+ */
+
+#include <stdio.h>
+#include "starchart.h"
+
+/*
+ * Chart parameters (limiting magnitude and window x,y,w,h)
+ */
+
+mapblock thumbnail =	{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+			3.2, 480, 0, 480, 240, 0.0 };
+
+mapblock master =	{ 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+			8.0, 0, 370, 960, 960, 0.0 };
+
+/*
+ * Generic Star Drawing Stuff
+ */
+
+#define PICSCALE (72.0/160.0) /* roughly 6.5 inches/1024.0 units */
+
+static int oldps, vecstate;
+
+out(s)
+    char *s;
+    {
+    printf("%s\n", s);
+    }
+
+float conv(i)
+    {
+    return(i*PICSCALE+80);	/* 1.1" margins left and bottom */
+    }
+
+vecsize(newps)
+    int newps;
+    {
+    if (newps != oldps)
+	 printf("/Times-Bold findfont %d scalefont setfont\n", newps);
+    oldps = newps;
+    }
+
+vecopen()
+    {
+out("%!PSAdobe-1.0");
+out("%%Creator: AWPaeth@watCGL");
+out("%%Title: StarChart");
+out("%%Pages: 1");
+out("%%DocumentFonts Times-Bold");
+out("%%BoundingBox 0 0 612 792");
+out("%%EndComments");
+out("%%EndProlog");
+out("%%Page: 0 1");
+out("%");
+out("% alias moveto/drawto");
+out("%");
+out("/mt {moveto} def");
+out("/lt {lineto} def");
+out("%");
+out("% show: right, center, left adjust");
+out("%");
+out("/lshow {5 0 8#040 4 3 roll widthshow} def");
+out("/cshow {dup stringwidth pop 2 div neg 0 rmoveto show} def");
+out("/rshow {dup stringwidth pop neg 0 rmoveto show} def");
+out("%");
+out("% star/planet macros");
+out("%");
+out("/movereldraw {newpath 4 2 roll mt rlineto stroke} def");
+out("/starplus {3 copy 0 movereldraw 3 copy 0 exch movereldraw");
+ out("neg 3 copy 0 movereldraw 3 copy 0 exch movereldraw} def");
+out("/starbody {newpath 0 360 arc closepath fill} def");
+out("/starbodyplus {3 copy starbody 1 add starplus} def");
+out("/planet {2 copy newpath 2.5 0 360 arc closepath stroke 3.5 starplus} def");
+out("%");
+out("/s0 {4.5 starbodyplus} def");
+out("/s1 {3.8 starbody} def");
+out("/s2 {3.1 starbodyplus} def");
+out("/s3 {2.4 starbody} def");
+out("/s4 {1.7 starbodyplus} def");
+out("/s5 {1.0 starbody} def");
+out("%");
+out("% alter line drawing defaults");
+out("%");
+out("0.5 setlinewidth 2 setlinecap");
+out("%");
+out("% boiler-plate");
+out("%");
+vecsize(10);
+out(" 76 685 mt (Database: Yale Star Catalog) show");
+out("548 685 mt (Software: AWPaeth@watCGL) rshow");
+vecsize(18);
+out("314 685 mt (StarChart) cshow");
+vecsize(10);
+out("%");
+out("% THE STUFF");
+out("%");
+    }
+
+vecclose()
+    {
+    out("showpage");
+    out("%");
+    out("%%Trailer");
+    out("%%Pages: 1");
+    fflush(stdout);
+    }
+
+vecmove(x, y)
+    {
+    if (vecstate==2) printf("stroke\n");
+    if (vecstate==2 || (vecstate == 0)) printf("newpath\n");
+    printf("%.1f %.1f mt\n", conv(x), conv(y));
+    vecstate = 1;
+    }
+
+vecdraw(x, y)
+    {
+    printf("%.1f %.1f lt\n", conv(x), conv(y));
+    vecstate = 2;
+    }
+
+vecsyms(x, y, s)
+    char *s;
+    {
+    vecmove(x,y-4);
+    printf("(%s) lshow\n", s);
+    }
+
+vecmovedraw(x1, y1, x2, y2)
+    {
+    vecmove(x1, y1);
+    vecdraw(x2, y2);
+    }
+
+drawP(x, y)
+    {
+    printf("%.1f %.1f planet\n", conv(x), conv(y));
+    }
+
+drawstar(x, y, mag)
+    {
+    switch (mag)
+	{
+	case -1: draw0(x, y); break;
+	case  0: draw0(x, y); break;
+	case  1: draw1(x, y); break;
+	case  2: draw2(x, y); break;
+	case  3: draw3(x, y); break;
+	case  4: draw4(x, y); break;
+	default: draw5(x, y); break;
+	}
+    }
+
+draw0(x, y)
+    {
+    vecsize(36);
+    printf("%.1f %.1f s0\n", conv(x), conv(y));
+    }
+
+draw1(x, y)
+    {
+    vecsize(30);
+    printf("%.1f %.1f s1\n", conv(x), conv(y));
+    }
+
+draw2(x, y)
+    {
+    vecsize(24);
+    printf("%.1f %.1f s2\n", conv(x), conv(y));
+    }
+
+draw3(x, y)
+    {
+    vecsize(16);
+    printf("%.1f %.1f s3\n", conv(x), conv(y));
+    }
+
+draw4(x, y)
+    {
+    vecsize(12);
+    printf("%.1f %.1f s4\n", conv(x), conv(y));
+    }
+
+draw5(x, y)
+    {
+    vecsize(8);
+    printf("%.1f %.1f s5\n", conv(x), conv(y));
+    }

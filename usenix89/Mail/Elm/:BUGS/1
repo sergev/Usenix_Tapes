@@ -1,0 +1,673 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!mhuxn!mhuxr!ulysses!allegra!princeton!caip!cbmvax!bpa!burdvax!sdcrdcf!trwrb!desint!geoff
+From: geoff@desint.UUCP (Geoff Kuenning)
+Newsgroups: net.sources.bugs
+Subject: Fixes to 'elm' for long names and NULL pointers
+Message-ID: <233@desint.UUCP>
+Date: 16 Jul 86 07:44:21 GMT
+Reply-To: geoff@desint.UUCP (Geoff Kuenning)
+Organization: SAH Consulting, Manhattan Beach, CA
+Lines: 662
+Posted: Wed Jul 16 02:44:21 1986
+
+Sigh.  I guess I must have mailed my previous fixes to 'msg' (now 'elm')
+to the wrong address.  At least, they didn't make it into the new
+version Dave Taylor just posted.  So, to save a lot of other people
+from having to repeat the same things, here are my fixes again.  Dave,
+there's a bunch of us out here who would really appreciate it if you'd
+pick these changes up and integrate them, so we don't have to keep
+making them.  I'm not going to try to mail them again, since the last
+time they didn't seem to get through.
+
+First, a few short notes on configuring elm:
+
+(1) Before formatting with "make documentation", you may want to change
+    the definition of FORMATTER in the Makefile to nroff.
+(2) -DSUN in the Makefile really means "don't dereference NULL pointers".
+    It has nothing to do with Sun's version of Unix.
+(3) If AUTO_BACKGROUND is defined, wnewmail will put itself into background,
+    even though this is a poor idea.  I haven't fixed this because I don't
+    have windowing and I lack ambition.  The fix should be easy, though--
+    just delete the #ifdef's for that option.
+
+Now, the problems I've fixed:
+
+(1) Elm uses long C names ("flexnames").  A new Makefile variable has
+    been added, -DSHORT_NAMES, which works around this by #define-ing
+    shorter names.  This depends on having a preprocessor that handles
+    names that are longer than what the rest of compiler takes;  this
+    is true on a lot of older Unix systems (like mine).
+(2) Getopt.c (which, by the way, is *not* the standard Unix getopt)
+    had a tendency to dereference NULL pointers.  This has been cured.
+    In the process, I have cleaned up the code a bit.
+(3) In opt_utils.c, there is a gethostname() routine to substitute for
+    the BSD version on non-BSD systems.  However, the #ifdef's were set
+    up so it did not compile on USG systems.  (I suspect HP's implementation
+    of System V supports gethostname(), so that this problem was invisible
+    to Dave;  otherwise I don't see how the program could have run).  I
+    changed the #ifdef's so gethostname is compiled on any non-BSD system.
+    Note that this may cause problems on HP systems if my conjecture is
+    correct.
+(4) The Makefile in the "utils" directory creates shell scripts on the
+    fly by echo-ing them into the "bin" directory.  These scripts all
+    start with "#!/bin/sh", which fails under csh on non-#! systems (csh
+    decides the "#" means it's C-shell script;  nice of it).  I changed
+    these to ": Use /bin/sh", which works almost everywhere and isn't
+    all that much slower.  If you support #!, you might want to suppress
+    this change, though.
+(5) In creating the "checkalias" script, the utils Makefile had a bug
+    causing "make" to eat a dollar sign, so that the checkalias script
+    didn't work.  If you take out my "#!" change, be sure to leave this
+    one in!
+(6) The utils Makefile failed to mention header-file dependencies for
+    several objects that it picks up from "../src".
+
+To fix the above problems, run this posting through Larry Wall's "patch"
+utility.  For example, from 'rn', type
+
+	| patch -d elmdir
+
+where "elmdir" is the directory you unpacked "elm" in.
+
+--------------------------------patches--------------------------------------
+
+Index: hdrs/curses.h
+
+*** hdrs/curses.h.old	Wed Jul 16 00:16:29 1986
+--- hdrs/curses.h	Wed Jul 16 00:16:31 1986
+***************
+*** 7,12
+  #define OFF		0
+  #define ON 		1
+  
+  int  InitScreen(),      /* This must be called before anything else!! */
+  
+       ClearScreen(), 	 CleartoEOLN(),
+
+--- 7,21 -----
+  #define OFF		0
+  #define ON 		1
+  
++ #ifdef SHORT_NAMES
++ #define CleartoEOS		ClrtoEOS
++ #define _clearinverse		_clrinv
++ #define _cleartoeoln		_clrtoeoln
++ #define _cleartoeos		_clr2eos
++ #define _transmit_off		xmit_off
++ #define _transmit_on		xmit_on
++ #endif
++ 
+  int  InitScreen(),      /* This must be called before anything else!! */
+  
+       ClearScreen(), 	 CleartoEOLN(),
+
+Index: hdrs/defs.h
+
+*** hdrs/defs.h.old	Wed Jul 16 00:16:38 1986
+--- hdrs/defs.h	Wed Jul 16 00:16:42 1986
+***************
+*** 207,209
+  	 char   address[NLEN];	/* machine!user you get mail as      */
+  	 struct addr_rec *next;	/* linked list pointer to next       */
+  	};
+
+--- 207,324 -----
+  	 char   address[NLEN];	/* machine!user you get mail as      */
+  	 struct addr_rec *next;	/* linked list pointer to next       */
+  	};
++ 
++ #ifdef SHORT_NAMES
++ #define PutLine0		PLine0
++ #define PutLine1		PLine1
++ #define PutLine2		PLine2
++ #define PutLine3		PLine3
++ #define add_to_table		add_2_table
++ #define address1		addrs1
++ #define addressII		addrsII
++ #define addresses		addr_s
++ #define alternate_prompt	alt_prompt
++ #define alternative_addresses	alt_addrs
++ #define always_leave		alw_leave
++ #define calendar_line		cal_line
++ #define cancelled_msg		cncld_msg
++ #define central_message_buffer	cntrl_bfr
++ #define compare_dates		cmp_dates
++ #define compare_headers		cmp_hdrs
++ #define copy_message_across	cpy_msg_across
++ #define current_record		cur_rec
++ #define current_time		cur_time
++ #define define_softkeys		def_softkeys
++ #define display_central_message	displ_cntrl_msg
++ #define display_error		displ_error
++ #define display_headers		displ_hdrs
++ #define display_helpfile	dspl_helpfile
++ #define display_options		displ_options
++ #define display_title		displ_titles
++ #define display_to		displ_to
++ #define encrypted		crypted
++ #define encrypted_key		crypt_key
++ #define expanded_cc		xp_cc
++ #define expanded_to		xp_to
++ #define expand_address		xp_addr
++ #define expand_domain		xp_domain
++ #define expand_env		xp_env
++ #define expand_filename		xp_filename
++ #define expand_group		xp_group
++ #define expand_logname		xp_logname
++ #define expand_site		xp_site
++ #define expand_system		xp_system
++ #define filename2		fn2
++ #define forward			forwrd
++ #define generate_reply_to	gen_reply_to
++ #define get_return_name		g_ret_name
++ #define header_line		h_line
++ #define header_page		h_page
++ #define headers_per_page	h_per_page
++ #define header_table		h_table
++ #define install_aliases		ins_aliases
++ #define last_line_loc		last_ln_loc
++ #define machine_group		mach_group
++ #define mailbox_defined		mbox_defined
++ #define mailfile_size		mfile_size
++ #define message_count		msg_count
++ #define message_number		msg_number
++ #define newaliases		nwaliases
++ #define noptimize_return	noret_opt
++ #define noptimize_usenet	nousenet_opt
++ #define optimize_and_add	opt_and_add
++ #define optimize_arpa		opt_arpa
++ #define optimize_cmplx_arpa	opt_cmplx_arpa
++ #define optimize_return		opt_return
++ #define optimize_usenet		opt_usenet
++ #define optional_arg		opt_arg
++ #define optionally_enter	opt_enter
++ #define original_cc		orig_cc
++ #define original_msg_num	orig_msg_num
++ #define original_to		orig_to
++ #define parse_arguments		pars_arguments
++ #define parse_arpa_from		prs_arpa_from
++ #define password_entry		pw_entry
++ #define pattern_enter		pat_enter
++ #define pattern_match		pat_match
++ #define read_alias_files	rd_alias_files
++ #define read_headers		rd_headers
++ #define read_notesfile		rd_notesfile
++ #define read_rc			rd_rc
++ #define read_rc_file		rd_rc_file
++ #define received_on_machine	rcvd_on_machine
++ #define remove_all		rem_all
++ #define remove_first_word	rem_1st_word
++ #define remove_domains		rem_domains
++ #define remove_header		rem_hdr
++ #define remove_user		rem_user
++ #define remove_through_ch	rem_thru_ch
++ #define reply_to_everyone	repl_to_everyone
++ #define resolve_received	rslv_received
++ #define show_message		shw_message
++ #define show_msg		showmsg
++ #define show_msg_tag		sh_msg_tag
++ #define size_of_pathfd		sz_of_pathfd
++ #define softkeys_off		soft_off
++ #define softkeys_on		soft_on
++ #define subjectbuffer		subjbuff
++ #define subject_matches		subj_matches
++ #define system_call		sys_call
++ #define system_data		sys_data
++ #define system_files		sys_files
++ #define system_hash_table	sys_hash_table
++ #define system_record		sys_record
++ #define tail_of_string		tl_of_string
++ #define talk_to_sys		tlk_to_sys
++ #define tempfile		tmpfile
++ #define termcap_label		tcap_label
++ #define top_of_screen_left	top_left_of_screen
++ #define top_of_screen_right	top_right_of_screen
++ #define translate_return	xlate_return
++ #define update_mailtime		upd_mailtime
++ #define update_title		upd_title
++ #define unexpanded_cc		unexp_cc
++ #define unexpanded_to		unexp_to
++ #define verify_transmission	vfy_xmsn
++ #define weeding_out		wding_out
++ #endif
+
+Index: src/getopt.c
+
+*** src/getopt.c.old	Wed Jul 16 00:17:06 1986
+--- src/getopt.c	Wed Jul 16 00:17:10 1986
+***************
+*** 5,10
+      (C) Copyright 1986 Dave Taylor
+  **/
+  
+  #ifndef NULL
+  # define NULL		0
+  #endif
+
+--- 5,12 -----
+      (C) Copyright 1986 Dave Taylor
+  **/
+  
++ #include "defs.h"
++ 
+  #ifndef NULL
+  # define NULL		0
+  #endif
+***************
+*** 49,55
+  	
+  	char        *word, *strchr();
+  
+! 	if (_argnum > argc) {	/* quick check first - no arguments! */
+  	  opt_index = argc;
+  	  return(DONE);
+  	}
+
+--- 51,57 -----
+  	
+  	char        *word, *strchr();
+  
+! 	if (_argnum >= argc) {	/* quick check first - no arguments! */
+  	  opt_index = argc;
+  	  return(DONE);
+  	}
+***************
+*** 54,60
+  	  return(DONE);
+  	}
+  
+! 	if (argv[_argnum] == NULL && _indx > 1) {    /* Sun compatability */
+  	  _argnum++;
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+
+--- 56,62 -----
+  	  return(DONE);
+  	}
+  
+! 	if (_indx >= strlen(argv[_argnum]) && _indx > 1) {
+  	  _argnum++;
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+***************
+*** 58,67
+  	  _argnum++;
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+- 	else if (_indx >= strlen(argv[_argnum]) && _indx > 1) {
+- 	  _argnum++;
+- 	  _indx = 1;		/* zeroeth char is '-' */
+- 	}
+  
+  	if (_argnum > argc) {
+  	  opt_index = _argnum; /* no more args */
+
+--- 60,65 -----
+  	  _argnum++;
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+  
+  	if (_argnum >= argc) {
+  	  opt_index = _argnum; /* no more args */
+***************
+*** 63,69
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+  
+! 	if (_argnum > argc) {
+  	  opt_index = _argnum; /* no more args */
+  	  return(DONE);
+  	}
+
+--- 61,67 -----
+  	  _indx = 1;		/* zeroeth char is '-' */
+  	}
+  
+! 	if (_argnum >= argc) {
+  	  opt_index = _argnum; /* no more args */
+  	  return(DONE);
+  	}
+***************
+*** 68,78
+  	  return(DONE);
+  	}
+  
+- 	if (_argnum == argc) {
+- 	  opt_index = _argnum;
+- 	  return(DONE);
+- 	}
+- 
+  	if (argv[_argnum][0] != '-') {
+  	  opt_index = _argnum;
+  	  return(DONE);
+
+--- 66,71 -----
+  	  return(DONE);
+  	}
+  
+  	if (argv[_argnum][0] != '-') {
+  	  opt_index = _argnum;
+  	  return(DONE);
+***************
+*** 80,86
+  
+          word = strchr(options, argv[_argnum][_indx++]);
+  
+! 	if (strlen(word) == 0) 
+  	  return(ERROR);
+  	
+  	if (word[1] == ':') {
+
+--- 73,79 -----
+  
+          word = strchr(options, argv[_argnum][_indx++]);
+  
+! 	if (word == NULL  ||  strlen(word) == 0) 
+  	  return(ERROR);
+  	
+  	if (word[1] == ':') {
+
+Index: src/opt_utils.c
+
+*** src/opt_utils.c.old	Wed Jul 16 00:17:19 1986
+--- src/opt_utils.c	Wed Jul 16 00:17:23 1986
+***************
+*** 11,16
+  
+  #ifdef BSD
+  #  include <pwd.h>
+  #endif
+  
+  #ifdef UTS
+
+--- 11,18 -----
+  
+  #ifdef BSD
+  #  include <pwd.h>
++ #else
++ #  include <sys/utsname.h>
+  #endif
+  
+  #ifdef UTS
+***************
+*** 14,20
+  #endif
+  
+  #ifdef UTS
+- #  include <sys/utsname.h>
+  #  include <sys/tubio.h>
+  
+  #  define  TTYIN		0		/* standard input */
+
+--- 16,21 -----
+  #endif
+  
+  #ifdef UTS
+  #  include <sys/tubio.h>
+  
+  #  define  TTYIN		0		/* standard input */
+***************
+*** 18,23
+  #  include <sys/tubio.h>
+  
+  #  define  TTYIN		0		/* standard input */
+  
+  gethostname(hostname,size) /* get name of current host */
+  int size;
+
+--- 19,25 -----
+  #  include <sys/tubio.h>
+  
+  #  define  TTYIN		0		/* standard input */
++ #endif
+  
+  #ifndef BSD
+  gethostname(hostname,size) /* get name of current host */
+***************
+*** 19,24
+  
+  #  define  TTYIN		0		/* standard input */
+  
+  gethostname(hostname,size) /* get name of current host */
+  int size;
+  char *hostname;
+
+--- 21,27 -----
+  #  define  TTYIN		0		/* standard input */
+  #endif
+  
++ #ifndef BSD
+  gethostname(hostname,size) /* get name of current host */
+  int size;
+  char *hostname;
+***************
+*** 36,41
+  	hostname[size] = '\0';
+  
+  }
+  
+  int
+  isa3270()
+
+--- 39,45 -----
+  	hostname[size] = '\0';
+  
+  }
++ #endif
+  
+  #ifdef UTS
+  int
+***************
+*** 37,42
+  
+  }
+  
+  int
+  isa3270()
+  {
+
+--- 41,47 -----
+  }
+  #endif
+  
++ #ifdef UTS
+  int
+  isa3270()
+  {
+
+Index: utils/Makefile
+
+*** utils/Makefile.old	Wed Jul 16 00:17:30 1986
+--- utils/Makefile	Wed Jul 16 00:17:33 1986
+***************
+*** 79,85
+  	-o ../bin/autoreply
+  
+  ../bin/checkalias: 
+! 	@echo '#!/bin/sh' > ../bin/checkalias
+  	@echo 'if [ -z "$$*" ]; then' >> ../bin/checkalias
+  	@echo '  echo Usage: checkalias alias \[or aliases\]' >>  \
+  	      ../bin/checkalias
+
+--- 79,85 -----
+  	-o ../bin/autoreply
+  
+  ../bin/checkalias: 
+! 	@echo ': Use /bin/sh' > ../bin/checkalias
+  	@echo 'if [ -z "$$*" ]; then' >> ../bin/checkalias
+  	@echo '  echo Usage: checkalias alias \[or aliases\]' >>  \
+  	      ../bin/checkalias
+***************
+*** 86,92
+  	@echo '  exit 1' >> ../bin/checkalias
+  	@echo 'fi' >> ../bin/checkalias
+  	@echo ' '  >> ../bin/checkalias
+! 	@echo 'exec elm -c $*' >> ../bin/checkalias
+  	@chmod +x ../bin/checkalias
+  
+  ../src/validname.o: ../src/validname.c
+
+--- 86,92 -----
+  	@echo '  exit 1' >> ../bin/checkalias
+  	@echo 'fi' >> ../bin/checkalias
+  	@echo ' '  >> ../bin/checkalias
+! 	@echo 'exec elm -c $$*' >> ../bin/checkalias
+  	@chmod +x ../bin/checkalias
+  
+  ../src/validname.o: ../src/validname.c ../hdrs/defs.h
+***************
+*** 89,95
+  	@echo 'exec elm -c $*' >> ../bin/checkalias
+  	@chmod +x ../bin/checkalias
+  
+! ../src/validname.o: ../src/validname.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} validname.c; cd ../utils)
+  
+  ../src/opt_utils.o: ../src/opt_utils.c
+
+--- 89,95 -----
+  	@echo 'exec elm -c $$*' >> ../bin/checkalias
+  	@chmod +x ../bin/checkalias
+  
+! ../src/validname.o: ../src/validname.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} validname.c; cd ../utils)
+  
+  ../src/opt_utils.o: ../src/opt_utils.c ../hdrs/defs.h
+***************
+*** 92,98
+  ../src/validname.o: ../src/validname.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} validname.c; cd ../utils)
+  
+! ../src/opt_utils.o: ../src/opt_utils.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} opt_utils.c; cd ../utils)
+  
+  ../src/getopt.o: ../src/getopt.c
+
+--- 92,98 -----
+  ../src/validname.o: ../src/validname.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} validname.c; cd ../utils)
+  
+! ../src/opt_utils.o: ../src/opt_utils.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} opt_utils.c; cd ../utils)
+  
+  ../src/getopt.o: ../src/getopt.c ../hdrs/defs.h
+***************
+*** 95,101
+  ../src/opt_utils.o: ../src/opt_utils.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} opt_utils.c; cd ../utils)
+  
+! ../src/getopt.o: ../src/getopt.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} getopt.c; cd ../utils)
+  
+  ../src/string2.o: ../src/string2.c
+
+--- 95,101 -----
+  ../src/opt_utils.o: ../src/opt_utils.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} opt_utils.c; cd ../utils)
+  
+! ../src/getopt.o: ../src/getopt.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} getopt.c; cd ../utils)
+  
+  ../src/string2.o: ../src/string2.c ../hdrs/defs.h
+***************
+*** 98,104
+  ../src/getopt.o: ../src/getopt.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} getopt.c; cd ../utils)
+  
+! ../src/string2.o: ../src/string2.c
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} string2.c; cd ../utils)
+  
+  clean:
+
+--- 98,104 -----
+  ../src/getopt.o: ../src/getopt.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} getopt.c; cd ../utils)
+  
+! ../src/string2.o: ../src/string2.c ../hdrs/defs.h
+  	@(cd ../src; ${CC} -c ${CFLAGS} ${DEFINE} string2.c; cd ../utils)
+  
+  clean:
+
+Index: utils/newmail.c
+
+*** utils/newmail.c.old	Wed Jul 16 00:17:43 1986
+--- utils/newmail.c	Wed Jul 16 00:17:46 1986
+***************
+*** 17,22
+      (C) 1986, Dave Taylor
+  **/
+  
+  #ifdef AUTO_BACKGROUND
+  #include <signal.h>	/* background jobs ignore some signals... */
+  #endif
+
+--- 17,24 -----
+      (C) 1986, Dave Taylor
+  **/
+  
++ #include "defs.h"
++ 
+  #ifdef AUTO_BACKGROUND
+  #include <signal.h>	/* background jobs ignore some signals... */
+  #endif
+***************
+*** 24,31
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+- 
+- #include "defs.h"
+  
+  static char ident[] = { WHAT_STRING };
+  
+
+--- 26,31 -----
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  
+  static char ident[] = { WHAT_STRING };
+  
+Index: utils/wnewmail.c
+
+*** utils/wnewmail.c.old	Wed Jul 16 00:17:58 1986
+--- utils/wnewmail.c	Wed Jul 16 00:18:03 1986
+***************
+*** 5,10
+      (C) Copyright 1986, Dave Taylor
+  **/
+  
+  #ifdef AUTO_BACKGROUND
+  #include <signal.h>	/* background jobs ignore some signals... */
+  #endif
+
+--- 5,12 -----
+      (C) Copyright 1986, Dave Taylor
+  **/
+  
++ #include "defs.h"
++ 
+  #ifdef AUTO_BACKGROUND
+  #include <signal.h>	/* background jobs ignore some signals... */
+  #endif
+***************
+*** 12,19
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+- 
+- #include "defs.h"
+  
+  static char ident[] = { WHAT_STRING };
+  
+
+--- 14,19 -----
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  
+  static char ident[] = { WHAT_STRING };
+  
+-- 
+
+	Geoff Kuenning
+	{hplabs,ihnp4}!trwrb!desint!geoff

@@ -1,0 +1,212 @@
+#!/bin/sh
+#
+# Setup for compiling RFS.
+#
+PWD=`pwd`
+KERNELDIRS='	conf
+		h
+		net
+		netimp
+		netinet
+		remote
+		sys'
+KDIRS_42='	vax
+		vaxif
+		vaxmba
+		vaxuba
+		netpup'
+KDIRS_43='	vax
+		vaxif
+		vaxmba
+		vaxuba
+		bbnnet
+		netns'
+KDIRS_PYR='	ether
+		io
+		kernel
+		kernel_m
+		ml
+		netpup
+		vls'
+INCLUDEFILE=syscall.h
+         NL='
+'
+EXECDIR=`expr $0 : '\(.*\)\/.*'`
+
+#
+# Figure out what software they are running...
+#
+while :
+do
+	echo -n "Are you running" \
+		"${NL}	1. VAX 4.3 BSD" \
+		"${NL}	2. VAX 4.2 BSD" \
+		"${NL}	3. Pyramid 2.5 (4.2/5.0)" \
+		"${NL}enter 1, 2 or 3: "
+	read ans
+	case "$ans" in
+	1)	         VER=VAX4.3
+			MACH=vax
+		  KERNELDIRS="$KERNELDIRS $KDIRS_43"
+		;;
+	2)	         VER=VAX4.2
+			MACH=vax
+		  KERNELDIRS="$KERNELDIRS $KDIRS_42"
+		;;
+	3)	         VER=PYR2.5
+			MACH=pyr
+		  KERNELDIRS="$KERNELDIRS $KDIRS_PYR"
+		;;
+	*)	echo "only 1, 2 and 3 are supported..."
+		continue
+		;;
+	esac
+	break;
+done
+
+#
+# Find out the sys directory
+#
+SYSDIR=
+while :
+do
+	echo -n "${NL}${NL}What is the top-level path of your kernel source" \
+		"${NL}directory (normally it is /usr/sys)? "
+	read ans
+	if [ "$ans" = "" -o ! -d "$ans" ]
+	then
+		echo "...but \"$ans\" is not a directory!"
+		continue
+	fi
+
+	#
+	# Ensure that the path begins with /
+	#
+	case "$ans" in
+	/*)	;;
+	*)	echo "\"$ans\" must begin with '/'"
+		continue
+		;;
+	esac
+
+	SYSDIR=$ans
+	break
+done
+
+#
+# ask if the changes are to be permanent
+#
+while :
+do
+	echo -n "${NL}${NL}Do you want these changes" \
+	"$NL	1. installed in $SYSDIR and in /usr/include" \
+	"$NL	2. installed in this directory (reccomended 1st pass)" \
+	"${NL}enter 1 or 2: "
+	read ans
+	case "$ans" in
+	1)	DEST=$SYSDIR
+		INCLUDEDIR=/usr/include
+		;;
+	2)	DEST=$PWD/sys
+		INCLUDEDIR=usr.include
+		;;
+	*)	echo "only 1 or 2 allowed."
+		continue
+		;;
+	esac
+	break
+done
+
+
+umask 022
+case "$DEST" in
+
+"$SYSDIR")	# don't need to make local directories, 'cept one.
+	mkdir $SYSDIR/remote
+	;;
+
+*)	#
+	# make directories
+	#
+	echo "${NL}${NL}Make kernel source directories in `pwd` ..."
+	ERR=
+	mkdir sys
+	for dir in $KERNELDIRS
+	do
+		mkdir	sys/$dir
+
+		case "$dir" in
+		remote)	continue;;	# don't check its existence...
+		esac
+
+		if [ ! -d $SYSDIR/$dir ]
+		then
+			echo "Kernel sources not in $SYSDIR/$dir ???"
+			ERR=true
+		fi
+	done
+	case "$ERR" in
+	"")	;;
+	*)	exit 1;;
+	esac
+
+	case "$VER" in
+	VAX4.2|VAX4.3) (cd sys; ln -s vax machine);;
+	esac
+
+	#
+	# make the symbolic links
+	#
+	for dir in $KERNELDIRS
+	do
+		case "$dir" in
+		remote)	continue;;
+		esac
+
+		echo "Make symbolic links from $DEST/$dir/*" \
+			"${NL}to $SYSDIR/$dir/*..."
+		(cd $DEST/$dir; ln -s $SYSDIR/$dir/* .)
+	done
+	;;
+esac
+
+#
+# move the remote kernel stuff into place...
+#
+echo "${NL}${NL}Copy $PWD/remote/usr.sys.remote/* files" \
+	"${NL}to $DEST/remote (and remove" \
+	"${NL}#ifdef BSD4_3 at the same time)..."
+$EXECDIR/rfs_kerninstall $PWD/remote/usr.sys.remote $DEST/remote $VER
+	
+#
+# Now run patch on each files to install
+# the changes necessary.
+#
+cat <<EOF
+
+
+I will now install all the kernel changes for you in
+$DEST with the 'patch' utility, so you must have that
+program to continue.  You will be given an opportunity to either suspend
+this program or kill it before each file is patched so that you may
+make adjustments as you think of them.  You may also skip the patches
+if you know that they are already installed (Better be sure, though).
+
+For the C-source files with the exception of two bug fixes, all changes
+will be installed between the control statements:
+
+#ifdef REMOTEFS
+#endif REMOTEFS
+
+EOF
+
+$EXECDIR/rfs_kernpatch remote/usr.sys.$VER $SYSDIR $DEST $VER
+$EXECDIR/rfs_userpatch remote/usr.include.$VER $INCLUDEDIR $DEST
+
+cat <<EOF
+
+
+Rfs software is set up and ready for compilation.  See the installation
+manual.
+
+EOF

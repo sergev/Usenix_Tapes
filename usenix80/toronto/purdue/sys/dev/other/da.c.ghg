@@ -1,0 +1,251 @@
+#
+/*
+ * DA-11 (DR11-B) driver
+ * This driver is rather simple minded and only allows one
+ * way transmissions and is only intended to hold things 
+ * over until the ARPA net protocol is up.
+ *  --ghg 11/04/77
+ */
+
+#include "../param.h"
+#include "../user.h"
+#include "../conf.h"
+#include "../buf.h"
+
+#define DAADDR 0172410	/* DA-11 Device address */
+#define DAPRI  4	/* sleep pri for I/O completion (not BR pri) */
+
+/* Device registers */
+
+struct daregs {
+	int	dawc;	/* word count */
+	int	daba;	/* bus address */
+	int	dast;	/* control and status */
+	int	dadb;	/* data buffer */
+};
+
+struct {
+	char	da_flag;	/* device flags */
+	char	da_state;	/* device state */
+	char	da_timer;	/* watchdog timer */
+	char	*da_buf;	/* pointer to stolen disk buffer */
+	char	*da_bufp;	/* pointer to buffer area */
+	int	da_wc;		/* word count */
+} da11;
+
+/* Hardware bits */
+
+#define GO	01	/* start function */
+#define OMODE	02	/* 0 = block, 1 = word */
+#define ODIR	04	/* 0 = xmit, 1 = receive */
+#define OINTR	010	/* interrupt other machine */
+#define IENABLE	0100	/* enable for device interrupts */
+#define READY	0200	/* device ready for new command */
+#define CYCLE	0400	/* force bus cycle to occur */
+#define IMODE	01000	/* status of OMODE from other machine */
+#define IDIR	02000	/* status of IDIR from other machine */
+#define IINTR	04000	/* status of OINTR from other machine */
+#define MAINT	010000	/* maint mode used by diagnostics */
+#define ATTN	020000	/* set briefly when OINTR set in other machine */
+#define NEX	040000	/* unibus timeout on transfer */
+#define ERROR	0100000	/* set by NEX or ATTN or wc overflow */
+
+/* software states */
+
+#define CLOSED	0	/* device not open */
+#define READ	1	/* read in progress */
+#define WRITE	2	/* write in progress */
+
+/* flags */
+
+#define OPEN	01	/* device is open */
+#define ASLEEP	02	/* asleep waiting on xfer to finish */
+#define ABORT	04	/* I/O error (write timeout, etc) */
+#define EOF	010	/* end of transfer from other machine (read) */
+#define INT	020	/* go ahead to start up read on channel */
+#define BUSY	040	/* DMA transfer in progress */
+
+daopen(dev, flag)
+{
+
+# ifdef POWERFAIL
+	if (dev == NODEV) {
+		da11.da_flag =| ABORT;	/* kiss goodbye */
+		DAADDR->dast =| IENABLE; /* cause abort */
+		return;
+	}
+# endif
+	if (da11.da_flag&OPEN) {
+		u.u_error = ENXIO;
+		return;
+	}
+	DAADDR->dast =| IENABLE;
+	da11.da_flag =| OPEN;
+
+/* Get a disk buffer */
+
+	da11.da_buf = getblk(NODEV);
+	da11.da_bufp = da11.da_buf->b_addr;
+/***** Put timer stuff here *******/
+	da11.da_flag =& ~INT; /* clear int caused by open */
+}
+
+daclose(dev)
+{
+
+	dawait();
+	if (da11.da_state == WRITE) {
+		spl6();
+		DAADDR->dast =& ~OINTR; /* must toggle to interrupt */
+		DAADDR->dast =| (OINTR|OMODE);
+		while ((da11.da_flag&(EOF|ABORT)) == 0) {
+			da11.da_flag =| ASLEEP;
+			sleep(&da11, DAPRI+1);
+		}
+	}
+	spl0();
+	DAADDR->dast = 0;
+/***** put stop timer stuff here ******/
+	brelse(da11.da_buf);
+	da11.da_buf = 0;
+	da11.da_flag = 0;
+	da11.da_state = 0;
+}
+
+dawrite(dev)
+{
+	register int c;
+
+	if (da11.da_flag&ABORT) {
+		u.u_error = EIO;
+		return;
+	}
+	da11.da_state = WRITE;
+	while (u.u_count) {
+		if (dawait()) {
+			u.u_error = EIO;
+			return;
+		}
+		c = min(u.u_count, 512);
+		if (c&01)
+			da11.da_bufp[c] = 0;	/* send 0 byte to make even */
+		da11.da_wc = (c+1)>>1;
+		iomove(da11.da_buf, 0, c, B_WRITE);
+		dastart();
+	}
+}
+
+daread(dev)
+{
+	register int c;
+
+	if (da11.da_flag&ABORT) {
+		u.u_error = EIO;
+		return;
+	}
+	da11.da_state = READ;
+	u.u_count =& ~01;	/* make sure count is even */
+	while(u.u_count) {
+		if (da11.da_flag&EOF)
+			return;
+		if (dawait()) {
+			u.u_error = EIO;
+			return;
+		}
+		c = min(u.u_count, 512);
+		da11.da_wc = c>>1;
+		/*
+		 * wait for other machine to start xmit fcn
+		 */
+		spl6();
+		while ((da11.da_flag & INT) == 0) {
+			da11.da_flag =| ASLEEP;
+			sleep(&da11, DAPRI-1);
+			if (da11.da_flag & ABORT)
+				goto out;
+		}
+		da11.da_flag =& ~INT;
+		spl0();
+		if (da11.da_flag & EOF)
+			return;
+		dastart();
+		if (dawait()) {
+			if (da11.da_flag&EOF) 
+				c = 512 + (DAADDR->dawc << 1);
+			else {
+				u.u_error = EIO;
+				return;
+			}
+		}
+		iomove(da11.da_buf, 0, c, B_READ);
+	}
+	return;
+out:
+	spl0();
+	u.u_error = EIO;
+}
+
+dawait()
+{
+	spl6();
+	while((DAADDR->dast&READY) == 0) {
+		da11.da_flag =| ASLEEP;
+		sleep(&da11, DAPRI);
+	}
+	spl0();
+	return(da11.da_flag&(ABORT|EOF));
+}
+
+dastart()
+{
+
+	register int *da;
+
+/*	da11.da_timer = *************/
+	spl7();
+	da11.da_flag =| BUSY;
+	da = &DAADDR->dawc;
+	*da++ = -da11.da_wc;
+	*da++ = da11.da_bufp;
+	*da = 0;
+	if(da11.da_state == READ)
+		*da =| ODIR;	/* set receive mode */
+/*
+printf("dastart() - dast = 0%o, dawc = 0%o, daba = 0%o\n",
+DAADDR->dast, DAADDR->dawc, DAADDR->daba);
+*/
+	*da =| (IENABLE|GO);
+	if (da11.da_state == WRITE)  {
+		*da =| OINTR;  /* start other machine */
+		*da =& ~OINTR;
+	}
+	spl0();
+}
+
+daintr()
+{
+	register int *da;
+
+	da = &DAADDR->dast;
+	if (*da&(ERROR|IINTR)) {
+		if (*da & IINTR) {
+			if (*da & IMODE) {
+				*da =| (OINTR|OMODE); /* ack EOF */
+				da11.da_flag =| EOF;
+			}
+		}
+		else {
+			printf("DA11 ABORTED wc0%o ba0%o st0%o db0%o\n",
+			DAADDR->dawc, DAADDR->daba, *da, DAADDR->dadb);
+			da11.da_flag =| ABORT;
+		}
+	}
+	if ((da11.da_flag&BUSY) == 0)
+		da11.da_flag =| INT;	/* start up read */
+	da11.da_flag =& ~BUSY;
+	if(da11.da_flag&ASLEEP) {
+		wakeup(&da11);
+		da11.da_flag =& ~ASLEEP;
+	}
+}
+

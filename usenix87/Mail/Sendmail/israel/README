@@ -1,0 +1,83 @@
+This documents the University of Maryland modifications to sendmail to
+allow translation tables to be used in sendmail.cf.
+
+There are 5 files here.  They are:
+
+4.2diffs
+4.3diffs - these are diff -c listings for the changes to the sendmail
+    source.  The changes exist in 5 files, parseaddr.c (the meat
+    of the changes), readcf.c, stab.c main.c and sendmail.h.
+
+mimsy.cf - The standard University of Maryland .cf file.  This file is
+    almost completely host independent, with only the real name, UUCP
+    name, and valid local domain definitions hardcoded into Define's.
+    Any other system information has been moved to files in the
+    directory /usr/lib/hostnames/.
+
+host-doc - This documents the various files in /usr/lib/hostnames/
+    that are used by the sendmail.cf file.  It is intended to be a
+    README for that directory.
+
+names - this is a shell script that makes a translation table for all
+    local network users.  It has hard-coded into it all machines on
+    the local network, and when run on a machine, builds a file of
+    accounts and aliases on the local network but NOT on the current
+    host.  This file is used by the .cf file to route mail to users on
+    the local net.  In this fashion, if JOE has an account on one
+    local machine, mail to JOE@<any-local-machine> will get to him.
+    If JOE has an account on multiple machines, it will route his
+    mail to one of them and assume that he has a .forward.  Note
+    that this requires that names on local network machines be unique
+    (i.e. two different people would not be given the same account).
+
+- How to use these mods -
+
+After installing the source mods, you will have a sendmail executable
+that has this extra feature of translation tables.  In normal
+sendmails, you use the 'C' and 'F' commands in the .cf file to define
+classes (C for classes define in the .cf file, and F for classes
+defined in an external file).  Translation tables are defined with
+the 'E' and 'F' commands.  A class is a list of items.  A translation
+class is a list of pairs, items and the translated version of the
+item.  i.e. a translation file for some uucp sites to be routed (i.e.
+pathalias stuff) could look like:
+
+seismo	umcp-cs!seismo
+chimera	gymble!harvard!chimera
+godot	gymble!harvard!think
+elsie	elsie
+ihnp4	umcp-cs!seismo!ihnp4
+
+To read in a translation table from a file, use 'F' like always but
+give a format string with two %s's in it, i.e.
+
+FU/usr/lib/hostnames/uucp-routing %s%s
+
+and both the name and its translation would be read in.  The 'E'
+command is like 'C'.  It reads pairs of items on the current line (and
+continuation lines) and groups them together.  i.e. a list of people
+and the machine that they use might be:
+
+EPjoe site1 bill site2 john site1 ed site3
+
+E was added for orthogonality with C, and is unused in the sample
+sendmail.cf file enclosed.
+
+Accessing Translations
+
+Normally in sendmail you use $<number> in a RHS to access items
+matched on the LHS.  If you want the translation instead, follow the $
+with an &, i.e. $&3.  For example, rules using the above classes might
+look like:
+
+R$=U!$+		$:$&1!$2	Expand UUCP paths from file
+R$=P		$1@$&1		Route mail for users to their machine
+
+Notice that both $num and $&num can be used together.  If a
+class was not specified as a translation table, then the translation
+of any item in that class is equivalent to the item itself.
+
+For more information, see the examples in mimsy.cf or send mail to
+israel@mimsy.umd.edu (Arpanet) or seismo!umcp-cs!israel (Usenet).
+
+Enjoy.

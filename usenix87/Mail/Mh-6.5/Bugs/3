@@ -1,0 +1,152 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA14998; Sat, 7 Feb 87 11:31:34 EST
+Received: by seismo.CSS.GOV (5.54/1.14) 
+	id AA20911; Sat, 7 Feb 87 09:50:54 EST
+Received: from bboards by ICS.UCI.EDU id a023414; 3 Feb 87 15:55 PST
+Received: from braggvax.arpa by ICS.UCI.EDU id a023349; 3 Feb 87 15:48 PST
+Message-Id: <8702031841.AA15908@braggvax.arpa>
+To: ics.uci.edu!mh-workers%ics.uci.edu
+Cc: BRAGGVAX.ARPA!gorman, braggvax.arpa!ted
+Subject: Fixes for bbc -topics in a POP environment
+Date: Tue, 03 Feb 87 13:41:40 EST
+From: braggvax.arpa!ted
+
+We run a pop server on our 4.3 vax, and have the Suns in our Lan configured
+as pop clients.  This works great for mail, but there were some minor
+problems for bboards.  In particular, the command
+
+	bbc -topics
+
+behaved strangely.  It would print all the bboards and the number of
+messages in each, but would not list the last modified date (it does
+locally on the vax).  Also, after listing all the bboards, it would go
+off into the POP files and list random users' names as bboards.  To
+make it work the way I think it should, I had to modify 2 files:
+popser.c in support/pop and bbc.c in uip.  There was no provision for
+transmitting the dates over the pop connection, so I added it at both
+ends.  To fix the problem of listing pop users as bboards, I #ifdefed
+out a little loop after the main bboard scan loop in popser.c.  If
+someone can explain to me what this was supposed to do, and how to make
+it work, I will put it back in.  You mileage may vary slightly on popser.c,
+I already made one change a few months back to make anonymous pop work
+at all.
+
+There is still an intermittent problem with updating .bbrc files, but I haven't 
+tracked that one down yet.
+
+I don't claim elegance for any of this.  (Actually I don't even claim
+correctness!)
+				Ted Nolan
+				ted@braggvax.arpa
+
+----------------------------popser.c------------------------------------------
+------- popser.c -------
+*** /tmp/d15182	Tue Feb  3 11:44:03 1987
+--- popser.c	Mon Feb  2 15:52:39 1987
+***************
+*** 877,883 ****
+  	    return NOTOK;
+  	xtnded++;
+  	(void) respond (OK, "%s", vec[1]);
+! 	multiline ("%s %d", bb -> bb_name, bb -> bb_maxima);
+      }
+      else {
+  	if (strcmp (vec[1], "bboards"))
+--- 877,883 ----
+  	    return NOTOK;
+  	xtnded++;
+  	(void) respond (OK, "%s", vec[1]);
+! 	multiline ("%16s %5d   %s", bb -> bb_name, bb -> bb_maxima,bb -> bb_date);
+      }
+      else {
+  	if (strcmp (vec[1], "bboards"))
+***************
+*** 887,897 ****
+  	for (bb = BBhead; bb; bb = bb -> bb_next) {
+  	    getbbmax (bb);
+  	    if (!(bb -> bb_flags & BB_INVIS))
+! 		multiline ("%s %d", bb -> bb_name, bb -> bb_maxima);
+  	}
+  	while (bb = getbbaux (NULLCP))
+  	    if (!(bb -> bb_flags & BB_INVIS))
+  		multiline ("%s %d", bb -> bb_name, bb -> bb_maxima);
+      }
+      multiend ();
+  
+--- 887,900 ----
+  	for (bb = BBhead; bb; bb = bb -> bb_next) {
+  	    getbbmax (bb);
+  	    if (!(bb -> bb_flags & BB_INVIS))
+! 		multiline ("%16s %5d   %s", bb -> bb_name, bb -> bb_maxima,
+! 					bb -> bb_date );
+  	}
++ #ifdef notdef
+  	while (bb = getbbaux (NULLCP))
+  	    if (!(bb -> bb_flags & BB_INVIS))
+  		multiline ("%s %d", bb -> bb_name, bb -> bb_maxima);
++ #endif
+      }
+      multiend ();
+  
+------------------------------bbc.c------------------------------------------
+------- bbc.c -------
+*** /tmp/d15861	Tue Feb  3 13:36:17 1987
+--- bbc.c	Tue Feb  3 11:35:25 1987
+***************
+*** 1,8 ****
+--- 1,11 ----
+  /* bbc.c - ZOTnet BBoard checker */
+  
++ static char SccsId[] = "@(#)bbc.c	1.2	2/3/87	braggvax";
++ 
+  #include "../h/mh.h"
+  #include "../zotnet/bboards.h"
+  #include <stdio.h>
++ #include <ctype.h>
+  #ifdef	BPOP
+  #include "../zotnet/mts.h"
+  #endif	BPOP
+***************
+*** 874,887 ****
+--- 877,907 ----
+  {
+      int     maxima;
+      char    name[BUFSIZ];
++     char    b_date[BUFSIZ];
+      register struct bboard *bb;
++     register char *i;
+  
+      if (sscanf (s, "%s %d", name, &maxima) != 2)
+  	adios (NULLCP, "XTND2 botch: %s", s);
+  
++ /*
++  * Grab the date field
++  */
++     i = s -1;
++     while(isspace(*++i));		/* move up TO name field */
++     while(!(isspace(*++i)));		/* move to white space after name*/
++     while(isspace(*++i));		/* move up TO maxima field */
++     while(!(isspace(*++i)));		/* move to white space after maxima*/
++     while(isspace(*++i));		/* move up TO Date field */
++     if(index(i,'\n'))
++ 	*(index(i,'\n')) = '\0';	/* Zap newline if any */
++     strcpy(b_date,i);
++ 	
++ 
+      if ((bb = (struct bboard   *) calloc (1, sizeof *bb)) == NULL)
+  	adios (NULLCP, "insufficient memory");
+      bb -> bb_name = getcpy (name);
++     bb -> bb_date = getcpy (b_date);
+      if ((bb -> bb_aka = (char **) calloc (1, sizeof *bb -> bb_aka)) == NULL)
+  	adios (NULLCP, "insufficient memory");
+      *bb -> bb_aka = NULL;
+***************
+*** 898,904 ****
+      bb -> bb_flags = BB_REMOTE;
+      bb -> bb_count = 0;
+      bb -> bb_maxima = maxima;
+-     bb -> bb_date = "";
+      bb -> bb_next = bb -> bb_link = bb -> bb_chain = NULL;
+  
+      if (Btail != NULL)
+--- 918,923 ----

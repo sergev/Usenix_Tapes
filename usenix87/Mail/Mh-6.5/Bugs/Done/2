@@ -1,0 +1,85 @@
+Patched: 13 May 86 01:37:37 CDT (Tue)
+Date:    Mon, 12 May 86 03:59:29 -0700 
+Subject: Re: More info... 
+From:    Van Jacobson <van@monet.berkeley.EDU>
+To:      Marshall Rose <mrose@NRTC-GREMLIN.NORTHROP.COM>
+
+(One problem with working on popular programs is the whole world
+suffers for your bugs...)  I'm pretty sure the problem is in the C
+version of matchc.  The braindamaged code I wrote would blithely try to
+match 20-30 characters past the end of the buffer (the amount depended
+on the number of newlines in the body of the message).  If there
+happened to be a valid delimiter in that region, m_getfld would append
+the garbage between the end of the buffer and the delim to the
+message.  The attached mods should fix the problem.  [The new version
+is also a tiny bit faster, at least on my Sun-3].
+
+ - Van
+
+ ps- You might want to forward this to Craig and/or mh-workers so 
+     people don't keep blaming you for my bugs.
+
+ pps- Gremlin doesn't seem to be adding a valid domain spec to
+     "from" addresses so our mailer bounces replies if I forget
+     to edit your address.  I.e., the from line I get is:
+	 From: Marshall Rose <mrose@nrtc-gremlin>
+ ---------------------------
+*** /usr/tmp/mh-6.5/sbr/m_getfld.c	Mon Apr 14 23:51:51 1986
+--- m_getfld.c	Mon May 12 03:22:53 1986
+***************
+*** 593,619 ****
+  #else
+  static char *
+  matchc( patln, pat, strln, str )
+! 	register int patln;
+! 	register char *pat;
+! 	register int strln;
+  	register char *str;
+  {
+  	register char *pp;
+! 	register int  pl;
+  	register char pc = *pat++;
+  
+  	for(;;) {
+! 		while (pc != *str++ && --strln > 0)
+! 			;
+! 		if (strln < 0)
+! 			return 0;
+  
+! 		pp = pat; pl = patln;
+! 		while (--pl > 0 && *str++ == *pp++)
+  			;
+! 		str += (pl - patln);
+! 		if (pl == 0) 
+! 			return (str);
+  	}
+  }
+  #endif
+--- 593,619 ----
+  #else
+  static char *
+  matchc( patln, pat, strln, str )
+! 	int patln;
+! 	char *pat;
+! 	int strln;
+  	register char *str;
+  {
++ 	register char *es = str + strln - patln;
++ 	register char *sp;
+  	register char *pp;
+! 	register char *ep = pat + patln;
+  	register char pc = *pat++;
+  
+  	for(;;) {
+! 		while (pc != *str++)
+! 			if (str > es)
+! 				return 0;
+  
+! 		sp = str; pp = pat;
+! 		while (pp < ep && *sp++ == *pp++)
+  			;
+! 		if (pp >= ep) 
+! 			return (--str);
+  	}
+  }
+  #endif

@@ -1,0 +1,711 @@
+
+# To unbundle, sh this file as root
+echo mkarpatxt 1>&2
+sed 's/^-//' >mkarpatxt <<'//GO.SYSIN DD mkarpatxt'
+#!/bin/sh
+# put output files in paths.internet/*
+ODIR=paths.internet
+
+if [ ! -d $ODIR ]; then
+	mkdir $ODIR
+	case $? in
+	0)	;;
+	*)	exit $?
+		;;
+	esac
+fi
+
+egrep '^HOST.*SMTP' ${1-hosts.txt}|
+	awk -F: '{print $3}'|
+	sed -e 's/ //g' -e 's/,/	/g'|
+	arpatxt -i -g decuac.dec.com -g seismo -g ucbvax -g topaz.rutgers.edu -g caip.rutgers.edu -p arpa-privates -d $ODIR
+//GO.SYSIN DD mkarpatxt
+echo arpatxt.c 1>&2
+sed 's/^-//' >arpatxt.c <<'//GO.SYSIN DD arpatxt.c'
+/*
+ * convert hosts.txt into pathalias format.
+ * preprocess hosts.txt with
+ *	egrep '^HOST.*SMTP' hosts.txt
+ *		| awk -F: '{print $3}'
+ *		| sed -e 's/ //g' -e 's/,/	/g'
+ *
+ * alias rules:
+ *	host.dom.ain nickname.arpa	-> host = nickname
+ *	host.arpa dom.ain.name		-> host = dom.ain.name
+ * the latter is not yet implemented.
+ */
+
+#ifndef lint
+static char *sccsid = "@(#)arpatxt.c	1.8 (down!honey) 86/04/06";
+#endif
+
+/* remove the next line for standard or research unix */
+#define strchr index
+
+#include <stdio.h>
+#include <ctype.h>
+
+typedef struct node node;
+
+struct node {
+	node *child;	/* subdomain or member host */
+	node *parent;	/* parent domain */
+	node *next;	/* sibling in domain tree or host list */
+	char *name;
+	node *alias;
+	node *bucket;
+	node *gateway;
+	int  flag;
+};
+
+node *Top;
+int Atflag;
+int Iflag;
+char *DotArpa = ".ARPA";
+char Fname[256], *Fend;
+
+node *newnode(), *find();
+char *strsave(), *lowercase(), *mkfile();
+
+extern char *malloc(), *strchr(), *calloc(), *gets(), *strcpy(), *fgets();
+extern FILE *fopen();
+
+#define ISADOMAIN(n) ((n) && *((n)->name) == '.')
+
+/* for node.flag */
+#define COLLISION 1
+
+/* for formatprint() */
+#define PRIVATE	0
+#define HOST	1
+#define DOMAIN	2
+
+/* for usage() */
+#define USAGE "usage: %s [-i@] [-g gateway] [-p privatefile] [-d directory] [file]\n"
+
+main(argc, argv)
+	char **argv;
+{	int c;
+	char buf[BUFSIZ], *privatefile = 0, *progname;
+	extern char *optarg;
+	extern int optind;
+
+	if ((progname = strchr(argv[0], '/')) != 0)
+		progname++;
+	else
+		progname = argv[0];
+
+	Top = newnode();	/* needed for adding gateways */
+	while ((c = getopt(argc, argv, "d:g:ip:@")) != EOF)
+		switch(c) {
+		case 'd':
+			strcpy(Fname, optarg);
+			break;
+		case 'g':
+			gateway(optarg);
+			break;
+		case 'i':
+			Iflag++;
+			break;
+		case 'p':
+			privatefile = optarg;
+			if (access(privatefile, 0) != 0) {
+				perror(privatefile);
+				exit(1);
+			}
+			break;
+		case '@':
+			Atflag++;
+			break;
+		default:
+			usage(progname);
+		}
+
+	if (Iflag)
+		(void) lowercase(DotArpa);
+	if (Top->gateway == 0)
+		fprintf(stderr, "%s: warning: no gateway to top level domains\n", progname);
+
+	Fend = Fname + strlen(Fname);
+	if (Fend != Fname) {
+		*Fend++ = '/';
+		*Fend = 0;
+	}
+	/* should do the mkdir here instead of the shell script ...*/
+		
+	Top->name = "internet";
+	if (optind < argc) {
+		if (freopen(argv[optind], "r", stdin) == 0) {
+			perror(argv[optind]);
+			exit(1);
+		}
+	}
+	while (gets(buf) != 0) {
+		if (Iflag)
+			(void) lowercase(buf);
+		insert(buf);
+	}
+	if (privatefile)
+		readprivates(privatefile);
+	merge();
+	dump(Top);
+	exit(0);
+}
+/*
+ * format of private file:
+ *	one per line, optionally followed by white space and comments
+ *	line starting with # is comment
+ */
+readprivates(pfile)
+	char *pfile;
+{	FILE *f;
+	node *n;
+	char buf[BUFSIZ], *bptr;
+
+	if ((f = fopen(pfile, "r")) == 0)
+		abort();
+	while (fgets(buf, BUFSIZ, f) != 0) {
+		if (*buf == '#')
+			continue;
+		if ((bptr = strchr(buf, ' ')) != 0)
+			*bptr = 0;
+		if ((bptr = strchr(buf, '\t')) != 0)
+			*bptr = 0;
+		if (*buf == 0)
+			continue;
+		n = newnode();
+		n->name = strsave(buf);
+		hash(n);
+	}
+	(void) fclose(f);
+}
+usage(progname)
+	char *progname;
+{
+	fprintf(stderr, USAGE, progname);
+	exit(1);
+}
+dumpgateways(ndom, f)
+	node *ndom;
+	FILE *f;
+{	node *n;
+
+	for (n = ndom->gateway; n; n = n->next) {
+		fprintf(f, "%s ", n->name);
+		if (Atflag)
+			putc('@', f);
+		fprintf(f, "%s(%s)\t# gateway\n", ndom->name,
+				ndom == Top ? "DEDICATED" : "LOCAL");
+	}
+}
+
+gateway(buf)
+	char *buf;
+{	node *n, *dom;
+	char *dot;
+
+	dot = strchr(buf, '.');
+	if (dot) {
+		dom = find(dot);
+		*dot = 0;
+	} else
+		dom = Top;
+
+	n = newnode();
+	n->name = strsave(buf);
+	n->next = dom->gateway;
+	dom->gateway = n;
+}
+	
+insert(buf)
+	char *buf;
+{	char host[BUFSIZ], *hptr, *dot;
+	node *n;
+
+	for (hptr = host; *hptr = *buf++; hptr++)
+		if (*hptr == '\t')
+			break;
+
+	if (*hptr == '\t')
+		*hptr = 0;
+	else
+		buf = 0;	/* no aliases */
+
+	if ((dot = strchr(host, '.')) == 0)
+		abort();	/* shouldn't happen */
+	
+	if (strcmp(dot, DotArpa) == 0)
+		buf = 0;		/* no aliases */
+
+	n = find(dot);
+	*dot = 0;
+
+	addchild(n, host, buf);
+}
+
+node *
+find(domain)
+	char *domain;
+{	char *dot;
+	node *parent, *child;
+
+	if (domain == 0)
+		return(Top);
+	if ((dot = strchr(domain+1, '.')) != 0) {
+		parent = find(dot);
+		*dot = 0;
+	} else
+		parent = Top;
+
+	for (child = parent->child; child; child = child->next)
+		if (strcmp(domain, child->name) == 0)
+			break;
+	if (child == 0) {
+		child = newnode();
+		child->next = parent->child;
+		parent->child = child;
+		child->parent = parent;
+		child->name = strsave(domain);
+	}
+	return(child);
+}
+
+node *
+newnode()
+{
+	node *n;
+
+	if ((n = (node *) calloc(1, sizeof(node))) == 0)
+		abort();
+	return(n);
+}
+
+char *
+strsave(buf)
+	char *buf;
+{	char *mstr;
+
+	if ((mstr = malloc(strlen(buf)+1)) == 0)
+		abort();
+	strcpy(mstr, buf);
+	return(mstr);
+}
+
+addchild(n, host, aliases)
+	node *n;
+	char *host, *aliases;
+{	node *child;
+
+	/* check for dups?  nah! */
+	child = newnode();
+	child->name = strsave(host);
+	child->parent = n;
+	child->next = n->child;
+	makealiases(child, aliases);
+	n->child = child;
+}
+
+dump(n)
+	node *n;
+{	node *child;
+	char *fname;
+	FILE *f;
+
+	if (!ISADOMAIN(n) && n != Top)
+		abort();
+
+	fname = mkfile(n);
+	if ((f = fopen(fname, "w")) == 0) {
+		perror(fname);
+		exit(1);
+	}
+	domprint(n, f);
+	dumpgateways(n, f);
+	(void) fclose(f);
+	for (child = n->child; child; child = child->next)
+		if (child->child)
+			dump(child);
+}
+
+qcmp(a, b)
+	node **a, **b;
+{
+	return(strcmp((*a)->name, (*b)->name));
+}
+
+domprint(n, f)
+	node *n;
+	FILE *f;
+{	node *table[10240], *child, *alias;
+	char leader[128], *cost = 0;
+	int nelem, i;
+
+	/* dump private definitions */
+	/* sort hosts and aliases in table */
+	i = 0;
+	for (child = n->child; child; child = child->next) {
+		table[i++] = child;
+		for (alias = child->alias; alias; alias = alias->next)
+			table[i++] = alias;
+	}
+	qsort((char *) table, i, sizeof(table[0]), qcmp);
+
+	formatprint(f, table, i, PRIVATE, "private {", cost);	/*}*/
+
+	/* dump domains and aliases */
+	/* sort hosts only in table */
+	i = 0;
+	for (child = n->child; child; child = child->next)
+		table[i++] = child;
+	qsort((char *) table, i, sizeof(table[0]), qcmp);
+	if (Atflag)
+		sprintf(leader, "%s = @{", n->name);	/*}*/
+	else
+		sprintf(leader, "%s = {", n->name);	/*}*/
+	
+	/* cost is DEDICATED for hosts in top-level domains, LOCAL o.w. */
+	if (n->parent == Top && strchr(n->name + 1, '.') == 0)
+		cost = "DEDICATED";
+	else
+		cost = "LOCAL";
+	formatprint(f, table, i, HOST, leader, cost);
+	if (Atflag)
+		sprintf(leader, "%s = @{", n->name);	/*}*/
+	else
+		sprintf(leader, "%s = {", n->name);	/*}*/
+	formatprint(f, table, i, DOMAIN, leader, "0");
+
+	/* dump aliases */
+	nelem = i;
+	for (i = 0; i < nelem; i++) {
+		if ((alias = table[i]->alias) == 0)
+			continue;
+		fprintf(f, "%s = %s", table[i]->name, alias->name);
+		for (alias = alias->next; alias; alias = alias->next)
+			fprintf(f, ", %s", alias->name);
+		fputc('\n', f);
+	}
+
+}
+
+dtable(comment, table, nelem)
+	char *comment;
+	node **table;
+{	int	i;
+
+	fprintf(stderr, "\n%s\n", comment);
+	for (i = 0; i < nelem; i++)
+		fprintf(stderr, "%3d\t%s\n", i, table[i]->name);
+}
+
+formatprint(f, table, nelem, flag, leader, cost)
+	FILE *f;
+	node **table;
+	char *leader, *cost;
+{	int i, noprint = 1;
+	char buf[128], *bptr;
+
+	strcpy(buf, leader);
+	bptr = buf + strlen(buf);
+	for (i = 0; i < nelem; i++) {
+		switch(flag) {
+		case PRIVATE:
+			if ((table[i]->flag & COLLISION) == 0)
+				continue;
+			break;
+		case HOST:
+			if (ISADOMAIN(table[i]))
+				continue;
+			break;
+		case DOMAIN:
+			if (!ISADOMAIN(table[i]))
+				continue;
+			break;
+		}
+
+		noprint = 0;
+		if ((bptr - buf) + strlen(table[i]->name) + 2 > 71) {
+			*bptr = 0;
+			fprintf(f, "%s\n ", buf);
+			bptr = buf;
+		}
+		sprintf(bptr, "%s, ", table[i]->name);
+		bptr += strlen(bptr);
+	}
+	*bptr = 0;
+	if (!noprint) {
+		fprintf(f, "%s}", buf);
+		switch(flag) {
+		case HOST:
+		case DOMAIN:
+			fprintf(f, "(%s)", cost);
+			break;
+		}
+		fputc('\n', f);
+	}
+}
+
+char *				
+mkfile(n)
+	node *n;
+{	node *parent;
+	char *bptr;
+
+	bptr = Fend;
+	if (n == Top)
+		strcpy(bptr, n->name);
+	else {
+		strcpy(bptr, n->name + 1);	/* skip leading dot */
+		bptr = bptr + strlen(bptr);
+		parent = n->parent;
+		while (bptr - Fend < 14 && ISADOMAIN(parent)) {
+			strcpy(bptr, parent->name);
+			bptr += strlen(bptr);
+			parent = parent->parent;
+		}
+		*bptr = 0;
+		Fend[14] = 0;
+	}
+#if 0
+	if (access(Fname, 0) == 0)
+		abort();
+#endif
+	return(Fname);
+}
+
+/* map to lower case in place.  return parameter for convenience */
+char *
+lowercase(buf)
+	char *buf;
+{	char *str;
+
+	for (str = buf ; *str; str++)
+		if (isupper(*str))
+			*str -= 'A' - 'a';
+	return(buf);
+}
+
+/* get the interesting aliases, attach to n->alias */
+makealiases(n, line)
+	node *n;
+	char *line;
+{	char *next, *dot;
+	node *a;
+
+	if (line == 0 || *line == 0)
+		return;
+
+	for ( ; line; line = next) {
+		next = strchr(line, '\t');
+		if (next)
+			*next++ = 0;
+		if ((dot = strchr(line, '.')) == 0)
+			continue;
+		if (strcmp(dot, DotArpa) != 0)
+			continue;
+		*dot = 0;
+
+		if (strcmp(n->name, line) == 0)
+			continue;
+
+		a = newnode();
+		a->name = strsave(line);
+		a->next = n->alias;
+		n->alias = a;
+	}
+}
+
+#define NHASH 13309
+node *htable[NHASH];
+
+merge()
+{	node *n;
+
+	setuniqflag(Top);
+	for (n = Top->child; n; n = n->next) {
+		if (n->flag & COLLISION) {
+			fprintf(stderr, "illegal subdomain: %s\n", n->name);
+			abort();
+		}
+		promote(n);
+	}
+}
+
+promote(parent)
+	node *parent;
+{	node *prev, *child, *next;
+	char buf[BUFSIZ];
+
+	prev = 0;
+	for (child = parent->child; child; child = next) {
+		next = child->next;
+		if (!ISADOMAIN(child)) {
+			prev = child;
+			continue;
+		}
+		if ((child->flag & COLLISION) || child->gateway) {
+			/*
+			 * reach here on dup domain name or gateway.
+			 * don't bump prev: this node is moving up the tree.
+			 */
+
+			/* lengthen child domain name */
+			sprintf(buf, "%s%s", child->name, parent->name);
+			cfree(child->name);
+			child->name = strsave(buf);
+
+			/* unlink child out of sibling chain */
+			if (prev)
+				prev->next = child->next;
+			else
+				parent->child = child->next;
+
+			/* link child in as peer of parent */
+			child->next = parent->next;
+			parent->next = child;
+			child->parent = parent->parent;
+
+			/*
+			 * reset collision flag; may promote again on
+			 * return to caller.
+			 */
+			child->flag &= ~COLLISION;
+			hash(child);
+		} else {
+			promote(child);
+			prev = child;
+		}
+	}
+	
+}
+
+setuniqflag(n)
+	node *n;
+{	node *child, *alias;
+
+	/* mark this node in the hash table */
+	hash(n);
+	/* mark the aliases of this node */
+	for (alias = n->alias; alias; alias = alias->next)
+		hash(alias);
+	/* recursively mark this node's children */
+	for (child = n->child; child; child = child->next)
+		setuniqflag(child);
+}
+
+hash(n)
+	node *n;
+{	node **bucket, *b;
+
+	bucket = &htable[fold(n->name) % NHASH];
+	for (b = *bucket; b; b = b->bucket) {
+		if (strcmp(n->name, b->name) == 0) {
+			b->flag |= COLLISION;
+			n->flag |= COLLISION;
+			return;
+		}
+	}
+	n->bucket = *bucket;
+	*bucket = n;
+}
+
+fold(str)
+char *str;
+{
+	int sum = 0;
+
+	for (;;) {
+		if (*str == 0)
+			break;
+		sum ^= *str++;
+		if (*str == 0)
+			break;
+		sum ^= *str++ << 8;
+		if (*str == 0)
+			break;
+		sum ^= *str++ << 16;
+		if (*str == 0)
+			break;
+		sum ^= *str++ << 24;
+	}
+	if (sum < 0)
+		sum = -sum;
+	return(sum);
+}
+//GO.SYSIN DD arpatxt.c
+echo arpa-privates 1>&2
+sed 's/^-//' >arpa-privates <<'//GO.SYSIN DD arpa-privates'
+###
+#host		map file ([map file ...] for unregistered hosts)
+#
+ai		eur.gb
+alamo		usa.tx
+ames		usa.ca.n (amazingly ...)
+ariadne		eur.gr
+astro		[usa.ma]
+athena		usa.or
+bach		[usa.nc]
+bashful		[usa.nc]
+boojum		att.nj.1
+brahms		asia.japan
+cleo		usa.nj.bcr
+dewey		att.nj.1
+diomedes	att.nj.1
+doc		[usa.nc]
+dopey		[usa.nc]
+einstein	usa.ny
+escher		usa.ca.s
+euclid		[eur.gb]
+euler		usa.nj
+felix		usa.ca.s
+fermat		usa.nj
+gandalf		can.on
+godot		usa.nc
+gould		usa.fl
+garfield	can.nf
+green		usa.md
+grumpy		[att.ga, att.il, att.nac, usa.nc]
+hamlet		[att.nj.2]
+happy		[usa.nc]
+hilbert		usa.wa
+hudson		att.nj.1
+huey		att.nj.1
+icarus		att.nj.1
+icsd		att.fl
+jason		usa.ny
+jove		usa.ny
+juliet		[att.nj.2, usa.nj]
+lafite		usa.nj.bcr
+louie		att.nj.1
+madvax		usa.ca.n
+max		att.nj.2
+merlin		att.nj.1
+mickey		[usa.nj]
+odin		att.nj.2
+orion		att.nj.2
+osiris		usa.md
+pallas		usa.il
+physics		att.nj.2
+pluto		usa.ny
+polaris		usa.ny
+phobos		att.nj.2
+psyche		usa.nc
+ra		usa.ny
+rocky
+rover
+saturn		att.oh
+sleepy		[usa.nc]
+sphinx		usa.il
+sun		usa.ca.n (for sun.css.gov, and sun.com for sun forwarding)
+tb		att.ok
+terra		usa.ma
+titan		usa.ca.s
+sneezy		[usa.wi]
+sol		[att.il, usa.ny, eur.gb]
+stc		eur.gb
+trillian	att.nj.2
+unh		usa.nh
+zeta		usa.nj.bcr
+//GO.SYSIN DD arpa-privates
+exit
+

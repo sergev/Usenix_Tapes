@@ -1,0 +1,332 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 (Tek) 9/28/84 based on 9/17/84; site hammer.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!mtuxo!mtunh!vax135!cornell!uw-beaver!tektronix!orca!hammer!steveh
+From: steveh@hammer.UUCP (Stephen Hemminger)
+Newsgroups: net.games.emp
+Subject: Re: info problem
+Message-ID: <1618@hammer.UUCP>
+Date: 6 Nov 85 16:20:45 GMT
+Date-Received: 7 Nov 85 23:47:05 GMT
+References: <18700003@uiucdcs>
+Reply-To: steveh@hammer.UUCP (Stephen Hemminger)
+Organization: Tektronix, Wilsonville OR
+Lines: 317
+Keywords: Empire, 4.2
+
+Here is an archive of my empire fixes which gets rid of problems
+with info on 4.2.
+----------- cut ----------
+: Run this shell script with "sh" not "csh"
+PATH=:/bin:/usr/bin:/usr/ucb
+export PATH
+all=FALSE
+if [ $1x = -ax ]; then
+	all=TRUE
+fi
+/bin/echo 'Extracting README'
+sed 's/^X//' <<'//go.sysin dd *' >README
+Fixes for PSL's empire (version as of Jan 1983),
+to make it run on 4.{2,3} bsd.
+
+Here is a start at fixing some bugs caused by changes from 4.1 to 4.2.
+
+1) New info command since info scan's directories this is needed.
+	You probably want to pre nroff the info files.
+	Also how nroff/pager is run maybe different than original
+	check nrarg[] and nnrarg in empdefs.c
+
+2) since stat changed, add new gtmod and modtime.
+
+3) new ioctl so new sread/inflush
+
+4) use better random number generator.
+
+This gets the obvious bugs (not all are gone).
+
+
+To install this:
+	unpack the sources (I use /usr/games/.../EMP/FIXES)
+	make
+	make install (will put the new .o into the archives)
+	rebuild empire
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 README
+	/bin/echo -n '	'; /bin/ls -ld README
+fi
+/bin/echo 'Extracting gtmod.c'
+sed 's/^X//' <<'//go.sysin dd *' >gtmod.c
+X/*
+ * Return mode of a file.
+ */
+
+#include <sys/types.h>
+#include <sys/stat.h>
+
+gtmod(file)
+	char *file;
+{
+	struct stat stb;
+
+	if(stat(file, &stb) < 0)
+		return -1;
+	else
+		return stb.st_mode;
+}
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 gtmod.c
+	/bin/echo -n '	'; /bin/ls -ld gtmod.c
+fi
+/bin/echo 'Extracting inflush.c'
+sed 's/^X//' <<'//go.sysin dd *' >inflush.c
+X/*
+ * flush input 
+ */
+
+#include <sys/ioctl.h>
+
+inflush() {
+	static int rd = 1;
+	ioctl(0, TIOCFLUSH, &rd);
+}
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 inflush.c
+	/bin/echo -n '	'; /bin/ls -ld inflush.c
+fi
+/bin/echo 'Extracting info.c'
+sed 's/^X//' <<'//go.sysin dd *' >info.c
+X/*
+ * Repaired version of info
+ */
+#include <sys/types.h>
+#include <sys/dir.h>
+
+extern char *nrarg[], junk[], *nroffil, *infodir, *argp[];
+extern int nnrarg;
+extern char *copy(), *fmt();
+extern long modtime();
+
+extern char *ctime();
+
+info()
+{
+	register int pid, w;
+	register char *p;
+	char *topic;
+	int status;
+	long mtime;
+
+	if( (topic = argp[1]) == 0) {
+		ilist(0);
+		return;
+	}
+	
+	if(topic[0] >= '0' && topic[0] <= '9') {
+		ilist(atoi(topic));
+		return;
+	}
+	if(strcmp(topic, "on") == 0 && argp[2]) {
+		topic = argp[2];
+	}
+
+	p = copy(infodir,junk);
+	*p++ = '/';
+	(void) copy(topic, p);
+	
+	nrarg[nnrarg] = junk;
+
+	if( (mtime = modtime(junk)) < 0) {
+		pr(fmt("There is no info on %s\n", topic));
+		return;
+	}
+	pr(fmt("Info on %s -- Last mod : %s", topic, ctime(&mtime)));
+
+	pid = vfork();
+	if(pid == -1) {
+		pr("vfork error\n");
+		return;
+	}
+
+	if(pid == 0) {
+		execv(nroffil, nrarg);
+		pr(fmt("Sorry, %s is not execlable\n", nroffil));
+		_exit(1);
+	}
+	while( (w = wait(&status)) != -1 && w != pid)
+		;
+}
+
+static long cutoff;
+
+static iselect(dp)
+struct direct *dp;
+{
+	if(dp->d_name[0] == '.')
+		return 0;
+	if( cutoff && modtime(dp->d_name) >= cutoff)
+		return 0;
+	return 1;		
+}
+
+ilist(days) {
+	extern char *infodir;
+	register struct direct *dp;
+	register int n, i;
+	struct direct **namelist;
+	extern int alphasort();
+
+	if(days) {
+		time(&cutoff);
+		cutoff -= days*24*60*60;
+	} else {
+		cutoff = 0L;
+	}
+
+	if( (n = scandir(infodir, &namelist, iselect, alphasort)) < 0) {
+		pr("No info available");
+		return;
+	}
+
+	if(days)
+		pr(fmt("Info topics modified since %s", ctime(&cutoff)));
+	else
+		pr("Information is currently available on:\n");
+
+	for(i = 0; i < n; ++i) {
+		dp = namelist[i];
+		pr(fmt("%-16.16s", dp->d_name));
+		if((i % 4) == 0)
+			pr("\n");
+		free((char *) dp);
+	}
+
+	pr("\n");
+	free((char *) namelist);
+}
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 info.c
+	/bin/echo -n '	'; /bin/ls -ld info.c
+fi
+/bin/echo 'Extracting makefile'
+sed 's/^X//' <<'//go.sysin dd *' >makefile
+#
+# Empire fixes
+
+CFLAGS	= -O
+EOBJS	=  info.o
+GOBJS	=  gtmod.o modtime.o rand.o  sread.o inflush.o
+OBJS	= ${EOBJS} ${GOBJS}
+
+all:	${OBJS}
+
+install: ${OBJS}
+	ar r ../../glib.a ${GOBJS}
+	ranlib ../../glib.a
+	ar r ../empcom.a ${EOBJS}
+	ranlib ../empcom.a
+
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 makefile
+	/bin/echo -n '	'; /bin/ls -ld makefile
+fi
+/bin/echo 'Extracting modtime.c'
+sed 's/^X//' <<'//go.sysin dd *' >modtime.c
+X/*
+ * return time last modified
+ */
+#include <sys/types.h>
+#include <sys/stat.h>
+
+long modtime(file)
+	char *file;
+{
+	struct stat stb;
+
+	if(stat(file, &stb) < 0)
+		return -1;
+	else
+		return stb.st_mtime;
+}
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 modtime.c
+	/bin/echo -n '	'; /bin/ls -ld modtime.c
+fi
+/bin/echo 'Extracting rand.c'
+sed 's/^X//' <<'//go.sysin dd *' >rand.c
+X/*
+ * random upgrade
+ */
+
+srand(seed) {
+	srandom(seed);
+}
+
+int rand() {
+	extern long random();
+
+	return (random() >> 2) & 0xffff;	/* make it a short */
+}
+
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 rand.c
+	/bin/echo -n '	'; /bin/ls -ld rand.c
+fi
+/bin/echo 'Extracting sread.c'
+sed 's/^X//' <<'//go.sysin dd *' >sread.c
+X/*
+ * Safe read
+ */
+
+#include <stdio.h>
+#include <setjmp.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+
+static jmp_buf sjbuf;
+
+static int icatch() {
+	longjmp(sjbuf, 1);
+}
+
+int sread(buf, size)
+	char *buf;
+{
+	struct sgttyb otty, ntty;
+	int (*oint)();
+	int cc = 0;
+
+	ioctl(0, TIOCGETP, &otty);
+	ntty = otty;
+
+	if(setjmp(sjbuf)) 
+		goto leave;
+
+	oint = signal(SIGINT, icatch);
+	ntty.sg_flags &= ~ECHO;
+	ioctl(0, TIOCSETN, &ntty);
+	fflush(stdout);
+	cc = read(0, buf, size);
+leave:
+	ioctl(0, TIOCSETP, &otty);	
+	signal(SIGINT, oint);
+	return cc;
+}
+//go.sysin dd *
+made=TRUE
+if [ $made = TRUE ]; then
+	/bin/chmod 664 sread.c
+	/bin/echo -n '	'; /bin/ls -ld sread.c
+fi

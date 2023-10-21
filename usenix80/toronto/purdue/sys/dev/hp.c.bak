@@ -1,0 +1,341 @@
+#
+/*
+ */
+
+/*
+ * RP04 disk driver
+ *
+ * This driver has been tested on a working RP04 for a few hours.
+ * It does not attempt ECC error correction and is probably
+ * deficient in general in the case of errors and when packs
+ * are dismounted.
+ *
+ * changed disk partion table "hp_sizes", G. Goble, 3/7/77
+ *
+ * changed disk partition table "hp_sizes", added hp8, also
+ * changed minor dev number mapping from 3 to 4 bits, allowing
+ * 16 filesystems per disk instead of  8.  Minor dev numbers
+ * 16. , etc refer to physical drive 1. -G. Goble, 7/17/77.
+ *
+ */
+
+/* #define UNSAFE_TDF	/* extra debug code for Rogers to find TDF UNSAFE */
+#include "../param.h"
+#include "../buf.h"
+#include "../conf.h"
+#include "../user.h"
+#include "../proc.h"
+#include "../systm.h"
+#ifdef STATS
+#include "../stats.h"
+#endif
+
+struct {
+	int	hpcs1;	/* Control and Status register 1 */
+	int	hpwc;	/* Word count register */
+	int	hpba;	/* UNIBUS address register */
+	int	hpda;	/* Desired address register */
+	int	hpcs2;	/* Control and Status register 2*/
+	int	hpds;	/* Drive Status */
+	int	hper1;	/* Error register 1 */
+	int	hpas;	/* Attention Summary */
+	int	hpla;	/* Look ahead */
+	int	hpdb;	/* Data buffer */
+	int	hpmr;	/* Maintenance register */
+	int	hpdt;	/* Drive type */
+	int	hpsn;	/* Serial number */
+	int	hpof;	/* Offset register */
+	int	hpca;	/* Desired Cylinder address register*/
+	int	hpcc;	/* Current Cylinder */
+	int	hper2;	/* Error register 2 */
+	int	hper3;	/* Error register 3 */
+	int	hppos;	/* Burst error bit position */
+	int	hppat;	/* Burst error bit pattern */
+	int	hpbae;	/* 11/70 bus extension */
+};
+
+#define	HPADDR	0176700
+#define	NHP	1
+
+struct {
+	char	*nblocks;
+	int	cyloff;
+} hp_sizes[] {
+	5016,	192,	/* hp0 cyl 192 thru 203 */
+	-1,	35,	/* hp1 cyl 35 thru 191 (-1 is 65535) */
+	-1,	204,	/* hp2 cyl 204 thru 360 */
+	20900,	361,	/* hp3 cyl 361 thru 410 */
+	13794,	2,	/* hp4 cyl 2 thru 34 */
+	836,	0,	/* hp5 cyl 0 thru 1(boot up file sys) */
+			/* note: hp6 and hp7 are subsets of hp4 */
+	7942,	2,	/* hp6 cyl 2 thru 20 (overlaps hp4!!) */
+	4180,	21,	/* hp7 cyl 21 thru 30 (overlaps hp4!!) */
+	1672,	31,	/* hp8 cyl 31 thru 34 */
+	4180+1672, 21,	/* hp9 same as hp7+hp8 */
+
+};
+
+
+struct	devtab	hptab;
+struct	buf	hpbuf;
+
+char	hp_openf;
+int	hpsort	1;	/* if set, sort requests by cyl. */
+# ifdef POWERFAIL
+int	hpfail;		/* nz if power failure */
+# endif
+
+#ifdef UNSAFE_TDF
+int	hp_ptrk;	/* previous trk+sec reg*/
+int	hp_pcsr;	/* previous CSR reg */
+#endif
+			/* Drive Commands */
+#define	GO	01
+#define	PRESET	020
+#define	RECAL	06
+#define RCLR	010
+#define OFFSET	014
+
+#define	IENABLE	0100	/* interrupt enable bit */
+#define	READY	0200	/* hpds - drive ready */
+#define	PIP	020000	/* hpds - Positioning Operation in Progress */
+#define MOL	010000	/* hpds - Medium Online */
+#define	ERR	040000	/* hpcs1 - composite error */
+
+#define	DU	040000	/* hper1 - Drive Unsafe	*/
+#define UWR	010	/* hper3 - unsafe/heads retracted */
+#define	DTE	010000  /* hper1 - Drive Timing Error	*/
+#define	OPI	020000  /* hper1 - Operation Incomplete	*/
+		/* Error Correction Code errors */
+#define DCK	0100000	/* hper1 - Data Check error */
+#define ECH	0100    /* hper1 - ECC hard error */
+
+#define CLR	040	/* hpcs2 - Controller Clear */
+
+#define FMT22	010000	/* hpof - 16 bit /word format */
+/*
+ * Use av_back to save track+sector,
+ * b_resid for cylinder.
+ */
+
+#define	trksec	av_back
+#define	cylin	b_resid
+
+hpopen(dev, flag)
+{
+
+# ifdef POWERFAIL
+	if(dev == NODEV) {
+		if(!hp_openf)	/* don't rec of not open */
+			return; /* maybe not on bus */
+		hp_openf = 0;
+		hpfail++;
+		printf("REC RP04-hp\n");
+		while((HPADDR->hpds & (MOL|READY)) != (MOL|READY));
+	}
+# endif
+	if(!hp_openf){
+		hp_openf++;
+		HPADDR->hpcs2 = CLR;
+		HPADDR->hpcs1 = RCLR|GO;
+		HPADDR->hpcs1 = PRESET|GO;
+		HPADDR->hpof = FMT22;
+	}
+# ifdef POWERFAIL
+	if (hpfail) {
+		while ((HPADDR->hpds & READY) == 0);
+		/*
+		 * Just incase power fail interrupt occurs
+		 * in rhstart when dev registers are being
+		 * loaded, we must stuff invalid track/sec
+		 * and mem addr in to avoid clobbering things.
+		 */
+		HPADDR->hpca = -1;
+		HPADDR->hpda = -1;
+		HPADDR->hpba = 0177700; /* will get bus timeout */
+		HPADDR->hpcs1 =| IENABLE;
+	}
+# endif
+}
+
+hpstrategy(abp)
+struct buf *abp;
+{
+	register struct buf *bp;
+	register char *p1, *p2;
+
+	bp = abp;
+	p1 = &hp_sizes[bp->b_dev.d_minor&017];
+	if (bp->b_dev.d_minor >= (NHP<<4) ||
+	    bp->b_blkno >= p1->nblocks) {
+		bp->b_flags =| B_ERROR;
+		iodone(bp);
+		return;
+	}
+	bp->av_forw = 0;
+	bp->cylin = p1->cyloff;
+	p1 = bp->b_blkno;
+	p2 = lrem(p1, 22);
+	p1 = ldiv(p1, 22);
+	bp->trksec = (p1%19)<<8 | p2;
+	bp->cylin =+ p1/19;
+	spl5();
+	if ((p1 = hptab.d_actf)==0)
+		hptab.d_actl = hptab.d_actf = bp;
+	else {
+		if(hpsort) {
+			for (; p2 = p1->av_forw; p1 = p2) {
+				if (p1->cylin <= bp->cylin
+				 && bp->cylin <  p2->cylin
+				 || p1->cylin >= bp->cylin
+				 && bp->cylin >  p2->cylin) 
+					break;
+			}
+			if(p2 == 0)
+				hptab.d_actl = bp;
+			bp->av_forw = p2;
+			p1->av_forw = bp;
+		}
+		else {
+# ifdef XBUF
+			*ka5 = praddr;
+# endif
+			if(u.u_procp->p_nice <= -5) {	/* priority req */
+				if((bp->av_forw = hptab.d_actf->av_forw) == 0)
+					hptab.d_actl = bp; /* update tail */
+				hptab.d_actf->av_forw = bp; /* link to 2nd */
+			}
+			else {
+				hptab.d_actl->av_forw = bp;
+				hptab.d_actl = bp;
+			}
+		}
+	}
+	if (hptab.d_active==0)
+		hpstart();
+	spl0();
+}
+
+hpstart()
+{
+	register struct buf *bp;
+
+	if ((bp = hptab.d_actf) == 0)
+		return;
+#ifdef STATS
+	stats.mon_cur[RPXF_CNT]++;
+#endif
+# ifdef POWERFAIL
+	hpfail = 0;
+# endif
+	hptab.d_active++;
+	HPADDR->hpcs2 = bp->b_dev.d_minor >> 4;
+	HPADDR->hpca = bp->cylin;
+#ifdef UNSAFE_TDF
+	hp_pcsr = HPADDR->hpcs1;
+	hp_ptrk = HPADDR->hpda;
+#endif
+	rhstart(bp, &HPADDR->hpda, bp->trksec, &HPADDR->hpbae);
+}
+
+hpintr()
+{
+	register struct buf *bp;
+	int ctr, i;
+
+	if (hptab.d_active == 0)
+		return;
+	bp = hptab.d_actf;
+	hptab.d_active = 0;
+#ifdef POWERFAIL
+	if (hpfail) {
+		hpstart();
+		return;
+	}
+# endif
+	if (HPADDR->hpcs1 & ERR) {		/* error bit */
+/*              HPADDR->hpcs1 =& ~IENABLE; /* this may be dangerous */
+		spl0();
+		deverror(bp, HPADDR->hpcs2, HPADDR->hpcs1);
+/* expanded error dump for RP04 -09/21/76 -ghg */
+printf("RP04 ERR - ds:%o er1:%o er2:%o er3:%o trksec:%o cyl:%o wc:%o\n",
+ HPADDR->hpds, HPADDR->hper1, HPADDR->hper2, HPADDR->hper3,
+ HPADDR->hpda, HPADDR->hpcc, HPADDR->hpwc);
+/* end of expanded RP04 error register dump */
+
+#ifdef UNSAFE_TDF
+printf("prev CSR:0%o  prev TRKSEC:0%o\n", hp_pcsr, hp_ptrk);
+#endif
+		if (HPADDR->hper1 & DU) {
+			printf("RP04 UNSAFE\n");
+			for(i=0; i<1; i++) /* delay to let disk settle down*/
+				while(--ctr);
+			if (HPADDR->hper3 & UWR) {
+				printf("HEADS RETRACTED\n");
+/*
+				halt();
+*/
+				HPADDR->hpcs2 = CLR;
+				while((HPADDR->hpds & MOL) == 0);
+			}
+		}
+/*
+		printf("ATTEMPTING TO CLEAR CONTROLLER AND DRIVES\n");
+*/
+		HPADDR->hpcs2 = CLR;
+		while ((HPADDR->hpcs1 & READY) == 0);
+		HPADDR->hpcs1 = (ERR|RCLR|GO);
+		while ((HPADDR->hpcs1 & READY) == 0);
+		HPADDR->hpcs1 = CLR;
+		while ((HPADDR->hpcs1 & READY) == 0);
+		while ((HPADDR->hpds & READY) == 0);
+		if (HPADDR->hpcs1 & ERR) {
+			printf("Can't clear RP04 error - halt - call SYSTEMS staff\n");
+			halt();
+		}
+		HPADDR->hpcs1 = PRESET|GO;	/* set volume valid */
+		HPADDR->hpof = FMT22;
+		spl5();
+		if (++hptab.d_errcnt <= 25) {
+			hpstart();
+			return;
+		}
+		bp->b_flags =| B_ERROR;
+		printf("RP04 ERROR NOT RECOVERED\n");
+		printf("Panic: Fatal system disk error\n");
+		halt();
+	}
+	hptab.d_errcnt = 0;
+	hptab.d_actf = bp->av_forw;
+	bp->b_resid = HPADDR->hpwc;
+	iodone(bp);
+	hpstart();
+}
+
+hpread(dev)
+{
+
+	if(hpphys(dev))
+	physio(hpstrategy, &hpbuf, dev, B_READ);
+}
+
+hpwrite(dev)
+{
+
+	if(hpphys(dev))
+	physio(hpstrategy, &hpbuf, dev, B_WRITE);
+}
+
+hpphys(dev)
+{
+	register c;
+
+	c = lshift(u.u_offset, -9);
+	c =+ ldiv(u.u_count+511, 512);
+	if(c > hp_sizes[dev.d_minor & 017].nblocks) {
+		u.u_error = ENXIO;
+		return(0);
+	}
+	return(1);
+}
+

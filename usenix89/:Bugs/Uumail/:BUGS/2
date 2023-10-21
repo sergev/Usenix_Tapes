@@ -1,0 +1,291 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!mtuxo!mtune!akguc!akgua!mcnc!ncsu!uvacs!edison!sjp
+From: sjp@edison.UUCP (Soo Passmoor)
+Newsgroups: net.sources.bugs
+Subject: Fix to uumail 3.0
+Message-ID: <830@edison.UUCP>
+Date: 29 Jul 86 16:58:00 GMT
+Organization: General Electric Company, Charlottesville, VA
+Lines: 281
+Posted: Tue Jul 29 11:58:00 1986
+
+
+ Two changes have been made to uumail.c:
+
+   The first was to modify all percent signs (not only the first) to double
+   percent signs in the mailing address.  This string on going through
+   printf misinterprets the single percent signs.
+
+   The second to bypass the code that writes to UUMAIL.TEST if the open fails.
+
+There are also a few changes made by jso@edison.uucp which do the following:
+
+   Change the grade of outgoing mail from C to A.
+
+   Allow "-D" option to specify an alternate database.
+
+These changes were necessary for our local use.  They are not suggested as
+necessary bug fixes.
+
+               Soo Passmoor
+
+Soo Passmoor		general electric automation controls operations
+sjp@edison.uucp		edison!sjp%virginia@csnet-relay.arpa
+(804) 978-5808		box 8106, charlottesville, va, 22906
+...............
+
+Included below is the context diff for the two versions..................
+
+*** uumail.orig	Tue Jul 29 10:14:18 1986
+--- uumail.c	Tue Jul 29 10:11:54 1986
+***************
+*** 20,25
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
+   * Revision 3.0  86/03/14  12:05:00  sob
+   * Release of 3/15/86 --- 3rd Release
+   * 
+
+--- 20,29 -----
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
++  * Revision 3.0.0.1  86/07/29  10:08:55  sjp
++  * Replace *all* percent signs with double percent signs, not just the first.
++  * Don't try to write to UUMAIL.TEST if the open failed.
++  * 
+   * Revision 3.0  86/03/14  12:05:00  sob
+   * Release of 3/15/86 --- 3rd Release
+   * 
+***************
+*** 158,164
+  char * from;
+  struct mailname addrlist;	/* list of addresses */
+  int local;
+! static char Version[] ="$Header: uumail.c,v 3.0 86/03/14 12:05:00 sob RELEASE_3 $";
+  
+  main(argc, argv)
+  	char **argv;
+
+--- 162,168 -----
+  char * from;
+  struct mailname addrlist;	/* list of addresses */
+  int local;
+! static char Version[] ="$Header: uumail.c,v 3.0.0.1 86/07/29 10:08:55 sjp Exp $";
+  
+  main(argc, argv)
+  	char **argv;
+***************
+*** 169,174
+  	char sys[64];	/* a system in path */
+  	char cmd[2000];
+  	char **av;
+  	int i,
+              error = 0,
+              bangcnt, hopcount = 30;
+
+--- 173,179 -----
+  	char sys[64];	/* a system in path */
+  	char cmd[2000];
+  	char **av;
++ 	char t[PATHSIZ];
+  	int i,
+              error = 0,
+              bangcnt, hopcount = 30;
+***************
+*** 174,180
+              bangcnt, hopcount = 30;
+  		
+      char    c,
+!             grade = 'C',
+  	   name[20], 			/* The system name (if any) */
+  	   *fname,
+  	   *path,			/* uupath to the system */
+
+--- 179,185 -----
+              bangcnt, hopcount = 30;
+  		
+      char    c,
+!             grade = 'A',
+  	   name[20], 			/* The system name (if any) */
+  	   *fname,
+  	   *path,			/* uupath to the system */
+***************
+*** 221,226
+  
+  			break;
+  
+  		  case 'g':   /* set grade */
+  			grade = p[2];
+  			break;
+
+--- 226,235 -----
+  
+  			break;
+  
++ 		  case 'D':	/* select alternate database */
++ 			paths = &p[2];
++ 			break;
++ 
+  		  case 'g':   /* set grade */
+  			grade = p[2];
+  			break;
+***************
+*** 414,420
+  /* fix string to allow % to be untranslated by printf and 
+   * friends 
+   */
+! 	   if ((r=index(path,'%')) != NULL)
+  		{
+  			char t[PATHSIZ];
+  			strncpy(t,path,(r-path));
+
+--- 423,429 -----
+  /* fix string to allow % to be untranslated by printf and 
+   * friends 
+   */
+! 	   while ((r=index(path,'%')) != NULL)
+  		{
+  			strncat(t,path,(r-path));
+  			strcat(t,"%%");
+***************
+*** 416,426
+   */
+  	   if ((r=index(path,'%')) != NULL)
+  		{
+! 			char t[PATHSIZ];
+! 			strncpy(t,path,(r-path));
+! 			strcat(t,"%");
+! 			strcat(t,r);
+! 			path = &t[0];
+  #ifdef DEBUG
+  		if (Debug>3)
+  			fprintf(stderr,"In percent fix, %s\n",t);
+
+--- 425,436 -----
+   */
+  	   while ((r=index(path,'%')) != NULL)
+  		{
+! 			strncat(t,path,(r-path));
+! 			strcat(t,"%%");
+! 			path = &r[1];
+! 		}
+! 		strcat(t,path);
+! 		path = &t[0];
+  #ifdef DEBUG
+  		if (Debug>3)
+  			fprintf(stderr,"In percent fix, %s\n",t);
+***************
+*** 425,431
+  		if (Debug>3)
+  			fprintf(stderr,"In percent fix, %s\n",t);
+  #endif
+- 		}
+  
+  
+  
+
+--- 435,440 -----
+  		if (Debug>3)
+  			fprintf(stderr,"In percent fix, %s\n",t);
+  #endif
+  
+  
+  
+***************
+*** 597,605
+  		else
+  #endif
+  			out = popen(cmd, "w");
+! /*		fputs(lbuf, out); */
+! 		if (!noheader) Putfrom(tmpf,out);
+! 		while (fgets(lbuf, sizeof lbuf, tmpf))
+  			fputs(lbuf, out);
+  
+  /* may not be needed */
+
+--- 606,617 -----
+  		else
+  #endif
+  			out = popen(cmd, "w");
+! 
+! 		if (out != NULL)
+! 		{
+! /*		    fputs(lbuf, out); */
+! 		    if (!noheader) Putfrom(tmpf,out);
+! 		    while (fgets(lbuf, sizeof lbuf, tmpf))
+  			fputs(lbuf, out);
+  
+  /* may not be needed */
+***************
+*** 603,609
+  			fputs(lbuf, out);
+  
+  /* may not be needed */
+! 		if (local!=0)
+  			fprintf(out,"\n.\n");
+  
+  #ifdef DEBUG
+
+--- 615,621 -----
+  			fputs(lbuf, out);
+  
+  /* may not be needed */
+! 		    if (local!=0)
+  			fprintf(out,"\n.\n");
+  
+  #ifdef DEBUG
+***************
+*** 607,613
+  			fprintf(out,"\n.\n");
+  
+  #ifdef DEBUG
+! 		if (Debug)
+  			i = fclose(out);
+  		else
+  #endif
+
+--- 619,625 -----
+  			fprintf(out,"\n.\n");
+  
+  #ifdef DEBUG
+! 		    if (Debug)
+  			i = fclose(out);
+  		    else
+  #endif
+***************
+*** 609,615
+  #ifdef DEBUG
+  		if (Debug)
+  			i = fclose(out);
+! 		else
+  #endif
+  			i = pclose(out);
+  		if ((i & 0377) != 0)
+
+--- 621,627 -----
+  #ifdef DEBUG
+  		    if (Debug)
+  			i = fclose(out);
+! 		    else
+  #endif
+  			i = pclose(out);
+  		}
+***************
+*** 612,617
+  		else
+  #endif
+  			i = pclose(out);
+  		if ((i & 0377) != 0)
+  			{
+  				fprintf(stderr, "pclose: status 0%o\n", i);
+
+--- 624,631 -----
+  		    else
+  #endif
+  			i = pclose(out);
++ 		}
++ 
+  		if ((i & 0377) != 0)
+  			{
+  				fprintf(stderr, "pclose: status 0%o\n", i);

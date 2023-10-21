@@ -1,0 +1,558 @@
+#
+/*
+ */
+
+/*
+ * RP04 disk driver
+ *
+ * This driver has been tested on a working RP04 for a few hours.
+ * It does not attempt ECC error correction and is probably
+ * deficient in general in the case of errors and when packs
+ * are dismounted.
+ *
+ * changed disk partion table "sj_sizes", G. Goble, 3/7/77
+ *
+ * changed disk partition table "sj_sizes", added sj8, also
+ * changed minor dev number mapping from 3 to 4 bits, allowing
+ * 16 filesystems per disk instead of  8.  Minor dev numbers
+ * 16. , etc refer to physjcal drive 1. -G. Goble, 7/17/77.
+ * 
+ * Convert to System Industries 9400 controller.  --G. Goble 09/17/78.
+ * A "mapped" SJ9400 controller connected to a CDC 9766 300 Megebyte
+ * drive looks like 3 DEC RP04's.  An unmapped SJ9400 looks like
+ * 1 DEC RP04, except there are 33 sectors/track (instead of 22)
+ * and there are 823 cylinders instead of 411.
+ *
+ */
+
+/* #define UNSAFE_TDF	/* extra debug code for Rogers to find TDF UNSAFE */
+#define DUMP		/* crash dump SJ 9400 controller 6800 memory */
+
+#define	UNMAPPED	/* use unmapped 9400 controller ROM */
+
+#ifdef	UNMAPPED
+# define	SECTRK	33	/* 33 sectors/track */
+#endif
+#ifndef UNMAPPED
+# define	SECTRK	22	/* 22 sectors/track (RP04 emulator mode) */
+#endif
+
+#define	HEADS	19	/* R/W heads (tracks/cyl) */
+#define	NRETRY	10	/* retries on error */
+#define DEBUG		/* compile in debug code */
+#include "../param.h"
+#include "../buf.h"
+#include "../conf.h"
+#include "../user.h"
+#include "../proc.h"
+#include "../systm.h"
+#include "../errlog.h"
+#ifdef STATS
+#include "../stats.h"
+#endif
+
+struct {
+	int	sjcs1;	/* Control and Status register 1 */
+	int	sjwc;	/* Word count register */
+	int	sjba;	/* UNIBUS address register */
+	int	sjda;	/* Desjred address register */
+	int	sjcs2;	/* Control and Status register 2*/
+	int	sjds;	/* Drive Status */
+	int	sjer1;	/* Error register 1 */
+	int	sjas;	/* Attention Summary */
+	int	sjla;	/* Look ahead */
+	int	sjdb;	/* Data buffer */
+	int	sjmr;	/* Maintenance register */
+	int	sjdt;	/* Drive type */
+	int	sjsn;	/* Serial number */
+	int	sjof;	/* Offset register */
+	int	sjca;	/* Desjred Cylinder address register*/
+	int	sjcc;	/* Current Cylinder */
+	int	sjer2;	/* Error register 2 */
+	int	sjer3;	/* Error register 3 */
+	int	sjpos;	/* Burst error bit posjtion */
+	int	sjpat;	/* Burst error bit pattern */
+	int	sjbae;	/* 11/70 bus extensjon */
+};
+
+#define	SJADDR	0171700
+#define	NSJ	3
+
+# ifndef UNMAPPED
+/* 418 blocks (sectors/cyl) */
+struct {
+	char	*nblocks;
+	int	cyloff;
+} sj_sizes[] {
+	5016,	192,	/* sj0 cyl 192 thru 203 */
+	-1,	35,	/* sj1 cyl 35 thru 191 (-1 is 65535) */
+	-1,	204,	/* sj2 cyl 204 thru 360 */
+	20900,	361,	/* sj3 cyl 361 thru 410 */
+	13794,	2,	/* sj4 cyl 2 thru 34 */
+	836,	0,	/* sj5 cyl 0 thru 1(boot up file sys) */
+			/* note: sj6 and sj7 are subsets of sj4 */
+	7942,	2,	/* sj6 cyl 2 thru 20 (overlaps sj4!!) */
+	4180,	21,	/* sj7 cyl 21 thru 30 (overlaps sj4!!) */
+	1672,	31,	/* sj8 cyl 31 thru 34 */
+	4180+1672, 21,	/* sj9 same as sj7+sj8 */
+
+};
+# endif
+#ifdef UNMAPPED
+/* 627 blocks (sectors/cyl) */
+struct {
+	char	*nblocks;
+	int	cyloff;
+} sj_sizes[] {
+	65535,	0,	/* sj0 cyl 000 thru 104 */
+	65535,	105,	/* sj1 cyl 105 thru 209 */
+	65535,	210,	/* sj2 cyl 210 thru 314 */
+	65535,	315,	/* sj3 cyl 315 thru 419 */
+	12540,  420,    /* sj4 cyl 420 thru 439 (root) */
+	65535,  440,    /* sj5 cyl 440 thru 544 */
+	65535,  545,    /* sj6 cyl 545 thru 649 */
+	65535,  650,    /* sj7 cyl 650 thru 754 */
+	42636,  755,    /* sj8 cyl 755 thru 822 */
+
+};
+#endif
+
+
+#define	GO	01
+#define	PRESET	020
+#define	RECAL	06
+#define RCLR	010
+#define OFFSET	014
+
+#define	IENABLE	0100	/* interrupt enable bit */
+#define	READY	0200	/* sjds - drive ready */
+#define VV	0100	/* sjds - volume valid */
+#define	PIP	020000	/* sjds - Posjtioning Operation in Progress */
+#define MOL	010000	/* sjds - Medium Online */
+#define DRVERR	040000	/* sjds - drive error */
+#define	ERR	040000	/* sjcs1 - composjte error */
+
+#define	DU	040000	/* sjer1 - Drive Unsafe	*/
+#define UWR	010	/* sjer3 - unsafe/heads retracted */
+#define	DTE	010000  /* sjer1 - Drive Timing Error	*/
+#define	OPI	020000  /* sjer1 - Operation Incomplete	*/
+		/* Error Correction Code errors */
+#define DCK	0100000	/* sjer1 - Data Check error */
+#define ECH	0100    /* sjer1 - ECC hard error */
+
+#define CLR	040	/* sjcs2 - Controller Clear */
+#define NED	010000	/* sjcs2 - Non existant drive */
+
+#define FMT22	010000	/* sjof - 16 bit /word format */
+/*
+ * Use av_back to save track+sector,
+ * b_resid for cylinder.
+ */
+
+#define	trksec	av_back
+#define	cylin	b_resid
+
+struct	devtab	sjtab;
+struct	buf	sjbuf;
+
+char	sj_openf;
+int     sjkludge 0;     /* 3 if unit1 plug in drive */
+int     sj_rh70 1;      /* nz if on RH70 massbuss, 0 or Unibus */
+int	sj_of	FMT22;	/* value to load into sjof */
+int	sjfault;	/* SJ hung, can't clear drive fault */
+int	sjwait	0;	/* keep trying to clear hung drive */
+int	sjabort;	/* nz if fatal I/O error */
+int	sjsort	1;	/* if set, sort requests by cyl. */
+int	sj_debug 0;	/* nz to debug */
+int	sjretry	NRETRY;	/* retry count */
+# ifdef POWERFAIL
+int	sjfail;		/* nz if power failure */
+# endif
+
+#ifdef UNSAFE_TDF
+int	sj_ptrk;	/* previous trk+sec reg*/
+int	sj_pcsr;	/* previous CSR reg */
+#endif
+			/* Drive Commands */
+sjopen(dev, flag)
+{
+	int ctr;
+
+# ifdef POWERFAIL
+		/*
+		 * Our model of the SJ 9400 controller does funny
+		 * things on Power fail/restart.  MOL and DRDY come
+		 * up when Power is applied to drive electronics,
+		 * and NED is cleared, even if drive (front panel)
+		 * button is turned off.  At present there are several
+		 * weird unclearable states both drive and controller
+		 * can get into.  Basjcally, one must attempt to
+		 * function the drive to see if it works.
+		 * also RECALIBRATE's must be issued often to keep
+		 * drive happy.
+		 * This power fail code assumes drive is already
+		 * spun back up (drives comes up in about 10 sec)
+		 * the reset loop in mch.s provides this delay.
+		 * Also if only 1 phase drops or CPU power fails
+		 * and drive power does not, or a short
+		 * power glitch occurs, the drive will probably
+		 * just fault and must be manually cleared.
+		 * The drive hardware will be modified to 
+		 * clear itself after awhile it is hoped.
+		 * --ghg 10/08/78.
+		 */
+
+	if(dev == NODEV) {
+		if (sj_openf == 0) return;
+		sj_openf = 0;
+		sjfail++;
+		printf("REC SJ-0\n");
+		SJADDR->sjcs2 = CLR;
+		SJADDR->sjcs2 = sjkludge;	/* for now */
+		SJADDR->sjcs1 = PRESET|GO;	/* set VV bit */
+		SJADDR->sjcs1 = RECAL|GO;
+		if (SJADDR->sjcs2 & NED)
+			goto fault;
+		ctr = 0;
+		while (((SJADDR->sjds & READY) == 0) && --ctr);
+		if (!ctr || SJADDR->sjds& DRVERR) {
+fault:
+			/* kiss it off */
+			sjfault++;
+			SJADDR->sjcs2 = CLR;
+			SJADDR->sjcs1 = 0;
+			printf("SJ disk hung or faulted - manual recovery needed\n");
+			return;
+		}
+	}
+# endif
+	if(!sj_openf){
+		sj_openf++;
+		SJADDR->sjcs2 = CLR;
+		SJADDR->sjcs2 = sjkludge;
+		SJADDR->sjcs1 = RCLR|GO;
+		SJADDR->sjcs1 = PRESET|GO;
+		SJADDR->sjof = FMT22;
+	}
+# ifdef POWERFAIL
+	if (sjfail) {
+		while ((SJADDR->sjds & READY) == 0);
+		/*
+		 * Just incase power fail interrupt occurs
+		 * in rhstart when dev registers are being
+		 * loaded, we must stuff invalid track/sec
+		 * and mem addr in to avoid clobbering things.
+		 */
+		SJADDR->sjca = -1;
+		SJADDR->sjda = -1;
+		SJADDR->sjba = 0177700; /* will get bus timeout */
+		SJADDR->sjcs1 =| IENABLE;
+	}
+# endif
+}
+
+sjstrategy(abp)
+struct buf *abp;
+{
+	register struct buf *bp;
+	register char *p1, *p2;
+
+	bp = abp;
+	while (sjfault)
+		sleep(bp, PRIBIO-3);
+	if ((bp->b_flags & B_PHYS) && sj_rh70 == 0)
+		mapalloc(bp);
+#ifdef FLAKEYBUS
+	devlock();	/* kludge until bus is fixed !!!!!!!!!! */
+#endif
+	p1 = &sj_sizes[bp->b_dev.d_minor&017];
+	if (bp->b_dev.d_minor >= (NSJ<<4) ||
+	    sjabort ||
+	    bp->b_blkno >= p1->nblocks) {
+		bp->b_flags =| B_ERROR;
+#ifdef FLAKEYBUS
+		devfree();	/* KLUDGE !!!!!!!!!!!! flakey bus */
+#endif
+		iodone(bp);
+		return;
+	}
+	bp->av_forw = 0;
+	bp->cylin = p1->cyloff;
+	p1 = bp->b_blkno;
+	p2 = lrem(p1, SECTRK);
+	p1 = ldiv(p1, SECTRK);
+	bp->trksec = (p1%HEADS)<<8 | p2;
+	bp->cylin =+ p1/HEADS;
+	spl5();
+	if ((p1 = sjtab.d_actf)==0)
+		sjtab.d_actl = sjtab.d_actf = bp;
+	else {
+		if(sjsort) {
+			for (; p2 = p1->av_forw; p1 = p2) {
+				if (p1->cylin <= bp->cylin
+				 && bp->cylin <  p2->cylin
+				 || p1->cylin >= bp->cylin
+				 && bp->cylin >  p2->cylin) 
+					break;
+			}
+			if(p2 == 0)
+				sjtab.d_actl = bp;
+			bp->av_forw = p2;
+			p1->av_forw = bp;
+		}
+		else {
+/*
+# ifdef XBUF
+			*ka5 = praddr;
+# endif
+*/
+			if(u.u_procp->p_nice <= -5) {	/* priority req */
+				if((bp->av_forw = sjtab.d_actf->av_forw) == 0)
+					sjtab.d_actl = bp; /* update tail */
+				sjtab.d_actf->av_forw = bp; /* link to 2nd */
+			}
+			else {
+				sjtab.d_actl->av_forw = bp;
+				sjtab.d_actl = bp;
+			}
+		}
+	}
+	if (sjtab.d_active==0)
+		sjstart();
+	spl0();
+}
+
+sjstart()
+{
+	register struct buf *bp;
+
+loop:
+	if ((bp = sjtab.d_actf) == 0)
+		return;
+	if (sjabort) {
+		bp->b_flags =| B_ERROR;	/* abort buffer chain */
+		sjtab.d_actf = bp->av_forw;
+		iodone(bp);
+		goto loop;
+	}
+#ifdef STATS
+	stats.mon_cur[RPXF_CNT]++;
+#endif
+# ifdef POWERFAIL
+	sjfail = 0;
+# endif
+	sjtab.d_active++;
+	SJADDR->sjcs2 = (bp->b_dev.d_minor >> 4) + sjkludge;
+	SJADDR->sjca = bp->cylin;
+	if ((SJADDR->sjds & VV) == 0)
+		SJADDR->sjcs1 = PRESET|GO;
+	SJADDR->sjof = sj_of;	/* patch to inhibit ECC */
+#ifdef UNSAFE_TDF
+	sj_pcsr = SJADDR->sjcs1;
+	sj_ptrk = SJADDR->sjda;
+#endif
+# ifdef DEBUG
+	if (sj_debug)
+		printf("SJSTART  cs2:%o dc:%o da:%o\n",
+		SJADDR->sjcs2, SJADDR->sjca, bp->trksec);
+# endif
+	if (sj_rh70)
+		rhstart(bp, &SJADDR->sjda, bp->trksec, &SJADDR->sjbae);
+	else
+		rhstrt(bp, &SJADDR->sjda, bp->trksec, &SJADDR->sjbae);
+
+}
+
+sjintr()
+{
+	register struct buf *bp;
+	register csr;
+	int ctr, i;
+
+# ifdef DEBUG
+/* check for flakey interrupt */
+	if (((csr = SJADDR->sjcs1) & GO) == GO || (csr & READY) == 0)
+		printf("Illegal SJ int cs1:0%o wc:0%o\n", csr, SJADDR->sjwc);
+
+	if (sj_debug) {
+	printf("INT cs1:%o wc:%o ba:%o da:%o cs2:%o ds:%o e1:%o dc%o cc%o e2:%o e3:%o\n",
+		SJADDR->sjcs1,
+		SJADDR->sjwc,
+		SJADDR->sjba,
+		SJADDR->sjda,
+		SJADDR->sjcs2,
+		SJADDR->sjds,
+		SJADDR->sjer1,
+		SJADDR->sjca,
+		SJADDR->sjcc,
+		SJADDR->sjer2,
+		SJADDR->sjer3);
+	}
+# endif
+	if (sjtab.d_active == 0)
+		return;
+	bp = sjtab.d_actf;
+	sjtab.d_active = 0;
+#ifdef POWERFAIL
+	if (sjfail) {
+		sjstart();
+		return;
+	}
+# endif
+		/*
+		 * Our SJ 9400 controller firmware doesn't always
+		 * set TRE in rpcs1 when it should.  One must check
+		 * for DRVERR in RPDS, TRE, and word count being
+		 * non zero, all which meant something went wrong.
+		 */
+	if (SJADDR->sjcs1&ERR || SJADDR->sjwc || SJADDR->sjds&DRVERR) {
+/* IENABLE gets cleared when CPU recognizes INT */
+/*		SJADDR->sjcs1.lobyte =& ~IENABLE; /* this may be dangerous */
+		spl0();
+		deverror(bp, SJADDR->sjcs2, SJADDR->sjcs1);
+/* expanded error dump for SJ -09/21/76 -ghg */
+printf("SJ ERR - ds:%o er1:%o er2:%o er3:%o trksec:%o cyl:%o wc:%o of:0%o\n",
+ SJADDR->sjds, SJADDR->sjer1, SJADDR->sjer2, SJADDR->sjer3,
+ SJADDR->sjda, SJADDR->sjcc, SJADDR->sjwc, SJADDR->sjof);
+/* end of expanded SJ error register dump */
+
+#ifdef UNSAFE_TDF
+printf("prev CSR:0%o  prev TRKSEC:0%o\n", sj_pcsr, sj_ptrk);
+#endif
+hung:
+#ifdef DUMP
+		sjdump();
+#endif
+		SJADDR->sjcs2 = CLR;
+		while ((SJADDR->sjcs1 & READY) == 0);
+		SJADDR->sjcs2 = sjkludge;
+		SJADDR->sjcs1 = PRESET|GO;
+		SJADDR->sjcs1 = (ERR|RCLR|GO);
+		while ((SJADDR->sjcs1 & READY) == 0);
+		for (ctr= -1; (SJADDR->sjds & READY) == 0 && --ctr;);
+		SJADDR->sjcs1 = RECAL|GO;
+		while ((SJADDR->sjcs1 & READY) == 0);
+		for (ctr= -1; (SJADDR->sjds & READY) == 0 && --ctr;);
+		if ( !ctr || (SJADDR->sjcs1 & ERR) || (SJADDR->sjds&DRVERR)) {
+			if (sjwait) {	/* keep trying to clear error */
+				printf("Trying to clear SJ err\n");
+				for (i=0; i<30; i++)
+					for (ctr=0; --ctr;);	/* hard wait */
+				goto hung;
+			}
+			printf("Can't clear SJ error - hung - call SYSTEMS staff\n");
+			printf("cs1:%o ds:%o ctr:%o\n", SJADDR->sjcs1, SJADDR->sjds, ctr);
+			sjfail++;	/* fake power fail to retry current op */
+			sjfault++;	/* so no more buffers get Q'd */
+			sjtab.d_active++;
+			return;
+		}
+		SJADDR->sjcs1 = PRESET|GO;	/* set volume valid */
+		SJADDR->sjof = FMT22;
+		spl5();
+		if (++sjtab.d_errcnt <= sjretry) {
+			sjstart();
+			return;
+		}
+		bp->b_flags =| B_ERROR;
+		spl0();
+		printf("SJ-0 ERROR NOT RECOVERED\n");
+		spl5();
+		if ((bp->b_flags&B_PHYS) == 0)	/* abort if cooked */
+			sjabort++;	/* abort all further I/O */
+		sjnop();
+	}
+	sjtab.d_errcnt = 0;
+	sjtab.d_actf = bp->av_forw;
+	bp->b_resid = SJADDR->sjwc;
+#ifdef FLAKEYBUS
+	devfree();	/* KLUDGE - FLAKEY BUS !!!!!!!!! */
+#endif
+	iodone(bp);
+	sjstart();
+}
+
+sjread(dev)
+{
+
+	if(sjphys(dev))
+	physio(sjstrategy, &sjbuf, dev, B_READ);
+}
+
+sjwrite(dev)
+{
+
+	if(sjphys(dev))
+	physio(sjstrategy, &sjbuf, dev, B_WRITE);
+}
+
+sjphys(dev)
+{
+	register c;
+
+	c = lshift(u.u_offset, -9);
+	c =+ ldiv(u.u_count+511, 512);
+	if(c > sj_sizes[dev.d_minor & 017].nblocks) {
+		u.u_error = ENXIO;
+		return(0);
+	}
+	return(1);
+}
+
+sjnop()
+{
+}
+#ifdef DUMP
+/*
+ * code to crash dump 6800 memory on SJ 9400 controller
+ */
+sjdump()
+{
+
+	register i, j, c;
+	int addr;
+
+	addr = 0X0101;	/* start dump at Hex 101 */
+	printf("SJ 9400 controller 6800 memory dump\n");
+	sjprb(addr.hibyte);
+	sjprb(addr.lobyte);
+	printf("   ");
+	for(i=0; i<2; i++)
+		sjprb(sjget(addr++));
+	putchar('\n');
+	/*
+	 * dump function buffer area 26 bytes/line
+	 */
+	for (i=0; i<4; i++) {	/* currently 4 buffers */
+		sjprb(addr.hibyte);
+		sjprb(addr.lobyte);
+		printf("  ");
+		for (j=0; j<26; j++) {
+			sjprb(sjget(addr++));
+			putchar(' ');
+		}
+		putchar('\n');
+	}
+	putchar('\n');
+}
+
+sjprb(c)
+{
+
+	c =& 0377;
+	putchar("0123456789ABCDEF"[c>>4]);
+	putchar("0123456789ABCDEF"[c & 017]);
+}
+/*
+ * get a byte from 9400 controller memory
+ */
+sjget(addr)
+{
+
+	while ((SJADDR->sjcs1 & READY) == 0);
+	SJADDR->sjca = addr;
+	SJADDR->sjcs1 = 075;	/* read controller mem function */
+	while ((SJADDR->sjcs1 & READY) == 0);
+	return(SJADDR->sjdb);
+}
+#endif

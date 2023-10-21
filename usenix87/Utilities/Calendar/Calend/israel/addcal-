@@ -1,0 +1,86 @@
+#! /bin/csh -f
+set rcfile=~/.calrc remtime="" movo="" movc="" mov="" remc="" noglob
+if (x$1 != x) set rcfile = $1
+echo -n "Flags [<ra1mxd] "
+set flgs = $<
+while ("$flgs" == '?' || "$flgs" == )
+	echo "Flags:"
+	echo "< - use alternate dates file" 
+	echo "r - remind at certain time"
+	echo "a - print always during period"
+	echo "1 - print once during period" ; echo "m - send mail"
+	echo "x - execute program - a,1 say how often"
+	echo "d - delete when finished" ; echo ""
+	echo -n "Flags [ra1mxd] " ; set flgs = $<
+end
+echo $flgs | grep -s "<"
+if ($status == 0) then
+	echo -n "Alternate file: "; set altfile = $<
+	while ("$altfile" == '?' || "$altfile" == )
+		echo "The alternate file will be used as another dates file."
+		echo -n "Alternate file: "; set altfile = $<
+	end
+	echo "<	$altfile"
+	echo "<	$altfile" >> $rcfile
+	exit 0
+endif
+echo $flgs | grep -s "r"
+if ($status == 0) then
+	echo -n "Remind time [hhmm]: " ; set remc = " " remtime = $<
+	while ("$remtime" == '?')
+		echo "Remind expects a four digit time, i.e. 2330."
+		echo -n "Remind time [hhmm]: " ; set remtime = $<
+	end
+endif
+echo $flgs | grep -s "d"
+if ($status == 1) then
+	echo -n "Move forward [+<num>]: "
+	set movc = "" mov = $< 
+	while ("$mov" == '?')
+		echo "Enter months and days, eg: +3m2d, +14d, +1m"
+		echo -n "Move forward [+<num>]: "
+		set mov = $< 
+	end
+	echo $mov | egrep -s "^\+"
+	if ($status == 1) then
+		if ("$mov" != no && "$mov" != n && "$mov" != ) echo "bad date - $mov."
+		set mov = ""
+	endif
+	if ("$mov" != ) set movo = "+" movc = " "
+endif
+echo -n "Start date: " ; set date1 = $<
+while ("$date1" == '?')
+	echo "Enter starting date; default is '*'"
+	echo -n "Start date: " ; set date1 = $<
+end
+if ("$date1" == ) set date1 = "*"
+echo -n "End date: " ; set date2 = $<
+while ("$date2" == '?')
+	echo "Enter ending date; default is '*'"
+	echo -n "End date: " ; set date2 = $<
+end
+if ("$date2" == ) set date2 = "*"
+if ("$date1$date2" == "**") then
+	echo "No dates given."
+	exit 1
+endif
+echo $flgs | grep -s "x"
+if ($status == 0) then
+	set cmd
+	echo -n "Command: "
+else
+	echo -n "Message: "
+endif
+set msg = $<
+while ("$msg" == '?' || "$msg" == )
+	if ($?cmd) then
+		echo "Enter command to be executed between $date1 and $date2"
+		echo -n "Command: "
+	else
+		echo "Any message you want printed between $date1 and $date2"
+		echo -n "Message: "
+	endif
+	set msg = $<
+end
+echo "$flgs$movo	$date1	$date2		$mov$movc$remtime$remc$msg"
+echo "$flgs$movo	$date1	$date2		$mov$movc$remtime$remc$msg" >>$rcfile

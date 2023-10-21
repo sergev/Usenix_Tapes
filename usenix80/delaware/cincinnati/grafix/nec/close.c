@@ -1,0 +1,6 @@
+closevt(){
+	closepl();
+}
+closepl(){
+	outplot();
+}

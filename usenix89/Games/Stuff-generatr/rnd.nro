@@ -1,0 +1,181 @@
+.EV
+.T1 rnd 1  2/14/84
+.SH "rnd \- Random stuff generator" (MJR)
+.SY
+.B rnd
+file1 file2, etc...
+.OP
+Each file must be a 'table' file.
+.DS
+.I Rnd 
+reads a file and writes generated data to the standard output.
+If more than one file is specified, the files are used as descriptions
+in sequence and merged output is written to the standard output.
+Two types of files are recognized; table files, and subtable files.
+A table file can contain several types of information:
+.TP 8
+\(bu Text-formats and text: these are simply text that will be
+included in the output. There are, however, a few simple rules.
+Any text string ending in a ':' (no space afterwards) will NOT
+have a newline appended after it. This is to allow a user to
+have the output from a subtable placed after a text string.
+Other text that does not have a ':' as the last character before
+a newline is printed as is.
+.TP
+\(bu Tabs and Formfeeds: to insert tabs and formfeeds, a "\\t" (tab)
+or a "\\l" (formfeed ^L) is placed as the ONLY thing on that line. 
+There must be no other blank spaces, etc. This is inelegant, but
+allows the program to run reasonably fast. If a tab is coded, the
+program does NOT automatically generate a newline after it. This
+is to allow a user to separate stats with tabs reasonably easily.
+.TP
+\(bu Stat commands: a stat command goes at the beginning of an 
+otherwise empty line, in the format 
+.nf
+.na
+"stat <char string WITHOUT spaces> <# of dice> <type of dice>"
+.fi
+.ad
+Rnd will then roll the appropriate number of N-sided dice, and
+print the stat on the standard output.
+
+.TP
+\(bu Subtable commands: a subtable command goes at the beginning of
+an otherwise empty line, in the format
+.nf
+.na
+"subtable <filename> <# of dice> <type of dice>"
+.fi
+.ad
+Rnd will then roll the appropriate number of N-sided dice, and
+open the subtable file. A subtable file is constructed as follows:
+.nf
+.na
+<#upper limit> <text string>
+<#upper limit> <text string>
+... etc.
+.fi
+.ad
+Subtable files may not contain any extraneous text (unlike table files)
+and all the entries must be in order, with the highest numerical entry as the
+last line in the file, and the lowest numerical entry as the first.
+Each line must contain a number value and a text string, or the results
+may be unusual. 
+.TP
+\(bu Table commands: a table can contain a list of tables as well as
+stats, format commands, text, and subtables. Each table is randomized
+recursively, until your stack overflows, or it returns, whichever comes
+first. Stacking tables deeply is usually not necessary, since several
+tables can be called on the command line, and that is much safer.
+When a table command is invoked, it must be followed by two numbers
+so that the semi-braindead parser recognizes it as a command.
+.nf
+.na
+table <filename> <bogus #><bogus #>
+.fi
+.ad
+Each table can contain its own list of subtables and stats, as well as text
+and format commands. This is lots of fun, since it allows the discerning
+DM to make a variety of layered tables and gives excellent control
+over how much is generated. For example if you determine that an encounter
+consists of monsters, booty, and terrain, you could have a table that
+invoked the monster table, then the terrain one, then the booty. In 
+this way, you would still have a perfectly usable set of tables for
+any time you wanted just a monster, or just terrain. The possibilities
+as far as maintaining standard libraries are considerable, obviously.
+The primary limitation is your machine's stack and disk space.
+.EX
+$ \fBrnd pirates\fR
+.EE
+.B rnd 
+reads the table named
+.B pirates
+and executes all the stats, subtables, and tables contained therein.
+.E2
+.sp
+.sp
+.sp
+.sp
+\fB(The contents of file "pirates".)\fR
+.EE
+.nf
+.na
+--------------------------------------
+A sample pirate -----
+stat strength 3 6
+\\t
+stat brains 3 6
+
+possesions:
+subtable possesions 1 100
+
+table anothertable 0 0
+
+---------------------------------------
+\\l
+
+.fi
+.ad
+	This would generate a pirate with 3d6 strength and brains, and
+would make a 1d100 roll on the possessions table. 
+The table "anothertable" is then opened and treated as a new list of
+commands. Note that there are 2 numbers provided with the table command.
+This is MANDATORY, and due only to lazy programming. Live with it.
+Appropriate tabs and
+a formfeed are generated. 
+.E2
+\fB(contents of file "possesions")\fP
+.EE
+.nf
+.na
+10 Cutlass
+20 Fists
+30 Bucket of Grog
+40 Belaying Pin
+90 Just his clothes
+100 Fancy clothes
+
+
+.fi
+.ad
+In this example, when the subtable was called, a 1d100 was rolled (be
+sure to specify that right!) 0-10 yields a Cutlass, 11-20 Fists, etc.
+
+.SC
+.TP 2
+\(bu
+This program is machine dependent to the degree that your machine likes
+recursion.
+.TP
+\(bu
+A random seed is requested for portability's sake. Those of you on
+UNIX systems are urged to use something like:
+.nf
+.na
+srand((unsigned)getpid());
+.fi
+.ad
+instead. Any random stirrer is appropriate.
+.TP
+\(bu
+This program has run on Gould Powernode 9080, Sun workstations, and
+my IBM compatible clone (lattice 3.0). On the PCs, usually some provision
+will have to be made to increase the stack size. On lattice this is
+done by declaring a global "int _stack = 6000;" or about 6 kilobytes.
+You decide. No guarantees are made for other compilers/machines, but
+anything that is not braindead can handle it. 
+.TP
+\(bu
+Capturing the output:: This program is designed for systems with I/O
+redirection. If you don't have it, I suggest you frob the code slightly
+by changing all printfs to fprintf, etc. For you with I/O redirection,
+the initial text, etc, is returned on the standard error, so it will
+not kluge up your characters as they are generated. Pipe the output
+through your favorite formatter, editor, printer, or null device.
+.IN
+no references
+.I0
+Author:
+Marcus J Ranum, Gould Inc. All rights reserved. Don't use this to make
+money, or sell. Otherwise it may be freely copied, deleted, and hacked.
+Give me credit for the idea, if not the code.

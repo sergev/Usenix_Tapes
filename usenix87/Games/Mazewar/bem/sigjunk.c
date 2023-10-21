@@ -1,0 +1,7 @@
+sigblock()
+{
+}
+
+sigsetmask()
+{
+}

@@ -1,0 +1,50 @@
+# !/bin/sh
+# Looks for "=" in the () of a while() or if().
+# Also looks for while() or if() followed by any number
+# of blanks then a semi-colon.
+# jhn 10 june 86
+# jim nelson, uncw, cs dept, wilmington nc 28405 919-395-3300
+# Runs on AT&T 3b2/300 SysVr2v2
+# BSD'ers probably can extend the egrepping to speed it up.
+# NOTE: is fooled by parenthesized expressions.
+# NOTE: jhn is by no means a [ef]*grep expert.  Comments and
+# corrections (even flames, i've got tenure) 
+# welcome.  just trying to learn. ...
+case $# in
+	0) echo "usage: finddumb filename.c
+	Finds possibly erroneous confusion between \"=\" and \"==\", and looks
+	for  \"while(...) ;\"   (also if) statements.
+	Help is best gotten by listing /usr/uncw/finddumb itself."
+	exit 1;;
+esac
+# find (if or while) followed by zero or more (blank or tab)
+# followed by left-paren
+# followed by either ( an = sign not preceded by !<>= or
+#                      an = sign preceded by << preceded by at least one char or
+#                      an = sign preceded by >> preceded by at least one char  )
+# followed by something that's not an = sign
+# followed by zero or more anythings
+# followed by a right-paren.
+echo ""
+if egrep '(if|while)[ 	]*\(([^=!<>]*|.+>>|.+<<)=[^=].*\)' $*
+then
+	echo "*****  assignment statement in if(...) or while(...) *****"
+fi
+# Why make two passes? Because trying to combine the two causes egrep
+# to abort with "regular expression too long" error message.
+#
+# It does return a bunch of false alarms, but it will at least catch
+# all the real ones.  Bayesian decision to suffer high risk of
+# false positive in return for low risk of false negative.
+# Also: a do...while(); statement is perfectly correct, but will
+#  of course be flagged by this dumb program.
+echo ""
+if egrep 'while[ 	]*\(.*\)[ 	]*;' $*
+then
+	echo "*****  null body of while-loop *****"
+fi
+echo ""
+if egrep 'if[ 	]*\(.*\)[ 	]*;' $*
+then
+	echo "*****  null stmt following if *****"
+fi

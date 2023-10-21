@@ -1,0 +1,82 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!allegra!mit-eddie!genrad!panda!enmasse!keith
+From: keith@enmasse.UUCP (Keith Crews)
+Newsgroups: net.sources.bugs
+Subject: Re: Serious bug & fix in Dave Taylor's latest 'elm' fixes
+Message-ID: <326@enmasse.UUCP>
+Date: 29 Jul 86 15:58:41 GMT
+References: <145@mirror.UUCP> <238@desint.UUCP>
+Reply-To: keith@enmasse.UUCP (Keith Crews)
+Organization: EnMasse Computer Corp, Acton, MA
+Lines: 70
+Posted: Tue Jul 29 10:58:41 1986
+
+In article <238@desint.UUCP> geoff@desint.UUCP (Geoff Kuenning) writes:
+>There are two separate problems with one of the enhancements offered in
+>Dave Taylor's latest 'elm' bugfixes, both serious.  The first, which
+>causes segmentation violations in the Reply command on most machines,
+>is that three 'chloc' calls had their arguments reversed (the character
+>should be the *second* argument).  However, if you fix that bug, you
+>will discover that 'elm' now corrupts the 'To:' return address by
+>appending the user's full name to it.  This causes annoying "can't
+>mail to (Dave" messages.
+
+I had intermittent problems with the reply command and found it to be caused
+by an unitialized variable in the routine get_return, the same
+one that these fixes apply to.  It is possible that the reason the chloc
+fixes caused the reply command to break on Geoff's system is
+that in his new, fixed version things have been moved around
+enough that the uninitialized variable happens to have the wrong
+type of garbage in it more often than in his previous version.
+The fact that the variable that was causing my problem 
+is name2 and it is used in the chloc fix
+makes that pretty likely.  Anyway, this is the fix I put in our
+system to make the reply problem go away:
+
+
+    buf[0] = hold_return[0] = lastname[0] = '\0';
+    name1[0] = name2[0] = alt_name2[0] = '\0';
+
+The only variable that I observed the problem with was name2 but I
+got paranoid and did this to all of them.
+
+The message that gave me trouble had the following two lines
+in the header.
+
+>From uucp Mon Jul 28 14:36 1986
+>From tom Mon Jul 28 13:32 EDT 1986 remote from oz
+
+The reason this was a problem was the following statement
+
+	sscanf(buf,"%*s %s %*s %*s %*s %*s %*s %*s %*s %s %s", 
+	       name1, name2, alt_name2);
+
+The sscanf of the first >From line terminated
+before assigning anything to name2.  Name2 therefore had garbage
+in it which was then passed to add_site to be used in building
+the site name.  With the fix, the correct address, oz!tom,
+was built.  By the way, we are running the official Motorola port
+of System V.  It is conceivable that other sscanfs would do something
+different upon reaching the end of the data in buf, so maybe not
+all systems will have this problem.
+
+Semi-disclaimer:
+
+	I do not know enough about all
+the mailers on various systems and their header conventions to know
+if this is sufficient to always fix the problem.  It is possible that the
+code has other similar problems that might come out with further
+testing, so you should take this fix with a grain of salt.
+The fact that the two >From lines above have different numbers of
+fields and that one of them has the string EDT, while the other
+does not, makes me think that
+the use of sscanf could cause further problems, since it has
+an implicit assumption about the format of >From lines that does
+not seem to jibe with reality in all cases.  Does anyone know if
+this is a peculiarity of our site's header conventions or
+are these standard?
+
+I should also point out that our version of elm did NOT have the chloc
+fixes in it.  We had the reply problem without having added them.  I do not
+know if my fix will coexist with them since I have not installed them.
+
+Keith Crews

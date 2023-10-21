@@ -1,0 +1,56 @@
+:	awkWARD Accounting Made Easy
+:	[C] Copyright PC Research, Inc. 1985
+:
+: balance book [YR=yy]:
+:	print balances of all accounts [for year yy].
+:
+: FILE FORMAT:
+: CLEAR	DATE	CHECK	AMOUNT	ACCOUNT	COMMENT
+: #					ignored
+: c	mm/dd/yy nnnn	dddd.cc name	cleared bank
+: -	mm/dd/yy nnnn	dddd.cc name	not cleared bank
+: H					page header line
+:
+BOOK=$1;
+if [ ! -f "$BOOK" ]
+then
+	echo "usage: balance book [YR=yy]"
+	exit 1;
+fi
+shift; OPTS="$*"
+awk '
+{
+	if ($1 == "#")
+		continue;
+	else if ($1 == "H")
+	{
+		printf "\n\nAccount Reconciliation for %s\n", substr($0, 3)
+		continue;
+	}
+	if ($5 == "+") 
+	{
+		if ($1 == "c") 
+			bank += $4;
+		curr += $4;
+	}
+	else
+	{
+		if ($1 == "c") 
+			bank -= $4;
+		curr -= $4;
+	}
+	yr=split($2, date, "/"); if (YR != "" && date[yr] != YR) continue;
+	expense[$5] += $4;
+}
+END {
+	printf "\n\n"
+	printf "Bank balance            = %8.2f\n", bank
+	printf "Current balance         = %8.2f\n\n", curr
+	for (acctnum in expense)
+		if (YR != "")
+			printf "19%s Total for %-8s = %8.2f\n",\
+				YR, acctnum,expense[acctnum]
+		else
+			printf "Total for %-8s      = %8.2f\n",\
+				acctnum,expense[acctnum]
+}' $OPTS $BOOK

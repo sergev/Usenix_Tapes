@@ -1,0 +1,594 @@
+
+
+
+		  A Command Argument Processing	Package
+
+			     John Quarterman
+
+
+
+
+       1.  IIIInnnnttttrrrroooodddduuuuccccttttiiiioooonnnn
+
+	    This  argument  package  allows  the  specification	 of
+       formal arguments	 for  a	 UNIX*	C  _m_a_i_n	 routine,  and	the
+       conversion  of the actual arguments of the program according
+       to the formal arguments.	 Ways are provided to  display	the
+       syntax  of  the	command	 and  to  show	the  values  of	its
+       arguments.
+
+	    The	basic usage of the package is explained	in the UNIX
+       PROGRAMMER's  MANUAL  entry,  _a_r_g_u_m_e_n_t(3l).   That, in turn,
+       refers to _i_n_t_r_o(1) and _g_e_t_o_p_t(3), which	describe  the  UNIX
+       System III command argument conventions.	 All the System	III
+       conventions are supported by the	package.
+
+	    This paper	describes  more	 specialized  uses  of	the
+       package	than  could  be	 treated  in the manual	entry.	The
+       information in the manual entry is assumed here and  is	not
+       repeated	in detail.
+
+
+       2.  DDDDeeeeffffiiiinnnniiiittttiiiioooonnnnssss::::	 aaaarrrrgggguuuummmmeeeennnntttt....hhhh
+
+	    The	file <argument.h> contains the	definitions  needed
+       to  use	the  argument package.	It requires <stdio.h> to be
+       included	first.
+
+	    Definitions:
+
+	    #include <stdio.h>
+	    #include <argument.h>
+
+	    Each specified formal argument has an instance  of	the
+       typedef ARGUMENT	associated with	it, containing all relevant
+       information  about  the	formal	argument.   This   is	the
+       information  passed  by the specification routine, _a_r_g__s_p_e_c.
+       Instances  of  ARGUMENTs	 should	 never	occur  outside	the
+       argument	package, as the	structure may change.
+
+	    The	_A_r_g__C_o_n_t_r_o_l structure  contains	 state	information
+       associated  with	 argument processing.  There is	only one of
+       these.	Usually,  only	argument  package  routines  should
+
+
+       __________
+
+	 * UNIX	is a tradmark of Bell Laboratories.
+
+
+
+
+
+
+
+
+
+
+
+
+				  - 2 -
+
+
+
+       modify	 it.	 _A_r_g__c_o_d_e,    described	    below     under
+       ``Control and Status,'' is used to set most parameters which
+       should be changeable.
+
+
+       3.  IIIInnnniiiittttiiiiaaaalllliiiizzzzaaaattttiiiioooonnnn aaaannnndddd AAAAccccttttuuuuaaaallll AAAArrrrgggguuuummmmeeeennnntttt SSSSppppeeeecccciiiiffffiiiiccccaaaattttiiiioooonnnn
+
+	    There are several  routines	 for  dealing  with  actual
+       arguments.
+
+	    Initialization and Actual Argument Specification:
+
+	    int	_m_a_i_n (argc, argv)
+	    int	argc;
+	    char **argv;
+
+	    int	_a_r_g__i_n_i_t (&argc, &argv,	help_main)
+	    char *help_main[];
+
+	    _p_r_o_g_n_a_m_e = argv[0];
+	    extern char	*_p_r_o_g_n_a_m_e;
+
+	    int	_a_r_g_v__i_n_i_t (&argc, &argv)
+	    int	_a_r_g_v__e_o_f ()
+
+	    int	_a_r_g_v__f_i_l_e (file, prompt)
+	    int	_a_r_g_v__l_i_n_e (file)
+	    FILE *file;
+	    int	(* prompt) ();
+
+	    char *_a_r_g_v__g_e_t ()
+	    char *_a_r_g_v__u_n_g_e_t (actual)
+	    char *actual;
+
+	    Actual arguments are  usually  specified  by  _a_r_g__i_n_i_t,
+       which  takes them from its first	two arguments, which should
+       be pointers to argc and	argv.	The  third  argument  is  a
+       NULL-terminated	array  of strings, containing a	description
+       of the command to be printed by the "-help" standard option.
+       The   format   of  this	string	array  is  described  under
+       _a_r_g__d_e_s_c_r_i_b_e in ``Printing functions'' below.  _A_r_g__i_n_i_t also
+       specifies  the  standard	options, which are "-syn", "-help",
+       "-show",	and "--".
+
+	    If _a_r_g__i_n_i_t	is not called, the name	of the command must
+       be  given  by  setting  _p_r_o_g_n_a_m_e	 (declared  in argument.h),
+       usually to argv[0].  The	actual arguments must be  specified
+       by _a_r_g_v__i_n_i_t or a similar actual	argument routine.
+
+	    _A_r_g_v__i_n_i_t is the routine used by  _a_r_g__i_n_i_t	to  specify
+       actual  arguments.   Its	 arguments are pointers	to argc	and
+
+
+
+
+
+
+
+
+
+
+
+				  - 3 -
+
+
+
+       argv.
+
+	    _A_r_g_v__e_o_f  returns  1  iff  there  are  no  more  actual
+       arguments.
+
+	    _A_r_g_v__f_i_l_e  takes  a	 standard  IO  (FILE  *)  as  first
+       argument,   a   prompt  function	 as  second  argument,	and
+       initializes the actual argument routines	to  read  arguments
+       from  the  file.	  These	 arguments  are	 separated by white
+       space, which includes new  lines.   Shell-style	quotes	and
+       backslash escapes work, but there is no file name expansion.
+       If the file is a	 terminal,  the	 prompt	 function  will	 be
+       called  immediately  before each	line is	read from the file.
+       The prompt function is passed no	 arguments  and	 any  value
+       returned	 from  it is ignored.  _A_r_g__n_p_r_o_m_p_t (see	below) is a
+       commonly	used prompt function.
+
+	    The	_s_f_o_r_m_a_t	direct assignment format  ARG_DSCAN  should
+       be  used	 with _a_r_g_v__f_i_l_e	only with care,	as a pointer to	the
+       same buffer will	be used	repeatedly.
+
+	    _A_r_g_v__l_i_n_e is like _a_r_g_v__f_i_l_e, except	arguments are taken
+       one  per	 line.	 The  newline  is  stripped,  but  no other
+       processing is done.
+
+	    _A_r_g_v__f_i_l_e  or  _a_r_g_v__l_i_n_e  may  be  used  in	 place	 of
+       _a_r_g_v__i_n_i_t, or they may be used alternately to switch between
+       the arguments from the command line and the arguments from a
+       file.
+
+	    _A_r_g_v__g_e_t returns the next actual argument, or  NULL	 if
+       there are no more.
+
+	    _A_r_g_v__u_n_g_e_t ungets an actual	argument, and  returns	it,
+       as well.	 At most one actual may	be ungotten at a time.
+
+	    Use	of _a_r_g_v__g_e_t or _a_r_g_v__u_n_g_e_t will confuse	the  formal
+       argument	 routines.   Their  descriptions  are  included	for
+       completeness.
+
+
+       4.  FFFFoooorrrrmmmmaaaallll AAAArrrrgggguuuummmmeeeennnntttt SSSSppppeeeecccciiiiffffiiiiccccaaaattttiiiioooonnnn::::  _a_r_g__s_p_e_c
+
+	    Formal arguments are specified  by	using  the  routine
+       _a_r_g__s_p_e_c.   The	_t_y_p_e argument is usually 0, the	syntactical
+       type of the argument being inferred from	the values of  _f_l_a_g
+       and  _n_a_m_e.   The	value of the argument is kept in a variable
+       pointed to by  _p_v_a_l_u_e,  whose  input  conversion	 format	 is
+       _s_f_o_r_m_a_t	and  whose display format is _p_f_o_r_m_a_t.  _D_e_s_c is used
+       in displaying the argument syntax to describe the  argument.
+       _C_f_u_n_c  and  _c_f_a_r_g  may  be  a  conversion  function  and	its
+
+
+
+
+
+
+
+
+
+
+
+				  - 4 -
+
+
+
+       argument, to be called when an actual argument is  seen	for
+       the formal, if not NULL.
+
+       Formal argument specification:
+
+       int _a_r_g__s_p_e_c (type, flag, name, sformat,	pvalue
+	   , pformat, desc, cfunc, cfarg)
+       int  type;      /* syntactical argument type (usually 0)	*/
+       char *flag;     /* option flag (string starting with '-') */
+       char *name;     /* string naming	the actual argument value */
+       char *sformat;  /* _s_c_a_n_f	format to convert the argument */
+       char *pvalue;   /* pointer to the formal	argument variable */
+       char *pformat;  /* _p_r_i_n_t_f format	to display the argument	*/
+       char *desc;     /* string describing the	argument */
+       int (* cfunc) (cfarg);  /* function to call on conversion */
+       char *cfarg;	       /* argument for conversion function */
+
+	    _A_r_g__s_p_e_c is	actually a  macro,  so	that  it  can  cast
+       _p_v_a_l_u_e  and  _c_f_a_r_g  to (char *),	and in order to	enforce	the
+       proper number of	arguments.
+
+	    The	kind of	 ordinary  argument  (fixed,  possible,	 or
+       variable)  being	 specified is determined by the	presence in
+       _f_l_a_g of one of the ordinary flags, or of	 the  NULL  pointer
+       (which defaults to fixed	type).
+
+	    The	syntactical type of an argument	(any argument,	not
+       only  ordinary arguments) may be	specified directly by using
+       some combination	of the type defines  found  in	argument.h.
+       _A_r_g__s_p_e_c	 can  be  used	to specify compound types, by oring
+       several types together.	An ordinary argument  can  be  both
+       ARG_FIXED  and  ARG_VARIABLE,  for example.  This would mean
+       there must be at	least one such actual argument.
+
+       #defined	argument types:
+
+       type mask       types
+
+       ARG_ORDINARY:   ARG_FIXED       ARG_POSSIBLE    ARG_VARIABLE
+       ordinary	flags: ARG_FFIX	""     ARG_FPOS	"["    ARG_FVAR	"[]"
+
+       ARG_OPTION:     ARG_SWITCH      ARG_FLAG	       ARG_KEY
+       wild card options:      ARG_WFLAG "-?"	       ARG_WKEY	"?"
+
+       ARG_SPECIAL:    ARG_WILDCARD    ARG_NOCHECK     ARG_DEFAULT
+
+	    The	 last  ARGUMENT	  converted   may   be	 found	 in
+       _A_r_g__C_o_n_t_r_o_l._A_r_g__L_a_s_t, as	for _a_r_g__e_a_c_h.  The ARGUMENT for	the
+       last formal argument processed is _A_r_g__C_o_n_t_r_o_l._A_r_g__L_a_s_t,	and
+       _A_r_g__C_o_n_t_r_o_l._A_r_g__L_T_y_p_e   is  the	type  under  which  it	was
+       processed.   The	  last	 actual	  argument   used   is	 in
+
+
+
+
+
+
+
+
+
+
+
+				  - 5 -
+
+
+
+       _A_r_g__C_o_n_t_r_o_l._A_r_g__A_c_t_u_a_l,	and  the  last actual flag argument
+       used is in _A_r_g__C_o_n_t_r_o_l._A_r_g__F_l_a_g.
+
+	    There  are	 several   special   types,   masked   with
+       ARG_SPECIAL, which may only be used with	options.
+
+	    Any	option,	not just ARG_WKEY or ARG_WFLAG,	may be made
+       a  wild	card by	the special type ARG_WILDCARD.	An argument
+       function	must be	specified for use with this,  and  will	 be
+       called  whenever	 an  unrecognizable switch, flag, or key is
+       seen.
+
+	    The	 argument  package   cannot   distinguish   between
+       unrecognized  flags  and	switches, and always reports errors
+       as switches.  Thus, if option is	the third argument  to	the
+       ARG_WILDCARD  function  for  ARG_SWITCH,	 and  (option[1] ==
+       _A_r_g__C_o_n_t_r_o_l._A_r_g__F_l_a_g[1]), _A_r_g__C_o_n_t_r_o_l._A_r_g__F_l_a_g  could  be  a
+       flag, or	it could be a sequence of switches, of which option
+       is the first.  Setting _A_r_g__C_o_n_t_r_o_l._A_r_g__S_w_i_t_c_h  =	 NULL  will
+       force  the  package  to	treat it as a flag, else it will be
+       taken to	be switches.
+
+	    The	remaining special types	are  not  recommended,	and
+       are included only for completeness.
+
+	    If the special type	ARG_DEFAULT is used with an  option
+       which  takes  a value, the option must be of type ARG_TTYPE,
+       and of formats ARG_TFORMAT.  If there is	no  value  for	the
+       option  found  on  the  command	line (the next actual is an
+       option, or there	are no more actuals),  the  value  will	 be
+       defaulted to ARG_TON.
+
+	    The	special	type ARG_NOCHECK prevents the  usual  check
+       to  see	that  prevents	an actual containing an	option from
+       being used as the value of a preceding option.
+
+	    A table of suggested correspondences between _s_c_a_n_f	and
+       _p_r_i_n_t_f formats, for _s_f_o_r_m_a_t and _p_f_o_r_m_a_t,	may be useful.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				  - 6 -
+
+
+
+	    _P_r_i_n_t_f formats corresponding to _s_c_a_n_f formats,
+	    for	use with the argument package _a_r_g__s_p_e_c routine.
+
+	    _s_c_a_n_f	    _p_r_i_n_t_f
+
+	    ""		    ""
+
+	    %d		    %d %u
+	    %o		    %o
+	    %x		    %x %X
+
+	    %hd		    %d
+	    %ho		    %o
+	    %hx		    %x %X
+
+	    %ld	%D	    %ld	%lu
+	    %lo	%O	    %lo
+	    %lx	%X	    %lx	%lX
+
+	    %s		    %s
+	    %c		    %c
+
+	    %f %e	    %f %e %g %E	%G
+	    %lf	%F %le %E   %f %e %g %E	%G
+
+
+       5.  AAAArrrrgggguuuummmmeeeennnntttt PPPPrrrroooocccceeeessssssssiiiinnnngggg::::	 _a_r_g__p_r_o_c_e_s_s
+
+	    Arguments are usually processed by calling	_a_r_g__p_r_o_c_e_s_s
+       while it	returns	a value	> 0.
+
+	    Argument processing	routines:
+
+	    int	_a_r_g__p_r_o_c_e_s_s ()
+	    int	_a_r_g__e_a_c_h ()
+	    int	_a_r_g__a_l_l	()
+
+	    _A_r_g__e_a_c_h processes one formal argument at a	 time.	 It
+       returns 1 for ordinary successful processing, 2 for the last
+       argument	of a set, and 0	for end	of processing.
+
+	    Since there	may be more than  one  switch  or  key	per
+       actual  argument,  _a_r_g__e_a_c_h  may	be called several times	for
+       the  same  actual  argument,  as	 it  processes	one  formal
+       argument	on each	call.
+
+	    Calls on _a_r_g__e_a_c_h and _a_r_g__p_r_o_c_e_s_s may be interspersed.
+
+	    _A_r_g__a_l_l returns 1  iff  argument  processing  would	 be
+       complete	if there were no more actual arguments.
+
+
+
+
+
+
+
+
+
+
+
+
+				  - 7 -
+
+
+
+       6.  PPPPrrrriiiinnnnttttiiiinnnngggg RRRRoooouuuuttttiiiinnnneeeessss ((((_a_r_g__e_r_r_o_r)
+
+	    There are several printing routines.
+
+	    _A_r_g__e_r_r_o_r takes a pointer to an  argument  variable,  a
+       type, and an error message, prints an appropriate message on
+       stderr, then exits with non-zero	exit status.
+
+	    Printing routines:
+
+	    int	_a_r_g__e_r_r_o_r (pvalue, type, message)
+	    /* pvalue and type are as for _a_r_g__s_p_e_c */
+	    char *message;
+
+	    int	_a_r_g__m_a_n	()
+
+	    int	_a_r_g__s_y_n_o_p_s_i_s ()
+	    int	_a_r_g__n_p_r_o_m_p_t ()
+	    int	_a_r_g__t_p_r_o_m_p_t (type)
+
+	    int	_a_r_g__h_e_l_p ()
+	    int	_a_r_g__d_e_s_c_r_i_b_e (strings)
+	    char *strings[];
+
+	    char _a_r_g__r_e_p_l_a_c_e[],
+		 _a_r_g__b_r_a_c_k_e_t[],
+		 _a_r_g__i_n_d_i_r_e_c_t[],
+		 _a_r_g__e_s_c_a_p_e[];
+
+	    int	_a_r_g__s_h_o_w ()
+
+	    _A_r_g__i_n_i_t sets up the "-syn", "-help", and "-show" flags
+       to  call	 _a_r_g__s_y_n_o_p_s_i_s, _a_r_g__m_a_n,	and _a_r_g__s_h_o_w, respectively.
+       There are also a	few other printing functions.	Those  that
+       print  values of	argument variables return 1, and those that
+       do not exit with	zero status.  The ones	that  usually  exit
+       can  be	made to	return 1 by setting ARGNHEXIT with _a_r_g__c_o_d_e
+       (see below).
+
+	    _A_r_g__s_y_n_o_p_s_i_s prints	a synopsis of the calling  sequence
+       of  the	command	 in  a	format	similar	to that	used in	the
+       SYNOPSIS	sections of the	manual,	and then exits.
+
+	    _A_r_g__n_p_r_o_m_p_t	prints a prompt, which is the same  as	the
+       _a_r_g__s_y_n_o_p_s_i_s  output  for  the  expected	 remaining ordinary
+       arguments.  It is commonly passed to _a_r_g_v__f_i_l_e as  a  prompt
+       function.   _A_r_g_v__t_p_r_o_m_p_t	takes one argument, which is a type
+       mask.  A	synopsis is printed  of	 all  the  arguments  whose
+       types  match  the  mask.	Neither	_a_r_g__n_p_r_o_m_p_t nor	_a_r_g__t_p_r_o_m_p_t
+       return any value, and neither exits.
+
+
+
+
+
+
+
+
+
+
+
+
+				  - 8 -
+
+
+
+	    _A_r_g__m_a_n uses _a_r_g__s_y_n_o_p_s_i_s, _a_r_g__h_e_l_p,  and  _a_r_g__d_e_s_c_r_i_b_e
+       to print	a help message similar to a condensed manual entry.
+       It then exits.  The argument is a NULL terminated  array	 of
+       strings to be passed to _a_r_g__d_e_s_c_r_i_b_e.
+
+	    _A_r_g__h_e_l_p prints the	flag, name, format, and	description
+       of  each	formal argument, and then exits.  The arguments	are
+       grouped by type,	and a header  is  given	 before	 each  type
+       group.
+
+	    _A_r_g__d_e_s_c_r_i_b_e prints	a description of the command, taken
+       from  its  argument,  which is an array of strings, i.e., an
+       array of	type (char *), terminated by a NULL  pointer.	The
+       strings	are  normally  output with no change.  Newlines	and
+       other formatting	characters must	be embedded if	desired	 on
+       output.	1 is returned.
+
+	    There are four special strings which can be	 used  with
+       _a_r_g__d_e_s_c_r_i_b_e.   _A_r_g__r_e_p_l_a_c_e  is	replaced  by  the  value of
+       _p_r_o_g_n_a_m_e	on output.  _A_r_g__b_r_a_c_k_e_t	causes the next	 string	 to
+       be  enclosed  in	 angle	brackets,  <>,	as  for	non-literal
+       argument	names in _a_r_g__h_e_l_p output.  _A_r_g__i_n_d_i_r_e_c_t	causes	the
+       next  array  element to be treated as a pointer to a string,
+       and to be dereferenced before printing.	Multiple levels	 of
+       indirection   are  possible.   An  indirect  string  may	 be
+       bracketed using _a_r_g__b_r_a_c_k_e_t.   _A_r_g__e_s_c_a_p_e  causes  the  next
+       array  element  to  be  treated	as a function pointer.	The
+       function	is called with a pointer  to  the  following  array
+       element	as  its	 argument.   It	 must return a string array
+       (char **), which	is then	used by	 _a_r_g__d_e_s_c_r_i_b_e  for  further
+       processing.
+
+	    _A_r_g__s_h_o_w is	like _a_r_g__h_e_l_p, except  that  the  value	 of
+       each  formal  argument is given in place	of its description,
+       and there are no	headers	before the type	groups.	 The  value
+       1 is returned.
+
+	    _A_r_g_v__g_e_t returns NULL for  EOF  or	error.	 _A_r_g_v__u_n_g_e_t
+       will  print  an error message and exit if it is called twice
+       with no intervening call	on _a_r_g_v__g_e_t.
+
+
+       7.  CCCCoooonnnnttttrrrroooollll aaaannnndddd SSSSttttaaaattttuuuussss
+
+	    There are several general control and status routines.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				  - 9 -
+
+
+
+	    Control and	status routines:
+
+	    int	_a_r_g__s_t_a_t_u_s ()
+
+	    int	_a_r_g__c_o_d_e (code)
+	    int	_a_r_g__d_e_c_o_d_e (code)
+	    int	code;
+	    codes:  ARG_ECHO	ARGNHEXIT   ARGNEEXIT
+
+	    ARGUMENT *_a_r_g__c_h_a_n_g_e (arglist)
+	    ARGUMENT *arglist;
+
+	    _A_r_g__s_t_a_t_u_s prints the state	of  the	 argument  package,
+       i.e., the contents of _A_r_g__C_o_n_t_r_o_l.
+
+	    The	one element of _A_r_g__C_o_n_t_r_o_l which  may  be  directly
+       assigned	 to  is	 _A_r_g__C_o_n_t_r_o_l._A_r_g__S_O_p_t.	 This is the formal
+       argument	variable for the "--" standard option.	While it is
+       0,  options  are	 recognized  wherever  they are	seen in	the
+       command line.  When it is 1, options are	not  recognized	 at
+       all.   If it is initially set to	-1, options will be handled
+       completely  compatibly  with  System  III:   they  will	 be
+       recognized  until  "--"	or  the	 first ordinary	argument is
+       seen.
+
+	    _A_r_g__c_o_d_e is	used to	 set  parameters  of  the  argument
+       package.	  Currently  defined codes are ARG_ECHO, ARGNHEXIT,
+       and ARGNEEXIT.  These codes are bit defines and may be  ored
+       together.   ARG_ECHO  causes the	value of the last converted
+       argument	to  be	printed.   ARGNHEXIT  suppresses  exits	 in
+       _a_r_g__h_e_l_p,   _a_r_g__s_y_n,  and  _a_r_g__m_a_n,  making  them  return  1
+       instead.	 ARGNEEXIT suppresses the exit in _a_r_g__e_r_r_o_r, making
+       it return -1.
+
+	    _A_r_g__d_e_c_o_d_e is normally called by the  argument  package
+       after  the  complete  coversion	of  each argument, with	the
+       global  special	action	code  set  by  _a_r_g__c_o_d_e	 from	its
+       argument.  _A_r_g__d_e_c_o_d_e can be called directly.
+
+	    _A_r_g__c_h_a_n_g_e allows saving  a	 list  of  formal  argument
+       specifications  for  later  use.	  It  returns  the  current
+       ARGUMENT	list,  which  is  then	replaced  by  its  argument
+       arglist,	 which	should be either NULL or a previously saved
+       argument	list.  The state of the	package	is also	reset.	 To
+       reset  the  state  and leave the	argument list unchanged, do
+       _a_r_g__c_h_a_n_g_e (_a_r_g__c_h_a_n_g_e (NULL)).
+
+
+
+
+
+
+
+
+
+
+
+
+

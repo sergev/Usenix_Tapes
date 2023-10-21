@@ -1,0 +1,3611 @@
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by hokey on Thu May 21 16:09:11 CDT 1987
+# Contents:  Compress/ Compress/:UPDATES/ Compress/:PATCHES/
+#	Compress/:PATCHES/1/ Compress/compress.1 Compress/compress.c
+#	Compress/Makefile Compress/usermem Compress/README Compress/README3.0
+#	Compress/atob.c Compress/btoa.1 Compress/btoa.c Compress/compressdir
+#	Compress/compressdir.1 Compress/tarmail Compress/uncompressdir
+#	Compress/untarmail Compress/zcmp Compress/zcmp.1 Compress/zdiff
+#	Compress/zmore Compress/zmore.1 Compress/:AUTHOR Compress/usermem-
+#	Compress/USERMEM Compress/Makefile- Compress/zzzz.z Compress/thingstodo
+#	Compress/:UPDATES/1 Compress/:PATCHES/1/:AUTHOR
+#	Compress/:PATCHES/1/compress.patch
+ 
+echo mkdir - Compress
+mkdir Compress
+chmod u=rwx,g=rwx,o=rwx Compress
+ 
+echo x - Compress/compress.1
+sed 's/^@//' > "Compress/compress.1" <<'@//E*O*F Compress/compress.1//'
+@.PU
+@.TH COMPRESS 1 local
+@.SH NAME
+compress, uncompress, zcat \- compress and expand data
+@.SH SYNOPSIS
+@.ll +8
+@.B compress
+[
+@.B \-f
+] [
+@.B \-v
+] [
+@.B \-c
+] [
+@.B \-V
+] [
+@.B \-b
+@.I bits
+] [
+@.I "name \&..."
+]
+@.ll -8
+@.br
+@.B uncompress
+[
+@.B \-f
+] [
+@.B \-v
+] [
+@.B \-c
+] [
+@.B \-V
+] [
+@.I "name \&..."
+]
+@.br
+@.B zcat
+[
+@.B \-V
+] [
+@.I "name \&..."
+]
+@.SH DESCRIPTION
+@.I Compress
+reduces the size of the named files using adaptive Lempel-Ziv coding.
+Whenever possible,
+each file is replaced by one with the extension
+@.B "\&.Z,"
+while keeping the same ownership modes, access and modification times.
+If no files are specified, the standard input is compressed to the
+standard output.
+Compressed files can be restored to their original form using
+@.I uncompress
+or
+@.I zcat.
+@.PP
+The
+@.B \-f
+option will force compression of
+@.I name.
+This is useful for compressing an entire directory,
+even if some of the files do not actually shrink.
+If
+@.B \-f
+is not given and
+@.I compress
+is run in the foreground,
+the user is prompted as to whether an existing file should be overwritten.
+@.PP
+The
+@.B \-c
+option makes
+@.I compress/uncompress
+write to the standard output; no files are changed.
+The nondestructive behavior of
+@.I zcat
+is identical to that of
+@.I uncompress
+@.B \-c.
+@.PP
+@.I Compress
+uses the modified Lempel-Ziv algorithm popularized in
+"A Technique for High Performance Data Compression",
+Terry A. Welch,
+@.I "IEEE Computer,"
+vol. 17, no. 6 (June 1984), pp. 8-19.
+Common substrings in the file are first replaced by 9-bit codes 257 and up.
+When code 512 is reached, the algorithm switches to 10-bit codes and
+continues to use more bits until the
+limit specified by the
+@.B \-b
+flag is reached (default 16).
+@.I Bits
+must be between 9 and 16.  The default can be changed in the source to allow
+@.I compress
+to be run on a smaller machine.
+@.PP
+After the
+@.I bits
+limit is attained,
+@.I compress
+periodically checks the compression ratio.  If it is increasing,
+@.I compress
+continues to use the existing code dictionary.  However,
+if the compression ratio decreases,
+@.I compress
+discards the table of substrings and rebuilds it from scratch.  This allows
+the algorithm to adapt to the next "block" of the file.
+@.PP
+Note that the
+@.B \-b
+flag is omitted for
+@.I uncompress,
+since the 
+@.I bits
+parameter specified during compression
+is encoded within the output, along with
+a magic number to ensure that neither decompression of random data nor
+recompression of compressed data is attempted. 
+@.PP
+@.ne 8
+The amount of compression obtained depends on the size of the
+input, the number of
+@.I bits
+per code, and the distribution of common substrings.
+Typically, text such as source code or English
+is reduced by 50\-60%.
+Compression is generally much better than that achieved by
+Huffman coding (as used in
+@.IR pack ),
+or adaptive Huffman coding
+@.RI ( compact ),
+and takes less time to compute.
+@.PP
+Under the
+@.B \-v
+option,
+a message is printed yielding the percentage of
+reduction for each file compressed.
+@.PP
+If the
+@.B \-V
+option is specified, the current version and compile options are printed on
+stderr.
+@.PP
+Exit status is normally 0;
+if the last file is larger after (attempted) compression, the status is 2;
+if an error occurs, exit status is 1.
+@.SH "SEE ALSO"
+pack(1), compact(1)
+@.SH "DIAGNOSTICS"
+Usage: compress [\-dfvcV] [\-b maxbits] [file ...]
+@.in +8
+Invalid options were specified on the command line.
+@.in -8
+Missing maxbits
+@.in +8
+Maxbits must follow
+@.BR \-b \.
+@.in -8
+@.IR file :
+not in compressed format
+@.in +8
+The file specified to
+@.I uncompress
+has not been compressed.
+@.in -8
+@.IR file :
+compressed with 
+@.I xx
+bits, can only handle 
+@.I yy
+bits
+@.in +8
+@.I File
+was compressed by a program that could deal with
+more 
+@.I bits
+than the compress code on this machine.
+Recompress the file with smaller
+@.IR bits \.
+@.in -8
+@.IR file :
+already has .Z suffix -- no change
+@.in +8
+The file is assumed to be already compressed.
+Rename the file and try again.
+@.in -8
+@.IR file :
+filename too long to tack on .Z
+@.in +8
+The file cannot be compressed because its name is longer than
+12 characters.
+Rename and try again.
+This message does not occur on BSD systems.
+@.in -8
+@.I file
+already exists; do you wish to overwrite (y or n)?
+@.in +8
+Respond "y" if you want the output file to be replaced; "n" if not.
+@.in -8
+uncompress: corrupt input
+@.in +8
+A SIGSEGV violation was detected which usually means that the input file has
+been corrupted.
+@.in -8
+Compression: 
+@.I "xx.xx%"
+@.in +8
+Percentage of the input saved by compression.
+(Relevant only for
+@.BR \-v \.)
+@.in -8
+-- not a regular file: unchanged
+@.in +8
+When the input file is not a regular file,
+(e.g. a directory), it is
+left unaltered.
+@.in -8
+-- has 
+@.I xx 
+other links: unchanged
+@.in +8
+The input file has links; it is left unchanged.  See
+@.IR ln "(1)"
+for more information.
+@.in -8
+-- file unchanged
+@.in +8
+No savings is achieved by
+compression.  The input remains virgin.
+@.in -8
+@.SH "BUGS"
+Although compressed files are compatible between machines with large memory,
+@.BR \-b \12
+should be used for file transfer to architectures with 
+a small process data space (64KB or less, as exhibited by the DEC PDP
+series, the Intel 80286, etc.)
+@//E*O*F Compress/compress.1//
+chmod u=r,g=r,o=r Compress/compress.1
+ 
+echo x - Compress/compress.c
+sed 's/^@//' > "Compress/compress.c" <<'@//E*O*F Compress/compress.c//'
+/* 
+ * Compress - data compression program 
+ */
+#define	min(a,b)	((a>b) ? b : a)
+
+/*
+ * machine variants which require cc -Dmachine:  pdp11, z8000, pcxt
+ */
+
+/*
+ * Set USERMEM to the maximum amount of physical user memory available
+ * in bytes.  USERMEM is used to determine the maximum BITS that can be used
+ * for compression.
+ *
+ * SACREDMEM is the amount of physical memory saved for others; compress
+ * will hog the rest.
+ */
+#ifndef SACREDMEM
+#define SACREDMEM	0
+#endif
+
+#ifndef USERMEM
+# define USERMEM 	450000	/* default user memory */
+#endif
+
+#ifdef interdata		/* (Perkin-Elmer) */
+#define SIGNED_COMPARE_SLOW	/* signed compare is slower than unsigned */
+#endif
+
+#ifdef pdp11
+# define BITS 	12	/* max bits/code for 16-bit machine */
+# define NO_UCHAR	/* also if "unsigned char" functions as signed char */
+# undef USERMEM 
+#endif /* pdp11 */	/* don't forget to compile with -i */
+
+#ifdef z8000
+# define BITS 	12
+# undef vax		/* weird preprocessor */
+# undef USERMEM 
+#endif /* z8000 */
+
+#ifdef pcxt
+# define BITS   12
+# undef USERMEM
+#endif /* pcxt */
+
+#ifdef USERMEM
+# if USERMEM >= (433484+SACREDMEM)
+#  define PBITS	16
+# else
+#  if USERMEM >= (229600+SACREDMEM)
+#   define PBITS	15
+#  else
+#   if USERMEM >= (127536+SACREDMEM)
+#    define PBITS	14
+#   else
+#    if USERMEM >= (73464+SACREDMEM)
+#     define PBITS	13
+#    else
+#     define PBITS	12
+#    endif
+#   endif
+#  endif
+# endif
+# undef USERMEM
+#endif /* USERMEM */
+
+#ifdef PBITS		/* Preferred BITS for this memory size */
+# ifndef BITS
+#  define BITS PBITS
+# endif BITS
+#endif /* PBITS */
+
+#if BITS == 16
+# define HSIZE	69001		/* 95% occupancy */
+#endif
+#if BITS == 15
+# define HSIZE	35023		/* 94% occupancy */
+#endif
+#if BITS == 14
+# define HSIZE	18013		/* 91% occupancy */
+#endif
+#if BITS == 13
+# define HSIZE	9001		/* 91% occupancy */
+#endif
+#if BITS <= 12
+# define HSIZE	5003		/* 80% occupancy */
+#endif
+
+#ifdef M_XENIX			/* Stupid compiler can't handle arrays with */
+# if BITS == 16			/* more than 65535 bytes - so we fake it */
+#  define XENIX_16
+# else
+#  if BITS > 13			/* Code only handles BITS = 12, 13, or 16 */
+#   define BITS	13
+#  endif
+# endif
+#endif
+
+/*
+ * a code_int must be able to hold 2**BITS values of type int, and also -1
+ */
+#if BITS > 15
+typedef long int	code_int;
+#else
+typedef int		code_int;
+#endif
+
+#ifdef SIGNED_COMPARE_SLOW
+typedef unsigned long int count_int;
+typedef unsigned short int count_short;
+#else
+typedef long int	  count_int;
+#endif
+
+#ifdef NO_UCHAR
+ typedef char	char_type;
+#else
+ typedef	unsigned char	char_type;
+#endif /* UCHAR */
+char_type magic_header[] = { "\037\235" };	/* 1F 9D */
+
+/* Defines for third byte of header */
+#define BIT_MASK	0x1f
+#define BLOCK_MASK	0x80
+/* Masks 0x40 and 0x20 are free.  I think 0x20 should mean that there is
+   a fourth header byte (for expansion).
+*/
+#define INIT_BITS 9			/* initial number of bits/code */
+
+/*
+ * compress.c - File compression ala IEEE Computer, June 1984.
+ *
+ * Authors:	Spencer W. Thomas	(decvax!harpo!utah-cs!utah-gr!thomas)
+ *		Jim McKie		(decvax!mcvax!jim)
+ *		Steve Davies		(decvax!vax135!petsd!peora!srd)
+ *		Ken Turkowski		(decvax!decwrl!turtlevax!ken)
+ *		James A. Woods		(decvax!ihnp4!ames!jaw)
+ *		Joe Orost		(decvax!vax135!petsd!joe)
+ *
+ * $Header: compress.c,v 4.0 85/07/30 12:50:00 joe Release $
+ * $Log:	compress.c,v $
+ * Revision 4.0  85/07/30  12:50:00  joe
+ * Removed ferror() calls in output routine on every output except first.
+ * Prepared for release to the world.
+ * 
+ * Revision 3.6  85/07/04  01:22:21  joe
+ * Remove much wasted storage by overlaying hash table with the tables
+ * used by decompress: tab_suffix[1<<BITS], stack[8000].  Updated USERMEM
+ * computations.  Fixed dump_tab() DEBUG routine.
+ *
+ * Revision 3.5  85/06/30  20:47:21  jaw
+ * Change hash function to use exclusive-or.  Rip out hash cache.  These
+ * speedups render the megamemory version defunct, for now.  Make decoder
+ * stack global.  Parts of the RCS trunks 2.7, 2.6, and 2.1 no longer apply.
+ *
+ * Revision 3.4  85/06/27  12:00:00  ken
+ * Get rid of all floating-point calculations by doing all compression ratio
+ * calculations in fixed point.
+ *
+ * Revision 3.3  85/06/24  21:53:24  joe
+ * Incorporate portability suggestion for M_XENIX.  Got rid of text on #else
+ * and #endif lines.  Cleaned up #ifdefs for vax and interdata.
+ *
+ * Revision 3.2  85/06/06  21:53:24  jaw
+ * Incorporate portability suggestions for Z8000, IBM PC/XT from mailing list.
+ * Default to "quiet" output (no compression statistics).
+ *
+ * Revision 3.1  85/05/12  18:56:13  jaw
+ * Integrate decompress() stack speedups (from early pointer mods by McKie).
+ * Repair multi-file USERMEM gaffe.  Unify 'force' flags to mimic semantics
+ * of SVR2 'pack'.  Streamline block-compress table clear logic.  Increase 
+ * output byte count by magic number size.
+ * 
+ * Revision 3.0   84/11/27  11:50:00  petsd!joe
+ * Set HSIZE depending on BITS.  Set BITS depending on USERMEM.  Unrolled
+ * loops in clear routines.  Added "-C" flag for 2.0 compatibility.  Used
+ * unsigned compares on Perkin-Elmer.  Fixed foreground check.
+ *
+ * Revision 2.7   84/11/16  19:35:39  ames!jaw
+ * Cache common hash codes based on input statistics; this improves
+ * performance for low-density raster images.  Pass on #ifdef bundle
+ * from Turkowski.
+ *
+ * Revision 2.6   84/11/05  19:18:21  ames!jaw
+ * Vary size of hash tables to reduce time for small files.
+ * Tune PDP-11 hash function.
+ *
+ * Revision 2.5   84/10/30  20:15:14  ames!jaw
+ * Junk chaining; replace with the simpler (and, on the VAX, faster)
+ * double hashing, discussed within.  Make block compression standard.
+ *
+ * Revision 2.4   84/10/16  11:11:11  ames!jaw
+ * Introduce adaptive reset for block compression, to boost the rate
+ * another several percent.  (See mailing list notes.)
+ *
+ * Revision 2.3   84/09/22  22:00:00  petsd!joe
+ * Implemented "-B" block compress.  Implemented REVERSE sorting of tab_next.
+ * Bug fix for last bits.  Changed fwrite to putchar loop everywhere.
+ *
+ * Revision 2.2   84/09/18  14:12:21  ames!jaw
+ * Fold in news changes, small machine typedef from thomas,
+ * #ifdef interdata from joe.
+ *
+ * Revision 2.1   84/09/10  12:34:56  ames!jaw
+ * Configured fast table lookup for 32-bit machines.
+ * This cuts user time in half for b <= FBITS, and is useful for news batching
+ * from VAX to PDP sites.  Also sped up decompress() [fwrite->putc] and
+ * added signal catcher [plus beef in writeerr()] to delete effluvia.
+ *
+ * Revision 2.0   84/08/28  22:00:00  petsd!joe
+ * Add check for foreground before prompting user.  Insert maxbits into
+ * compressed file.  Force file being uncompressed to end with ".Z".
+ * Added "-c" flag and "zcat".  Prepared for release.
+ *
+ * Revision 1.10  84/08/24  18:28:00  turtlevax!ken
+ * Will only compress regular files (no directories), added a magic number
+ * header (plus an undocumented -n flag to handle old files without headers),
+ * added -f flag to force overwriting of possibly existing destination file,
+ * otherwise the user is prompted for a response.  Will tack on a .Z to a
+ * filename if it doesn't have one when decompressing.  Will only replace
+ * file if it was compressed.
+ *
+ * Revision 1.9  84/08/16  17:28:00  turtlevax!ken
+ * Removed scanargs(), getopt(), added .Z extension and unlimited number of
+ * filenames to compress.  Flags may be clustered (-Ddvb12) or separated
+ * (-D -d -v -b 12), or combination thereof.  Modes and other status is
+ * copied with copystat().  -O bug for 4.2 seems to have disappeared with
+ * 1.8.
+ *
+ * Revision 1.8  84/08/09  23:15:00  joe
+ * Made it compatible with vax version, installed jim's fixes/enhancements
+ *
+ * Revision 1.6  84/08/01  22:08:00  joe
+ * Sped up algorithm significantly by sorting the compress chain.
+ *
+ * Revision 1.5  84/07/13  13:11:00  srd
+ * Added C version of vax asm routines.  Changed structure to arrays to
+ * save much memory.  Do unsigned compares where possible (faster on
+ * Perkin-Elmer)
+ *
+ * Revision 1.4  84/07/05  03:11:11  thomas
+ * Clean up the code a little and lint it.  (Lint complains about all
+ * the regs used in the asm, but I'm not going to "fix" this.)
+ *
+ * Revision 1.3  84/07/05  02:06:54  thomas
+ * Minor fixes.
+ *
+ * Revision 1.2  84/07/05  00:27:27  thomas
+ * Add variable bit length output.
+ *
+ */
+static char rcs_ident[] = "$Header: compress.c,v 4.0 85/07/30 12:50:00 joe Release $";
+
+#include <stdio.h>
+#include <ctype.h>
+#include <signal.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+#define ARGVAL() (*++(*argv) || (--argc && *++argv))
+
+int n_bits;				/* number of bits/code */
+int maxbits = BITS;			/* user settable max # bits/code */
+code_int maxcode;			/* maximum code, given n_bits */
+code_int maxmaxcode = 1 << BITS;	/* should NEVER generate this code */
+#ifdef COMPATIBLE		/* But wrong! */
+# define MAXCODE(n_bits)	(1 << (n_bits) - 1)
+#else
+# define MAXCODE(n_bits)	((1 << (n_bits)) - 1)
+#endif /* COMPATIBLE */
+
+#ifdef XENIX_16
+count_int htab0[8192];
+count_int htab1[8192];
+count_int htab2[8192];
+count_int htab3[8192];
+count_int htab4[8192];
+count_int htab5[8192];
+count_int htab6[8192];
+count_int htab7[8192];
+count_int htab8[HSIZE-65536];
+count_int * htab[9] = {
+	htab0, htab1, htab2, htab3, htab4, htab5, htab6, htab7, htab8 };
+
+#define htabof(i)	(htab[(i) >> 13][(i) & 0x1fff])
+unsigned short code0tab[16384];
+unsigned short code1tab[16384];
+unsigned short code2tab[16384];
+unsigned short code3tab[16384];
+unsigned short code4tab[16384];
+unsigned short * codetab[5] = {
+	code0tab, code1tab, code2tab, code3tab, code4tab };
+
+#define codetabof(i)	(codetab[(i) >> 14][(i) & 0x3fff])
+
+#else	/* Normal machine */
+count_int htab [HSIZE];
+unsigned short codetab [HSIZE];
+#define htabof(i)	htab[i]
+#define codetabof(i)	codetab[i]
+#endif	/* XENIX_16 */
+code_int hsize = HSIZE;			/* for dynamic table sizing */
+count_int fsize;
+
+/*
+ * To save much memory, we overlay the table used by compress() with those
+ * used by decompress().  The tab_prefix table is the same size and type
+ * as the codetab.  The tab_suffix table needs 2**BITS characters.  We
+ * get this from the beginning of htab.  The output stack uses the rest
+ * of htab, and contains characters.  There is plenty of room for any
+ * possible stack (stack used to be 8000 characters).
+ */
+
+#define tab_prefixof(i)	codetabof(i)
+#ifdef XENIX_16
+# define tab_suffixof(i)	((char_type *)htab[(i)>>15])[(i) & 0x7fff]
+# define de_stack		((char_type *)(htab2))
+#else	/* Normal machine */
+# define tab_suffixof(i)	((char_type *)(htab))[i]
+# define de_stack		((char_type *)&tab_suffixof(1<<BITS))
+#endif	/* XENIX_16 */
+
+code_int free_ent = 0;			/* first unused entry */
+int exit_stat = 0;
+
+code_int getcode();
+
+Usage() {
+#ifdef DEBUG
+fprintf(stderr,"Usage: compress [-dDVfc] [-b maxbits] [file ...]\n");
+}
+int debug = 0;
+#else
+fprintf(stderr,"Usage: compress [-dfvcV] [-b maxbits] [file ...]\n");
+}
+#endif /* DEBUG */
+int nomagic = 0;	/* Use a 3-byte magic number header, unless old file */
+int zcat_flg = 0;	/* Write output on stdout, suppress messages */
+int quiet = 1;		/* don't tell me about compression */
+
+/*
+ * block compression parameters -- after all codes are used up,
+ * and compression rate changes, start over.
+ */
+int block_compress = BLOCK_MASK;
+int clear_flg = 0;
+long int ratio = 0;
+#define CHECK_GAP 10000	/* ratio check interval */
+count_int checkpoint = CHECK_GAP;
+/*
+ * the next two codes should not be changed lightly, as they must not
+ * lie within the contiguous general code space.
+ */ 
+#define FIRST	257	/* first free entry */
+#define	CLEAR	256	/* table clear output code */
+
+int force = 0;
+char ofname [100];
+#ifdef DEBUG
+int verbose = 0;
+#endif /* DEBUG */
+int (*bgnd_flag)();
+
+int do_decomp = 0;
+
+/*****************************************************************
+ * TAG( main )
+ *
+ * Algorithm from "A Technique for High Performance Data Compression",
+ * Terry A. Welch, IEEE Computer Vol 17, No 6 (June 1984), pp 8-19.
+ *
+ * Usage: compress [-dfvc] [-b bits] [file ...]
+ * Inputs:
+ *	-d:	    If given, decompression is done instead.
+ *
+ *      -c:         Write output on stdout, don't remove original.
+ *
+ *      -b:         Parameter limits the max number of bits/code.
+ *
+ *	-f:	    Forces output file to be generated, even if one already
+ *		    exists, and even if no space is saved by compressing.
+ *		    If -f is not used, the user will be prompted if stdin is
+ *		    a tty, otherwise, the output file will not be overwritten.
+ *
+ *      -v:	    Write compression statistics
+ *
+ * 	file ...:   Files to be compressed.  If none specified, stdin
+ *		    is used.
+ * Outputs:
+ *	file.Z:	    Compressed form of file with same mode, owner, and utimes
+ * 	or stdout   (if stdin used as input)
+ *
+ * Assumptions:
+ *	When filenames are given, replaces with the compressed version
+ *	(.Z suffix) only if the file decreases in size.
+ * Algorithm:
+ * 	Modified Lempel-Ziv method (LZW).  Basically finds common
+ * substrings and replaces them with a variable size code.  This is
+ * deterministic, and can be done on the fly.  Thus, the decompression
+ * procedure needs no input table, but tracks the way the table was built.
+ */
+
+main( argc, argv )
+register int argc; char **argv;
+{
+    int overwrite = 0;	/* Do not overwrite unless given -f flag */
+    char tempname[100];
+    char **filelist, **fileptr;
+    char *cp, *rindex(), *malloc();
+    struct stat statbuf;
+    extern onintr(), oops();
+
+
+    if ( (bgnd_flag = signal ( SIGINT, SIG_IGN )) != SIG_IGN ) {
+	signal ( SIGINT, onintr );
+	signal ( SIGSEGV, oops );
+    }
+
+#ifdef COMPATIBLE
+    nomagic = 1;	/* Original didn't have a magic number */
+#endif /* COMPATIBLE */
+
+    filelist = fileptr = (char **)(malloc(argc * sizeof(*argv)));
+    *filelist = NULL;
+
+    if((cp = rindex(argv[0], '/')) != 0) {
+	cp++;
+    } else {
+	cp = argv[0];
+    }
+    if(strcmp(cp, "uncompress") == 0) {
+	do_decomp = 1;
+    } else if(strcmp(cp, "zcat") == 0) {
+	do_decomp = 1;
+	zcat_flg = 1;
+    }
+
+#ifdef BSD4_2
+    /* 4.2BSD dependent - take it out if not */
+    setlinebuf( stderr );
+#endif /* BSD4_2 */
+
+    /* Argument Processing
+     * All flags are optional.
+     * -D => debug
+     * -V => print Version; debug verbose
+     * -d => do_decomp
+     * -v => unquiet
+     * -f => force overwrite of output file
+     * -n => no header: useful to uncompress old files
+     * -b maxbits => maxbits.  If -b is specified, then maxbits MUST be
+     *	    given also.
+     * -c => cat all output to stdout
+     * -C => generate output compatible with compress 2.0.
+     * if a string is left, must be an input filename.
+     */
+    for (argc--, argv++; argc > 0; argc--, argv++) {
+	if (**argv == '-') {	/* A flag argument */
+	    while (*++(*argv)) {	/* Process all flags in this arg */
+		switch (**argv) {
+#ifdef DEBUG
+		    case 'D':
+			debug = 1;
+			break;
+		    case 'V':
+			verbose = 1;
+			version();
+			break;
+#else
+		    case 'V':
+			version();
+			break;
+#endif /* DEBUG */
+		    case 'v':
+			quiet = 0;
+			break;
+		    case 'd':
+			do_decomp = 1;
+			break;
+		    case 'f':
+		    case 'F':
+			overwrite = 1;
+			force = 1;
+			break;
+		    case 'n':
+			nomagic = 1;
+			break;
+		    case 'C':
+			block_compress = 0;
+			break;
+		    case 'b':
+			if (!ARGVAL()) {
+			    fprintf(stderr, "Missing maxbits\n");
+			    Usage();
+			    exit(1);
+			}
+			maxbits = atoi(*argv);
+			goto nextarg;
+		    case 'c':
+			zcat_flg = 1;
+			break;
+		    case 'q':
+			quiet = 1;
+			break;
+		    default:
+			fprintf(stderr, "Unknown flag: '%c'; ", **argv);
+			Usage();
+			exit(1);
+		}
+	    }
+	}
+	else {		/* Input file name */
+	    *fileptr++ = *argv;	/* Build input file list */
+	    *fileptr = NULL;
+	    /* process nextarg; */
+	}
+	nextarg: continue;
+    }
+
+    if(maxbits < INIT_BITS) maxbits = INIT_BITS;
+    if (maxbits > BITS) maxbits = BITS;
+    maxmaxcode = 1 << maxbits;
+
+    if (*filelist != NULL) {
+	for (fileptr = filelist; *fileptr; fileptr++) {
+	    exit_stat = 0;
+	    if (do_decomp != 0) {			/* DECOMPRESSION */
+		/* Check for .Z suffix */
+		if (strcmp(*fileptr + strlen(*fileptr) - 2, ".Z") != 0) {
+		    /* No .Z: tack one on */
+		    strcpy(tempname, *fileptr);
+		    strcat(tempname, ".Z");
+		    *fileptr = tempname;
+		}
+		/* Open input file */
+		if ((freopen(*fileptr, "r", stdin)) == NULL) {
+			perror(*fileptr); continue;
+		}
+		/* Check the magic number */
+		if (nomagic == 0) {
+		    if ((getchar() != (magic_header[0] & 0xFF))
+		     || (getchar() != (magic_header[1] & 0xFF))) {
+			fprintf(stderr, "%s: not in compressed format\n",
+			    *fileptr);
+		    continue;
+		    }
+		    maxbits = getchar();	/* set -b from file */
+		    block_compress = maxbits & BLOCK_MASK;
+		    maxbits &= BIT_MASK;
+		    maxmaxcode = 1 << maxbits;
+		    if(maxbits > BITS) {
+			fprintf(stderr,
+			"%s: compressed with %d bits, can only handle %d bits\n",
+			*fileptr, maxbits, BITS);
+			continue;
+		    }
+		}
+		/* Generate output filename */
+		strcpy(ofname, *fileptr);
+		ofname[strlen(*fileptr) - 2] = '\0';  /* Strip off .Z */
+	    } else {					/* COMPRESSION */
+		if (strcmp(*fileptr + strlen(*fileptr) - 2, ".Z") == 0) {
+		    	fprintf(stderr, "%s: already has .Z suffix -- no change\n",
+			    *fileptr);
+		    continue;
+		}
+		/* Open input file */
+		if ((freopen(*fileptr, "r", stdin)) == NULL) {
+		    perror(*fileptr); continue;
+		}
+		stat ( *fileptr, &statbuf );
+		fsize = (long) statbuf.st_size;
+		/*
+		 * tune hash table size for small files -- ad hoc,
+		 * but the sizes match earlier #defines, which
+		 * serve as upper bounds on the number of output codes. 
+		 */
+		hsize = HSIZE;
+		if ( fsize < (1 << 12) )
+		    hsize = min ( 5003, HSIZE );
+		else if ( fsize < (1 << 13) )
+		    hsize = min ( 9001, HSIZE );
+		else if ( fsize < (1 << 14) )
+		    hsize = min ( 18013, HSIZE );
+		else if ( fsize < (1 << 15) )
+		    hsize = min ( 35023, HSIZE );
+		else if ( fsize < 47000 )
+		    hsize = min ( 50021, HSIZE );
+
+		/* Generate output filename */
+		strcpy(ofname, *fileptr);
+#ifndef BSD4_2		/* Short filenames */
+		if ((cp=rindex(ofname,'/')) != NULL)	cp++;
+		else					cp = ofname;
+		if (strlen(cp) > 12) {
+		    fprintf(stderr,"%s: filename too long to tack on .Z\n",cp);
+		    continue;
+		}
+#endif  /* BSD4_2		Long filenames allowed */
+		strcat(ofname, ".Z");
+	    }
+	    /* Check for overwrite of existing file */
+	    if (overwrite == 0 && zcat_flg == 0) {
+		if (stat(ofname, &statbuf) == 0) {
+		    char response[2];
+		    response[0] = 'n';
+		    fprintf(stderr, "%s already exists;", ofname);
+		    if (foreground()) {
+			fprintf(stderr, " do you wish to overwrite %s (y or n)? ",
+			ofname);
+			fflush(stderr);
+			read(2, response, 2);
+			while (response[1] != '\n') {
+			    if (read(2, response+1, 1) < 0) {	/* Ack! */
+				perror("stderr"); break;
+			    }
+			}
+		    }
+		    if (response[0] != 'y') {
+			fprintf(stderr, "\tnot overwritten\n");
+			continue;
+		    }
+		}
+	    }
+	    if(zcat_flg == 0) {		/* Open output file */
+		if (freopen(ofname, "w", stdout) == NULL) {
+		    perror(ofname);
+		    continue;
+		}
+		if(!quiet)
+			fprintf(stderr, "%s: ", *fileptr);
+	    }
+
+	    /* Actually do the compression/decompression */
+	    if (do_decomp == 0)	compress();
+#ifndef DEBUG
+	    else			decompress();
+#else
+	    else if (debug == 0)	decompress();
+	    else			printcodes();
+	    if (verbose)		dump_tab();
+#endif /* DEBUG */
+	    if(zcat_flg == 0) {
+		copystat(*fileptr, ofname);	/* Copy stats */
+		if((exit_stat == 1) || (!quiet))
+			putc('\n', stderr);
+	    }
+	}
+    } else {		/* Standard input */
+	if (do_decomp == 0) {
+		compress();
+#ifdef DEBUG
+		if(verbose)		dump_tab();
+#endif /* DEBUG */
+		if(!quiet)
+			putc('\n', stderr);
+	} else {
+	    /* Check the magic number */
+	    if (nomagic == 0) {
+		if ((getchar()!=(magic_header[0] & 0xFF))
+		 || (getchar()!=(magic_header[1] & 0xFF))) {
+		    fprintf(stderr, "stdin: not in compressed format\n");
+		    exit(1);
+		}
+		maxbits = getchar();	/* set -b from file */
+		block_compress = maxbits & BLOCK_MASK;
+		maxbits &= BIT_MASK;
+		maxmaxcode = 1 << maxbits;
+		fsize = 100000;		/* assume stdin large for USERMEM */
+		if(maxbits > BITS) {
+			fprintf(stderr,
+			"stdin: compressed with %d bits, can only handle %d bits\n",
+			maxbits, BITS);
+			exit(1);
+		}
+	    }
+#ifndef DEBUG
+	    decompress();
+#else
+	    if (debug == 0)	decompress();
+	    else		printcodes();
+	    if (verbose)	dump_tab();
+#endif /* DEBUG */
+	}
+    }
+    exit(exit_stat);
+}
+
+static int offset;
+long int in_count = 1;			/* length of input */
+long int bytes_out;			/* length of compressed output */
+long int out_count = 0;			/* # of codes output (for debugging) */
+
+/*
+ * compress stdin to stdout
+ *
+ * Algorithm:  use open addressing double hashing (no chaining) on the 
+ * prefix code / next character combination.  We do a variant of Knuth's
+ * algorithm D (vol. 3, sec. 6.4) along with G. Knott's relatively-prime
+ * secondary probe.  Here, the modular division first probe is gives way
+ * to a faster exclusive-or manipulation.  Also do block compression with
+ * an adaptive reset, whereby the code table is cleared when the compression
+ * ratio decreases, but after the table fills.  The variable-length output
+ * codes are re-sized at this point, and a special CLEAR code is generated
+ * for the decompressor.  Late addition:  construct the table according to
+ * file size for noticeable speed improvement on small files.  Please direct
+ * questions about this implementation to ames!jaw.
+ */
+
+compress() {
+    register long fcode;
+    register code_int i = 0;
+    register int c;
+    register code_int ent;
+#ifdef XENIX_16
+    register code_int disp;
+#else	/* Normal machine */
+    register int disp;
+#endif
+    register code_int hsize_reg;
+    register int hshift;
+
+#ifndef COMPATIBLE
+    if (nomagic == 0) {
+	putchar(magic_header[0]); putchar(magic_header[1]);
+	putchar((char)(maxbits | block_compress));
+	if(ferror(stdout))
+		writeerr();
+    }
+#endif /* COMPATIBLE */
+
+    offset = 0;
+    bytes_out = 3;		/* includes 3-byte header mojo */
+    out_count = 0;
+    clear_flg = 0;
+    ratio = 0;
+    in_count = 1;
+    checkpoint = CHECK_GAP;
+    maxcode = MAXCODE(n_bits = INIT_BITS);
+    free_ent = ((block_compress) ? FIRST : 256 );
+
+    ent = getchar ();
+
+    hshift = 0;
+    for ( fcode = (long) hsize;  fcode < 65536L; fcode *= 2L )
+    	hshift++;
+    hshift = 8 - hshift;		/* set hash code range bound */
+
+    hsize_reg = hsize;
+    cl_hash( (count_int) hsize_reg);		/* clear hash table */
+
+#ifdef SIGNED_COMPARE_SLOW
+    while ( (c = getchar()) != (unsigned) EOF ) {
+#else
+    while ( (c = getchar()) != EOF ) {
+#endif
+	in_count++;
+	fcode = (long) (((long) c << maxbits) + ent);
+ 	i = ((c << hshift) ^ ent);	/* xor hashing */
+
+	if ( htabof (i) == fcode ) {
+	    ent = codetabof (i);
+	    continue;
+	} else if ( (long)htabof (i) < 0 )	/* empty slot */
+	    goto nomatch;
+ 	disp = hsize_reg - i;		/* secondary hash (after G. Knott) */
+	if ( i == 0 )
+	    disp = 1;
+probe:
+	if ( (i -= disp) < 0 )
+	    i += hsize_reg;
+
+	if ( htabof (i) == fcode ) {
+	    ent = codetabof (i);
+	    continue;
+	}
+	if ( (long)htabof (i) > 0 ) 
+	    goto probe;
+nomatch:
+	output ( (code_int) ent );
+	out_count++;
+ 	ent = c;
+#ifdef SIGNED_COMPARE_SLOW
+	if ( (unsigned) free_ent < (unsigned) maxmaxcode) {
+#else
+	if ( free_ent < maxmaxcode ) {
+#endif
+ 	    codetabof (i) = free_ent++;	/* code -> hashtable */
+	    htabof (i) = fcode;
+	}
+	else if ( (count_int)in_count >= checkpoint && block_compress )
+	    cl_block ();
+    }
+    /*
+     * Put out the final code.
+     */
+    output( (code_int)ent );
+    out_count++;
+    output( (code_int)-1 );
+
+    /*
+     * Print out stats on stderr
+     */
+    if(zcat_flg == 0 && !quiet) {
+#ifdef DEBUG
+	fprintf( stderr,
+		"%ld chars in, %ld codes (%ld bytes) out, compression factor: ",
+		in_count, out_count, bytes_out );
+	prratio( stderr, in_count, bytes_out );
+	fprintf( stderr, "\n");
+	fprintf( stderr, "\tCompression as in compact: " );
+	prratio( stderr, in_count-bytes_out, in_count );
+	fprintf( stderr, "\n");
+	fprintf( stderr, "\tLargest code (of last block) was %d (%d bits)\n",
+		free_ent - 1, n_bits );
+#else /* !DEBUG */
+	fprintf( stderr, "Compression: " );
+	prratio( stderr, in_count-bytes_out, in_count );
+#endif /* DEBUG */
+    }
+    if(bytes_out > in_count)	/* exit(2) if no savings */
+	exit_stat = 2;
+    return;
+}
+
+/*****************************************************************
+ * TAG( output )
+ *
+ * Output the given code.
+ * Inputs:
+ * 	code:	A n_bits-bit integer.  If == -1, then EOF.  This assumes
+ *		that n_bits =< (long)wordsize - 1.
+ * Outputs:
+ * 	Outputs code to the file.
+ * Assumptions:
+ *	Chars are 8 bits long.
+ * Algorithm:
+ * 	Maintain a BITS character long buffer (so that 8 codes will
+ * fit in it exactly).  Use the VAX insv instruction to insert each
+ * code in turn.  When the buffer fills up empty it and start over.
+ */
+
+static char buf[BITS];
+
+#ifndef vax
+char_type lmask[9] = {0xff, 0xfe, 0xfc, 0xf8, 0xf0, 0xe0, 0xc0, 0x80, 0x00};
+char_type rmask[9] = {0x00, 0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff};
+#endif /* vax */
+
+output( code )
+code_int  code;
+{
+#ifdef DEBUG
+    static int col = 0;
+#endif /* DEBUG */
+
+    /*
+     * On the VAX, it is important to have the register declarations
+     * in exactly the order given, or the asm will break.
+     */
+    register int r_off = offset, bits= n_bits;
+    register char * bp = buf;
+
+#ifdef DEBUG
+	if ( verbose )
+	    fprintf( stderr, "%5d%c", code,
+		    (col+=6) >= 74 ? (col = 0, '\n') : ' ' );
+#endif /* DEBUG */
+    if ( code >= 0 ) {
+#ifdef vax
+	/* VAX DEPENDENT!! Implementation on other machines is below.
+	 *
+	 * Translation: Insert BITS bits from the argument starting at
+	 * offset bits from the beginning of buf.
+	 */
+	0;	/* Work around for pcc -O bug with asm and if stmt */
+	asm( "insv	4(ap),r11,r10,(r9)" );
+#else /* not a vax */
+/* 
+ * byte/bit numbering on the VAX is simulated by the following code
+ */
+	/*
+	 * Get to the first byte.
+	 */
+	bp += (r_off >> 3);
+	r_off &= 7;
+	/*
+	 * Since code is always >= 8 bits, only need to mask the first
+	 * hunk on the left.
+	 */
+	*bp = (*bp & rmask[r_off]) | (code << r_off) & lmask[r_off];
+	bp++;
+	bits -= (8 - r_off);
+	code >>= 8 - r_off;
+	/* Get any 8 bit parts in the middle (<=1 for up to 16 bits). */
+	if ( bits >= 8 ) {
+	    *bp++ = code;
+	    code >>= 8;
+	    bits -= 8;
+	}
+	/* Last bits. */
+	if(bits)
+	    *bp = code;
+#endif /* vax */
+	offset += n_bits;
+	if ( offset == (n_bits << 3) ) {
+	    bp = buf;
+	    bits = n_bits;
+	    bytes_out += bits;
+	    do
+		putchar(*bp++);
+	    while(--bits);
+	    offset = 0;
+	}
+
+	/*
+	 * If the next entry is going to be too big for the code size,
+	 * then increase it, if possible.
+	 */
+	if ( free_ent > maxcode || (clear_flg > 0))
+	{
+	    /*
+	     * Write the whole buffer, because the input side won't
+	     * discover the size increase until after it has read it.
+	     */
+	    if ( offset > 0 ) {
+		if( fwrite( buf, 1, n_bits, stdout ) != n_bits)
+			writeerr();
+		bytes_out += n_bits;
+	    }
+	    offset = 0;
+
+	    if ( clear_flg ) {
+    	        maxcode = MAXCODE (n_bits = INIT_BITS);
+	        clear_flg = 0;
+	    }
+	    else {
+	    	n_bits++;
+	    	if ( n_bits == maxbits )
+		    maxcode = maxmaxcode;
+	    	else
+		    maxcode = MAXCODE(n_bits);
+	    }
+#ifdef DEBUG
+	    if ( debug ) {
+		fprintf( stderr, "\nChange to %d bits\n", n_bits );
+		col = 0;
+	    }
+#endif /* DEBUG */
+	}
+    } else {
+	/*
+	 * At EOF, write the rest of the buffer.
+	 */
+	if ( offset > 0 )
+	    fwrite( buf, 1, (offset + 7) / 8, stdout );
+	bytes_out += (offset + 7) / 8;
+	offset = 0;
+	fflush( stdout );
+#ifdef DEBUG
+	if ( verbose )
+	    fprintf( stderr, "\n" );
+#endif /* DEBUG */
+	if( ferror( stdout ) )
+		writeerr();
+    }
+}
+
+/*
+ * Decompress stdin to stdout.  This routine adapts to the codes in the
+ * file building the "string" table on-the-fly; requiring no table to
+ * be stored in the compressed file.  The tables used herein are shared
+ * with those of the compress() routine.  See the definitions above.
+ */
+
+decompress() {
+    register char_type *stackp;
+    register int finchar;
+    register code_int code, oldcode, incode;
+
+    /*
+     * As above, initialize the first 256 entries in the table.
+     */
+    maxcode = MAXCODE(n_bits = INIT_BITS);
+    for ( code = 255; code >= 0; code-- ) {
+	tab_prefixof(code) = 0;
+	tab_suffixof(code) = (char_type)code;
+    }
+    free_ent = ((block_compress) ? FIRST : 256 );
+
+    finchar = oldcode = getcode();
+    if(oldcode == -1)	/* EOF already? */
+	return;			/* Get out of here */
+    putchar( (char)finchar );		/* first code must be 8 bits = char */
+    if(ferror(stdout))		/* Crash if can't write */
+	writeerr();
+    stackp = de_stack;
+
+    while ( (code = getcode()) > -1 ) {
+
+	if ( (code == CLEAR) && block_compress ) {
+	    for ( code = 255; code >= 0; code-- )
+		tab_prefixof(code) = 0;
+	    clear_flg = 1;
+	    free_ent = FIRST - 1;
+	    if ( (code = getcode ()) == -1 )	/* O, untimely death! */
+		break;
+	}
+	incode = code;
+	/*
+	 * Special case for KwKwK string.
+	 */
+	if ( code >= free_ent ) {
+            *stackp++ = finchar;
+	    code = oldcode;
+	}
+
+	/*
+	 * Generate output characters in reverse order
+	 */
+#ifdef SIGNED_COMPARE_SLOW
+	while ( ((unsigned long)code) >= ((unsigned long)256) ) {
+#else
+	while ( code >= 256 ) {
+#endif
+	    *stackp++ = tab_suffixof(code);
+	    code = tab_prefixof(code);
+	}
+	*stackp++ = finchar = tab_suffixof(code);
+
+	/*
+	 * And put them out in forward order
+	 */
+	do
+	    putchar ( *--stackp );
+	while ( stackp > de_stack );
+
+	/*
+	 * Generate the new entry.
+	 */
+	if ( (code=free_ent) < maxmaxcode ) {
+	    tab_prefixof(code) = (unsigned short)oldcode;
+	    tab_suffixof(code) = finchar;
+	    free_ent = code+1;
+	} 
+	/*
+	 * Remember previous code.
+	 */
+	oldcode = incode;
+    }
+    fflush( stdout );
+    if(ferror(stdout))
+	writeerr();
+}
+
+/*****************************************************************
+ * TAG( getcode )
+ *
+ * Read one code from the standard input.  If EOF, return -1.
+ * Inputs:
+ * 	stdin
+ * Outputs:
+ * 	code or -1 is returned.
+ */
+
+code_int
+getcode() {
+    /*
+     * On the VAX, it is important to have the register declarations
+     * in exactly the order given, or the asm will break.
+     */
+    register code_int code;
+    static int offset = 0, size = 0;
+    static char_type buf[BITS];
+    register int r_off, bits;
+    register char_type *bp = buf;
+
+    if ( clear_flg > 0 || offset >= size || free_ent > maxcode ) {
+	/*
+	 * If the next entry will be too big for the current code
+	 * size, then we must increase the size.  This implies reading
+	 * a new buffer full, too.
+	 */
+	if ( free_ent > maxcode ) {
+	    n_bits++;
+	    if ( n_bits == maxbits )
+		maxcode = maxmaxcode;	/* won't get any bigger now */
+	    else
+		maxcode = MAXCODE(n_bits);
+	}
+	if ( clear_flg > 0) {
+    	    maxcode = MAXCODE (n_bits = INIT_BITS);
+	    clear_flg = 0;
+	}
+	size = fread( buf, 1, n_bits, stdin );
+	if ( size <= 0 )
+	    return -1;			/* end of file */
+	offset = 0;
+	/* Round size down to integral number of codes */
+	size = (size << 3) - (n_bits - 1);
+    }
+    r_off = offset;
+    bits = n_bits;
+#ifdef vax
+    asm( "extzv   r10,r9,(r8),r11" );
+#else /* not a vax */
+	/*
+	 * Get to the first byte.
+	 */
+	bp += (r_off >> 3);
+	r_off &= 7;
+	/* Get first part (low order bits) */
+#ifdef NO_UCHAR
+	code = ((*bp++ >> r_off) & rmask[8 - r_off]) & 0xff;
+#else
+	code = (*bp++ >> r_off);
+#endif /* NO_UCHAR */
+	bits -= (8 - r_off);
+	r_off = 8 - r_off;		/* now, offset into code word */
+	/* Get any 8 bit parts in the middle (<=1 for up to 16 bits). */
+	if ( bits >= 8 ) {
+#ifdef NO_UCHAR
+	    code |= (*bp++ & 0xff) << r_off;
+#else
+	    code |= *bp++ << r_off;
+#endif /* NO_UCHAR */
+	    r_off += 8;
+	    bits -= 8;
+	}
+	/* high order bits. */
+	code |= (*bp & rmask[bits]) << r_off;
+#endif /* vax */
+    offset += n_bits;
+
+    return code;
+}
+
+char *
+rindex(s, c)		/* For those who don't have it in libc.a */
+register char *s, c;
+{
+	char *p;
+	for (p = NULL; *s; s++)
+	    if (*s == c)
+		p = s;
+	return(p);
+}
+
+#ifdef DEBUG
+printcodes()
+{
+    /*
+     * Just print out codes from input file.  For debugging.
+     */
+    code_int code;
+    int col = 0, bits;
+
+    bits = n_bits = INIT_BITS;
+    maxcode = MAXCODE(n_bits);
+    free_ent = ((block_compress) ? FIRST : 256 );
+    while ( ( code = getcode() ) >= 0 ) {
+	if ( (code == CLEAR) && block_compress ) {
+   	    free_ent = FIRST - 1;
+   	    clear_flg = 1;
+	}
+	else if ( free_ent < maxmaxcode )
+	    free_ent++;
+	if ( bits != n_bits ) {
+	    fprintf(stderr, "\nChange to %d bits\n", n_bits );
+	    bits = n_bits;
+	    col = 0;
+	}
+	fprintf(stderr, "%5d%c", code, (col+=6) >= 74 ? (col = 0, '\n') : ' ' );
+    }
+    putc( '\n', stderr );
+    exit( 0 );
+}
+
+code_int sorttab[1<<BITS];	/* sorted pointers into htab */
+
+dump_tab()	/* dump string table */
+{
+    register int i, first;
+    register ent;
+#define STACK_SIZE	15000
+    int stack_top = STACK_SIZE;
+    register c;
+
+    if(do_decomp == 0) {	/* compressing */
+	register int flag = 1;
+
+	for(i=0; i<hsize; i++) {	/* build sort pointers */
+		if((long)htabof(i) >= 0) {
+			sorttab[codetabof(i)] = i;
+		}
+	}
+	first = block_compress ? FIRST : 256;
+	for(i = first; i < free_ent; i++) {
+		fprintf(stderr, "%5d: \"", i);
+		de_stack[--stack_top] = '\n';
+		de_stack[--stack_top] = '"';
+		stack_top = in_stack((htabof(sorttab[i])>>maxbits)&0xff, 
+                                     stack_top);
+		for(ent=htabof(sorttab[i]) & ((1<<maxbits)-1);
+		    ent > 256;
+		    ent=htabof(sorttab[ent]) & ((1<<maxbits)-1)) {
+			stack_top = in_stack(htabof(sorttab[ent]) >> maxbits,
+						stack_top);
+		}
+		stack_top = in_stack(ent, stack_top);
+		fwrite( &de_stack[stack_top], 1, STACK_SIZE-stack_top, stderr);
+	   	stack_top = STACK_SIZE;
+	}
+   } else if(!debug) {	/* decompressing */
+
+       for ( i = 0; i < free_ent; i++ ) {
+	   ent = i;
+	   c = tab_suffixof(ent);
+	   if ( isascii(c) && isprint(c) )
+	       fprintf( stderr, "%5d: %5d/'%c'  \"",
+			   ent, tab_prefixof(ent), c );
+	   else
+	       fprintf( stderr, "%5d: %5d/\\%03o \"",
+			   ent, tab_prefixof(ent), c );
+	   de_stack[--stack_top] = '\n';
+	   de_stack[--stack_top] = '"';
+	   for ( ; ent != NULL;
+		   ent = (ent >= FIRST ? tab_prefixof(ent) : NULL) ) {
+	       stack_top = in_stack(tab_suffixof(ent), stack_top);
+	   }
+	   fwrite( &de_stack[stack_top], 1, STACK_SIZE - stack_top, stderr );
+	   stack_top = STACK_SIZE;
+       }
+    }
+}
+
+int
+in_stack(c, stack_top)
+	register c, stack_top;
+{
+	if ( (isascii(c) && isprint(c) && c != '\\') || c == ' ' ) {
+	    de_stack[--stack_top] = c;
+	} else {
+	    switch( c ) {
+	    case '\n': de_stack[--stack_top] = 'n'; break;
+	    case '\t': de_stack[--stack_top] = 't'; break;
+	    case '\b': de_stack[--stack_top] = 'b'; break;
+	    case '\f': de_stack[--stack_top] = 'f'; break;
+	    case '\r': de_stack[--stack_top] = 'r'; break;
+	    case '\\': de_stack[--stack_top] = '\\'; break;
+	    default:
+	 	de_stack[--stack_top] = '0' + c % 8;
+	 	de_stack[--stack_top] = '0' + (c / 8) % 8;
+	 	de_stack[--stack_top] = '0' + c / 64;
+	 	break;
+	    }
+	    de_stack[--stack_top] = '\\';
+	}
+	return stack_top;
+}
+#endif /* DEBUG */
+
+writeerr()
+{
+    perror ( ofname );
+    unlink ( ofname );
+    exit ( 1 );
+}
+
+copystat(ifname, ofname)
+char *ifname, *ofname;
+{
+    struct stat statbuf;
+    int mode;
+    time_t timep[2];
+
+    fclose(stdout);
+    if (stat(ifname, &statbuf)) {		/* Get stat on input file */
+	perror(ifname);
+	return;
+    }
+    if ((statbuf.st_mode & S_IFMT/*0170000*/) != S_IFREG/*0100000*/) {
+	if(quiet)
+	    	fprintf(stderr, "%s: ", ifname);
+	fprintf(stderr, " -- not a regular file: unchanged");
+	exit_stat = 1;
+    } else if (statbuf.st_nlink > 1) {
+	if(quiet)
+	    	fprintf(stderr, "%s: ", ifname);
+	fprintf(stderr, " -- has %d other links: unchanged",
+		statbuf.st_nlink - 1);
+	exit_stat = 1;
+    } else if (exit_stat == 2 && (!force)) { /* No compression: remove file.Z */
+	if(!quiet)
+		fprintf(stderr, " -- file unchanged");
+    } else {			/* ***** Successful Compression ***** */
+	exit_stat = 0;
+	mode = statbuf.st_mode & 07777;
+	if (chmod(ofname, mode))		/* Copy modes */
+	    perror(ofname);
+	chown(ofname, statbuf.st_uid, statbuf.st_gid);	/* Copy ownership */
+	timep[0] = statbuf.st_atime;
+	timep[1] = statbuf.st_mtime;
+	utime(ofname, timep);	/* Update last accessed and modified times */
+	if (unlink(ifname))	/* Remove input file */
+	    perror(ifname);
+	if(!quiet)
+		fprintf(stderr, " -- replaced with %s", ofname);
+	return;		/* Successful return */
+    }
+
+    /* Unsuccessful return -- one of the tests failed */
+    if (unlink(ofname))
+	perror(ofname);
+}
+/*
+ * This routine returns 1 if we are running in the foreground and stderr
+ * is a tty.
+ */
+foreground()
+{
+	if(bgnd_flag) {	/* background? */
+		return(0);
+	} else {			/* foreground */
+		if(isatty(2)) {		/* and stderr is a tty */
+			return(1);
+		} else {
+			return(0);
+		}
+	}
+}
+
+onintr ( )
+{
+    unlink ( ofname );
+    exit ( 1 );
+}
+
+oops ( )	/* wild pointer -- assume bad input */
+{
+    if ( do_decomp == 1 ) 
+    	fprintf ( stderr, "uncompress: corrupt input\n" );
+    unlink ( ofname );
+    exit ( 1 );
+}
+
+cl_block ()		/* table clear for block compress */
+{
+    register long int rat;
+
+    checkpoint = in_count + CHECK_GAP;
+#ifdef DEBUG
+	if ( debug ) {
+    		fprintf ( stderr, "count: %ld, ratio: ", in_count );
+     		prratio ( stderr, in_count, bytes_out );
+		fprintf ( stderr, "\n");
+	}
+#endif /* DEBUG */
+
+    if(in_count > 0x007fffff) {	/* shift will overflow */
+	rat = bytes_out >> 8;
+	if(rat == 0) {		/* Don't divide by zero */
+	    rat = 0x7fffffff;
+	} else {
+	    rat = in_count / rat;
+	}
+    } else {
+	rat = (in_count << 8) / bytes_out;	/* 8 fractional bits */
+    }
+    if ( rat > ratio ) {
+	ratio = rat;
+    } else {
+	ratio = 0;
+#ifdef DEBUG
+	if(verbose)
+		dump_tab();	/* dump string table */
+#endif
+ 	cl_hash ( (count_int) hsize );
+	free_ent = FIRST;
+	clear_flg = 1;
+	output ( (code_int) CLEAR );
+#ifdef DEBUG
+	if(debug)
+    		fprintf ( stderr, "clear\n" );
+#endif /* DEBUG */
+    }
+}
+
+cl_hash(hsize)		/* reset code table */
+	register count_int hsize;
+{
+#ifndef XENIX_16	/* Normal machine */
+	register count_int *htab_p = htab+hsize;
+#else
+	register j;
+	register long k = hsize;
+	register count_int *htab_p;
+#endif
+	register long i;
+	register long m1 = -1;
+
+#ifdef XENIX_16
+    for(j=0; j<=8 && k>=0; j++,k-=8192) {
+	i = 8192;
+	if(k < 8192) {
+		i = k;
+	}
+	htab_p = &(htab[j][i]);
+	i -= 16;
+	if(i > 0) {
+#else
+	i = hsize - 16;
+#endif
+ 	do {				/* might use Sys V memset(3) here */
+		*(htab_p-16) = m1;
+		*(htab_p-15) = m1;
+		*(htab_p-14) = m1;
+		*(htab_p-13) = m1;
+		*(htab_p-12) = m1;
+		*(htab_p-11) = m1;
+		*(htab_p-10) = m1;
+		*(htab_p-9) = m1;
+		*(htab_p-8) = m1;
+		*(htab_p-7) = m1;
+		*(htab_p-6) = m1;
+		*(htab_p-5) = m1;
+		*(htab_p-4) = m1;
+		*(htab_p-3) = m1;
+		*(htab_p-2) = m1;
+		*(htab_p-1) = m1;
+		htab_p -= 16;
+	} while ((i -= 16) >= 0);
+#ifdef XENIX_16
+	}
+    }
+#endif
+    	for ( i += 16; i > 0; i-- )
+		*--htab_p = m1;
+}
+
+prratio(stream, num, den)
+FILE *stream;
+long int num, den;
+{
+	register int q;			/* Doesn't need to be long */
+
+	if(num > 214748L) {		/* 2147483647/10000 */
+		q = num / (den / 10000L);
+	} else {
+		q = 10000L * num / den;		/* Long calculations, though */
+	}
+	if (q < 0) {
+		putc('-', stream);
+		q = -q;
+	}
+	fprintf(stream, "%d.%02d%%", q / 100, q % 100);
+}
+
+version()
+{
+	fprintf(stderr, "%s\n", rcs_ident);
+	fprintf(stderr, "Options: ");
+#ifdef vax
+	fprintf(stderr, "vax, ");
+#endif
+#ifdef NO_UCHAR
+	fprintf(stderr, "NO_UCHAR, ");
+#endif
+#ifdef SIGNED_COMPARE_SLOW
+	fprintf(stderr, "SIGNED_COMPARE_SLOW, ");
+#endif
+#ifdef XENIX_16
+	fprintf(stderr, "XENIX_16, ");
+#endif
+#ifdef COMPATIBLE
+	fprintf(stderr, "COMPATIBLE, ");
+#endif
+#ifdef DEBUG
+	fprintf(stderr, "DEBUG, ");
+#endif
+#ifdef BSD4_2
+	fprintf(stderr, "BSD4_2, ");
+#endif
+	fprintf(stderr, "BITS = %d\n", BITS);
+}
+@//E*O*F Compress/compress.c//
+chmod u=r,g=r,o=r Compress/compress.c
+ 
+echo x - Compress/Makefile
+sed 's/^@//' > "Compress/Makefile" <<'@//E*O*F Compress/Makefile//'
+CC=cc
+COMFLAGS=-O
+BIN=/usr/local/bin
+MAN=/usr/man/local/man1
+#define to "l" if manuals go on /usr/man/manl
+L=1
+
+all :	compress atob btoa
+
+compress : compress.c USERMEM
+	$(CC) $(COMFLAGS) -DUSERMEM=`cat USERMEM` -o compress compress.c
+
+# USERMEM may have to be set by hand.  It should contain the amount of
+# available user memory in bytes.  See the README file for more info.
+USERMEM:
+	sh usermem > USERMEM
+
+atob:	atob.c
+	$(CC) $(COMFLAGS) -o atob atob.c
+
+btoa:	btoa.c
+	$(CC) $(COMFLAGS) -o btoa btoa.c
+
+install: compress atob btoa zmore zcmp zdiff compressdir uncompressdir btoa.1 compress.1 compressdir.1 zmore.1 zcmp.1 tarmail untarmail
+	cp compress $(BIN)
+	rm -f $(BIN)/uncompress $(BIN)/zcat
+	ln $(BIN)/compress $(BIN)/uncompress
+	ln $(BIN)/compress $(BIN)/zcat
+	cp zmore zcmp zdiff compressdir uncompressdir $(BIN)
+	cp atob btoa tarmail untarmail $(BIN)
+	cp btoa.1 $(MAN)/btoa.$(L)
+	rm -f $(MAN)/atob.$(L) $(MAN)/tarmail.$(L) $(MAN)/untarmail.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/atob.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/tarmail.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/untarmail.$(L)
+	cp compress.1 $(MAN)/compress.$(L)
+	rm -f $(MAN)/uncompress.$(L) $(MAN)/zcat.$(L)
+	ln $(MAN)/compress.$(L) $(MAN)/uncompress.$(L)
+	ln $(MAN)/compress.$(L) $(MAN)/zcat.$(L)
+	cp compressdir.1 $(MAN)/compressdir.$(L)
+	cp zmore.1 $(MAN)/zmore.$(L)
+	cp zcmp.1 $(MAN)/zcmp.$(L)
+	rm -f $(MAN)/zdiff.$(L)
+	ln $(MAN)/zcmp.$(L) $(MAN)/zdiff.$(L)
+
+clean:
+	rm -f compress atob btoa
+@//E*O*F Compress/Makefile//
+chmod u=r,g=r,o=r Compress/Makefile
+ 
+echo x - Compress/usermem
+sed 's/^@//' > "Compress/usermem" <<'@//E*O*F Compress/usermem//'
+: This shell script snoops around to find the maximum amount of available
+: user memory.  These variables need to be set only if there is no
+: /usr/adm/messages.  KMEM, UNIX, and CLICKSIZE can be set on the command
+: line, if desired, e.g. UNIX=/unix
+KMEM=/dev/kmem		# User needs read access to KMEM
+UNIX=
+# VAX			CLICKSIZE=512,	UNIX=/vmunix
+# PDP-11		CLICKSIZE=64,	UNIX=/unix
+# CADLINC 68000		CLICKSIZE=4096,	UNIX=/unix
+# Perkin-Elmer 3205	CLICKSIZE=4096,	UNIX=/edition7
+# Perkin-Elmer all others, CLICKSIZE=2048, UNIX=/edition7
+CLICKSIZE=512
+eval $*
+
+SIZE=0
+if test -r /usr/adm/messages	# probably the most transportable
+then
+    SIZE=`grep avail /usr/adm/messages | sed -n '$s/.*[ 	]//p'`
+fi
+
+echo initial SIZE=$SIZE
+
+if test 0$SIZE -le 0		# no SIZE in /usr/adm/messages
+then
+    if test -r $KMEM		# Readable KMEM
+    then
+	if test -n "$UNIX"
+	then
+	    : User must have specified it already.
+	elif test -r /vmunix
+	then
+	    UNIX=/vmunix
+	    CLICKSIZE=512	# Probably VAX
+	elif test -r /edition7
+	then
+	    UNIX=/edition7
+	    CLICKSIZE=2048	# Perkin-Elmer: change to 4096 on a 3205
+	elif test -r /unix
+	then
+	    UNIX=/unix		# Could be anything
+	fi
+	if test -n "$UNIX"
+	then
+	    SIZE=`echo maxmem/D | adb $UNIX $KMEM | sed -n '$s/.*[ 	]//p'`
+	    if test 0$SIZE -le 0
+	    then
+		SIZE=`echo physmem/D | adb $UNIX $KMEM | sed -n '$s/.*[ 	]//p'`
+	    fi
+	    echo SIZE=$SIZE, CLICKSIZE=$CLICKSIZE
+	    SIZE=`expr 0$SIZE '*' $CLICKSIZE`
+	fi
+    fi
+fi
+
+case $UNIX in
+    /vmunix)		# Assume 4.2bsd: check for resource limits
+	MAXSIZE=`csh -c limit | awk 'BEGIN	{ MAXSIZE = 1000000 }
+/datasize|memoryuse/ && NF == 3	{ if ($2 < MAXSIZE) MAXSIZE = $2 }
+END	{ print MAXSIZE * 1000 }'`
+	if test $MAXSIZE -lt $SIZE
+	then
+	    SIZE=$MAXSIZE
+	fi
+	;;
+esac
+
+if test 0$SIZE -le 0
+then
+    echo 0;exit 1
+else
+    echo $SIZE
+fi
+@//E*O*F Compress/usermem//
+chmod u=r,g=r,o=r Compress/usermem
+ 
+echo x - Compress/README
+sed 's/^@//' > "Compress/README" <<'@//E*O*F Compress/README//'
+Compress version 4.0 improvements:
+	o compress() speedup (10-50%) by changing division hash to xor
+	o decompress() speedup (5-10%)
+	o Memory requirements reduced (3-30%)
+	o Stack requirements reduced to less than 4kb
+	o Removed 'Big+Fast' compress code (FBITS) because of compress speedup
+    	o Portability mods for Z8000 and PC/XT (but not zeus 3.2)
+	o Default to 'quiet' mode
+	o Unification of 'force' flags
+	o Manual page overhaul
+	o Portability enhancement for M_XENIX
+	o Removed text on #else and #endif
+	o Added "-V" switch to print version and options
+	o Added #defines for SIGNED_COMPARE_SLOW
+	o Added Makefile and "usermem" program
+	o Removed all floating point computations
+	o New programs:
+		compressdir - compress all files on a directory
+		uncompressdir - uncompress all files on a directory
+		zcmp - cmp compressed files
+		zdiff - diff compressed files
+	  The following are with thanks to philabs!per:
+		btoa - convert binary to ascii for mailing
+		atob - convert ascii to binary with checksum
+		tarmail - tar, compress, btoa, and mail files
+		untarmail - restore "tarmail" files
+
+		WARNING: These last few programs are not compatible 
+		with the original ones from the net.  The encoding
+		has changed.  See btoa.c for more info.
+
+The "usermem" script attempts to determine the maximum process size.  Some
+editing of the script may be necessary (see the comments).  If you can't get
+it to work at all, just create file "USERMEM" containing the maximum process
+size in decimal.
+
+The following preprocessor symbols control the compilation of "compress.c":
+
+	o USERMEM		Maximum process memory on the system
+	o SACREDMEM		Amount to reserve for other proceses
+	o SIGNED_COMPARE_SLOW	Unsigned compare instructions are faster
+	o NO_UCHAR		Don't use "unsigned char" types
+	o BITS			Overrules default set by USERMEM-SACREDMEM
+	o vax			Generate inline assembler
+	o interdata		Defines SIGNED_COMPARE_SLOW
+	o M_XENIX		Makes arrays < 65536 bytes each
+	o pdp11			BITS=12, NO_UCHAR
+	o z8000			BITS=12
+	o pcxt			BITS=12
+	o BSD4_2		Allow long filenames ( > 14 characters) &
+				Call setlinebuf(stderr)
+
+The difference "usermem-sacredmem" determines the maximum BITS that can be
+specified with the "-b" flag.
+
+memory: at least		BITS
+------  -- -----                ----
+     433,484			 16
+     229,600			 15
+     127,536			 14
+      73,464			 13
+           0			 12
+
+The default is BITS=16.
+
+The maximum bits can be overrulled by specifying "-DBITS=bits" at
+compilation time.
+
+WARNING: files compressed on a large machine with more bits than allowed by 
+a version of compress on a smaller machine cannot be decompressed!  Use the
+"-b12" flag to generate a file on a large machine that can be uncompressed 
+on a 16-bit machine.
+
+The output of compress 4.0 is fully compatible with that of compress 3.0.
+In other words, the output of compress 4.0 may be fed into uncompress 3.0 or
+the output of compress 3.0 may be fed into uncompress 4.0.
+
+The output of compress 4.0 not compatable with that of
+compress 2.0.  However, compress 4.0 still accepts the output of
+compress 2.0.  To generate output that is compatable with compress
+2.0, use the undocumented "-C" flag.
+
+Check the Makefile, then "make".
+@//E*O*F Compress/README//
+chmod u=r,g=r,o=r Compress/README
+ 
+echo x - Compress/README3.0
+sed 's/^@//' > "Compress/README3.0" <<'@//E*O*F Compress/README3.0//'
+Enclosed is compress version 3.0 with the following changes:
+
+1.	"Block" compression is performed.  After the BITS run out, the
+	compression ratio is checked every so often.  If it is decreasing,
+	the table is cleared and a new set of substrings are generated.
+
+	This makes the output of compress 3.0 not compatable with that of
+	compress 2.0.  However, compress 3.0 still accepts the output of
+	compress 2.0.  To generate output that is compatable with compress
+	2.0, use the undocumented "-C" flag.
+
+2.	A quiet "-q" flag has been added for use by the news system.
+
+3.	The character chaining has been deleted and the program now uses
+	hashing.  This improves the speed of the program, especially
+	during decompression.  Other speed improvements have been made,
+	such as using putc() instead of fwrite().
+
+4.	A large table is used on large machines when a relatively small
+	number of bits is specified.  This saves much time when compressing
+	for a 16-bit machine on a 32-bit virtual machine.  Note that the
+	speed improvement only occurs when the input file is > 30000
+	characters, and the -b BITS is less than or equal to the cutoff
+	described below.
+
+Most of these changes were made by James A. Woods (ames!jaw).  Thank you
+James!
+
+Version 3.0 has been beta tested on many machines.
+
+To compile compress:
+
+	cc -O -DUSERMEM=usermem -o compress compress.c
+
+Where "usermem" is the amount of physical user memory available (in bytes).  
+If any physical memory is to be reserved for other processes, put in 
+"-DSACREDMEM sacredmem", where "sacredmem" is the amount to be reserved.
+
+The difference "usermem-sacredmem" determines the maximum BITS that can be
+specified, and the cutoff bits where the large+fast table is used.
+
+memory: at least		BITS		cutoff
+------  -- -----                ----            ------
+   4,718,592 			 16		  13
+   2,621,440 			 16		  12
+   1,572,864			 16		  11
+   1,048,576			 16		  10
+     631,808			 16               --
+     329,728			 15               --
+     178,176			 14		  --
+      99,328			 13		  --
+           0			 12		  --
+
+The default memory size is 750,000 which gives a maximum BITS=16 and no
+large+fast table.
+
+The maximum bits can be overrulled by specifying "-DBITS=bits" at
+compilation time.
+
+If your machine doesn't support unsigned characters, define "NO_UCHAR" 
+when compiling.
+
+If your machine has "int" as 16-bits, define "SHORT_INT" when compiling.
+
+After compilation, move "compress" to a standard executable location, such 
+as /usr/local.  Then:
+	cd /usr/local
+	ln compress uncompress
+	ln compress zcat
+
+On machines that have a fixed stack size (such as Perkin-Elmer), set the
+stack to at least 12kb.  ("setstack compress 12" on Perkin-Elmer).
+
+Next, install the manual (compress.l).
+	cp compress.l /usr/man/manl
+	cd /usr/man/manl
+	ln compress.l uncompress.l
+	ln compress.l zcat.l
+
+		- or -
+
+	cp compress.l /usr/man/man1/compress.1
+	cd /usr/man/man1
+	ln compress.1 uncompress.1
+	ln compress.1 zcat.1
+
+The zmore shell script and manual page are for use on systems that have a
+"more(1)" program.  Install the shell script and the manual page in a "bin"
+and "man" directory, respectively.  If your system doesn't have the
+"more(1)" program, just skip "zmore".
+
+					regards,
+					petsd!joe
+
+Here is the README file from the previous version of compress (2.0):
+
+>Enclosed is compress.c version 2.0 with the following bugs fixed:
+>
+>1.	The packed files produced by compress are different on different
+>	machines and dependent on the vax sysgen option.
+>		The bug was in the different byte/bit ordering on the
+>		various machines.  This has been fixed.
+>
+>		This version is NOT compatible with the original vax posting
+>		unless the '-DCOMPATIBLE' option is specified to the C
+>		compiler.  The original posting has a bug which I fixed, 
+>		causing incompatible files.  I recommend you NOT to use this
+>		option unless you already have a lot of packed files from
+>		the original posting by thomas.
+>2.	The exit status is not well defined (on some machines) causing the
+>	scripts to fail.
+>		The exit status is now 0,1 or 2 and is documented in
+>		compress.l.
+>3.	The function getopt() is not available in all C libraries.
+>		The function getopt() is no longer referenced by the
+>		program.
+>4.	Error status is not being checked on the fwrite() and fflush() calls.
+>		Fixed.
+>
+>The following enhancements have been made:
+>
+>1.	Added facilities of "compact" into the compress program.  "Pack",
+>	"Unpack", and "Pcat" are no longer required (no longer supplied).
+>2.	Installed work around for C compiler bug with "-O".
+>3.	Added a magic number header (\037\235).  Put the bits specified
+>	in the file.
+>4.	Added "-f" flag to force overwrite of output file.
+>5.	Added "-c" flag and "zcat" program.  'ln compress zcat' after you
+>	compile.
+>6.	The 'uncompress' script has been deleted; simply 
+>	'ln compress uncompress' after you compile and it will work.
+>7.	Removed extra bit masking for machines that support unsigned
+>	characters.  If your machine doesn't support unsigned characters,
+>	define "NO_UCHAR" when compiling.
+>
+>Compile "compress.c" with "-O -o compress" flags.  Move "compress" to a
+>standard executable location, such as /usr/local.  Then:
+>	cd /usr/local
+>	ln compress uncompress
+>	ln compress zcat
+>
+>On machines that have a fixed stack size (such as Perkin-Elmer), set the
+>stack to at least 12kb.  ("setstack compress 12" on Perkin-Elmer).
+>
+>Next, install the manual (compress.l).
+>	cp compress.l /usr/man/manl		- or -
+>	cp compress.l /usr/man/man1/compress.1
+>
+>Here is the README that I sent with my first posting:
+>
+>>Enclosed is a modified version of compress.c, along with scripts to make it
+>>run identically to pack(1), unpack(1), an pcat(1).  Here is what I
+>>(petsd!joe) and a colleague (petsd!peora!srd) did:
+>>
+>>1. Removed VAX dependencies.
+>>2. Changed the struct to separate arrays; saves mucho memory.
+>>3. Did comparisons in unsigned, where possible.  (Faster on Perkin-Elmer.)
+>>4. Sorted the character next chain and changed the search to stop
+>>prematurely.  This saves a lot on the execution time when compressing.
+>>
+>>This version is totally compatible with the original version.  Even though
+>>lint(1) -p has no complaints about compress.c, it won't run on a 16-bit
+>>machine, due to the size of the arrays.
+>>
+>>Here is the README file from the original author:
+>> 
+>>>Well, with all this discussion about file compression (for news batching
+>>>in particular) going around, I decided to implement the text compression
+>>>algorithm described in the June Computer magazine.  The author claimed
+>>>blinding speed and good compression ratios.  It's certainly faster than
+>>>compact (but, then, what wouldn't be), but it's also the same speed as
+>>>pack, and gets better compression than both of them.  On 350K bytes of
+>>>unix-wizards, compact took about 8 minutes of CPU, pack took about 80
+>>>seconds, and compress (herein) also took 80 seconds.  But, compact and
+>>>pack got about 30% compression, whereas compress got over 50%.  So, I
+>>>decided I had something, and that others might be interested, too.
+>>>
+>>>As is probably true of compact and pack (although I haven't checked),
+>>>the byte order within a word is probably relevant here, but as long as
+>>>you stay on a single machine type, you should be ok.  (Can anybody
+>>>elucidate on this?)  There are a couple of asm's in the code (extv and
+>>>insv instructions), so anyone porting it to another machine will have to
+>>>deal with this anyway (and could probably make it compatible with Vax
+>>>byte order at the same time).  Anyway, I've linted the code (both with
+>>>and without -p), so it should run elsewhere.  Note the longs in the
+>>>code, you can take these out if you reduce BITS to <= 15.
+>>>
+>>>Have fun, and as always, if you make good enhancements, or bug fixes,
+>>>I'd like to see them.
+>>>
+>>>=Spencer (thomas@utah-20, {harpo,hplabs,arizona}!utah-cs!thomas)
+>>
+>>					regards,
+>>					joe
+>>
+>>--
+>>Full-Name:  Joseph M. Orost
+>>UUCP:       ..!{decvax,ucbvax,ihnp4}!vax135!petsd!joe
+>>US Mail:    MS 313; Perkin-Elmer; 106 Apple St; Tinton Falls, NJ 07724
+>>Phone:      (201) 870-5844
+@//E*O*F Compress/README3.0//
+chmod u=r,g=r,o=r Compress/README3.0
+ 
+echo x - Compress/atob.c
+sed 's/^@//' > "Compress/atob.c" <<'@//E*O*F Compress/atob.c//'
+/* atob: version 4.0
+ * stream filter to change printable ascii from "btoa" back into 8 bit bytes
+ * if bad chars, or Csums do not match: exit(1) [and NO output]
+ *
+ *  Paul Rutter		Joe Orost
+ *  philabs!per		petsd!joe
+ */
+
+#include <stdio.h>
+
+#define reg register
+
+#define streq(s0, s1)  strcmp(s0, s1) == 0
+
+#define times85(x)	((((((x<<2)+x)<<2)+x)<<2)+x)
+
+long int Ceor = 0;
+long int Csum = 0;
+long int Crot = 0;
+long int word = 0;
+long int bcount = 0;
+
+fatal() {
+  fprintf(stderr, "bad format or Csum to atob\n");
+  exit(1);
+}
+
+#define DE(c) ((c) - '!')
+
+decode(c) 
+  reg c;
+{
+  if (c == 'z') {
+    if (bcount != 0) {
+      fatal();
+    } else {
+      byteout(0);
+      byteout(0);
+      byteout(0);
+      byteout(0);
+    }
+  } else if ((c >= '!') && (c < ('!' + 85))) {
+    if (bcount == 0) {
+      word = DE(c);
+      ++bcount;
+    } else if (bcount < 4) {
+      word = times85(word);
+      word += DE(c);
+      ++bcount;
+    } else {
+      word = times85(word) + DE(c);
+      byteout((int)((word >> 24) & 255));
+      byteout((int)((word >> 16) & 255));
+      byteout((int)((word >> 8) & 255));
+      byteout((int)(word & 255));
+      word = 0;
+      bcount = 0;
+    }
+  } else {
+    fatal();
+  }
+}
+
+FILE *tmp_file;
+
+byteout(c) 
+  reg c;
+{
+  Ceor ^= c;
+  Csum += c;
+  Csum += 1;
+  if ((Crot & 0x80000000)) {
+    Crot <<= 1;
+    Crot += 1;
+  } else {
+    Crot <<= 1;
+  }
+  Crot += c;
+  putc(c, tmp_file);
+}
+
+main(argc, argv) 
+  char **argv;
+{
+  reg c;
+  reg long int i;
+  char tmp_name[100];
+  char buf[100];
+  long int n1, n2, oeor, osum, orot;
+
+  if (argc != 1) {
+    fprintf(stderr,"bad args to %s\n", argv[0]);
+    exit(2);
+  }
+  sprintf(tmp_name, "/usr/tmp/atob.%x", getpid());
+  tmp_file = fopen(tmp_name, "w+");
+  if (tmp_file == NULL) {
+    fatal();
+  }
+  unlink(tmp_name);	/* Make file disappear */
+  /*search for header line*/
+  for (;;) {
+    if (fgets(buf, sizeof buf, stdin) == NULL) {
+      fatal();
+    }
+    if (streq(buf, "xbtoa Begin\n")) {
+      break;
+    }
+  }
+
+  while ((c = getchar()) != EOF) {
+    if (c == '\n') {
+      continue;
+    } else if (c == 'x') {
+      break;
+    } else {
+      decode(c);
+    }
+  }
+  if(scanf("btoa End N %ld %lx E %lx S %lx R %lx\n",
+         &n1, &n2, &oeor, &osum, &orot) != 5) {
+    fatal();
+  }
+  if ((n1 != n2) || (oeor != Ceor) || (osum != Csum) || (orot != Crot)) {
+    fatal();
+  } else {
+    /*copy OK tmp file to stdout*/;
+    fseek(tmp_file, 0L, 0);
+    for (i = n1; --i >= 0;) {
+      putchar(getc(tmp_file));
+    }
+  }
+  exit(0);
+}
+@//E*O*F Compress/atob.c//
+chmod u=r,g=r,o=r Compress/atob.c
+ 
+echo x - Compress/btoa.1
+sed 's/^@//' > "Compress/btoa.1" <<'@//E*O*F Compress/btoa.1//'
+@.TH BTOA 1 local
+@.SH NAME
+btoa, atob, tarmail, untarmail \- encode/decode binary to printable ASCII
+@.SH SYNOPSIS
+@.B btoa
+@.br
+@.B atob
+@.br
+@.B tarmail
+who subject files ...
+@.br
+@.B untarmail
+[ file ]
+@.SH DESCRIPTION
+@.I Btoa
+is a filter that reads anything from the standard input, and encodes it into
+printable ASCII on the standard output.  It also attaches a header and checksum
+information used by the reverse filter 
+@.I atob 
+to find the start of the data and to check integrity.
+@.PP
+@.I Atob
+reads an encoded file, strips off any leading and
+trailing lines added by mailers, and recreates a copy of the original file
+on the standard output.
+@.I Atob 
+gives NO output (and exits with an error message) if its input is garbage or 
+the checksums do not check.
+@.PP
+@.I Tarmail
+is a shell script that tar's up all the given files, pipes them 
+through 
+@.IR compress ","
+@.IR btoa ","
+and mails them to the given person with the given subject phrase.  For
+example:
+@.PP
+@.in 1i
+tarmail ralph "here it is ralph" foo.c a.out
+@.in -1i
+@.PP
+Will package up files "foo.c" and "a.out" and mail them to "ralph" using
+subject "here it is ralph".  Notice the quotes on the subject.  They are
+necessary to make it one argument to the shell.
+@.PP
+@.I Tarmail 
+with no args will print a short message reminding you what the required args 
+are.  When the mail is received at the other end, that person should use
+mail to save the message in some temporary file name (say "xx").
+Then saying "untarmail xx"
+will decode the message and untar it.  
+@.I Untarmail 
+can also be used as a filter.  By using 
+@.IR tarmail ","
+binary files and
+entire directory structures can be easily transmitted between machines.
+Naturally, you should understand what tar itself does before you use 
+@.IR tarmail "."
+@.PP
+Other uses:
+@.PP
+compress < secrets | crypt | btoa | mail ralph
+@.PP
+will mail the encrypted contents of the file "secrets" to ralph.  If ralph
+knows the encryption key, he can decode it by saving the mail (say in "xx"),
+and then running:
+@.PP
+atob < xx | crypt | uncompress
+@.PP
+(crypt requests the key from the terminal,
+and the "secrets" come out on the terminal).
+@.SH AUTHOR
+Paul Rutter (modified by Joe Orost)
+@.SH FEATURES
+@.I Btoa
+uses a compact base-85 encoding so that
+4 bytes are encoded into 5 characters (file is expanded by 25%).
+As a special case, 32-bit zero is encoded as one character.  This encoding
+produces less output than
+@.IR uuencode "(1)."
+@.SH "SEE ALSO"
+compress(1), crypt(1), uuencode(1), mail(1)
+@//E*O*F Compress/btoa.1//
+chmod u=r,g=r,o=r Compress/btoa.1
+ 
+echo x - Compress/btoa.c
+sed 's/^@//' > "Compress/btoa.c" <<'@//E*O*F Compress/btoa.c//'
+/* btoa: version 4.0
+ * stream filter to change 8 bit bytes into printable ascii
+ * computes the number of bytes, and three kinds of simple checksums
+ * incoming bytes are collected into 32-bit words, then printed in base 85
+ *  exp(85,5) > exp(2,32)
+ * the ASCII characters used are between '!' and 'u'
+ * 'z' encodes 32-bit zero; 'x' is used to mark the end of encoded data.
+ *
+ *  Paul Rutter		Joe Orost
+ *  philabs!per		petsd!joe
+ *
+ *  WARNING: this version is not compatible with the original as sent out
+ *  on the net.  The original encoded from ' ' to 't'; which cause problems
+ *  with some mailers (stripping off trailing blanks).
+ */
+
+#include <stdio.h>
+
+#define reg register
+
+#define MAXPERLINE 78
+
+long int Ceor = 0;
+long int Csum = 0;
+long int Crot = 0;
+
+long int ccount = 0;
+long int bcount = 0;
+long int word;
+
+#define EN(c)	(int) ((c) + '!')
+
+encode(c) 
+  reg c;
+{
+  Ceor ^= c;
+  Csum += c;
+  Csum += 1;
+  if ((Crot & 0x80000000)) {
+    Crot <<= 1;
+    Crot += 1;
+  } else {
+    Crot <<= 1;
+  }
+  Crot += c;
+
+  word <<= 8;
+  word |= c;
+  if (bcount == 3) {
+    wordout(word);
+    bcount = 0;
+  } else {
+    bcount += 1;
+  }
+}
+
+wordout(word) 
+  reg long int word;
+{
+  if (word == 0) {
+    charout('z');
+  } else {
+    reg int tmp = 0;
+    
+    if(word < 0) {	/* Because some don't support unsigned long */
+      tmp = 32;
+      word = word - (long)(85 * 85 * 85 * 85 * 32);
+    }
+    if(word < 0) {
+      tmp = 64;
+      word = word - (long)(85 * 85 * 85 * 85 * 32);
+    }
+    charout(EN((word / (long)(85 * 85 * 85 * 85)) + tmp));
+    word %= (long)(85 * 85 * 85 * 85);
+    charout(EN(word / (85 * 85 * 85)));
+    word %= (85 * 85 * 85);
+    charout(EN(word / (85 * 85)));
+    word %= (85 * 85);
+    charout(EN(word / 85));
+    word %= 85;
+    charout(EN(word));
+  }
+}
+
+charout(c) {
+  putchar(c);
+  ccount += 1;
+  if (ccount == MAXPERLINE) {
+    putchar('\n');
+    ccount = 0;
+  }
+}
+
+main(argc,argv) 
+  char **argv;
+{
+  reg c;
+  reg long int n;
+
+  if (argc != 1) {
+    fprintf(stderr,"bad args to %s\n", argv[0]);
+    exit(2);
+  }
+  printf("xbtoa Begin\n");
+  n = 0;
+  while ((c = getchar()) != EOF) {
+    encode(c);
+    n += 1;
+  }
+  while (bcount != 0) {
+    encode(0);
+  }
+  /* n is written twice as crude cross check*/
+  printf("\nxbtoa End N %ld %lx E %lx S %lx R %lx\n", n, n, Ceor, Csum, Crot);
+  exit(0);
+}
+@//E*O*F Compress/btoa.c//
+chmod u=r,g=r,o=r Compress/btoa.c
+ 
+echo x - Compress/compressdir
+sed 's/^@//' > "Compress/compressdir" <<'@//E*O*F Compress/compressdir//'
+OPTIONS=
+FILES=
+for ARG
+do
+	case "$ARG" in
+	-*)	OPTIONS="$OPTIONS $ARG";;
+	*)	FILES="$FILES $ARG";;
+	esac
+done
+if test -z "$FILES"; then
+	FILES="."
+fi
+set $FILES
+find $@ -type f -links 1 -exec test -r {} -a -s {} \; \
+-exec expr '(' {} : '.*\.Z' ')' '=' 0 \; \
+-exec compress $OPTIONS {} \; >/dev/null
+@//E*O*F Compress/compressdir//
+chmod u=rx,g=rx,o=rx Compress/compressdir
+ 
+echo x - Compress/compressdir.1
+sed 's/^@//' > "Compress/compressdir.1" <<'@//E*O*F Compress/compressdir.1//'
+@.PU
+@.TH COMPRESSDIR 1 local
+@.SH NAME
+compressdir, uncompressdir \-  compress and uncompress directories of files
+@.SH SYNOPSIS
+@.ll +8
+@.B compressdir
+[ flags ] [
+@.I "directory \&..."
+]
+@.ll -8
+@.br
+@.B uncompressdir
+[ flags ] [
+@.I "directory \&..."
+]
+@.SH DESCRIPTION
+Recursively decends each specified directory and compresses each
+file.
+Each file is replaced by a file with the extension
+@.B "\&.Z,"
+but only if the file got smaller.
+If no directories are specified,
+the compression is applied to all files starting with the current directory.
+Compressed files can be restored to their original form by running
+@.I uncompressdir
+on the directories.
+@.PP
+The
+@.I flags
+specified are passed to the compress(1) program.
+@.SH "SEE ALSO"
+compress(1)
+@//E*O*F Compress/compressdir.1//
+chmod u=r,g=r,o=r Compress/compressdir.1
+ 
+echo x - Compress/tarmail
+sed 's/^@//' > "Compress/tarmail" <<'@//E*O*F Compress/tarmail//'
+if test $# -lt 3; then
+  echo "Usage: tarmail mailpath \"subject-string\" directory-or-file(s)"
+  exit
+else
+  mailpath=$1
+  echo "mailpath = $mailpath"
+  shift
+  subject="$1"
+  echo "subject-string = $subject"
+  shift
+  echo files = $*
+  tar cvf - $* | compress | btoa | mail -s "$subject" $mailpath
+fi
+@//E*O*F Compress/tarmail//
+chmod u=rx,g=rx,o=rx Compress/tarmail
+ 
+echo x - Compress/uncompressdir
+sed 's/^@//' > "Compress/uncompressdir" <<'@//E*O*F Compress/uncompressdir//'
+OPTIONS=
+FILES=
+for ARG
+do
+	case "$ARG" in
+	-*)	OPTIONS="$OPTIONS $ARG";;
+	*)	FILES="$FILES $ARG";;
+	esac
+done
+if test -z "$FILES"; then
+	FILES="."
+fi
+set $FILES
+find $@ -type f -links 1 -exec test -r {} -a -s {} \; \
+-exec expr {} : '.*\.Z' \; \
+-exec uncompress $OPTIONS {} \; >/dev/null
+@//E*O*F Compress/uncompressdir//
+chmod u=rx,g=rx,o=rx Compress/uncompressdir
+ 
+echo x - Compress/untarmail
+sed 's/^@//' > "Compress/untarmail" <<'@//E*O*F Compress/untarmail//'
+if test $# -ge 1; then
+   atob < $1 | uncompress | tar xvpf -
+   mv $1 /usr/tmp/$1.$$
+   echo tarmail file moved to: /usr/tmp/$1.$$
+else
+   atob | uncompress | tar xvpf -
+fi
+@//E*O*F Compress/untarmail//
+chmod u=rx,g=rx,o=rx Compress/untarmail
+ 
+echo x - Compress/zcmp
+sed 's/^@//' > "Compress/zcmp" <<'@//E*O*F Compress/zcmp//'
+
+OPTIONS=
+FILES=
+for ARG
+do
+	case "$ARG" in
+	-*)	OPTIONS="$OPTIONS $ARG";;
+	*)	FILES="$FILES $ARG";;
+	esac
+done
+if test -z "$FILES"; then
+	echo "Usage: zcmp [cmp_options] file [file]"
+	exit 1
+fi
+set $FILES
+if test $# -eq 1; then
+	FILE=`expr $1 : '\(.*\)\.Z' '|' $1`
+	zcat $FILE | cmp $OPTIONS - $FILE
+	STAT="$?"
+elif test $# -eq 2; then
+	case "$1" in
+	*.Z)	case "$2" in
+		*.Z)	F=`basename $2 .Z`
+			zcat $2 > /tmp/$F.$$
+			zcat $1 | cmp $OPTIONS - /tmp/$F.$$
+			STAT="$?";;
+		*)	zcat $1 | cmp $OPTIONS - $2;;
+		esac;;
+	*)	case "$2" in
+		*.Z)	F=`basename $2 .Z`
+			zcat $2 > /tmp/$F.$$
+			cmp $OPTIONS $1 /tmp/$F.$$
+			STAT="$?";;
+		*)	cmp $OPTIONS $1 $2
+			STAT="$?";;
+		esac;;
+	esac
+	exit "$STAT"
+else
+	echo "Usage: zcmp [cmp_options] file [file]"
+	exit 1
+fi
+@//E*O*F Compress/zcmp//
+chmod u=rx,g=rx,o=rx Compress/zcmp
+ 
+echo x - Compress/zcmp.1
+sed 's/^@//' > "Compress/zcmp.1" <<'@//E*O*F Compress/zcmp.1//'
+@.TH ZCMP 1
+@.SH NAME
+zcmp, zdiff \- compare compressed files
+@.SH SYNOPSIS
+@.B zcmp
+[ cmp_options ] file1
+[ file2 ]
+@.br
+@.B zdiff
+[ diff_options ] file1
+[ file2 ]
+@.SH DESCRIPTION
+@.I  Zcmp
+and 
+@.I zdiff
+are used to invoke the
+@.I cmp
+or the
+@.I diff
+program on compressed files.  All options specified are passed directly to
+@.I cmp
+or
+@.IR diff "."
+If only 1 file is specified, then the files compared are
+@.I file1
+and an uncompressed
+@.IR file1 ".Z."
+If two files are specified, then they are uncompressed (if ending with ".Z")
+and fed to
+@.I cmp
+or
+@.IR diff "."
+The exit status from 
+@.I cmp
+or
+@.I diff
+is preserved.
+@.SH "SEE ALSO"
+cmp(1), diff(1), zmore(1), zcat(1), compress(1), uncompress(1)
+@.SH BUGS
+Messages from the
+@.I cmp
+or
+@.I diff
+programs refer to temporary filenames instead of those specified.
+@//E*O*F Compress/zcmp.1//
+chmod u=r,g=r,o=r Compress/zcmp.1
+ 
+echo x - Compress/zdiff
+sed 's/^@//' > "Compress/zdiff" <<'@//E*O*F Compress/zdiff//'
+
+OPTIONS=
+FILES=
+for ARG
+do
+	case "$ARG" in
+	-*)	OPTIONS="$OPTIONS $ARG";;
+	*)	FILES="$FILES $ARG";;
+	esac
+done
+if test -z "$FILES"; then
+	echo "Usage: zdiff [diff_options] file [file]"
+	exit 1
+fi
+set $FILES
+if test $# -eq 1; then
+	FILE=`expr $1 : '\(.*\)\.Z' '|' $1`
+	zcat $FILE | diff $OPTIONS - $FILE
+	STAT="$?"
+elif test $# -eq 2; then
+	case "$1" in
+	*.Z)	case "$2" in
+		*.Z)	F=`basename $2 .Z`
+			zcat $2 > /tmp/$F.$$
+			zcat $1 | diff $OPTIONS - /tmp/$F.$$
+			STAT="$?";;
+		*)	zcat $1 | diff $OPTIONS - $2;;
+		esac;;
+	*)	case "$2" in
+		*.Z)	zcat $2 | diff $OPTIONS $1 -
+			STAT="$?";;
+		*)	diff $OPTIONS $1 $2
+			STAT="$?";;
+		esac;;
+	esac
+	exit "$STAT"
+else
+	echo "Usage: zdiff [diff_options] file [file]"
+	exit 1
+fi
+@//E*O*F Compress/zdiff//
+chmod u=rx,g=rx,o=rx Compress/zdiff
+ 
+echo x - Compress/zmore
+sed 's/^@//' > "Compress/zmore" <<'@//E*O*F Compress/zmore//'
+FIRST=1
+for FILE
+do
+	if test $FIRST -eq 0; then
+		echo "--More--(Next file: $FILE)\c"
+		stty cbreak -echo
+		ANS=`dd bs=1 count=1 2>/dev/null` 
+		stty -cbreak echo
+		echo " "
+		if test "$ANS" = 'e'; then
+			exit
+		fi
+	fi
+	echo "------> $FILE <------"
+	zcat $FILE | more
+	if test -t; then
+		FIRST=0
+	fi
+done
+@//E*O*F Compress/zmore//
+chmod u=rx,g=rx,o=rx Compress/zmore
+ 
+echo x - Compress/zmore.1
+sed 's/^@//' > "Compress/zmore.1" <<'@//E*O*F Compress/zmore.1//'
+@.TH ZMORE 1
+@.SH NAME
+zmore \- file perusal filter for crt viewing of compressed text
+@.SH SYNOPSIS
+@.B zmore
+[ name ...  ]
+@.SH DESCRIPTION
+@.I  Zmore
+is a filter which allows examination of compressed text files
+one screenful at a time on a soft-copy terminal.
+It normally pauses after each screenful, printing --More--
+at the bottom of the screen.
+If the user then types a carriage return, one more line is displayed.
+If the user hits a space,
+another screenful is displayed.  Other possibilites are enumerated later.
+@.PP
+@.I Zmore
+looks in the file
+@.I /etc/termcap
+to determine terminal characteristics,
+and to determine the default window size.
+On a terminal capable of displaying 24 lines,
+the default window size is 22 lines.
+@.PP
+Other sequences which may be typed when
+@.I zmore
+pauses, and their effects, are as follows (\fIi\fP is an optional integer
+argument, defaulting to 1) :
+@.PP
+@.IP \fIi\|\fP<space>
+display
+@.I i
+more lines, (or another screenful if no argument is given)
+@.PP
+@.IP ^D
+display 11 more lines (a ``scroll'').
+If
+@.I i
+is given, then the scroll size is set to \fIi\|\fP.
+@.PP
+@.IP d
+same as ^D (control-D)
+@.PP
+@.IP \fIi\|\fPz
+same as typing a space except that \fIi\|\fP, if present, becomes the new
+window size.  Note that the window size reverts back to the default at the
+end of the current file.
+@.PP
+@.IP \fIi\|\fPs
+skip \fIi\|\fP lines and print a screenful of lines
+@.PP
+@.IP \fIi\|\fPf
+skip \fIi\fP screenfuls and print a screenful of lines
+@.PP
+@.IP "q or Q"
+quit reading the current file; go on to the next (if any)
+@.PP
+@.IP e
+When the prompt --More--(Next file: 
+@.IR file )
+is printed, this command causes zmore to exit.
+@.PP 
+@.IP =
+Display the current line number.
+@.PP
+@.IP \fIi\|\fP/expr
+search for the \fIi\|\fP-th occurrence of the regular expression \fIexpr.\fP
+If the pattern is not found,
+@.I zmore
+goes on to the next file (if any).
+Otherwise, a screenful is displayed, starting two lines before the place
+where the expression was found.
+The user's erase and kill characters may be used to edit the regular
+expression.
+Erasing back past the first column cancels the search command.
+@.PP
+@.IP \fIi\|\fPn
+search for the \fIi\|\fP-th occurrence of the last regular expression entered.
+@.PP
+@.IP !command
+invoke a shell with \fIcommand\|\fP. 
+The character `!' in "command" are replaced with the
+the previous shell command.  The sequence "\\!" is replaced by "!".
+@.PP
+@.IP ":q or :Q"
+quit reading the current file; go on to the next (if any)
+(same as q or Q).
+@.PP
+@.IP .
+(dot) repeat the previous command.
+@.PP
+The commands take effect immediately, i.e., it is not necessary to
+type a carriage return.
+Up to the time when the command character itself is given,
+the user may hit the line kill character to cancel the numerical
+argument being formed.
+In addition, the user may hit the erase character to redisplay the
+--More-- message.
+@.PP
+At any time when output is being sent to the terminal, the user can
+hit the quit key (normally control\-\\).
+@.I Zmore
+will stop sending output, and will display the usual --More--
+prompt.
+The user may then enter one of the above commands in the normal manner.
+Unfortunately, some output is lost when this is done, due to the
+fact that any characters waiting in the terminal's output queue
+are flushed when the quit signal occurs.
+@.PP
+The terminal is set to
+@.I noecho
+mode by this program so that the output can be continuous.
+What you type will thus not show on your terminal, except for the / and !
+commands.
+@.PP
+If the standard output is not a teletype, then
+@.I zmore
+acts just like
+@.I zcat,
+except that a header is printed before each file.
+@.SH FILES
+@.DT
+/etc/termcap		Terminal data base
+@.SH "SEE ALSO"
+more(1), zcat(1), compress(1), uncompress(1)
+@//E*O*F Compress/zmore.1//
+chmod u=r,g=r,o=r Compress/zmore.1
+ 
+echo x - Compress/:AUTHOR
+sed 's/^@//' > "Compress/:AUTHOR" <<'@//E*O*F Compress/:AUTHOR//'
+@From wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!talcott!panda!genrad!sources-request Sat Aug  3 09:46:18 CDT 1985
+
+Mod.sources:  Volume 2, Issue 27
+Submitted by: vax135!petsd!joe (Joe Orost)
+
+[ Moderator's notes:  Speedup and reduced memory requirements are the
+  primary improvements over Compress 3.0  A shell script to automatically
+  determine the available memory has been added.  
+
+  Also, additional shell scripts have been added to the package to allow
+  for additional user interfaces.  Frankly, I don't find these particularly
+  useful.
+
+  I have repackaged Compress 4.0 from how it was sent to me.  Part 1
+  contains compress.1 compress.c usermem and Makefile (these are all
+  that are required to get the basic system up and running.)  Part 2
+  contains the README's and shell scripts and stuff.
+
+  Here is a copy of the new README for compress 4.0
+
+   -  John P. Nelson (decvax!genrad!john) [moderator, mod.sources]
+]
+
+---------------------------------------------------------------------------
+
+Compress version 4.0 improvements:
+	o compress() speedup (10-50%) by changing division hash to xor
+	o decompress() speedup (5-10%)
+	o Memory requirements reduced (3-30%)
+	o Stack requirements reduced to less than 4kb
+	o Removed 'Big+Fast' compress code (FBITS) because of compress speedup
+    	o Portability mods for Z8000 and PC/XT (but not zeus 3.2)
+	o Default to 'quiet' mode
+	o Unification of 'force' flags
+	o Manual page overhaul
+	o Portability enhancement for M_XENIX
+	o Removed text on #else and #endif
+	o Added "-V" switch to print version and options
+	o Added #defines for SIGNED_COMPARE_SLOW
+	o Added Makefile and "usermem" program
+	o Removed all floating point computations
+	o New programs:
+		compressdir - compress all files on a directory
+		uncompressdir - uncompress all files on a directory
+		zcmp - cmp compressed files
+		zdiff - diff compressed files
+	  The following are with thanks to philabs!per:
+		btoa - convert binary to ascii for mailing
+		atob - convert ascii to binary with checksum
+		tarmail - tar, compress, btoa, and mail files
+		untarmail - restore "tarmail" files
+
+		WARNING: These last few programs are not compatible 
+		with the original ones from the net.  The encoding
+		has changed.  See btoa.c for more info.
+
+The "usermem" script attempts to determine the maximum process size.  Some
+editing of the script may be necessary (see the comments).  If you can't get
+it to work at all, just create file "USERMEM" containing the maximum process
+size in decimal.
+
+The following preprocessor symbols control the compilation of "compress.c":
+
+	o USERMEM		Maximum process memory on the system
+	o SACREDMEM		Amount to reserve for other proceses
+	o SIGNED_COMPARE_SLOW	Unsigned compare instructions are faster
+	o NO_UCHAR		Don't use "unsigned char" types
+	o BITS			Overrules default set by USERMEM-SACREDMEM
+	o vax			Generate inline assembler
+	o interdata		Defines SIGNED_COMPARE_SLOW
+	o M_XENIX		Makes arrays < 65536 bytes each
+	o pdp11			BITS=12, NO_UCHAR
+	o z8000			BITS=12
+	o pcxt			BITS=12
+	o BSD4_2		Allow long filenames ( > 14 characters) &
+				Call setlinebuf(stderr)
+
+The difference "usermem-sacredmem" determines the maximum BITS that can be
+specified with the "-b" flag.
+
+memory: at least		BITS
+------  -- -----                ----
+     433,484			 16
+     229,600			 15
+     127,536			 14
+      73,464			 13
+           0			 12
+
+The default is BITS=16.
+
+The maximum bits can be overrulled by specifying "-DBITS=bits" at
+compilation time.
+
+WARNING: files compressed on a large machine with more bits than allowed by 
+a version of compress on a smaller machine cannot be decompressed!  Use the
+"-b12" flag to generate a file on a large machine that can be uncompressed 
+on a 16-bit machine.
+
+The output of compress 4.0 is fully compatible with that of compress 3.0.
+In other words, the output of compress 4.0 may be fed into uncompress 3.0 or
+the output of compress 3.0 may be fed into uncompress 4.0.
+
+The output of compress 4.0 not compatable with that of
+compress 2.0.  However, compress 4.0 still accepts the output of
+compress 2.0.  To generate output that is compatable with compress
+2.0, use the undocumented "-C" flag.
+
+
+@//E*O*F Compress/:AUTHOR//
+chmod u=r,g=r,o=r Compress/:AUTHOR
+ 
+echo x - Compress/usermem-
+sed 's/^@//' > "Compress/usermem-" <<'@//E*O*F Compress/usermem-//'
+: This shell script snoops around to find the maximum amount of available
+: user memory.  These variables need to be set only if there is no
+: /usr/adm/messages.  KMEM, UNIX, and CLICKSIZE can be set on the command
+: line, if desired, e.g. UNIX=/unix
+KMEM=/dev/kmem		# User needs read access to KMEM
+UNIX=
+# VAX			CLICKSIZE=512,	UNIX=/vmunix
+# PDP-11		CLICKSIZE=64,	UNIX=/unix
+# CADLINC 68000		CLICKSIZE=4096,	UNIX=/unix
+# Perkin-Elmer 3205	CLICKSIZE=4096,	UNIX=/edition7
+# Perkin-Elmer all others, CLICKSIZE=2048, UNIX=/edition7
+CLICKSIZE=512
+eval $*
+
+SIZE=0
+if test -r /usr/adm/messages	# probably the most transportable
+then
+    SIZE=`grep avail /usr/adm/messages | sed -n '$s/.*[ 	]//p'`
+fi
+
+if test 0$SIZE -le 0		# no SIZE in /usr/adm/messages
+then
+    if test -r $KMEM		# Readable KMEM
+    then
+	if test -n "$UNIX"
+	then
+	    : User must have specified it already.
+	elif test -r /vmunix
+	then
+	    UNIX=/vmunix
+	    CLICKSIZE=512	# Probably VAX
+	elif test -r /edition7
+	then
+	    UNIX=/edition7
+	    CLICKSIZE=2048	# Perkin-Elmer: change to 4096 on a 3205
+	elif test -r /unix
+	then
+	    UNIX=/unix		# Could be anything
+	fi
+	if test -n "$UNIX"
+	then
+	    SIZE=`echo maxmem/D | adb $UNIX $KMEM | sed -n '$s/.*[ 	]//p'`
+	    if test 0$SIZE -le 0
+	    then
+		SIZE=`echo physmem/D | adb $UNIX $KMEM | sed -n '$s/.*[ 	]//p'`
+	    fi
+	    SIZE=`expr 0$SIZE '*' $CLICKSIZE`
+	fi
+    fi
+fi
+
+case $UNIX in
+    /vmunix)		# Assume 4.2bsd: check for resource limits
+	MAXSIZE=`csh -c limit | awk 'BEGIN	{ MAXSIZE = 1000000 }
+/datasize|memoryuse/ && NF == 3	{ if ($2 < MAXSIZE) MAXSIZE = $2 }
+END	{ print MAXSIZE * 1000 }'`
+	if test $MAXSIZE -lt $SIZE
+	then
+	    SIZE=$MAXSIZE
+	fi
+	;;
+esac
+
+if test 0$SIZE -le 0
+then
+    echo 0;exit 1
+else
+    echo $SIZE
+fi
+@//E*O*F Compress/usermem-//
+chmod u=rx,g=rx,o=rx Compress/usermem-
+ 
+echo x - Compress/USERMEM
+sed 's/^@//' > "Compress/USERMEM" <<'@//E*O*F Compress/USERMEM//'
+50000000
+@//E*O*F Compress/USERMEM//
+chmod u=r,g=r,o=r Compress/USERMEM
+ 
+echo x - Compress/Makefile-
+sed 's/^@//' > "Compress/Makefile-" <<'@//E*O*F Compress/Makefile-//'
+CC=cc
+COMFLAGS=-O
+BIN=/usr/bin
+MAN=/usr/man/man1
+#define to "l" if manuals go on /usr/man/manl
+L=1
+
+all :	compress atob btoa
+
+compress : compress.c USERMEM
+	$(CC) $(COMFLAGS) -DUSERMEM=`cat USERMEM` -o compress compress.c
+
+# USERMEM may have to be set by hand.  It should contain the amount of
+# available user memory in bytes.  See the README file for more info.
+USERMEM:
+	sh usermem > USERMEM
+
+atob:	atob.c
+	$(CC) $(COMFLAGS) -o atob atob.c
+
+btoa:	btoa.c
+	$(CC) $(COMFLAGS) -o btoa btoa.c
+
+install: compress atob btoa zmore zcmp zdiff compressdir uncompressdir btoa.1 compress.1 compressdir.1 zmore.1 zcmp.1 tarmail untarmail
+	cp compress $(BIN)
+	rm -f $(BIN)/uncompress $(BIN)/zcat
+	ln $(BIN)/compress $(BIN)/uncompress
+	ln $(BIN)/compress $(BIN)/zcat
+	cp zmore zcmp zdiff compressdir uncompressdir $(BIN)
+	cp atob btoa tarmail untarmail $(BIN)
+	cp btoa.1 $(MAN)/btoa.$(L)
+	rm -f $(MAN)/atob.$(L) $(MAN)/tarmail.$(L) $(MAN)/untarmail.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/atob.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/tarmail.$(L)
+	ln $(MAN)/btoa.$(L) $(MAN)/untarmail.$(L)
+	cp compress.1 $(MAN)/compress.$(L)
+	rm -f $(MAN)/uncompress.$(L) $(MAN)/zcat.$(L)
+	ln $(MAN)/compress.$(L) $(MAN)/uncompress.$(L)
+	ln $(MAN)/compress.$(L) $(MAN)/zcat.$(L)
+	cp compressdir.1 $(MAN)/compressdir.$(L)
+	cp zmore.1 $(MAN)/zmore.$(L)
+	cp zcmp.1 $(MAN)/zcmp.$(L)
+	rm -f $(MAN)/zdiff.$(L)
+	ln $(MAN)/zcmp.$(L) $(MAN)/zdiff.$(L)
+
+clean:
+	rm -f compress atob btoa
+@//E*O*F Compress/Makefile-//
+chmod u=r,g=r,o=r Compress/Makefile-
+ 
+echo x - Compress/zzzz.z
+sed 's/^@//' > "Compress/zzzz.z" <<'@//E*O*F Compress/zzzz.z//'
+total 172
+-r--r--r--  1 hokey   mumps      4216 Aug  3 09:46 :AUTHOR
+-rw-rw-r--  1 hokey   mumps      1447 Sep  5 13:35 Makefile
+-r--r--r--  1 hokey   mumps      1435 Aug  3 11:03 Makefile-
+-r--r--r--  1 hokey   mumps      3194 Aug  3 11:03 README
+-r--r--r--  1 hokey   mumps      8142 Aug  3 11:03 README3.0
+-rw-rw-r--  1 root    other         9 Sep  5 13:29 USERMEM
+-r--r--r--  1 hokey   mumps      2505 Aug  3 11:03 atob.c
+-r--r--r--  1 hokey   mumps      2483 Aug  3 11:03 btoa.1
+-r--r--r--  1 hokey   mumps      2333 Aug  3 11:03 btoa.c
+-r--r--r--  1 hokey   mumps      5147 Aug  3 11:03 compress.1
+-r--r--r--  1 hokey   mumps     39614 Aug  3 11:03 compress.c
+-r-xr-xr-x  1 hokey   mumps       302 Aug  3 11:03 compressdir
+-r--r--r--  1 hokey   mumps       736 Aug  3 11:03 compressdir.1
+-r-xr-xr-x  1 hokey   mumps       303 Aug  3 11:03 tarmail
+-r-xr-xr-x  1 hokey   mumps       290 Aug  3 11:03 uncompressdir
+-r-xr-xr-x  1 hokey   mumps       174 Aug  3 11:03 untarmail
+-rw-rw-r--  1 root    other      1816 Sep  5 13:26 usermem
+-r-xr-xr-x  1 hokey   mumps      1748 Aug  3 11:03 usermem-
+-r-xr-xr-x  1 hokey   mumps       760 Aug  3 11:03 zcmp
+-r--r--r--  1 hokey   mumps       797 Aug  3 11:03 zcmp.1
+-r-xr-xr-x  1 hokey   mumps       724 Aug  3 11:03 zdiff
+-r-xr-xr-x  1 hokey   mumps       306 Aug  3 11:03 zmore
+-r--r--r--  1 hokey   mumps      3702 Aug  3 11:03 zmore.1
+-rw-rw-rw-  1 max     mumps         0 Dec 16 22:20 zzzz.z
+@//E*O*F Compress/zzzz.z//
+chmod u=r,g=r,o=r Compress/zzzz.z
+ 
+echo x - Compress/thingstodo
+sed 's/^@//' > "Compress/thingstodo" <<'@//E*O*F Compress/thingstodo//'
+	cc -O -DUSERMEM=`cat USERMEM` -o compress compress.c
+	cc -O -o atob atob.c
+	cc -O -o btoa btoa.c
+	cp compress /usr/local/bin
+	rm -f /usr/local/bin/uncompress /usr/local/bin/zcat
+	ln /usr/local/bin/compress /usr/local/bin/uncompress
+	ln /usr/local/bin/compress /usr/local/bin/zcat
+	cp zmore zcmp zdiff compressdir uncompressdir /usr/local/bin
+	cp atob btoa tarmail untarmail /usr/local/bin
+	cp btoa.1 /usr/man/local/man1/btoa.1
+	rm -f /usr/man/local/man1/atob.1 /usr/man/local/man1/tarmail.1 /usr/man/local/man1/untarmail.1
+	ln /usr/man/local/man1/btoa.1 /usr/man/local/man1/atob.1
+	ln /usr/man/local/man1/btoa.1 /usr/man/local/man1/tarmail.1
+	ln /usr/man/local/man1/btoa.1 /usr/man/local/man1/untarmail.1
+	cp compress.1 /usr/man/local/man1/compress.1
+	rm -f /usr/man/local/man1/uncompress.1 /usr/man/local/man1/zcat.1
+	ln /usr/man/local/man1/compress.1 /usr/man/local/man1/uncompress.1
+	ln /usr/man/local/man1/compress.1 /usr/man/local/man1/zcat.1
+	cp compressdir.1 /usr/man/local/man1/compressdir.1
+	cp zmore.1 /usr/man/local/man1/zmore.1
+	cp zcmp.1 /usr/man/local/man1/zcmp.1
+	rm -f /usr/man/local/man1/zdiff.1
+	ln /usr/man/local/man1/zcmp.1 /usr/man/local/man1/zdiff.1
+@//E*O*F Compress/thingstodo//
+chmod u=r,g=r,o=r Compress/thingstodo
+ 
+echo mkdir - Compress/:UPDATES
+mkdir Compress/:UPDATES
+chmod u=rwx,g=rwx,o=rwx Compress/:UPDATES
+ 
+echo x - Compress/:UPDATES/1
+sed 's/^@//' > "Compress/:UPDATES/1" <<'@//E*O*F Compress/:UPDATES/1//'
+Date: 14 Mar 87 10:12:00
+@From: Stuart Lynne <ihnp4!alberta!ubc-vision!van-bc!sl>
+
+The following is a reworking of the (un)compressdir scripts.
+
+Seems to work a little better, and only needs one copy. 
+
+Cut and copy to compressdir, link to uncompressdir.
+
+Have fun and enjoy!
+
+-- 
+Stuart Lynne	ihnp4!alberta!ubc-vision!van-bc!sl     Vancouver,BC,604-937-7532
+
+# Not a shar file
+# ------------ cut here --------------- cut here --------------- cut here -----
+#! /bin/sh
+#
+# compress/uncompressdir
+#
+#	Tom Rushworth
+#	Stuart Lynne
+#					Mar/87
+#
+#
+#	Modified from compress 4.0 release
+#
+OPTIONS=
+FILES=
+if test `basename $0` = "compressdir"; then
+EFLAG=-v
+COMPRESS=compress
+else
+EFLAG=
+COMPRESS=uncompress
+fi
+for ARG
+do
+	case "$ARG" in
+	-*)	OPTIONS="$OPTIONS $ARG";;
+	*)	FILES="$FILES $ARG";;
+	esac
+done
+if test -z "$FILES"; then
+	FILES="."
+fi
+set $FILES
+find $@ -type f -links 1 -print |
+	egrep $EFLAG '\.Z$' |
+	while read FILE
+	do
+		if test -r $FILE -a -s $FILE
+		then
+			$COMPRESS $OPTIONS $FILE
+		fi
+	done
+@//E*O*F Compress/:UPDATES/1//
+chmod u=r,g=r,o=r Compress/:UPDATES/1
+ 
+echo mkdir - Compress/:PATCHES
+mkdir Compress/:PATCHES
+chmod u=rwx,g=rwx,o=rwx Compress/:PATCHES
+ 
+echo mkdir - Compress/:PATCHES/1
+mkdir Compress/:PATCHES/1
+chmod u=rwx,g=rwx,o=rwx Compress/:PATCHES/1
+ 
+echo x - Compress/:PATCHES/1/:AUTHOR
+sed 's/^@//' > "Compress/:PATCHES/1/:AUTHOR" <<'@//E*O*F Compress/:PATCHES/1/:AUTHOR//'
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!mirror!sources-request
+@From: sources-request@mirror.UUCP
+Newsgroups: mod.sources
+Subject: v06i023:  Xenix patches to compress4.0 (compress.xenix)
+Message-ID: <103@mirror.UUCP>
+Date: 26 Jun 86 14:50:52 GMT
+Sender: rs@mirror.UUCP
+Lines: 306
+Approved: rs@mirror.UUCP
+Posted: Thu Jun 26 09:50:52 1986
+
+Submitted by: condor!genrad!panda!talcott!seismo!vrdxhq!BMS-AT!stuart
+Mod.sources: Volume 6, Issue 23
+Archive-name: compress.xenix
+
+[  The source that was submitted had the final hunk look like this:
+	1380c1443
+	< long int num, den;	/* never want 16-bit */
+	---
+	> count_int num, den;
+	1407a1471,1473
+	> #endif
+	> #ifdef XENIX_16
+	> 	fprintf(stderr, "XENIX_16, ");
+   My copy, and the one in the mod.sources archive, doesn't have the
+   "never want" comment.
+
+   I patched a copy of the source and compiled and ran it.  Both
+   the patched version and the "official" version work together,
+   and generate identical output from identical input.  This holds
+   for my 4.2BSD Vax750; no guarantees on other machines, and I
+   don't have Xenix.  --r$]
+
+	I recently received the shell archives for compress and related
+utilities.  We are running a 16-bit Xenix machine as well as a 16/32 bit
+motorola 6350.  The XENIX_16 code for compress did not work.  The
+problem was:
+	a) a problem with the large model code optimizer.
+	b) the constant (1<<16) as assigned to maxcode evaluates
+	   to zero on a 16 bit machine!
+After fixing problem b, I removed the XENIX_16 code and instead declared
+the large arrays as 'huge'.  This allows a small model program that uses
+32-bit pointers only for codetab and htab.  This also removes the kludge
+code for multiple arrays.  Defining the big constants as long
+is not necessary on our compiler, but doesn't hurt and may help other
+16-bit compilers.  I changed the logic slightly in compress() and
+decompress() to allow the use of unsigned short for heavily used variables
+containing code values.  This makes things about 5% faster on a 16-bit
+machine.  Please mail me some comments about whether you appreciate
+this mail.
+
+	Stuart D. Gathman <vrdxhq!BMS-AT!stuart>
+
+@//E*O*F Compress/:PATCHES/1/:AUTHOR//
+chmod u=r,g=r,o=r Compress/:PATCHES/1/:AUTHOR
+ 
+echo x - Compress/:PATCHES/1/compress.patch
+sed 's/^@//' > "Compress/:PATCHES/1/compress.patch" <<'@//E*O*F Compress/:PATCHES/1/compress.patch//'
+22c22
+< # define USERMEM 	450000L	/* default user memory */
+---
+> # define USERMEM 	450000	/* default user memory */
+46,49d45
+< #ifndef M_XENIX
+< #  define huge		/* needed only for 16-bit machines */
+< #endif
+< 
+51c47
+< # if USERMEM >= (433484L+SACREDMEM)
+---
+> # if USERMEM >= (433484+SACREDMEM)
+78c74
+< # define HSIZE	69001L		/* 95% occupancy */
+---
+> # define HSIZE	69001		/* 95% occupancy */
+81c77
+< # define HSIZE	35023L		/* 94% occupancy */
+---
+> # define HSIZE	35023		/* 94% occupancy */
+92a89,98
+> #ifdef M_XENIX			/* Stupid compiler can't handle arrays with */
+> # if BITS == 16			/* more than 65535 bytes - so we fake it */
+> #  define XENIX_16
+> # else
+> #  if BITS > 13			/* Code only handles BITS = 12, 13, or 16 */
+> #   define BITS	13
+> #  endif
+> # endif
+> #endif
+> 
+259c265
+< code_int maxmaxcode;			/* should NEVER generate this code */
+---
+> code_int maxmaxcode = 1 << BITS;	/* should NEVER generate this code */
+261c267
+< # define MAXCODE(n_bits)	((code_int)1 << (n_bits) - 1)
+---
+> # define MAXCODE(n_bits)	(1 << (n_bits) - 1)
+263c269
+< # define MAXCODE(n_bits)	(((code_int)1 << (n_bits)) - 1)
+---
+> # define MAXCODE(n_bits)	((1 << (n_bits)) - 1)
+266,267c272,298
+< count_int huge htab [HSIZE];
+< unsigned short huge codetab [HSIZE];
+---
+> #ifdef XENIX_16
+> count_int htab0[8192];
+> count_int htab1[8192];
+> count_int htab2[8192];
+> count_int htab3[8192];
+> count_int htab4[8192];
+> count_int htab5[8192];
+> count_int htab6[8192];
+> count_int htab7[8192];
+> count_int htab8[HSIZE-65536];
+> count_int * htab[9] = {
+> 	htab0, htab1, htab2, htab3, htab4, htab5, htab6, htab7, htab8 };
+> 
+> #define htabof(i)	(htab[(i) >> 13][(i) & 0x1fff])
+> unsigned short code0tab[16384];
+> unsigned short code1tab[16384];
+> unsigned short code2tab[16384];
+> unsigned short code3tab[16384];
+> unsigned short code4tab[16384];
+> unsigned short * codetab[5] = {
+> 	code0tab, code1tab, code2tab, code3tab, code4tab };
+> 
+> #define codetabof(i)	(codetab[(i) >> 14][(i) & 0x3fff])
+> 
+> #else	/* Normal machine */
+> count_int htab [HSIZE];
+> unsigned short codetab [HSIZE];
+269a301
+> #endif	/* XENIX_16 */
+283,284c315,321
+< # define tab_suffixof(i)	((char_type huge *)(htab))[i]
+< # define de_stack		((char_type huge *)&tab_suffixof(1<<BITS))
+---
+> #ifdef XENIX_16
+> # define tab_suffixof(i)	((char_type *)htab[(i)>>15])[(i) & 0x7fff]
+> # define de_stack		((char_type *)(htab2))
+> #else	/* Normal machine */
+> # define tab_suffixof(i)	((char_type *)(htab))[i]
+> # define de_stack		((char_type *)&tab_suffixof(1<<BITS))
+> #endif	/* XENIX_16 */
+485c522
+<     maxmaxcode = (code_int)1 << maxbits;
+---
+>     maxmaxcode = 1 << maxbits;
+513c550
+< 		    maxmaxcode = (code_int)1 << maxbits;
+---
+> 		    maxmaxcode = 1 << maxbits;
+631c668
+< 		maxmaxcode = (code_int)1 << maxbits;
+---
+> 		maxmaxcode = 1 << maxbits;
+675c712
+<     register code_int i = 0;	/* must hold HSIZE */
+---
+>     register code_int i = 0;
+677,678c714,719
+<     register unsigned ent;	/* must hold BITS bits */
+<     register code_int disp;	/* must hold HSIZE */
+---
+>     register code_int ent;
+> #ifdef XENIX_16
+>     register code_int disp;
+> #else	/* Normal machine */
+>     register int disp;
+> #endif
+809,810c850,851
+< output( incode )
+<   code_int  incode;
+---
+> output( code )
+> code_int  code;
+821d861
+<     register unsigned short code;
+829,830c869
+<     if ( incode >= 0 ) {
+< 	code = incode;
+---
+>     if ( code >= 0 ) {
+863c902
+< 	if (bits)
+---
+> 	if(bits)
+938c977
+<     register char_type huge *stackp;
+---
+>     register char_type *stackp;
+940,941c979
+<     register unsigned short code;
+<     register code_int oldcode, incode;
+---
+>     register code_int code, oldcode, incode;
+947,949c985,987
+<     for ( incode = 255; incode >= 0; incode-- ) {
+< 	tab_prefixof(incode) = 0;
+< 	tab_suffixof(incode) = (char_type)incode;
+---
+>     for ( code = 255; code >= 0; code-- ) {
+> 	tab_prefixof(code) = 0;
+> 	tab_suffixof(code) = (char_type)code;
+956c994
+<     putchar( finchar );		/* first code must be 8 bits = char */
+---
+>     putchar( (char)finchar );		/* first code must be 8 bits = char */
+961c999
+<     while ( (incode = getcode()) > -1 ) {
+---
+>     while ( (code = getcode()) > -1 ) {
+963d1000
+< 	code = incode;
+965,966c1002,1003
+< 	    for ( incode = 255; incode >= 0; incode-- )
+< 		tab_prefixof(incode) = 0;
+---
+> 	    for ( code = 255; code >= 0; code-- )
+> 		tab_prefixof(code) = 0;
+969c1006
+< 	    if ( (incode = getcode ()) == -1 )	/* O, untimely death! */
+---
+> 	    if ( (code = getcode ()) == -1 )	/* O, untimely death! */
+971d1007
+< 	    code = incode;
+972a1009
+> 	incode = code;
+984c1021,1025
+< 	while ( code >= 256 ) {		/* already unsigned compare */
+---
+> #ifdef SIGNED_COMPARE_SLOW
+> 	while ( ((unsigned long)code) >= ((unsigned long)256) ) {
+> #else
+> 	while ( code >= 256 ) {
+> #endif
+1000,1001c1041
+< 	if ( free_ent < maxmaxcode ) {
+< 	    code = free_ent++;
+---
+> 	if ( (code=free_ent) < maxmaxcode ) {
+1003a1044
+> 	    free_ent = code+1;
+1025c1066,1067
+< code_int getcode() {
+---
+> code_int
+> getcode() {
+1030c1072
+<     register unsigned short code;
+---
+>     register code_int code;
+1093c1135
+<     return (code_int)code;
+---
+>     return code;
+1185,1186c1227,1228
+< 	   for ( ; ent != 0;
+< 		   ent = (ent >= FIRST ? tab_prefixof(ent) : 0) ) {
+---
+> 	   for ( ; ent != NULL;
+> 		   ent = (ent >= FIRST ? tab_prefixof(ent) : NULL) ) {
+1350c1392,1398
+< 	register count_int huge *htab_p = htab+hsize;
+---
+> #ifndef XENIX_16	/* Normal machine */
+> 	register count_int *htab_p = htab+hsize;
+> #else
+> 	register j;
+> 	register long k = hsize;
+> 	register count_int *htab_p;
+> #endif
+1353a1402,1411
+> #ifdef XENIX_16
+>     for(j=0; j<=8 && k>=0; j++,k-=8192) {
+> 	i = 8192;
+> 	if(k < 8192) {
+> 		i = k;
+> 	}
+> 	htab_p = &(htab[j][i]);
+> 	i -= 16;
+> 	if(i > 0) {
+> #else
+1354a1413
+> #endif
+1373a1433,1436
+> #ifdef XENIX_16
+> 	}
+>     }
+> #endif
+1380c1443
+< long int num, den;
+---
+> count_int num, den;
+1407a1471,1473
+> #endif
+> #ifdef XENIX_16
+> 	fprintf(stderr, "XENIX_16, ");
+@//E*O*F Compress/:PATCHES/1/compress.patch//
+chmod u=r,g=r,o=r Compress/:PATCHES/1/compress.patch
+ 
+exit 0

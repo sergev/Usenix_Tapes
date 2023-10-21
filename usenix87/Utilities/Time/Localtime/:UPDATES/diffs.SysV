@@ -1,0 +1,218 @@
+*** date.c.SysV	Tue Apr 29 03:05:41 1986
+--- date.c.SysV.new	Tue Apr 29 03:05:42 1986
+***************
+*** 17,23
+  #define	JULIAN	itoa(tim->tm_yday+1,cp,3)
+  #define	WEEKDAY	itoa(tim->tm_wday,cp,1)
+  #define	MODHOUR	itoa(h,cp,2)
+! #define	dysize(A) (((A)%4)? 365: 366)
+  
+  int dmsize[12]={31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  
+
+--- 17,24 -----
+  #define	JULIAN	itoa(tim->tm_yday+1,cp,3)
+  #define	WEEKDAY	itoa(tim->tm_wday,cp,1)
+  #define	MODHOUR	itoa(h,cp,2)
+! #define	isleap(yr) ((yr) % 4 == 0 && ((yr) % 100 != 0 || (yr) % 400 == 0))
+! #define	dysize(A) (isleap(A)? 366: 365)
+  
+  int dmsize[12]={31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+  
+***************
+*** 32,37
+  	"Thu","Fri","Sat"
+  };
+  
+  char	*itoa();
+  char	*cbp;
+  long	timbuf;
+
+--- 33,39 -----
+  	"Thu","Fri","Sat"
+  };
+  
++ char	*getenv();
+  char	*itoa();
+  char	*cbp;
+  long	timbuf;
+***************
+*** 35,40
+  char	*itoa();
+  char	*cbp;
+  long	timbuf;
+  
+  struct	utmp	wtmp[2] = { {"","",OTIME_MSG,0,OLD_TIME,0,0,0},
+  			    {"","",NTIME_MSG,0,NEW_TIME,0,0,0} };
+
+--- 37,43 -----
+  char	*itoa();
+  char	*cbp;
+  long	timbuf;
++ extern	char *tz_abbr;
+  
+  struct	utmp	wtmp[2] = { {"","",OTIME_MSG,0,OLD_TIME,0,0,0},
+  			    {"","",NTIME_MSG,0,NEW_TIME,0,0,0} };
+***************
+*** 48,53
+  	long	tbuf, time(), lseek();
+  	struct	tm  *tim;
+  	char	 buf[200], *tzn;
+  
+  	tfailed = 0;
+  	if(argc > 1) {
+
+--- 51,60 -----
+  	long	tbuf, time(), lseek();
+  	struct	tm  *tim;
+  	char	 buf[200], *tzn;
++ 	struct	tm gmt;
++ 	struct	tm local;
++ 	register long diff;
++ 	register int iters = 0;
+  
+  	tfailed = 0;
+  	if(argc > 1) {
+***************
+*** 153,158
+  			exit(2);
+  		}
+  
+  		if(gtime()) {
+  			(void) fprintf(stderr,"date: bad conversion\n");
+  			exit(2);
+
+--- 160,170 -----
+  			exit(2);
+  		}
+  
++ 		if (settz(cp = getenv("TZ")) < 0) {
++ 			(void) fprintf(stderr,"date: unknown zone \"%s\"\n",cp);
++ 			exit(2);
++ 		}
++ 
+  		if(gtime()) {
+  			(void) fprintf(stderr,"date: bad conversion\n");
+  			exit(2);
+***************
+*** 159,165
+  		}
+  
+  	/* convert to Greenwich time, on assumption of Standard time. */
+! 		timbuf += timezone;
+  
+  	/* Now fix up to local daylight time. */
+  		if (localtime(&timbuf)->tm_isdst)
+
+--- 171,225 -----
+  		}
+  
+  	/* convert to Greenwich time, on assumption of Standard time. */
+! 		/*
+! 		 * Do this by determining what the given time
+! 		 * is when converted to local time, and when
+! 		 * converted to GMT and taking the difference.
+! 		 * This works correctly regardless of whether
+! 		 * local time is DST or not.
+! 		 * The loop usually runs twice, once to correct the
+! 		 * time, and once to check the correction was accurate.
+! 		 * An extra iteration can be caused by setting the time
+! 		 * just about when DST turns on or off.
+! 		 * If we iterate more than a couple of times, then
+! 		 * the idiot root moron has asked to set the time to
+! 		 * something in the "dead" zone where DST has just
+! 		 * turned on, and the times don't exist!
+! 		 * The ugly "if" statements are to handle wierd cases
+! 		 * that arise setting the time just about midnight on
+! 		 * Jan 1 after a year that was a leap year.
+! 		 * How close to midnight it has to be depends on how
+! 		 * close to Greenwich you are, whether before or after
+! 		 * midnight depends on whether you are East or West.
+! 		 */
+!  
+! 		gmt = *gmtime(&tv.tv_sec);
+! 		do {
+! 			local = *localtime(&tv.tv_sec);
+! 			diff = gmt.tm_year - local.tm_year;
+! 			diff *= 365;
+! 			if (gmt.tm_year > local.tm_year) {
+! 				if (isleap(local.tm_year))
+! 					diff++;
+! 			} else if (local.tm_year > gmt.tm_year) {
+! 				if (isleap(gmt.tm_year))
+! 					diff--;
+! 			}
+! 			diff += gmt.tm_yday - local.tm_yday;
+! 			diff *= 24;
+! 			diff += gmt.tm_hour - local.tm_hour;
+! 			diff *= 60;
+! 			diff += gmt.tm_min - local.tm_min;
+! 			diff *= 60;
+! 			diff += gmt.tm_sec - local.tm_sec;
+! 			tv.tv_sec += diff;
+! 		} while (diff != 0 && ++iters < 5);
+! 		if (iters >= 5) {
+! 			fprintf(stderr,
+! 			    "date: %.24s is in the time warp!\n",
+! 			    asctime(&gmt));
+! 			exit(1);
+! 		}
+  
+  		(void) time(&wtmp[0].ut_time);
+  
+***************
+*** 161,170
+  	/* convert to Greenwich time, on assumption of Standard time. */
+  		timbuf += timezone;
+  
+- 	/* Now fix up to local daylight time. */
+- 		if (localtime(&timbuf)->tm_isdst)
+- 			timbuf += -1*60*60;
+- 
+  		(void) time(&wtmp[0].ut_time);
+  
+  		if(stime(&timbuf) < 0) {
+
+--- 221,226 -----
+  			exit(1);
+  		}
+  
+  		(void) time(&wtmp[0].ut_time);
+  
+  		if(stime(&timbuf) < 0) {
+***************
+*** 188,194
+  		(void) time(&timbuf);
+  	cbp = ctime(&timbuf);
+  	(void) write(1, cbp, 20);
+! 	tzn = tzname[localtime(&timbuf)->tm_isdst];
+  	if (tzn)
+  		(void) write(1, tzn, 3);
+  	(void) write(1, cbp+19, 6);
+
+--- 244,250 -----
+  		(void) time(&timbuf);
+  	cbp = ctime(&timbuf);
+  	(void) write(1, cbp, 20);
+! 	tzn = tz_abbr;
+  	if (tzn)
+  		(void) write(1, tzn, strlen(tzn));
+  	(void) write(1, cbp+19, 6);
+***************
+*** 190,196
+  	(void) write(1, cbp, 20);
+  	tzn = tzname[localtime(&timbuf)->tm_isdst];
+  	if (tzn)
+! 		(void) write(1, tzn, 3);
+  	(void) write(1, cbp+19, 6);
+  	exit(tfailed?2:0);
+  }
+
+--- 246,252 -----
+  	(void) write(1, cbp, 20);
+  	tzn = tz_abbr;
+  	if (tzn)
+! 		(void) write(1, tzn, strlen(tzn));
+  	(void) write(1, cbp+19, 6);
+  	exit(tfailed?2:0);
+  }

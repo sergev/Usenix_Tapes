@@ -1,0 +1,105 @@
+  This shell archive contains diffs, (suitable for use with `patch') and a few
+programs to make your 4.2bsd Mail handle encrypted mail.  I've tried to make
+it conform to the RFC822 standard and make it useful.  If you want to improve
+on it please be my guest.  Note that there is no guarantee that no one can read
+your mail.  However, it does slow them down.
+
+Once you have the diffs installed in your big-M mailer you can send encrypted
+mail like this:
+
+	% Mail -e 'encryptor,keycode' username
+
+This will put the field "Encrypted: encryptor,keycode" in the header. For the
+details of the header see RFC822.  NOTE that Mail doesn't do the encryption so
+you must do the encryption before you send the message.  A way to do this is to
+prepare the message before mailing it and put Mail in a pipeline like this.
+
+	% cat > msg
+	hello this is a test
+	^D
+	% crypt msg | Mail -e 'crypt' glenn
+	Key:
+	%
+
+Or you can do this.
+
+	% Mail -e 'vernam' glenn
+	Subject:  Only testing.
+	Hello this is a test
+	~|vernam -e -k toulouse -c 0123456789ABCDEF
+	(continue)
+	.
+	%
+
+See the "vernam" program below.
+
+  Please remember that if you send encrypted mail to your friends they must
+have a way to decypher it.
+
+Now that you can send encrypted mail you should learn how to read it in case
+you receive some encrypted mail.  The changes to Mail will make mail messages
+with the "Encrypted:" field in the header show up in the header listing.
+
+% Mail
+...
+>N  1 boss     Fri Jan 11 08:37  12/234 "Get back to work!"
+ N  2 secret   Fri Jan 11 08:37  vernam "A little message."
+
+Notice the line/characters field no long has lines/characters.
+I type:
+	& p 2
+
+	From secret  Fri Jan 11 08:37:59 1985
+	Received: by sdcrdcf.UUCP (4.12/4.7)
+		id AA10145; Fri, 11 Jan 85 08:35:29 pst
+	Date: Fri, 11 Jan 85 08:35:29 pst
+	From: secret (You'll never know)
+	Message-Id: <8501111635.AA10145@sdcrdcf.UUCP>
+	To: eglenn
+	Subject: A little message.
+	Encrypted: vernam
+
+	3C0A0C 4C2655 191007 1B5518 071A06 021C1B 552548 115311 110319 4C161A
+	064559 425515 000001 45170E 074B1C 551C0B 54091C 1E0A55 1A0B54 1B1D09
+	4F0512 171F06 1B0B4F 191C11 5A657F 65667C 7A6C7D 281909 011B79 274C5E
+
+
+Very nice !  To read it I type:
+
+	& decrypt vernam -d -k toulouse -c 0123456789ABCDEF
+
+and I get something like:
+
+	From secret  Fri Jan 11 08:37:59 1985
+	Received: by sdcrdcf.UUCP (4.12/4.7)
+		id AA10145; Fri, 11 Jan 85 08:35:29 pst
+	Date: Fri, 11 Jan 85 08:35:29 pst
+	From: secret (You'll never know)
+	Message-Id: <8501111635.AA10145@sdcrdcf.UUCP>
+	To: eglenn
+	Subject: A little message.
+	Encrypted: vernam
+
+	      I just tought I'd tell you - you car's on fire in the parking lot.
+
+Beware !  Currently the 'decrypt' command works only on the current message.
+ie: you cannot type "decrypt 2 vernam -d -k toulouse -c 0123456789ABCDEF".
+That's why I had to 'p'rint it first.
+
+  The enclosed programs are a encryptor/decryptor based on the encypherment
+by (probably) Gilbert Vernam.  The second program may be used is an alias in
+/usr/lib/aliases to encrypt, via the vernam cypher, your incoming mail that is
+placed in your system mailbox.  Use a line like this in /usr/lib/aliases:
+
+	glenn:"|/b/glenn/bin/mailencrypt /usr/spool/mail/glenn"
+
+
+  The `vernam' program works some thing like this:
+
+  Given a key and a 16 character code the plaintext is exclusive or'ed with
+succesive characters of the key.  The resulting 8-bit character value is split
+into 2 4-bit peices.  These peices are used as an index into the code
+characters to be printed.  Therefore each character in the plaintext is
+translated into 2 encrypted characters.  Send short messages.  Experiment with
+the enclosed programs and develop your own.  Amaze your friends, baffle your
+enemies !!

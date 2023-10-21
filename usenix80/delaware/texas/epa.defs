@@ -1,0 +1,220 @@
+/* ep definitions for ADM-3 terminal */
+
+#define ADM 1
+#define HELPFILE "/usr/lib/epahelp"
+
+/**********  Terminal codes  **********/
+#define RINGBELL        007
+#undef  BACKGROUND
+#undef  FOREGROUND
+#define CLEARSCREEN     032
+#undef  CLEARLINE
+#define LEADIN          033
+#define CURSORCOME      075
+#define ROW_COL         1
+#define ROWBASE         040
+#define COLBASE         040
+#define ZAPTUBE maketerm(CLEARSCREEN) 
+
+/**********  Control functions   **********/
+#define ARG     000     /* <cntrl @>, argument */
+#define PAGE    001     /* <cntrl a>, forward page display */
+#define BOL     002     /* <cntrl b>, position cursor to beginning of line */
+#define CNTRL   003     /* <cntrl c>, enter a cntrl char or split line */
+#define OPEN    004     /* <cntrl d>, insert a blank line */
+#define BSRCH   005     /* <cntrl e>, backward search */
+#define CLOSE   006     /* <cntrl f>, take out lines */
+#define DROP    007     /* <cntrl g>, drop picked or zapped lines */
+#define LT      010     /* <cntrl h>, cursor left */
+#define TAB     011     /* <cntrl i>, tab */
+#define LF      012     /* line feed */
+#undef  DWN             /* <cntrl j>, cursor down */
+#define UP      013     /* <cntrl k>, cursor up */
+#define RT      014     /* <cntrl l>, cursor right */
+#define CR      015     /* carriage return */
+#define EOL     016     /* <cntrl n>, position cursor to end of line */
+#define INSERT  017     /* <cntrl o>, insert mode */
+#define POSIT   020     /* <cntrl p>, position cursor to specified line */
+#define BAKPAGE 021     /* <cntrl q>, backward page display */
+#define FSRCH   022     /* <cntrl r>, forward search */
+#define FSHIFT  023     /* <cntrl s>, forward shift (port) n lines */
+#define PICK    024     /* <cntrl t>, pick up lines */
+#define BAKTAB  025     /* <cntrl u>, back tab */
+#define MERGE   026     /* <cntrl v>, merge this line with next line */  
+#define BSHIFT  027     /* <cntrl w>, back shift (port) n lines */
+#define ED      030     /* <cntrl x>, pass argument directly to ed */
+#define MORE    031     /* <cntrl y>, pick up more lines */
+#define REFRESH 032     /* <cntrl z>, refresh display */
+#define ESC     033     /* <cntrl [> == <escape>, exit editor */
+#define COLM    034     /* <cntrl \>, column display on/off */
+/* * unused * * 035        <cntrl ]> */
+#define HOME    036     /* <cntrl HOME>, cursor home */
+#define HELP    037     /* <cntrl ?>, display command summary */
+#define RUB    0177     /* <rub out>, delete characters */
+
+/**********  Terminal size definations  **********/
+#define MINCOL 0        /* minimum column position on screen */
+#define MAXCOL 79       /* maximum column position on screen */
+#define LINELEN 80      /* screen line length */
+#define MINROW 0        /* minimum row position on screen */
+#define MAXROW 21       /* maximum row position on screen */
+#define SSIZE 22        /* number rows in screen */
+#define LOCMSG 23       /* row coordinate of message space on screen */
+#define SCNTRL 36       /* start coordinate of control char message */
+#define EXTCOL 59       /* start coordinate of extended column message */
+#define EXTMOD 20       /* extended column modulo base */
+#define ECAREA 45       /* end coordinate of user command area */
+#define SGENFO 47       /* start coordinate of general file info */
+
+/********************************************************************/
+
+#define ALL 1           /* signal to infosho: show all info */
+#define LINE 0          /* signal to infosho: just display line num */
+#define ON 1
+#define OFF 0
+#define PTHL "-"        /* point for a horizontal line */
+#define FOREVER for (;;)
+#define EOF -1
+#define CBSIZE  520
+#define OK 1
+#define DONE 0
+#define YES 1
+#define NO 0
+#define BOSS 1          /* signal to ed: is user in charge? */
+#define BOY 0           /* signal to ed: ep's issuing command */
+#define FULLSCREEN -1   /* signal to screen output routine */
+#define BSIZE 45        /* size of buf and skey */
+#define KIND_CR 1       /* kind of move down */
+#define KIND_LF 0       /* kind of move down */
+#define FORWARD 1       /* signal to tab forward */
+#define BACK -1         /* signal to tab backward */
+#define TABDIS 8        /* tab interval */
+#define OFFSCREEN 0     /* signal to putchar and puts */
+#define GO -1           /* signal start of new bundle */
+#define QUIT 0          /* signal tred exit */
+#define EDMSG -1        /* signals message from ed to tell */
+#define LEFT 0          /* an argument to the routine scan() */
+#define RIGHT 1         /*                "                  */
+#define NULL '\0'       /* end of string */
+#define TIGHT 1         /* value of flag rein, for substitution control */
+#define LOOSE 0         /* value of flag rein, for substitution control */
+#define DOIT '.'        /* Signal to subcontrol() to actually do substition */
+#define TOEND -1        /* to end of screen */
+
+char combuf[CBSIZE];    /* command buffer, for ed commands */
+char skey[BSIZE];       /* search key */
+char *ttyname;
+char ttycode[4];
+char putcbuf[4];
+char buf[BSIZE];        /* argument buffer */
+char namekeep[30];
+char *out;
+char *order;            /* address in bundle space where ed command starts */
+int rtcode[4];
+int itel;
+int position;           /* screen row coordinate of output line */
+int bspace[BSIZE];      /* array of bundle pointers */
+int col, row;
+int searching;          /* search flag */
+int msg_on;             /* "message on?" flag */
+int tellinsert;         /* insertmode message flag */
+int tellcntrl;          /* control char message flag */
+int tellcol;            /* column message flag */
+int tellrow;            /* extended column row number */
+int tellext;            /* extended column message flag */
+char tellstr[LINELEN-EXTCOL]; /* extended column string */
+int tdisable;           /* signal user attempt to execute a disabled ed com. */
+int change;             /* flag that signals any changes to a line */
+int load_line;          /* number of line currently resident in linebuf */
+int load_len;           /* length of line currently resident in linebuf */
+int user;               /* flag to ed: is command coming directly from user? */
+int *zapstart;          /* pointer to start of zap area at end of core */
+int *mockdol;           /* VERY end of core; > dol if pick or zap buffers
+			   have contents */
+int rein;               /* global signal to subcontrol() */
+
+/* port descriptor */
+struct portdes {
+	int line;       /* text line number corresponding to screen row */
+	int indent;     /* length of left indentation */
+	int len;        /* line length */
+	int disp;       /* flag that signals the line has been displayed */
+	} port[SSIZE];
+
+
+/***************************************************************************/
+/*             Definitions that appeared in original ed                    */
+/***************************************************************************/
+
+/*
+ * Editor
+ * Copyright 1974, Bell Telephone Laboratories, Incorporated
+ */
+
+#define SIGHUP  1
+#define SIGINTR 2
+#define SIGQUIT 3
+#define FNSIZE  64
+#define LBSIZE  512
+#define ESIZE   128
+#define GBSIZE  256
+#define NBRA    5
+#define EOF     -1
+
+#define CBRA    1
+#define CCHR    2
+#define CDOT    4
+#define CCL     6
+#define NCCL    8
+#define CDOL    10
+#define CEOF    11
+#define CKET    12
+
+#define STAR    01
+
+#define error   errfunc()
+#define READ    0
+#define WRITE   1
+
+int     peekc;
+int     lastc;
+char    savedfile[FNSIZE];
+char    file[FNSIZE];
+char    linebuf[LBSIZE];
+char    rhsbuf[LBSIZE/2];
+char    expbuf[ESIZE+4];
+int     circfl;
+int     *zero;
+int     *dot;
+int     *dol;
+int     *endcore;
+int     *fendcore;
+int     *addr1;
+int     *addr2;
+char    genbuf[LBSIZE];
+int     count[2];
+char    *nextip;
+char    *linebp;
+int     ninbuf;
+int     io;
+int     pflag;
+int     onhup;
+int     onquit;
+int     listf;
+int     colm;
+char    *globp;
+int     globf;          /* global command flag (was not in ed) */
+int     tline;
+char    *tfname;
+char    *loc1;
+char    *loc2;
+char    *locs;
+char    ibuff[512];
+char    obuff[512];
+int     ichanged;
+int     nleft;
+int     errfunc();
+int     names[26];
+char    *braslist[NBRA];
+char    *braelist[NBRA];
+

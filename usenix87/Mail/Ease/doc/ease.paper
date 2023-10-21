@@ -1,0 +1,800 @@
+.LP
+.TL
+Ease: A Configuration Language
+for Sendmail
+.AU
+James S. Schoner
+.AI
+Purdue University Computing Center
+West Lafayette, Indiana  47907
+.sp 2
+.I
+.ce
+ABSTRACT
+.R
+.PP
+The rapid expansion of computer networks and ensuing variation among mailing
+address formats have made address interpretation an increasingly
+complex task.  In the UNIX* 4.2BSD operating system, a program named 
+\fIsendmail\fR was introduced which provided a
+general internetwork mail routing facility.  This facility has significantly
+diminished the complexity of handling address interpretation.
+.PP
+\fISendmail\fR's address interpretation is based on a rewriting
+system composed of
+a number of rewriting rules (or productions) arranged as part of a 
+configuration file.  Unfortunately, the syntactical format of a
+configuration file for \fIsendmail\fR is both terse and rigid, making it
+rather difficult to modify.  The standard format certainly serves its 
+purpose, but, as 
+the need to change these configurations increases in frequency, a more 
+readable format (i.e., one that is similar to the format 
+of modern programming languages) is required to permit reasonably 
+quick modifications to the configuration.  As a solution to this problem, 
+\fBEase\fR 
+provides a level of abstraction which eliminates most of the current
+syntactic hindrances
+faced by programmers who must reconfigure \fIsendmail\fR's 
+address parsing scheme.  
+.PP
+As a high-level specification format, \fBEase\fR is proving to be an 
+excellent alternative to \fIsendmail\fR's cryptic 
+configuration file syntax.  The syntactic structures of \fBEase\fR 
+are patterned after modern language constructs, making the language
+easy to learn and easy to remember.  The format of the address rewriting
+rule is perhaps the most significant syntactical improvement.  It was 
+undoubtedly
+the most needed improvement.  Nevertheless, every element of a configuration 
+file is structurally enhanced through the use of \fBEase\fR. 
+.FS
+*  UNIX is a trademark of AT&T Bell Laboratories.
+.FE
+.sp 2
+.NH
+Introduction
+.PP
+The \fBEase\fR language is a high-level specification format for \fIsendmail\fR's
+configuration file.  The motivation for its development
+was to fulfill a goal of providing a readable and easily modifiable 
+\fIsendmail\fR configuration file format.  \fBEase\fR fulfills this goal by
+shielding the programmer from the cryptic configuration specification required
+by \fIsendmail\fR and providing a high-level language with which the programmer
+may specify all modifications to a configuration file.  The development 
+of Ease coincided with
+the development of an \fBEase\fR translator, \fIet\fR,
+which translates a configuration file written 
+in \fBEase\fR to an
+equivalent file of the standard format accepted by \fIsendmail\fR.
+.NH
+Ease in Profile
+.PP
+As will be seen in the next section, the syntax of \fBEase\fR is quite
+readable and easy to learn.  In order to acquire a relevant perspective
+on this issue,
+the reader is advised to examine a raw configuration file for \fIsendmail\fR (the 
+output
+of the \fBEase\fR translator, \fIet\fR, will do nicely).  The raw syntax, while
+quite fitting for quick translation, can prove to be a programmer's nightmare.  
+.PP
+Undoubtedly, one of the more prominent features of \fBEase\fR is the ability 
+to attach
+names to address fields.  When address field names are well-chosen, a distinct,
+self-documenting quality becomes a visible part of the address rewriting 
+rules.  Ostensibly, address field names provide a new level of semantic 
+abstraction.  A brief comparison of the formats can be accomplished by examining
+the following equivalent representations of an address pattern:
+.DS
+	user_path@host_name			(\fBEase\fR format)
+	$+@$-					(raw format)
+.DE
+In the above, \*Quser_path\*U represents a field of one or more address
+tokens, and \*Qhost_name\*U represents one address token exactly.  These
+token fields are represented by \*Q$+\*U and \*Q$-\*U in the raw format.  Clearly, 
+the \fBEase\fR format is preferable, not only for increased readability, but 
+structural comprehension as well.
+.PP
+Other features of \fBEase\fR include ruleset naming, long identifiers for 
+macros and classes, flow-of-control structures, and free formatting.  In
+addition, the C language preprocessor (cpp) can be used for file inclusion
+and conditionally defined code constructs.  The next section describes
+the \fBEase\fR language in complete detail.
+.NH
+Ease Syntax*
+.FS
+*  \fINo attempt is made to describe the complete semantic meaning 
+associated with all of the constructs of a sendmail configuration file.  Items 
+not covered in this document include the semantic distinction among rulesets, 
+the special uses of
+pre-defined macros, and the method of building configuration files.  To
+obtain this information, the reader is advised to refer to
+the Installation and Operation Guide for Sendmail (UNIX
+Programmer's Manual, Volume 2c), by Eric Allman.\fR
+.FE
+.PP
+At its highest level, \fBEase\fR can be viewed as a collection of 
+block-structures, where each block begins with a keyword and is followed by
+zero or more related definitions and/or declarations.  There are ten distinct 
+block types.  The following is 
+a list containing all ten block keywords and the block type it denotes.
+.TS
+center;
+l l .
+\fIbind\fR	-ruleset identifier bindings
+\fImacro\fR	-macro definitions
+\fIclass\fR	-class definitions
+\fIoptions\fR	-\fIsendmail\fR option definitions
+\fIprecedence\fR	-precedence definitions
+\fItrusted\fR	-trusted users
+\fIheader\fR	-mail header definitions
+\fImailer\fR	-mailer definitions
+\fIfield\fR	-address field definitions
+\fIruleset\fR	-address rewriting rules
+.TE
+.sp 1
+In general,
+.TS
+center ;
+l .
+
+* Letters are distinguished by case,
+
+T{
+* An \fBEase\fR identifier is defined to be a letter, followed by zero or 
+more letters, digits, underscores (_), or dashes (-),
+T}
+
+T{
+* A literal newline or double quotation (") character may be included in 
+any quoted string by preceding the character with a backslash (\\\\\), and
+T}
+
+T{
+* \fBEase\fR source is preprocessed by the C language preprocessor (cpp),
+thus source comments (i.e., text enclosed by \*Q/*\*U and \*Q*/\*U) may appear 
+anywhere as part of \fBEase\fR whitespace.
+T}
+.TE
+.PP
+For notational convenience, this document specifies all reserved
+words of the \fBEase\fR language in italics.  In addition, quantities
+enclosed in angle brackets (<..>) represent arbitrary 
+identifiers, strings, or numbers.  
+.NH 2
+Ruleset Identifier Bindings
+.PP
+A ruleset (a set of rewriting rules) is identified solely by an integer 
+in \fIsendmail\fR's
+configuration file.  \fBEase\fR, however, allows each ruleset to be named with
+a meaningful identifier.  Since a special numeric association for each 
+ruleset is required by the address parsing scheme of \fIsendmail\fR, a \fIbind\fR
+block must be present in any \fBEase\fR file which defines one or more 
+rulesets.  A
+\fIbind\fR block consists of the keyword \fIbind\fR, followed by zero or more
+statements of the form:
+.TS
+center box;
+l .
+<ruleset-id> = \fIruleset\fR <ruleset-number> ;
+.TE
+The following example, 
+.sp 1
+\fIbind\fR
+.PP
+FINAL_RW = \fIruleset\fR 4;
+.sp 1
+specifies that FINAL_RW, the final rewriting ruleset, is \fIsendmail\fR's ruleset 
+number 4.
+.NH 2
+Macro Definitions
+.PP
+A macro is an identifier which, when referenced in the text of a program,
+is replaced by its value, a string of zero or more characters.  The value
+of a macro may include references to other macros, but not itself!  \fISendmail\fR
+allows a maximum of 26 user-declared macros in its configuration file.  In 
+addition, there are a number of pre-declared macros which have special meaning
+to \fIsendmail\fR (see Appendix A).  \fBEase\fR macros are defined in 
+\fImacro\fR blocks.  \fBEase\fR allows any macro to be declared 
+(which is equivalent to simply referencing it) before it is defined.  A macro
+identifier is replaced by its value when it is preceded by the character
+\*Q$\*U.  In addition, a macro reference inside a quoted string must always 
+include braces ({}) around the macro identifier (for delimiting purposes).  
+.PP
+A \fImacro\fR block consists of the keyword \fImacro\fR, followed by zero
+or more statements taking either of the following forms:
+.TS
+center box;
+l .
+<macro-identifier> = "<macro-value>" ;
+<macro-identifier> = \fBconditional-expression\fR ;
+.TE
+The \fBconditional-expression\fR format will be discussed 
+later.  
+.sp 1
+The following example,
+.sp 1
+\fImacro\fR
+.PP
+first_name = "James";
+.PP
+last_name = "Schoner";
+.PP
+whole_name = "${first_name} ${second_name}";
+.sp 1
+defines the macros first_name, last_name, and whole_name, where whole_name
+is the string, "James Schoner".
+.NH 2
+Class definitions
+.PP
+A class is denoted by an identifier representing a logical grouping of zero 
+or more names.  Classes are used to represent the range of values a token
+may assume in the pattern matching of an address.  Further discussion on the
+use of classes will be deferred until address fields are described.
+.PP
+One identifier may be used to distinctly represent both a macro
+and class (i.e., the set of macro identifiers and the set of class identifiers
+may form a non-empty intersection).  A name, or class element, may 
+be an identifier or any quoted word.
+.PP
+A \fIclass\fR block consists of the keyword \fIclass\fR, followed by zero
+or more statements taking any of the following forms:
+.TS
+center box;
+l .
+<class-identifier> = { <name1>, <name2>, <name3>, ... } ;
+<class-identifier> = \fIreadclass\fR ( "<file-name>" ) ;
+<class-identifier> = \fIreadclass\fR ( "<file-name>", "<read-format>" ) ;
+.TE
+The second and third forms cause \fIsendmail\fR to read the names of the class 
+from the named
+file.  The third form contains a read format, which should be a \fIscanf(3)\fR 
+pattern yielding a single string.
+.sp 1
+The following example,
+.sp 1
+\fIclass\fR
+.PP
+campus_hosts = { statistics, engineering, chemistry, physics, physics-2 } ;
+.PP
+versions     = { "1.0", "1.1", "4.0", "4.2", latest-and-greatest } ;
+.PP
+phone_hosts  = \fIreadclass\fR ( "/tmp/phonenet.list" ) ;
+.sp 1
+defines the classes campus_hosts, versions, and phone_hosts.
+.NH 2
+Sendmail option definitions
+.PP
+A number of options to the \fIsendmail\fR program may be specified in 
+an \fIoptions\fR
+block.  For a description of the various \fIsendmail\fR options and their 
+values, see Appendix B.  
+.PP
+An
+\fIoptions\fR block consists of the keyword \fIoptions\fR, followed by zero
+or more statements taking any of the following forms:
+.TS
+center box;
+l l .
+<option-identifier>	= "<option-value>" ;
+\fIo_delivery\fR	= \fBspecial-value\fR ;
+\fIo_handling\fR	= \fBspecial-value\fR ;
+.TE
+All but two options (\fIo_delivery\fR and \fIo_handling\fR) use the first 
+form.  To specify an option without a value, simply assign to it the null 
+string ("").  The \fBspecial-value\fR field of the second and third form
+refers to special values (non-quoted) which are specified in Appendix B.
+.sp 1
+The following example,
+.sp 1
+\fIoptions\fR
+.PP
+\fIo_alias\fR = "/usr/lib/aliases" ;
+.PP
+\fIo_tmode\fR = "0600" ;
+.PP
+\fIo_delivery\fR = d_background ;
+.sp 1
+sets the options \fIo_alias\fR, \fIo_tmode\fR, and \fIo_delivery\fR.
+.NH 2
+Precedence definitions
+.PP
+Message headers may contain a \*QPrecedence:\*U field describing the precedence
+of the message class.  Identifiers which may appear in the precedence field of
+a message are given precedence values in a configuration file \fIprecedence\fR 
+definition.  This association will be illustrated below in an example.
+.PP
+A \fIprecedence\fR block consists of the keyword \fIprecedence\fR, followed 
+by zero or more statements of the form:
+.KS
+.TS
+center box;
+l .
+<precedence-identifier> = <precedence-integer> ;
+.TE
+.KE
+The following example,
+.sp 1
+\fIprecedence\fR
+.PP
+special-delivery = 100;
+.PP
+junk = -100;
+.sp 1
+defines the precedence level for the names \*Qspecial-delivery\*U and 
+\*Qjunk\*U.  Thus, whenever the name \*Qjunk\*U appears in 
+a \*QPrecedence:\*U field, the corresponding message class will be set to -100.
+.NH 2
+Trusted users
+.PP
+\fISendmail\fR's \fB-f\fR flag allows trusted users to override the sender's
+machine address.  Trusted users are listed in \fItrusted\fR blocks.  A 
+\fItrusted\fR block consists of the keyword \fItrusted\fR, followed 
+by zero or more sets of users taking the form:
+.TS
+center box;
+l .
+{ <user1>, <user2>, <user3>, ... } ;
+.TE
+The following example,
+.sp 1
+\fItrusted\fR
+.PP
+{ root, uucp, network } ;
+.PP
+{ acu, kcs, jss } ;
+.sp 1
+specifies that the users root, uucp, network, acu, kcs, and jss can be trusted 
+to use the \fIsendmail\fR flag, \fB-f\fR.
+.NH 2
+Mail header definitions
+.PP
+The format of the message headers inserted by \fIsendmail\fR is defined in one
+or more \fIheader\fR blocks in the configuration file.  A \fIheader\fR block
+consists of the keyword \fIheader\fR, followed by zero or more statements
+taking any of the following forms:
+.TS
+center box;
+l 
+l
+l
+l
+l
+l
+l
+l
+l
+l
+l .
+\fIfor\fR ( <mailer-flag1>, <mailer-flag2>, ... )
+       \fIdefine\fR ( "<header-title>" , \fBheader-value\fR ) ;
+
+\fIfor\fR ( <mailer-flag1>, <mailer-flag2>, ... ) {
+       \fIdefine\fR ( "<header-title>" , \fBheader-value\fR ) ;
+       \fIdefine\fR ( "<header-title>" , \fBheader-value\fR ) ;
+       .
+       .
+} ;
+
+\fIdefine\fR ( "<header-title>" , \fBheader-value\fR ) ;
+.TE
+The first form is used to define one header for one or more mailer
+flags.  The second form differs from the first in that more than one
+header may be defined for a given set of flags.  The third form is used to 
+define a header,
+regardless of mailer flags.  Refer to Appendix C for a list of \fBEase\fR 
+identifiers representing mailer flags.  The header title is a simple
+string of characters (no macro references), whereas the \fBheader-value\fR can
+be either a string of characters (possibly containing macro references) or 
+a \fBconditional-expression\fR (discussed later).
+.sp 1
+The following example,
+.DS
+\fIheader\fR
+
+	\fIdefine\fR ( "Subject:", "") ;
+
+	\fIfor\fR ( \fIf_return\fR )
+		\fIdefine\fR ( "Return-Path:", "<${\fIm_sreladdr\fR}>" ) ;
+
+	\fIfor\fR ( \fIf_date\fR ) {
+		\fIdefine\fR ( "Resent-Date:", "${\fIm_odate\fR}" ) ;
+		\fIdefine\fR ( "Date:", "${\fIm_odate\fR}" );
+	} ;
+.DE
+defines a \*QSubject\*U field for all mailers, regardless of their flags, a
+\*QReturn-Path\*U field for mailers whose definition specifies
+the flag, \fIf_return\fR, and the headers, \*QResent-Date\*U and \*QDate\*U,
+for mailers whose definition specifies the flag, \fIf_date\fR.
+.NH 2
+Mailer Definitions
+.PP
+\fISendmail\fR's definition of a mailer (or an interface to one) occurs in a
+\fImailer\fR block.  A \fImailer\fR block consists of the keyword \fImailer\fR,
+followed by zero or more statements of the form:
+.TS
+center box;
+l .
+<mailer-identifier> { \fBmailer-spec\fR } ;
+.TE
+The field, \fBmailer-spec\fR, is a list of zero or more of the
+following attribute assignments (where successive assignment statements are
+separated by commas):
+.TS
+center ;
+l l 
+l l
+l l
+l l
+l l
+l l
+l l .
+\fIPath\fR	= \fBstring-attribute\fR
+\fIArgv\fR	= \fBstring-attribute\fR
+\fIEol\fR	= \fBstring-attribute\fR
+\fIMaxsize\fR	= \fBstring-attribute\fR
+\fIFlags\fR	= { <mailer-flag1>, <mailer-flag2>, ... } 
+\fISender\fR	= <sender-ruleset-id>
+\fIRecipient\fR	= <recipient-ruleset-id>
+.TE
+The \fBstring-attribute\fR value can take the form of a quoted string
+(possibly containing macro references) or a \fBconditional-expression\fR 
+(discussed later).
+.sp 1
+The following example,
+.sp 1
+\fImailer\fR
+.DS
+	local {
+		\fIPath\fR		= "/bin/mail",
+		\fIFlags\fR		= { \fIf_from\fR, \fIf_locm\fR },
+		\fISender\fR	= Sender_RW,
+		\fIRecipient\fR	= Recip_RW,
+		\fIArgv\fR		= "mail -d ${\fIm_ruser\fR}",
+		\fIMaxsize\fR	= "200000"
+	} ;
+.DE
+defines a mailer named \*Qlocal\*U.
+.NH 2
+Address field definitions
+.PP
+\fISendmail\fR's address parsing scheme treats an address as a group of tokens
+(an address token is precisely defined in the Arpanet protocol RFC822).  In
+general, \fIsendmail\fR divides an address into tokens based on a list of
+characters assigned as a string to the special macro \fIm_addrops\fR.  These
+characters will individually be considered as tokens and will separate tokens
+when parsing is performed. 
+.PP
+For
+the \fBEase\fR language, there is a distinct set of address tokens (defined
+below) which are used in combination to represent generic forms of 
+addresses.  In 
+addition to literal address tokens, the pattern to be matched in a rewriting 
+rule (often refered to as the LHS) may
+include field identifiers which match one of five possibilities:
+.DS
+	- zero or more tokens
+	- one or more tokens
+	- one token exactly
+	- one token which is an element of an aribitrary class \fBX\fR
+	- one token which is not an element of an aribitrary class \fBX\fR
+.DE
+A particular field type may be assigned to one or more identifiers.  Each
+field identifier is associated with (or defined to be) a field type in
+a \fIfield\fR declarations block.  A \fIfield\fR declarations block consists
+of the keyword \fIfield\fR, followed by zero or more field definitions of
+the form:
+.TS
+center box;
+l .
+\fBfield-id-list\fR : \fBfield-type\fR ;
+.TE
+A \fBfield-id-list\fR is a list of one or more identifiers, each separated by
+a comma.  A \fBfield-type\fR, on the other hand, is a representation of 
+one of the five fields 
+described above.  The syntax for each of the five forms follows:
+.DS
+	\fImatch\fR ( 0* )
+	\fImatch\fR ( 1* )
+	\fImatch\fR ( 1 )
+	\fImatch\fR ( 1 ) in <class-X>
+	\fImatch\fR ( 0 ) in <class-X>
+.DE
+The star in the first two forms means: "or more".  Thus, the first
+form would read: "match zero or more tokens".  The fourth form describes
+a field where one token is matched from an arbitrary class (class-X), whereas
+the fifth form describes a field where one token is matched if it is not of the
+given class (class-X).
+.sp 1
+The following example,
+.sp 1
+.DS
+\fIfield\fR
+	anypath		: \fImatch\fR ( 0* );
+	recipient_host	: \fImatch\fR ( 1 );
+	local_site		: \fImatch\fR ( 1 ) in \fIm_sitename\fR;
+	remote_site		: \fImatch\fR ( 0 ) in \fIm_sitename\fR;
+.DE
+defines the fields anypath, recipient_host, local_site, and remote_site.
+.NH 2
+Address rewriting rules
+.PP
+Address rewriting rules are grouped according to the function they perform.  For
+example, it is desirable to form a distinct group for those rewriting rules 
+which perform transformations on recipient addresses.
+.PP
+Sets of rewriting rules are defined in \fIruleset\fR blocks.  A \fIruleset\fR
+block consists of the keyword \fIruleset\fR, followed by zero or more
+ruleset definitions of the form:
+.TS
+center box;
+l .
+<ruleset-id> { <rewriting-rule1> <rewriting-rule2> ... }
+.TE
+The ruleset identifier, ruleset-id, must be defined in a \fIbind\fR block, as
+described earlier.  The rewriting rules have the form:
+.DS
+	\fIif\fR ( <match-pattern> )
+		<match-action> ( <rewriting-pattern> ) ;
+.DE
+where match-pattern, rewriting-pattern, and match-action are described below.
+.NH 3
+Match-patterns
+.PP
+A match-pattern is a sequence of Ease address elements representing an
+address format.  If the address being rewritten matches the pattern
+\*Qmatch-pattern\*U,
+then the address is reformatted using the pattern \*Qrewriting-pattern\*U, and 
+the corresponding
+action (\*Qmatch-action\*U) is performed.  The five distinct Ease address
+elements which may constitute a match-pattern are as follows:
+.TS
+center ;
+l .
+1. Field Identifiers (refer to previous section)
+T{
+2. Non-alphanumeric characters (the exception is the case for literal 
+double quotes, which must be preceded by a backslash (\\\\\)
+T}
+3. Macro references
+4. Quoted strings ("...")
+5. \fBConditional-expressions\fR (discussed later)
+.TE
+Below are two sample match-patterns, each describing the same address format:
+.DS
+	user-id @ hostname . $arpa_suffix
+	user-id @ hostname ".ARPA"
+.DE
+where user-id and hostname are field identifiers, and arpa_suffix is a 
+user-defined macro with the value \*QARPA\*U.
+.NH 3
+Rewriting-patterns
+.PP
+A rewriting-pattern specifies the form in which to rewrite a matched 
+address.  The seven distinct elements which may be used to form 
+a rewriting-pattern are as follows:
+.TS
+center ;
+l .
+
+T{
+1. Non-alphanumeric characters (the exception is the case for literal
+double quotes, left parentheses, or right parentheses, each of which 
+must be preceded by a backslash (\\\\\). 
+T}
+
+T{
+2. A call to another ruleset.  This is used to perform rewrites
+on a suffix of the rewriting-pattern.  The proper use of this
+feature will be demonstrated by example below. 
+T}
+
+3. Quoted strings ("...").
+
+4. \fBConditional-expressions\fR (discussed later).
+
+5. A macro reference.
+
+T{
+6. A positional reference in the matched address.  A positional 
+reference takes the form: $<integer-position>.  For example, 
+$3 references the value of the third \fBEase\fR address 
+element in the matched address.
+T}
+
+T{
+7. Canonicalized host names of the form \fIcanon\fR (<id-token>),
+where id-token is a regular identifier, a quoted identifier (with
+double quotes), a macro reference yielding an identifier, or a 
+positional reference in the matched address.  The canonicalization of 
+a host name is simply a mapping to its canonical (or official) form.
+T}
+
+.TE
+Below are two sample rewriting-patterns:
+.DS
+	$1 % $2 < @ $3 ".ARPA" >
+	OLDSTYLE_RW ( $1 )
+.DE
+The first form specifies an address such as a%b<@c.ARPA>, where a, b, and c
+represent matched identifiers or paths.  The second form specifies a call to
+the ruleset \*QOLDSTYLE_RW\*U, for old-style rewriting on the parameter 
+$1, which probably references the entire matched address.  This will become 
+clear in later examples.
+.NH 3
+Match-actions
+.PP
+When a ruleset is called, the address to be rewritten is compared (or matched)
+sequentially against the match-address of each rewriting rule.  When a
+match-address describes the address \fIsendmail\fR is attempting to rewrite, the
+address is rewritten (or reformatted) using the rule's 
+rewriting-pattern.  Following this rewrite, the corresponding match-action
+is performed.  There are four match-actions:
+.TS
+center ;
+l l .
+\fIretry\fR	T{
+-a standard action which causes the rewritten address
+to be again compared to the match-address of the current rule. 
+T}
+
+\fInext\fR	T{
+-an action which causes the rewritten address to be
+compared to the match-address of the next rewriting rule of the current 
+ruleset.  If the end of the list is reached, the ruleset returns the 
+rewritten address.
+T}
+
+\fIreturn\fR	T{
+-an action which causes an immediate return of the 
+ruleset with the current rewritten address.
+T}
+
+\fIresolve\fR	T{
+-an action which specifies that the address has been
+completely resolved (i.e., no further rewriting is necessary).  The 
+\fIresolve\fR action is described in more detail below. 
+T}
+.TE
+.PP
+The match-action, \fIresolve\fR, is special in that it terminates
+the address rewriting altogether.  The semantic structure of \fIsendmail\fR's
+rewriting scheme requires that a \fIresolve\fR action appear only in the 
+ruleset whose numerical binding is to the number zero.  The \fIresolve\fR action
+must specify three parameters: \fImailer\fR, \fIhost\fR, and \fIuser\fR.  If
+the \fImailer\fR is local, the \fIhost\fR parameter may be omitted.  The
+\fImailer\fR argument must be specified as a single word, macro, or positional
+reference in the matched address.  The \fIhost\fR argument may be specified as 
+a single word or as an expression which expands to a single word (i.e.,
+\fIhost\fR ($1 ".ARPA")).  In addition, the \fIhost\fR argument may be a
+canonicalization (as described above) or a numeric internet specification.  The
+keyword \fIhostnum\fR is used for numeric internet specifications, as in 
+\fIhostnum\fR ("00.00.00.00") or \fIhostnum\fR ( $2 ).  The \fIuser\fR 
+specification is a rewriting-pattern, as described above.  
+.PP
+In general, the format of a \fIresolve\fR action will be as follows:
+.DS
+	\fIresolve\fR (	\fImailer\fR ( <mailer-name> ),
+			\fIhost\fR   ( <host-name> ),
+			\fIuser\fR   ( <user-address>)   );
+.DE
+Examples of the match-action statement are shown below:
+.DS
+\fIfield\fR
+	anypath	: \fImatch\fR (0*);
+	usr, path	: \fImatch\fR (1*);
+	hostname	: \fImatch\fR (1);
+	phone_host	: \fImatch\fR (1) in phonehosts;
+.DE
+.DS
+\fIruleset\fR
+
+	EXAMPLE_RW {
+	
+		\fIif\fR ( anypath < path > anypath )   /* basic RFC821/822 parse */
+			\fIretry\fR ( $2 );
+		\fIif\fR ( usr " at " path )		/* \*Qat\*U -> \*Q@\*U */
+			\fInext\fR ( $1 @ $2 );
+		\fIif\fR ( @path: usr )
+			\fIreturn\fR ( LOCAL_RW ( < @$1 > : $2 ) );
+		\fIif\fR ( anypath < @phone_host".ARPA" > anypath )
+			\fIresolve\fR (	\fImailer\fR ( tcp ),
+					\fIhost\fR ( csnet-relay ),
+					\fIuser\fR ( $1 % $2 < @"csnet-relay" > $3 ) );
+	}
+.DE
+.PP
+The example above defines the ruleset \*QEXAMPLE_RW\*U, which contains four
+rewriting rules.  The first rewriting rule discards all tokens of an address
+which lie on either side of a pair of angle brackets (<>), thereby 
+rewriting the address as
+the sequence of tokens contained within the angle brackets ($2).  Following the
+address rewrite, the rule is applied again (\fIretry\fR).  When the first rule
+fails to match the address being rewritten, the second rule is applied.  
+.PP
+The second 
+rule simply replaces the word \*Qat\*U by the symbol \*Q@\*U.  The \*Q\fInext\fR\*U
+action specifies that if a match is made, a rewrite is performed and 
+matching continues at the next (or following) rule.  
+.PP
+The third rule illustrates
+the use of the \*Q\fIreturn\fR\*U action, which is executed if the 
+pattern \*Q@path: usr\*U
+describes the current format of the address being rewritten.  In this example,
+the \fIreturn\fR action returns the result of a call to ruleset \*QLOCAL_RW\*U,
+which rewrites the address \*Q<@$1>:$2\*U, where $1 and $2 are substituted
+with the token(s) matched respectively by \*Qpath\*U and \*Qusr\*U.
+.PP
+The fourth (and final) rule signals a resolution (and termination) of the
+rewriting process if the given pattern is matched.  The resolution specifies
+that the mailer \*Qtcp\*U will be used to deliver the message to the host
+\*Qcsnet-relay\*U.  The \fIuser\fR parameter specifies the final form of the address
+which \fIsendmail\fR has just resolved.
+.sp 2
+.PP
+The \fBEase\fR construct which remains to be examined is the 
+\fBconditional-expression\fR.  The \fBconditional-expression\fR provides a 
+method for
+constructing strings based on the condition that some test macro is (or is not)
+set.  The general form begins with the concatenation of a string and a
+\fBstring-conditional\fR:
+.DS
+	\fIconcat\fR ( <quoted-string>, \fBstring-conditional\fR )
+	\fIconcat\fR ( \fBstring-conditional\fR, <quoted-string> )
+.DE
+A \fBstring-conditional\fR assumes either of the following forms:
+.DS
+	\fIifset\fR ( <macro-name>, <ifset-string> )
+	\fIifset\fR ( <macro-name>, <ifset-string>, <notset-string> )
+.DE
+A \fBstring-conditional\fR of the first form evaluates to \*Qifset-string\*U 
+if the macro \*Qmacro-name\*U has been assigned a value; otherwise it
+evaluates to the null string.  The second form behaves similarly, except
+that the \fBstring-conditional\fR evaluates to \*Qnotset-string\*U, instead
+of the null string, if the macro \*Qmacro-name\*U has no value.
+.sp 1
+The following \fBconditional-expression\fR,
+.DS
+	\fIconcat\fR ( "New ", \fIifset\fR ( city, "York", "Jersey" ) )
+.DE
+evaluates to the string "New York", if the macro \*Qcity\*U is set.  Otherwise,
+the \fBconditional-expression\fR evaluates to the string "New Jersey".
+.NH
+Ease Translation
+.PP
+It is important to note that \fBEase\fR is translated by a stand-alone
+translator to the raw configuration file format.  No modifications were
+made to the \fIsendmail\fR program itself.  As a result, syntactical verification
+of a configuration file can be performed without invoking \fIsendmail\fR.
+.PP
+The \fBEase\fR language is translated by invoking 
+the C language preprocessor (cpp) with \fBEase\fR source as input, then piping
+the output as input to the \fBEase\fR translator (\fIet\fR).  The \fBEase\fR
+translator may be invoked on the command line in one of four ways:
+.TS
+center box ;
+l l .
+\fIet\fR  <input-file>  <output-file>	[read from a file, write to a file]
+\fIet\fR  <input-file>	[read from a file, write to standard output]
+\fIet\fR  -  <output-file>	[read from standard input, write to a file]
+\fIet\fR	[read from standard input, write to standard output]
+.TE
+.NH
+Conclusion
+.PP
+\fBEase\fR is currently in use at the Purdue University Computing 
+Center.  Source code for the \fBEase\fR translator (\fIet\fR) may be
+obtained on request by writing to:
+.DS
+U.S. Mail:
+		James S. Schoner
+		Mathematical Sciences Building, Office 204
+		Purdue University
+		West Lafayette, Indiana  47907
+
+Electronic Mail:
+		jss@purdue-asc.ARPA
+.DE
+.PP
+Much of the success of this project is attributable to the constant support 
+and insight offered by Mark Shoemaker.  To him, I owe a debt of gratitude.  In 
+addition, I would like to thank Kevin Smallwood, Paul Albitz, and Rich Kulawiec
+for their many notable suggestions and valuable insight.

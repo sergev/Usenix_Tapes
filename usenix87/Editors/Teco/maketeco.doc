@@ -1,0 +1,65 @@
+TECO for Ultrix			Matt Fichtenbaum  3/27/86  revised 7/25/86
+
+     These notes describe briefly what it is and how to make it.
+
+     Ultrix TECO is an editor that is mostly compatible with DEC
+Standard TECO.  It is written in C to run under Ultrix (and other
+Unix (tm) implementations, e.g., it has compiled and run on a Sun
+workstation).  It implements all the editor functions of DEC TECO
+and it has some additional features suited to the Unix environment,
+such as the ability to execute Unix commands or to pass text from
+TECO's buffer through a Unix process and incorporate the result
+into the text buffer.  It lacks some of the display support features
+of Standard TECO, but includes the split-screen "window" mode
+suitable for using "raw" TECO.
+
+     Note that TECO's CRT routines are hard-coded for a VT100-type
+terminal.  Using another type of terminal requires changing these
+routines.
+
+     Ultrix TECO consists of twelve source files:
+
+	te_defs.h	definitions file #include'd by the .c files
+	te_data.c	"common" data
+	te_main.c	main program
+	te_rdcmd.c	read commands and build the command string
+	te_exec0.c	exec commands 1 (initial dispatch & expressions)
+	te_exec1.c	exec commands 2 (most commands)
+	te_exec2.c	exec commands 3 (E, F commands, file I/O, Unix extensions)
+	te_srch.c	search operations
+	te_window.c	CRT display routines
+	te_chario.c	terminal I/O, interaction with tty driver, signals
+	te_subs.c	higher level subroutines
+	te_utils.c	lower level subroutines
+
+TECO is built as follows:
+
+	1. Compile all the .c files with cc -c -O <file>.c
+
+	2. Link all the object files with cc -o te *.o
+
+Note that TECO catches the "interrupt" (^C) signal; this may cause problems when
+using dbx.  This can be circumvented by compiling te_chario.c with the symbol
+DEBUG defined, i.e.,
+
+	cc -c -g -DDEBUG te_chario.c
+
+(naturally, the -g flag should be specified to all the cc commands
+if dbx is to be used).
+
+
+There are two 'makefiles.'  'makefile' makes 'te' as above; 'makefile.x'
+makes 'te' and 'tex' for use with dbx.  'tex' compiles te_chario.c with
+the DEBUG flag set.  Because 'makefile.x' compiles with -g and 'makefile'
+doesn't, the two ought not to share the same directory.
+
+NOTE: makefile.x is set up to make the -DDEBUG version of te_chario.o
+under the name te_chx.o.  The source directory should contain te_chx.c
+as a symbolic link to te_chario.c.
+
+	The file .tecorc illustrates one possible startup.  It implements
+'te file' to mean
+
+	%te
+	*ebfile$y5,7:w$$
+

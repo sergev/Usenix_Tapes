@@ -1,0 +1,62 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: Notesfiles $Revision: 1.7.0.10 $; site ccvaxa
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!inuxc!pur-ee!uiucdcs!ccvaxa!willcox
+From: willcox@ccvaxa.UUCP
+Newsgroups: net.sources.bugs
+Subject: Word wrap fix for MicroEMACS
+Message-ID: <9600004@ccvaxa>
+Date: 4 Jan 86 21:10:00 GMT
+Date-Received: 8 Jan 86 14:16:19 GMT
+Lines: 49
+Nf-ID: #N:ccvaxa:9600004:000:1416
+Nf-From: ccvaxa.UUCP!willcox    Jan  4 15:10:00 1986
+
+
+The "wordwrap" routine in file word.c in the distribution of MicroEMACS
+is broken.  In particular, it breaks if the last word you typed had only
+one character.  Also, it used NULL, where FALSE was correct.  The following
+works much better.
+
+----------------- wrapword(n), from word.c ------------------
+wrapword(n)
+int n;
+{
+	register int cnt;
+	register LINE *oldp;
+	int onech;
+        oldp = curwp->w_dotp;
+        cnt = -1;
+        do {                            
+                cnt++;
+                if (! backchar(FALSE, 1))
+                        return(FALSE);
+        } while (! inword());
+
+	if (! backchar (FALSE, 1)) 	/* back over last char of word */
+		return (FALSE);
+
+	onech = !inword();		/* remember if one-char word */
+	if (! forwchar (FALSE, 1))	/* return to end of word */
+		return (FALSE);
+
+	if (!onech) {			/* multi-letter word, back over
+					   whole thing */
+		if (! backword (FALSE, 1))
+			return (FALSE);
+	}
+
+        if ((oldp == curwp->w_dotp) && curwp->w_doto) {
+                if (! backdel(FALSE, 1))
+                        return(FALSE);
+                if (! newline(FALSE, 1))
+                        return(FALSE);
+        }
+        return(forwword(FALSE, 1) && forwchar(FALSE, cnt)));
+}
+--------------------------- END --------------------------
+David A. Willcox
+Gould CSD-Urbana
+1101 E. University Ave.
+Urbana, IL 61801
+217-384-8500
+{decvax!pur-ee,ihnp4}!uiucdcs!ccvaxa!willcox

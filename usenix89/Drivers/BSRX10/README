@@ -1,0 +1,122 @@
+DESCRIPTION
+
+x10 is a little program for hacking a BSR X10 "Powerhouse" home
+control device.  This gizmo, currently sold by DAK (a discount mail
+order house) for $49.95, can remotely control lights and appliances
+in your house by signaling over the house wiring.  Since most people
+know what the X10 system does (see the DAK catalog for details;  Radio
+Shack also sells X10 stuff) I won't describe it in detail here.
+
+The gizmo comes with software for IBM PCs, Apples, or Commodores, but
+I wanted to hang it off my UNIX box.  So I wrote this program.
+
+The BSR X10 Powerhouse connects to a computer with an RS232 interface.
+It can store up to 128 events;  each event can turn on, turn off, or dim
+up to sixteen slave units.  The X10 box has a battery backed up clock
+which the computer can read, which turned out to be one of its biggest
+uses for me -- my computer doesn't have a battery clock.
+
+Each slave unit has a one-letter housecode ranging from A to P (for 16
+different codes) and a number from 1 to 16.  x10's command structure
+is pretty primitive.  See the man pages for details.
+
+INSTALLATION
+
+Hopefully, the only file that needs to be configured for your
+system is the makefile.  You may need to review x10.h and tty.c
+if you experience any trouble.
+
+Change BIN to the location of your favorite directory.
+Change OWNER to whichever login you want.
+Keep the GROUP set to sys.
+
+the DFLAGS line in the makefile needs to be configured as follows:
+
+	add -DVENIX if you are using Venix
+	add -DSYSV if you are using System III or V
+	add -DMINIEXCH if you are using the DEC mini-exchange
+	add -DVIOD if your compiler doesn't have type void
+	add -DXDIR=\"fullpath_name/x10\" if you don't want to
+		use the default path of the current directory
+
+After changing the makefile for your system, do 'make'.
+Next, cd as 'root' to /dev and link the root filesystem
+and tty port connected to the 'X10' as follows:
+	ln root_fs_special_device x10fs
+	ln tty_port x10
+
+The port connected to the x10 should not have a getty running.
+The root filesystem needs to be set to group 'sys' and mode 440.
+('x10 date' is the only command that requires this.  If you do
+not want to do it because you're worried about security, do not
+create /dev/x10fs.  All other features of x10 will work.)  The
+tty port connected to the x10 needs to be changed to the owner
+of the 'X10 device', and the mode needs to be set to 600.
+
+Finially, do 'make install' as root to install x10 in the proper
+location, with the proper owner and the proper permissions.
+
+PORTABILITY
+
+This has been tested under VENIX/Rainbow, which is basically V7 (thus
+there are no short-identifier problems), and on System V, Release 3.0.
+It should run OK under BSD-flavor UNIX.
+
+NOTES
+
+I'm running my X10 through a DEC Mini-Exchange, which is a dumb little
+8-port programmable port selector.  (My computer has only one, count 'em,
+serial port with modem control, which is why I use the Mini-Exchange.)
+
+There are two VENIX-specific hacks in x10.  First, my routine hangup()
+depends on a modification I made to the VENIX tty driver that causes it
+to drop DTR if you set the baud rate to zero, and raise it again when
+you set the baud rate to a nonzero number.  Most modern flavors of UNIX
+have an ioctl or something to do this.  
+
+Second, there are a number of occurrences of:
+
+	sleep(SMALLPAUSE);
+
+where SMALLPAUSE is #defined to be -10.  This is a VENIX-specific hack
+that means sleep for 10 60ths of a second, or 1/6th of a second.  This
+isn't critical; if VENIX is not defined in the makefile, SMALLPAUSE is 
+set to 1.
+
+EXAMPLES
+
+Example contents of an id file:
+
+1	Bedroom switched table lamp
+2	Office switched floor lamp
+3	Living room ceiling lights
+4	Front porch and garrage lights
+5	Family room hanging lamp
+6	Family room portable radio
+7	Thermostat
+8	Bedroom protable tv
+
+Example output of the 'x10 dump all' command using the above id file:
+
+    SLOT    UNIT    STATE    ID    DESCRIPTION
+       0    c1      Off      001   Bedroom switched table lamp
+       1    c2      Off      002   Office switched floor lamp
+       2    c3      Off      003   Living room ceiling lights
+       3    c4      Off      004   Front porch and garrage lights
+       4    c5      Off      005   Family room hanging lamp
+       5    c6      Off      006   Family room portable radio
+       6    c7      Off      007   Thermostat
+       7    c8      Off      008   Bedroom protable tv
+
+   EVENT   STATE    MODE       DAYS        TIME     UNITS
+       0   On       Normal     Everyday    21:00    c5
+       1   Off      Normal     Everyday    22:30   c1-8
+       2   Dim  8   Normal     Everyday    21:15    c3
+       3   Off      Normal     Everyday    21:45    c3
+       4   On       Today                  21:33    c1
+       5   Dim  4   Security   Weekdays    20:15    c2
+       6   Off      Normal     Weekend      1:00    c1-2,6-7
+
+- Larry Campbell (maynard!campbell)
+  with help from John Chmielewski (rogue!jlc)
+  September 1, 1986

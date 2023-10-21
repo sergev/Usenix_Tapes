@@ -1,0 +1,66 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!gamma!ulysses!allegra!princeton!rutgers!mit-eddie!bu-cs!budd
+From: budd@bu-cs.UUCP
+Newsgroups: net.sources
+Subject: file command which identifies core files
+Keywords: file core diff 4.3
+Message-ID: <3615@bu-cs.BU.EDU>
+Date: 20 Jan 87 21:22:34 GMT
+Organization: Boston U. Comp. Sci.
+Lines: 54
+Posted: Tue Jan 20 16:22:34 1987
+
+Here is a context diff to 4.3 file.c that tries to identify a core
+file, and type out the name of the command which dumped.  The idea
+comes from SUNos (!) but SUN core files are different (they start with
+a magic number for one thing).
+
+Its less than full graceful, since it re-reads the top of the file,
+but hey, it works.
+
+
+*** file.c.orig	Thu Mar  6 19:34:29 1986
+--- file.c	Tue Jan 20 12:14:30 1987
+***************
+*** 6,11 ****
+--- 6,13 ----
+   */
+  
+  #include <sys/param.h>
++ #include <sys/dir.h>		/* budd for user.h */
++ #include <sys/user.h>		/* budd */
+  #include <sys/stat.h>
+  #include <stdio.h>
+  #include <ctype.h>
+***************
+*** 288,295 ****
+  	for(i=0; i < in; i++)if(buf[i]&0200){
+  		if (buf[0]=='\100' && buf[1]=='\357')
+  			printf("troff (CAT) output\n");
+! 		else
+! 			printf("data\n"); 
+  		return;
+  	}
+  	if (mbuf.st_mode&((S_IEXEC)|(S_IEXEC>>3)|(S_IEXEC>>6))) {
+--- 290,311 ----
+  	for(i=0; i < in; i++)if(buf[i]&0200){
+  		if (buf[0]=='\100' && buf[1]=='\357')
+  			printf("troff (CAT) output\n");
+! 		else {			/* budd ... */
+! 		    union {
+! 			struct user us;
+! 			char pad[UPAGES][NBPG];
+! 		    } u_;
+! # define u u_.us
+! 		    lseek( ifile, 0L, 0);
+! 		    if( read(ifile, &u_, sizeof u_ ) == sizeof u_ ) {
+! 			int p = UPAGES + u.u_dsize + u.u_ssize;
+! 			if( p * NBPG == mbuf.st_size ) {
+! 			    printf("core from %s\n", u.u_comm );
+! 			    return;
+! 			}
+! 		    }
+! 		    printf("data\n"); 
+! 		}			/* ... budd */
+  		return;
+  	}
+  	if (mbuf.st_mode&((S_IEXEC)|(S_IEXEC>>3)|(S_IEXEC>>6))) {

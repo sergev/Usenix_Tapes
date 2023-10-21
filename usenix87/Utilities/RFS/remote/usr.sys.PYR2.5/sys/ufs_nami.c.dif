@@ -1,0 +1,99 @@
+These changes are the primary hook into the operating system for detecting
+a "remote" file.
+***************
+*** 145,150
+  	unsigned hash;			/* value of name hash for entry */
+  	union nchash *nhp;		/* cache chain head for entry */
+  	int isdotdot;			/* != 0 if current name is ".." */
+  
+  	sysVinfo.sV_namei++;
+  	lockparent = flag & LOCKPARENT;
+
+--- 145,153 -----
+  	unsigned hash;			/* value of name hash for entry */
+  	union nchash *nhp;		/* cache chain head for entry */
+  	int isdotdot;			/* != 0 if current name is ".." */
++ #ifdef REMOTEFS
++ 	long    remote;
++ #endif REMOTEFS
+  
+  	sysVinfo.sV_namei++;
+  	lockparent = flag & LOCKPARENT;
+***************
+*** 189,194
+  	 * Check accessiblity of directory.
+  	 */
+  	if ((dp->i_mode&IFMT) != IFDIR) {
+  		u.u_error = ENOTDIR;
+  		goto bad;
+  	}
+
+--- 192,214 -----
+  	 * Check accessiblity of directory.
+  	 */
+  	if ((dp->i_mode&IFMT) != IFDIR) {
++ #ifdef REMOTEFS
++ 		remote = isremote(dp, cp, nbp->b_un.b_addr);
++ 
++ 		/*
++ 		 * If it is really local, then start again at the root.
++ 		 */
++ 		if (remote < 0) {
++ 			iput(dp);
++ 			dp = rootdir;
++ 			ilockx(dp);
++ 			dp->i_count++;
++ 			fs = dp->i_fs;
++ 			cp = nbp->b_un.b_addr;
++ 			goto dirloop2;
++ 		}
++ 		else if (! remote)
++ #endif REMOTEFS
+  		u.u_error = ENOTDIR;
+  		goto bad;
+  	}
+***************
+*** 604,609
+  					u.u_error = EPERM;
+  					goto bad;
+  				}
+  			}
+  		}
+  #ifdef NSA
+
+--- 624,640 -----
+  					u.u_error = EPERM;
+  					goto bad;
+  				}
++ #ifdef REMOTEFS
++ 				/*
++ 				 * don't allow anyone to remove a remote mount
++ 				 * point.
++ 				 */
++ 				if (rmt_host(dp, &i)) {
++ 					iput(u.u_pdir);
++ 					u.u_error = EBUSY;
++ 					goto bad;
++ 				}
++ #endif REMOTEFS
+  			}
+  		}
+  #ifdef NSA
+***************
+*** 786,791
+  
+  		if (len + pathlen >= MAXPATHLEN - 1 ||
+  		    ++nlink > MAXSYMLINKS) {
+  			u.u_error = ELOOP;
+  			goto bad2;
+  		}
+
+--- 817,824 -----
+  
+  		if (len + pathlen >= MAXPATHLEN - 1 ||
+  		    ++nlink > MAXSYMLINKS) {
++ 			printf("nlink=%d,len=%d,pathlen=%d:LOOP\n",
++ 				nlink, len, pathlen);
+  			u.u_error = ELOOP;
+  			goto bad2;
+  		}

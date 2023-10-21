@@ -1,0 +1,659 @@
+.LS
+bool_t
+xdr_wrap_list(xdrs, glp)
+	XDR *xdrs;
+	gnumbers_list *glp;
+{
+	return(xdr_reference(xdrs, glp, sizeof(struct gnnode),
+	    xdr_gnnode));
+}
+.Lf
+.LS
+struct xdr_discrim choices[2] = {
+	/*
+	 * called if another node needs (de)serializing
+	 */
+	{ TRUE, xdr_wrap_list },
+	/*
+	 * called when no more nodes need (de)serializing
+	 */
+	{ FALSE, xdr_void }
+}
+.sp.5
+bool_t
+xdr_gnumbers_list(xdrs, glp)
+	XDR *xdrs;
+	gnumbers_list *glp;
+{
+	bool_t more_data;
+.sp.5
+	more_data = (*glp != (gnumbers_list)NULL);
+	return(xdr_union(xdrs, &more_data, glp, choices, NULL);
+}
+.Lf
+The entry routine is
+.LW xdr_gnumbers_list() ;
+its job is to translate between the boolean value
+.LW more_data
+and the list pointer values.
+If there is no more data, the
+.LW xdr_union()
+primitive calls
+.LW xdr_void()
+and the recursion is terminated.
+Otherwise,
+.LW xdr_union()
+calls
+.LW xdr_wrap_list() ,
+whose job is to dereference the list pointers.
+The
+.LW xdr_gnnode()
+routine actually (de)serializes data of the current node
+of the linked list, and recursively calls
+.LW xdr_gnumbers_list()
+to handle the remainder of the list.
+.LP
+You should convince yourself that these routines
+function correctly in all three directions
+.LW (XDR_ENCODE ,
+.LW XDR_DECODE ,
+and
+.LW XDR_FREE)
+for linked lists of any length (including zero).
+Note that the boolean
+.LW more_data
+is always initialized, but in the
+.LW XDR_DECODE
+case it is overwritten by an externally generated value.
+Also note that the value of the
+.LW bool_t
+is lost in the stack.
+The essence of the value is reflected in the list's pointers.
+.LP
+The unfortunate side effect of (de)serializing a list
+with these routines is that the C stack grows linearly
+with respect to the number of nodes in the list.
+This is due to the recursion.
+The routines are also hard to 
+code (and understand) due to the number and nature of primitives involved
+(such as
+.LW xdr_reference ,
+.LW xdr_union ,
+and
+.LW xdr_void ).
+.LP
+The following routine collapses the recursive routines.
+It also has other optimizations that are discussed below.
+.LS
+bool_t
+xdr_gnumbers_list(xdrs, glp)
+	XDR *xdrs;
+	gnumbers_list *glp;
+{
+	bool_t more_data;
+.sp.5
+	while (TRUE) {
+		more_data = (*glp != (gnumbers_list)NULL);
+		if (!xdr_bool(xdrs, &more_data))
+			return(FALSE);
+		if (!more_data)
+			return(TRUE);  /* we are done */
+		if (!xdr_reference(xdrs, glp, sizeof(struct gnnode),
+		    xdr_gnumbers))
+			return(FALSE);
+		glp = &((*glp)->nxt); 
+	}
+}
+.Lf
+The claim is that this one routine is easier to code and understand than the
+three recursive routines above.
+(It is also buggy, as discussed below.)
+The parameter
+.LW glp
+is treated as the address of the pointer 
+to the head of the
+remainder of the list to be (de)serialized.
+Thus,
+.LW glp
+is set to the
+address of the current node's
+.LW nxt
+field at the end of the while loop.
+The discriminated union is implemented in-line; the variable
+.LW more_data
+has the same use in this routine as in the routines above.
+Its value is
+recomputed and re-(de)serialized each iteration of the loop.
+Since
+.LW *glp
+is a pointer to a node, the pointer is dereferenced using 
+.LW xdr_reference() .
+Note that the third parameter is truly the size of a node
+(data values plus
+.LW nxt
+pointer), while
+.LW xdr_gnumbers()
+only (de)serializes the data values.
+We can get away with this tricky optimization only because the
+.LW nxt
+data comes after all legitimate external data.
+.LP
+The routine is buggy in the
+.LW XDR_FREE
+case.  The bug is that
+.LW xdr_reference()
+will free the node
+.LW *glp .
+Upon return the assignment
+.LW "glp = &((*glp)->nxt)"
+cannot be guaranteed to work since
+.LW *glp
+is no longer a legitimate node.
+The following is a rewrite that works in all cases.
+The hard part is to avoid dereferencing a pointer
+which has not been initialized or which has been freed.
+.LS
+bool_t
+xdr_gnumbers_list(xdrs, glp)
+	XDR *xdrs;
+	gnumbers_list *glp;
+{
+	bool_t more_data;
+	bool_t freeing;
+	gnumbers_list *next;  /* the next value of glp */
+.sp.5
+	freeing = (xdrs->x_op == XDR_FREE);
+	while (TRUE) {
+		more_data = (*glp != (gnumbers_list)NULL);
+		if (!xdr_bool(xdrs, &more_data))
+			return(FALSE);
+		if (!more_data)
+			return(TRUE);  /* we are done */
+		if (freeing)
+			next = &((*glp)->nxt);
+		if (!xdr_reference(xdrs, glp, sizeof(struct gnnode),
+		    xdr_gnumbers))
+			return(FALSE);
+		glp = (freeing) ? next : &((*glp)->nxt);
+	}
+}
+.Lf
+Note that this is the first example in this document
+that actually inspects the direction of the operation
+.LW xdrs->x_op ). (
+The claim is that the correct iterative implementation is still 
+easier to understand or code than the recursive implementation.
+It is certainly more efficient with respect to C stack requirements.
+.NH 2
+The Record Marking Standard
+.LP
+A record is composed of one or more record fragments.
+A record fragment is a four-byte header followed by
+$ 0 ~ "\fRto\fP" ~ {2 sup 31} - 1$ bytes of fragment data.
+The bytes encode an unsigned binary number;
+as with XDR integers, the byte order is from highest to lowest.
+The number encodes two values \(em
+a boolean that indicates whether the fragment is the last fragment
+of the record (bit value 1 implies the fragment is the last fragment),
+and a 31-bit unsigned binary value
+which is the length in bytes of the fragment's data.
+The boolean value is the high-order bit of the
+header; the length is the 31 low-order bits.
+.LP
+(Note that this record specification is
+.I not
+in XDR standard form
+and cannot be implemented using XDR primitives!)
+.\"
+.bp
+.SH
+Appendix A -- Synopsis of XDR Routines
+.LP
+.LW xdr_array()
+.LS
+xdr_array(xdrs, arrp, sizep, maxsize, elsize, elproc)
+	XDR *xdrs;
+	char **arrp;
+	u_int *sizep, maxsize, elsize;
+	xdrproc_t elproc;
+.Lf
+A filter primitive that translates between arrays
+and their corresponding external representations.
+The parameter
+.LW arrp
+is the address of the pointer to the array, while
+.LW sizep
+is the address of the element count of the array;
+this element count cannot exceed
+.LW maxsize .
+The parameter
+.LW elsize
+is the
+.LW sizeof()
+each of the array's elements, and
+.LW elproc
+is an XDR filter that translates between
+the array elements' C form, and their external representation.  
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_bool()
+.LS
+xdr_bool(xdrs, bp)
+	XDR *xdrs;
+	bool_t *bp;
+.Lf
+A filter primitive that translates between booleans (C integers)
+and their external representations.
+When encoding data, this filter produces values of either one or zero.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_bytes()
+.LS
+xdr_bytes(xdrs, sp, sizep, maxsize)
+	XDR *xdrs;
+	char **sp;
+	u_int *sizep, maxsize;
+.Lf
+A filter primitive that translates between counted byte strings
+and their external representations.
+The parameter
+.LW sp
+is the address of the string pointer.
+The length of the string is located at address
+.LW sizep ;
+strings cannot be longer than
+.LW maxsize .
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_destroy()
+.LS
+void
+xdr_destroy(xdrs)
+	XDR *xdrs;
+.Lf
+A macro that invokes the destroy routine
+associated with the XDR stream,
+.LW xdrs .
+Destruction usually involves freeing private data structures
+associated with the stream.  Using
+.LW xdrs
+after invoking
+.LW xdr_destroy()
+is undefined.
+.LP
+.LW xdr_double()
+.LS
+xdr_double(xdrs, dp)
+	XDR *xdrs;
+	double *dp;
+.Lf
+A filter primitive that translates between C
+.LW double
+precision numbers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_enum()
+.LS
+xdr_enum(xdrs, ep)
+	XDR *xdrs;
+	enum_t *ep;
+.Lf
+A filter primitive that translates between C
+.LW enum s
+(actually integers) and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_float()
+.LS
+xdr_float(xdrs, fp)
+	XDR *xdrs;
+	float *fp;
+.Lf
+A filter primitive that translates between C
+.LW float s
+and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_getpos()
+.LS
+u_int
+xdr_getpos(xdrs)
+	XDR *xdrs;
+.Lf
+A macro that invokes the get-position routine
+associated with the XDR stream,
+.LW xdrs .
+The routine returns an unsigned integer,
+which indicates the position of the XDR byte stream.
+A desirable feature of XDR streams
+is that simple arithmetic works with this number,
+although the XDR stream instances need not guarantee this.
+.LP
+.LW xdr_inline()
+.LS
+long *
+xdr_inline(xdrs, len)
+	XDR *xdrs;
+	int len;
+.Lf
+A macro that invokes the in-line routine associated with the XDR stream,
+.LW xdrs .
+The routine returns a pointer
+to a contiguous piece of the stream's buffer;
+.LW len
+is the byte length of the desired buffer.
+Note that the pointer is cast to
+.LW "long *" .
+Warning:
+.LW xdr_inline()
+may return 
+.LW NULL
+if it cannot allocate a contiguous piece of a buffer.
+Therefore the behavior may vary among stream instances;
+it exists for the sake of efficiency.
+.LP
+.LW xdr_int()
+.LS
+xdr_int(xdrs, ip)
+	XDR *xdrs;
+	int *ip;
+.Lf
+A filter primitive that translates between C integers
+and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_long()
+.LS
+xdr_long(xdrs, lp)
+	XDR *xdrs;
+	long *lp;
+.Lf
+A filter primitive that translates between C
+.LW long
+integers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_opaque()
+.LS
+xdr_opaque(xdrs, cp, cnt)
+	XDR *xdrs;
+	char *cp;
+	u_int cnt;
+.Lf
+A filter primitive that translates between fixed size opaque data
+and its external representation.
+The parameter
+.LW cp
+is the address of the opaque object, and
+.LW cnt
+is its size in bytes.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_reference()
+.LS
+xdr_reference(xdrs, pp, size, proc)
+	XDR *xdrs;
+	char **pp;
+	u_int size;
+	xdrproc_t proc;
+.Lf
+A primitive that provides pointer chasing within structures.
+The parameter
+.LW pp
+is the address of the pointer;
+.LW size
+is the
+.LW sizeof()
+the structure that
+.LW *pp
+points to; and
+.LW proc
+is an XDR procedure that filters the structure
+between its C form and its external representation.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_setpos()
+.LS
+xdr_setpos(xdrs, pos)
+	XDR *xdrs;
+	u_int pos;
+.Lf
+A macro that invokes the set position routine associated with the XDR stream
+.LW xdrs .
+The parameter
+.LW pos
+is a position value obtained from
+.LW xdr_getpos() .
+This routine returns one if the XDR stream could be repositioned,
+and zero otherwise.
+Warning: it is difficult to reposition some types of XDR streams,
+so this routine may fail with one type of stream and succeed with another. 
+.LP
+.LW xdr_short()
+.LS
+xdr_short(xdrs, sp)
+	XDR *xdrs;
+	short *sp;
+.Lf
+A filter primitive that translates between C
+.LW short
+integers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_string()
+.LS
+xdr_string(xdrs, sp, maxsize)
+	XDR *xdrs;
+	char **sp;
+	u_int maxsize;
+.Lf
+A filter primitive that translates between C strings and their
+corresponding external representations.
+Strings cannot cannot be longer than
+.LW maxsize .
+Note that
+.LW sp
+is the address of the string's pointer.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_u_int()
+.LS
+xdr_u_int(xdrs, up)
+	XDR *xdrs;
+	unsigned *up;
+.Lf
+A filter primitive that translates between C
+.LW unsigned
+integers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_u_long()
+.LS
+xdr_u_long(xdrs, ulp)
+	XDR *xdrs;
+	unsigned long *ulp;
+.Lf
+A filter primitive that translates between C
+.LW "unsigned long"
+integers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_u_short()
+.LS
+xdr_u_short(xdrs, usp)
+	XDR *xdrs;
+	unsigned short *usp;
+.Lf
+A filter primitive that translates between C
+.LW "unsigned short"
+integers and their external representations.
+This routine returns one if it succeeds, zero otherwise.
+.br
+.ne 2i
+.LW xdr_union()
+.LS
+xdr_union(xdrs, dscmp, unp, choices, dfault)
+	XDR *xdrs;
+	int *dscmp;
+	char *unp;
+	struct xdr_discrim *choices;
+	xdrproc_t dfault;
+.Lf
+A filter primitive that translates between a discriminated C
+.LW union
+and its corresponding external representation.  The parameter 
+.LW dscmp
+is the address of the union's discriminant, while
+.Lunp
+in the address of the union.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdr_void()
+.LS
+xdr_void()
+.Lf
+This routine always returns one.
+It may be passed to RPC routines that require a function parameter,
+where nothing is to be done.
+.LP
+.LW xdr_wrapstring()
+.LS
+xdr_wrapstring(xdrs, sp)
+	XDR *xdrs;
+	char **sp;
+.Lf
+A primitive that calls
+.LW xdr_string(xdrs,sp,MAXUNSIGNED);
+where
+.LW MAXUNSIGNED
+is the maximum value of an unsigned integer.
+This is handy because the RPC package passes
+only two parameters XDR routines, whereas
+.LW xdr_string() ,
+one of the most frequently used primitives, requires three parameters.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdrmem_create()
+.LS
+void
+xdrmem_create(xdrs, addr, size, op)
+	XDR *xdrs;
+	char *addr;
+	u_int size;
+	enum xdr_op op;
+.Lf
+This routine initializes the XDR stream object pointed to by
+.LW xdrs .
+The stream's data is written to, or read from,
+a chunk of memory at location
+.LW addr
+whose length is no more than
+.LW size
+bytes long.  The
+.LW op
+determines the direction of the XDR stream
+(either
+.LW XDR_ENCODE ,
+.LW XDR_DECODE ,
+or
+.LW XDR_FREE ).
+.LP
+.LW xdrrec_create()
+.LS
+void
+xdrrec_create(xdrs,
+  sendsize, recvsize, handle, readit, writeit)
+	XDR *xdrs;
+	u_int sendsize, recvsize;
+	char *handle;
+	int (*readit)(), (*writeit)();
+.Lf
+This routine initializes the XDR stream object pointed to by
+.LW xdrs .
+The stream's data is written to a buffer of size
+.LW sendsize ;
+a value of zero indicates the system should use a suitable default.
+The stream's data is read from a buffer of size
+.LW recvsize ;
+it too can be set to a suitable default by passing a zero value.
+When a stream's output buffer is full,
+.LW writeit()
+is called.  Similarly, when a stream's input buffer is empty,
+.LW readit()
+is called.  The behavior of these two routines
+is similar to the
+.UX
+system calls
+.LW read
+and
+.LW write ,
+except that
+.LW handle
+is passed to the former routines as the first parameter.
+Note that the XDR stream's
+.LW op
+field must be set by the caller.
+Warning: this XDR stream implements an intermediate record stream.
+Therefore there are additional bytes in the stream
+to provide record boundary information.
+.LP
+.LW xdrrec_endofrecord()
+.LS
+xdrrec_endofrecord(xdrs, sendnow)
+	XDR *xdrs;
+	int sendnow;
+.Lf
+This routine can be invoked only on streams created by
+.LW xdrrec_create() .
+The data in the output buffer is marked as a completed record,
+and the output buffer is optionally written out if
+.LW sendnow
+is non-zero.  This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdrrec_eof()
+.LS
+xdrrec_eof(xdrs)
+	XDR *xdrs;
+	int empty;
+.Lf
+This routine can be invoked only on streams created by
+.LW xdrrec_create() .
+After consuming the rest of the current record in the stream,
+this routine returns one if the stream has no more input, zero otherwise.
+.LP
+.LW xdrrec_skiprecord()
+.LS
+xdrrec_skiprecord(xdrs)
+	XDR *xdrs;
+.Lf
+This routine can be invoked only on streams created by
+.LW xdrrec_create() .
+It tells the XDR implementation that the rest of the current record
+in the stream's input buffer should be discarded.
+This routine returns one if it succeeds, zero otherwise.
+.LP
+.LW xdrstdio_create()
+.LS
+void
+xdrstdio_create(xdrs, file, op)
+	XDR *xdrs;
+	FILE *file;
+	enum xdr_op op;
+.Lf
+This routine initializes the XDR stream object pointed to by
+.LW xdrs .
+The XDR stream data is written to, or read from, the Standard I/O stream
+.LW file .
+The parameter
+.LW op
+determines the direction of the XDR stream (either
+.LW XDR_ENCODE ,
+.LW XDR_DECODE ,
+or
+.LW XDR_FREE ).
+Warning: the destroy routine associated with such XDR streams calls
+.LW fflush()
+on the
+.LW file
+stream, but never
+.LW fclose() . 

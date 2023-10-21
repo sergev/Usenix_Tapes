@@ -1,0 +1,173 @@
+: Command file to control the various actions of the UNIX exerciser suite.
+: UNIX Version 7
+: Author: Martin Tuori, DCIEM, Toronto, Canada, November 30, 1981.
+
+: interactive unless arguments present
+INTERACT="interactive"
+CONSOLE=/dev/tty
+CHECK="yes"
+TIMES="yes"
+EDCOUNT=2
+CCCOUNT=2
+FPCOUNT=2
+NRCOUNT=2
+
+while echo -n ""
+do
+	if test $1
+	then
+		COMM=$1
+		shift
+		INTERACT=""
+		CONSOLE=/dev/null
+	else
+		if test "$INTERACT"
+		then
+			echo -n "bench: "
+			read COMM
+		else
+:			if arguments present, do not run interactive mode.
+			exit 0
+		fi
+	fi
+	case $COMM in
+		he*)
+			echo "valid commands are: he[lp] / se[tup] / cl[eanup] / pa[rams] / ru[n] / sh[ell] / qu[it]"
+			;;
+		se*)
+			echo setup:
+			(cd ed; run se $EDCOUNT)&
+			(cd cc; run se $CCCOUNT)&
+			(cd fptest; run se $FPCOUNT)&
+			(cd nroff; run se $NRCOUNT)&
+			wait
+			echo setup complete
+			;;
+		cl*)
+			echo cleanup:
+			(cd ed; run cl $EDCOUNT)&
+			(cd cc; run cl $CCCOUNT)&
+			(cd fptest; run cl $FPCOUNT)&
+			(cd nroff; run cl $NRCOUNT)&
+			wait
+			echo cleanup complete
+			;;
+		pa*)
+			echo parameter changes
+			echo -n "check results using cmp: $CHECK, new value yes/no? "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			case $READVAL in
+				y*) CHECK=yes ;;
+				n*) CHECK=no ;;
+				"") echo -n unchanged: ;;
+				*) echo -n reply not understood, unchanged: ;;
+			esac
+			echo " $CHECK"
+
+			echo -n "measure time to run: $TIMES, new value yes/no? "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			case $READVAL in
+				y*) TIMES=yes ;;
+				n*) TIMES=no ;;
+				"") echo -n unchanged: ;;
+				*) echo -n reply not understood, unchanged: ;;
+			esac
+			echo " $TIMES"
+
+			echo -n "$EDCOUNT editors at at time, new value: "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			if test -z "$READVAL"
+			then echo -n "unchanged: "
+			elif test '(' `expr "$READVAL" '<' 0` != 0 -o `expr "$READVAL" '>' 99` != 0 ')'
+				then echo -n "out of range, unchanged: "
+				else EDCOUNT=$READVAL
+			fi
+			echo $EDCOUNT
+
+			echo -n "$CCCOUNT C compiles at at time, new value: "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			if test -z "$READVAL"
+			then echo -n "unchanged: "
+			elif test '(' `expr "$READVAL" '<' 0` != 0 -o `expr "$READVAL" '>' 99` != 0 ')'
+				then echo -n "out of range, unchanged: "
+				else CCCOUNT=$READVAL
+			fi
+			echo $CCCOUNT
+
+			echo -n "$FPCOUNT floating point jobs at at time, new value: "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			if test -z "$READVAL"
+			then echo -n "unchanged: "
+			elif test '(' `expr "$READVAL" '<' 0` != 0 -o `expr "$READVAL" '>' 99` != 0 ')'
+				then echo -n "out of range, unchanged: "
+				else FPCOUNT=$READVAL
+			fi
+			echo $FPCOUNT
+
+			echo -n "$NRCOUNT nroffs at at time, new value: "
+			if test $INTERACT
+			then read READVAL
+			else READVAL=$1; shift
+			fi
+			if test -z "$READVAL"
+			then echo -n "unchanged: "
+			elif test '(' `expr "$READVAL" '<' 0` != 0 -o `expr "$READVAL" '>' 99` != 0 ')'
+				then echo -n "out of range, unchanged: "
+				else NRCOUNT=$READVAL
+			fi
+			echo $NRCOUNT
+
+			;;
+		ru*)
+			echo run:
+			case $TIMES in
+			yes)
+				case $CHECK in
+				yes)
+					time run.split $EDCOUNT $CCCOUNT $FPCOUNT $NRCOUNT check 2>&- 2>&1 | tee $CONSOLE >> results
+					;;
+				*)
+					time run.split $EDCOUNT $CCCOUNT $FPCOUNT $NRCOUNT 2>&- 2>&1 | tee $CONSOLE >> results
+					;;
+				esac
+				;;
+			*)
+				case $CHECK in
+				yes)
+					run.split $EDCOUNT $CCCOUNT $FPCOUNT $NRCOUNT check 2>&- 2>&1 | tee $CONSOLE >> results
+					;;
+				*)
+					run.split $EDCOUNT $CCCOUNT $FPCOUNT $NRCOUNT 2>&- 2>&1 | tee $CONSOLE >> results
+					;;
+				esac
+				;;
+			esac
+			;;
+		qu*)
+			echo quit:
+			exit 0
+			;;
+		sh*)
+			echo escape to the shell
+			sh
+			;;
+		*)
+			echo command $COMM not understood, try again.
+			;;
+	esac
+done

@@ -1,0 +1,174 @@
+
+	/*******************************************************\
+	*							*
+	*	X_ref for YACC - LEX file			*
+	*	~~~~~~~~~~~~~~~~~~~~~~~~~			*
+	*							*
+	*	Date: Tue Jul  1 03:36:21 BST 1986		*
+	*							*
+	\*******************************************************/
+
+%{
+
+# include	<stdio.h>
+# include	"sto.h"
+
+#define		TRUE 1
+#define 	FALSE 0
+
+int	recognised;
+char	c;
+
+%}
+
+	/* abbreviations */
+
+digit		[0-9]
+u_case		[A-Z]
+l_case		[a-z]
+id_char		[A-Za-z0-9_]
+letter		[A-Za-z]
+white		[\t ]
+
+
+%%
+
+"/*"			{
+				ECHO;
+				recognised = FALSE;
+				c = nextchar();
+				while (recognised == FALSE)
+				{
+					while (c != '*')
+						c = nextchar();
+					c = nextchar();
+					if (c == '\/')
+						recognised = TRUE;
+				}
+			}
+"%{"			{
+				ECHO;
+				recognised = FALSE;
+				c = nextchar();
+				while (recognised == FALSE)
+				{
+					while (c != '\%')
+						c = nextchar();
+					c = nextchar();
+					if (c == '\}')
+						recognised = TRUE;
+				}
+				return(PERCURL);
+			}
+"{"			{
+
+/*
+*	Although LEX can cope with the full definition,
+*	( "{"[^\}]*"}" ) this may overrun the lex buffer (200 chars).
+*	Thus this routine.
+*/
+
+				ECHO;
+				c = nextchar();
+				while (c != '\}')
+					c = nextchar();
+				return(ACT);
+			}
+{letter}{id_char}*	{
+				ECHO;
+				return(IDENTIFIER);
+			}
+"'"\\?[^']+"'"		{
+				ECHO;
+				return(CHARACTER);
+			}
+{white}+		{	
+				ECHO;
+			}
+{digit}+		{
+				ECHO;
+				return(NUMBER);
+			}
+"%"{white}*"left"	{
+				ECHO;
+				return(LEFT);
+			}
+"%"{white}*"right"	{
+				ECHO;
+				return(RIGHT);
+			}
+"%"{white}*"nonassoc"	{
+				ECHO;
+				return(NONASSOC);
+			}
+"%"{white}*"token"	{
+				ECHO;
+				return(TOKEN);
+			}
+"%"{white}*"prec"	{
+				ECHO;
+				return(PREC);
+			}
+"%"{white}*"type"	{
+				ECHO;
+				return(TYPE);
+			}
+"%"{white}*"start"	{
+				ECHO;
+				return(START);
+			}
+"%"{white}*"union"	{
+				ECHO;
+				return(UNION);
+			}
+"%%"			{
+				ECHO;
+				return(PER);
+			}
+":"			{
+				ECHO;
+				return(COLON);
+			}
+";"			{
+				ECHO;
+				return(SEMICOLON);
+			}
+","			{
+				ECHO;
+				return(COMMA);
+			}
+"|"			{
+				ECHO;
+				return(OR);
+			}
+"<"			{
+				ECHO;
+				return(LESS);
+			}
+">"			{
+				ECHO;
+				return(GREATER);
+			}
+"\n"			{
+				ECHO;
+				nline(++line);
+			}
+
+%%
+
+yywrap()
+{
+	/* wrap-up procedure */
+	return(1);
+}
+
+nextchar()
+{
+	char	c;
+	
+	c = input();
+	printf("%c",c);
+	if (c == '\n')
+		nline(++line);
+	return(c);
+}

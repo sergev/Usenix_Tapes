@@ -1,0 +1,148 @@
+.TH REMOTEON 2 "27 July 1983"
+.UC 4
+.SH NAME
+remoteon, remoteoff \- turn on and off remote file system
+.SH SYNOPSIS
+.nf
+.ft B
+remoteon(path, pathlen, name, namelen)
+char *path;
+int pathlen;
+struct sockaddr *name;
+int namelen;
+.PP
+.ft B
+remoteoff(path)
+char *path;
+.fi
+.SH DESCRIPTION
+.I Remoteon
+announces to the system that the file system
+starting with the root, aka "/", on the internet host
+.I name
+has been mounted on
+the plain file
+.I path;
+from then on, references to any files below
+.I path
+will refer to
+files below the root file system on the remote host,
+.I name.
+.I Path
+is a pointer to a null-terminated string
+containing the appropriate path name,
+but for storage purposes in the kernel,
+.I pathlen
+must also be provided.
+.I name
+can only be a valid internet address (this may be extended later),
+and
+.I namelen
+should be the correct length,
+normally
+.I sizeof(struct sockaddr_in).
+.PP
+.I Path
+must exist already and be
+a plain file.
+Its old contents
+are still accessible while the remote file system
+is mounted,
+but the file cannot be removed.
+.PP
+A special case for
+.I remoteon
+and
+.I remoteoff
+is when
+.I path
+is a null pointer.
+This tells the kernel to disallow
+.I (remoteoff)
+or allow
+.I (remoteon)
+remote access for the current
+process,
+and is intended primarily for use with a remote file server
+to prevent remote file system loops.
+By default,
+all processes are allowed remote access.
+Note that while only the super-user may turn on or off the remote
+file system,
+any user may turn on and off remote access for himself.
+.PP
+.I Remoteoff
+announces to the system that the
+.I path
+file is no longer to be a remote mount point.
+Currently,
+even if
+.I remoteoff
+fails,
+the remote file system is marked for closing and
+no more usage is allowed.
+System calls that must be run on the remote system after
+this point will fail (return \-1).
+.SH "RETURN VALUE
+.I Remoteon
+returns 0 if the action occurred, \-1 if
+.I path
+is inaccessible,
+already a remote mount point, not an appropriate file, if
+.I path
+does not exist,
+or if there are already too many remote file systems mounted.
+.PP
+.I Remoteoff
+returns 0 if the action occurred; \-1 if
+if the file is inaccessible or
+does not point to a remote file system,
+or if there are active processes using the remote 
+file system.
+.SH ERRORS
+.I Remoteon
+will fail when one of the following occurs:
+.TP 15
+[EPERM]
+The caller is not the super-user.
+.TP 15
+[ENOENT]
+.I Special
+does not exist.
+.TP 15
+[EISDIR]
+.I Path
+is not a plain file.
+.TP 15
+[EINVAL]
+.I Namelen
+is too long.
+.TP 15
+[ENOBUFS]
+the system is out of mbuf structures.
+.TP 15
+[EFAULT]
+.I Name
+points to a bad address.
+.TP 15
+[ETOOMANYREMOTE]
+The action would overflow internal tables.
+.TP 15
+[EBUSY]
+.I Path
+is already a remote mount point.
+.PP
+.I Remoteoff
+may fail with one of the following errors:
+.TP 15
+[EPERM]
+The caller is not the super-user.
+.TP 15
+[ENOENT]
+.I Path
+does not exist.
+.TP 15
+[EBUSY]
+A process is holding a reference to the remote file system.
+.SH "SEE ALSO"
+rmtmnt(8), rfs_server(8)

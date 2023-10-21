@@ -1,0 +1,701 @@
+                             PREP v. 2.1
+
+                    Copyright (C) 1985,1986 P.R.Ove
+                     All rights reserved (sort of)
+
+     Suggestions and comments regarding this program are welcome,
+preferably in the form of code segments.  I will make an effort to
+incorporate any suggestions and maintain an "official" version of
+this program on the net.  Those whose contributions are incorporated
+will be noted in this doc file.
+     Only the source for this program is copyrighted.  The executable
+files, doc files, demos, and headers are entirely in the public domain.
+     As to the source, I have no objection to it being incorporated as
+a whole or in part in other software, as long as you say nice things
+about me in the docs and include my copyright notice and documentation.
+The source is available on net.sources, or I can email it (binaries as
+well if you have no C compiler).  The source may be freely distributed
+under these conditions.
+     This program is primarily intended for those that are forced to
+use fortran but would rather not, such as Cray users (currently fortran
+is the only compiler that vectorizes automatically on the Cray XMP).
+If you know someone suffering from this disease, please provide them
+with this relief package.
+
+Currently the program has been tested on:
+	1) MSDOS 80*86 machines
+	2) Intel iPSC (80286, Xenix)
+	3) Sun 3 (BSD Unix)
+	4) Definicon DSI-020
+	5) Cray XMP (Cray C 1.0)
+	6) Gould 9000 (UTX)
+	7) VAX (Ultrix & BSD Unix)
+	8) Alliant FX/8
+NOTE: select a machine specific #define if using the DSI-020 
+      SVS compiler or the Cray compiler.  This is located at the
+      beginning of the file prep.h.
+
+    At the moment comments should be directed to 14004@ncsavmsa.bitnet
+(or equivalently 14004@ncsaa.cso.uiuc.edu), or prove@uiucmvd.bitnet,
+or prove@tcgould.tn.cornell.edu.
+
+Version 2.1 fixes and additions:
+1) Cleaned up some embarrassing bugs.
+2) Macros can now be undefined.
+3) Memory is released when a macro is redefined or deleted.
+4) Macro searching is somewhat faster (especially for long macro names),
+   using the Boyer-Moore algorithm.  This improvement made use of some
+   code from "bm", a public domain (I hope) fgrep-like utility written
+   by Peter Bain.
+5) Conditional compilation directives (#ifdef, #ifndef, #else, #endif) added.
+6) ; is now used to allow comments on the same line with a statement.
+7) All switches are now accepted in either case (for case insensitive
+   shells like VMS).
+
+Planned improvements:
+1) Escapes for special characters in macro names.
+2) ANSI-F88 vector statement support.
+
+
+
+Introduction
+
+     This documentation describes the use of PREP, a preprocessor for 
+fortran.  As an alternative to ratfor, PREP offers a few advantages.
+These include better macro facilities and a concise shorthand for array
+and vector statements.  In addition, all of the standard flow control
+constructs of forth are supported.  It is probably possible to emulate
+some of ratfor's syntax using PREP's macro processor to modify the flow
+control commands.  It is written is generic c and will run on nearly any
+machine/compiler combination.  Perhaps the greatest advantage is that
+the source is freely available.
+     PREP does not do everything, and in particular does not offer any
+help with the deficiency of data structures in fortran.  It also does not
+understand fortran, and will quite happily produce nonsense code if so
+instructed.  It will detect errors in its own syntax, but errors in 
+fortran will be left for the compiler.  Therefore debugging will 
+unfortunately involve looking at the fortran output, which can be quite
+ugly.  These problems are shared with ratfor.
+     The vector statement notation makes it possible to incorporate do
+loop unrolling automatically to any depth, which for certain classes of
+loops on certain machines (memory bound loops on vector machines) will
+improve performance.  On the Cray XMP performance for certain loops
+was increased from the normal 50 Mflops to a maximum of 80 Mflops when
+unrolled to a depth of 16.  On machines with many parallel paths to
+memory (parallel processors with compilers that optimize loops over
+the nodes) there may also be situations where this is advantageous.
+     Although the syntax is similar to forth, the spirit of forth is
+totally absent.  The macros are really macros, not colon definitions,
+and recursive macro definitions will cause an error during expansion.
+Postfix notation would only cause confusion, being in conflict with
+fortran conventions, and is not used.
+    The macro processor can be considered a pre-preprocessor.  The
+order of translation is:
+
+	1) file inclusion & conditional compilation
+	2) macro processing
+	3) flow control extensions
+	4) vector statements
+
+Note that because of this the flow control syntax can be modified
+at the macro level.  Although this order of translation holds
+rigorously, PREP is a one pass processor and makes no temporary
+files.
+     Macro definitions can be imbedded in the program file or in
+files that can later be included.  Some common definitions mapping
+certain symbols ( &, <=, !=, etc ) to their fortran equivalents ( .and.,
+.le., .ne., etc ) are stored in the file premac.h.  These can be made
+active by placing the statement ' #include "premac.h" ' in the program
+file, or by using the -i switch from the command line.
+    The nesting limit for all loops is defined by an internal constant
+NESTING, which is set to a number like 10 or 20 (implementation 
+dependent).  The flow control directives are permitted inside vector
+loops, but since they will inhibit Cray vectorization of those loops it
+may be best to avoid this.  One of the reasons for using the vector
+shorthand is that it encourages programming in a style that can be
+easily vectorized by the compiler.
+    This program attempts to avoid all fixed limits on data structures,
+and instead allocates memory when needed.  The flow control directives
+do not adhere to this philosophy, since the maximum expansion length
+can be determined in advance and processing is faster without continual
+reallocation of memory.  Fairly robust memory management is used by the
+macro processor and input routines (there is no source line length limit
+other than any limitations imposed by the system).  Recursive macro
+definitions are accepted during the definition phase, but will cause an
+error during expansion.  When a macro is expanded more than the limit
+(100 or so per line, but implementation dependent) the program will abort
+with a recursion error message, but it is conceivable (if the memory of
+the machine is small and the macro definitions are very long) that a
+memory allocation error will occur before this.
+    In most cases the flow control directives must be the first word
+on the line (PREP is line oriented like fortran and unlike c).  The
+only exception is that directives and fortran code can be on the same
+line after an OF statement.  Any delimiters (){}[]'" may be used in the
+logical expressions ( i.e.  leave [ i == 1 ] ).  Macro definitions
+must use () for the parameter block however (to allow macro names
+containing the character {, for instance), and macro names cannot contain
+the open parens or whitespace characters.
+
+
+Running PREP
+
+     The command line interface and program function is identical 
+regardless of the machine (so far).  The syntax is
+
+prep -x -x .... <file>
+
+where file is the first name of the file and the extension is assumed
+to be P.  The output file will have the extension F.  x represents
+a command line option:
+
+ Switches:
+   -c		keep comments (truncated at column 72)
+   -u		keep underline characters
+   -m		only do macro substitution (==> -c and -u as well, and
+		prevents file includes (except -i switch).
+   -i	<file>	include <file> before processing
+   -r n		unroll vector loops to depth n
+   -l n		unroll loops with n or fewer lines
+   -d   <name>	define <name> as a macro, equivalent to : name 1 ;
+   -?		write message about allowed switches
+
+     If no file is present standard input and output are used.  The -i
+switch requires the full path name of the include file.  All switches
+and arguments must be separated by blanks, nothing like -mcdMAC is
+permitted.
+     Normally underline characters and comment records are eliminated
+unless overridden with a switch.  Quoted underlines (the fortran quote
+character is the apostrophe) are never deleted.  In general quoted
+characters are safe from PREP, as is text in comment records.  Comments
+on the same line with source (separated with ';') will not be kept even
+if -c is specified.  They are only preserved by -m, in which case they
+will be processed for macros.  Comment records with a ';' as the first
+character are treated as though they were commented with 'c'.  Since
+';' is also the signal to end a macro, it can't be used as a comment
+delimeter in macro definitions.
+     The -m switch is useful for converting existing programs to PREP
+format.  It turns off all PREP functions except macro substitution.  To
+partially convert a fortran program, enter:
+
+prep -m -i fix.h <prog.f >prog.p
+
+The file fix.h contains the inverse definitions of premac.h.  A side
+effect of PREP on DOS machines is that the terminating control-z is
+removed, which is useful if the fortran code is to be transferred to
+another machine.  Running the above command without the -i switch and
+without any internal macro definitions, it will do nothing but remove the
+control-z.
+     If the argument for -r is omitted the default is 8.  If -r is not
+present then unrolling will not be done at all unless turned on by an
+internal directive.  The command line switch will not override imbedded
+unrolling commands.  If -l is omitted the default is 1000, while if the
+argument is omitted the default is 1.
+     Versions for Intel 80*** based machines come compiled for small
+and large memory models.  The large model version is quite large
+itself.  It is only necessary to use the large model if the memory
+is needed for many very long macro definitions, which are memory resident.
+If you have a memory allocation error with the small version try the
+other.  The large one is called bigprep.exe.  Since I am now distributing
+the source you can do what your want.
+
+
+
+
+Summary of Features
+
+    The extensions can be broken up into four classes: 1) including
+files & conditional compilation, 2) macro definition/expansion,
+3) flow control directives, and 4) vector notation.  These will be
+discussed in this order, which is also the order in which they are
+processed.
+
+
+
+Included files & conditional compilation.
+  example:
+  #include "premac.h"
+
+     Normally fortran incudes files with the directive "include". 
+Incidentally, using cft and precomp on a cray files are included with
+"use" so if you are using a cray you may find it convenient to define
+"include" equivalent to "use" with
+	: include[x]	use x ;
+so that "include 'file'" will be translated to "use file".  Prep will
+include a file if it finds an include directive ( #include "file" )
+in the source, or if the -i switch is used from the command line.  Included
+files can be nested, probably about 10 deep.  Only the current directory is
+searched, and PREP will terminate if the file is not found.  To include
+a file in another directory the full pathname must be used.
+     The conditional compilation directives are similar to those of the
+C preprocessor, but not quite the same.  Since & and | are legitimate
+macro names, no expressions are permitted (this is of course a rather
+poor excuse, the real reason being laziness :-)  The syntax is:
+
+#ifdef name1 name2 name3.... namen
+lines of code
+#endif
+
+The lines of code will be processed if any of the names is currently
+defined as a macro.  #ifdef can be abbreviated as #if.  #ifndef is 
+similar, except that the the lines will be processed if any of the
+names is not a macro.  "Not being processed" means that the lines
+will be stricken from the resulting fortran program altogether.
+#else is also supported, but not #elif.  This simple set of 
+directives is probably sufficient, but expression evaluation and
+a (#case, #of, #default, #endcase) would be useful.
+
+Macros
+     The style is similar to that of C #define macros, except
+that : is used instead of #define and ; terminates the macro.  No
+special character is needed to continue to the next line.  Non-C syntax
+is used to allow both PREP macros and C preprocessor macros in the
+same program, and because I don't wish to make any guarantees about
+compatibility with cpp.
+     Recursive definitions are permitted, but will cause an abort
+(and possibly a memory allocation error) on expansion.  For each
+line submitted to expand_macros, a count of is kept for each
+stored macro indicating how many times it has been expanded in
+the current line.  When this exceeds MAX_CALLS, the program 
+assumes a macro definition is recursive and stops.  Macros
+are expanded starting with the one with the longest name, so that
+if the definitions
+
+   : >=		.ge. ;
+   : >		.gt. ;
+
+are in effect, >= will be changed to .ge. rather than .gt.=.  This
+is only a potential problem when macro names are not fully
+alphanumeric, since "arg" will not be flagged if "r" is defined.
+The underline character is considered non-alphanumeric here, for
+no good reason and perhaps it should not be.
+
+     The definition phase is invoked when a leading : is found in
+the record.  Text is then taken until the terminating ; is found.  Text
+following the ; is ignored (until the next newline).  Multi-line macros
+are permitted: they will be converted to at least as many lines in the
+fortran program.  The general form of a macro definition is:
+
+   : name( parm1, parm2, ... )	text with parameters
+				more text with parameters
+				 "    "    "    "    ;
+
+with 20 as the maximum number of parameters.  There must be no space
+between the macro name and the open delimiter of the parameter block in
+a definition, and the delimiters (if present) must be ().  Macro names
+can not contain the open parens.  Examples of macros with more than
+one line are:
+
+   : }
+	end do ;
+   : {
+	;
+
+These will allow translation of ratfor style do loops:
+
+	do i = 1, 10 { write(*,*) ' i = ', i }
+
+is translated into:
+
+	do i = 1, 10
+	write(*,*) ' i = ', i
+	end do
+
+which will be translated into fortran during the flow control processing.
+Note that this example relies on the fact the whitespace between the
+macro definition and its terminating ; is significant (newline is not
+considered whitespace here).  This is not the case for whitespace between
+the name and the definition.  Failure to have a terminating ; will define
+the entire program to be a macro.  This could cause a memory allocation
+failure, as macros are stored in memory.
+     While in a definition the open parens must follow the name without
+whitespace, in the source code this requirement (and the need to use only
+() as delimiters) is relaxed.  Alphanumeric macros must be not be next to
+an alpha or number character or they will not be recognized.
+     The macro definition routine puts the macro string into a more easily
+handled format, replacing parameters in the text with n, where n is a
+binary value (128 to 128+MAX_TOKENS).  The macro is placed in a structure
+of the form:
+
+struct Macro {
+	char	*name ;
+	char	namelength ;
+	char	*text ;
+	int	parmcount ;
+	int	callcount ;
+	int	alpha ;
+	unsigned short	*skip1, *skip2 ;
+}
+
+where the text string has binary symbols where the parms were.  Parmcount
+is used to see if a parameter block should be searched for when expanding
+a macro.  Callcount is used to stop expansion in case of recursive
+definitions.  Alpha set to 1 ==> the macro name can't be next to alpha-
+numeric characters.  The skip parameters point to Boyer-Moore tables
+(except for macros with short names (currently short :== 1 character),
+which don't use the BM algorithm for efficiency reasons).
+     Caution must be exercised to avoid accidental recursive definitions
+involving more than one macro:
+
+	: h	i+x ;
+	: i(y)	func(y) ;
+	: func	h ;
+
+This will generate the successive strings (from a = func(x)):
+
+	a = h(x)
+	a = i+x(x)
+	a = func()+x(x)
+	a = h()+x(x) .... and so on.  Beware.
+
+     Macro names will not be flagged if they are quoted (with apostrophes)
+in the source, or if they are in comment records.
+     If more parameters are found than were present in the definition, the
+trailers are ignored.  If fewer are found they will be inserted where
+expected only (the missing parameters will be taken to be null strings).
+Parameters are separated by commas, and are only recognized if they are
+balanced according to delimiters.  If : MACRO(a,b) a + b ; is defined
+and
+
+	MACRO " [i,j] "
+
+is found in the text, only one parameter will be found and it will be
+expanded as:
+
+	[i,j] +
+
+It is not possible to have unbalanced delimiters in a parameter of a 
+macro unless the macro only has one argument.
+     A macro definition will override a previous definition with
+the same name.  The statement:
+
+: func(x) ;
+
+will undefine func (remove it from the macro table).  The argument
+is unnecessary when undefining.
+
+
+
+Flow Control Extensions
+     These commands are based on the flow control of forth (except for
+the do/end_do construct).  With the exception of the OF and DEFAULT
+commands, no other text is allowed on the line.  If trailing text is
+present it is ignored, leading text will prevent PREP from seeing the
+command.  This includes labels: PREP command lines may not have labels
+unless macros are used to define labels to expand as continue statements
+and newlines.  The commands end_case, end_do, and leave_do can have a
+space instead of the underline, but the space is significant.  Of course
+a macro could be defined as    : enddo end_do ;.  Unlike some other
+languages (forth and c) where CONTINUE applies to all types of loops,
+here there are three CONTINUE statements (continue, continue_do, and
+continue_case) which apply to the three classes of loops supported by
+PREP.  This avoids some confusion in certain situations with nested
+loops of differing types.  In general for the flow control extensions,
+if optional expressions are omitted they are taken to be TRUE.
+
+
+ Forth style begin/while/until/again construct:
+     begin ... again
+     begin ... while (exp1) ... again
+     begin ... until (exp1)
+     leave (optional expression) to exit current level
+     continue (optional expression) to got back to begin
+
+     Here the ...'s represent lines of PREP and fortran code, not on
+the same line with the directives.  A working example of one of these
+is:
+     begin
+        line of code
+     while ( SOME_MACRO[i] )   ; the macro evaluates to a logical expression
+        line of code
+        line of code
+     again
+
+The begin ... again construct will loop forever.  Usually it will have a
+leave command inside ( leave [ EOF ], where EOF is a macro ), or a
+return to caller.  These (as with the case construct and do/end_do) may
+be nested ten levels deep.  The begin is always necessary, even it the
+next statement is while.
+
+
+ Case construct:
+     case ( optional exp )
+     of   ( exp2 )  line of code
+                    line of code
+                    continue_case ( optional logical exp )
+     of   ( exp3 )  line of code
+     default        line of code
+                    line of code
+     end_case
+
+     This is processed by converting to if else endif expressions.  It is
+somewhat clearer in general.  The expressions here must NOT be logical
+(.eq. is used), unless CASE is followed by no parameter in which case 
+the OF expressions MUST be logical expressions.  Unfortunately fortran
+does not allow comparisons between logical expressions using .eq., so
+there is no way around this dilemma without having the preprocessor
+understand fortran to determine variable types (which in turn would
+require that all fortran include directives be processed).  Of course
+if the value is logical there is not much sense in using the case
+construct instead of and ordinary if/else/endif.  An example of a 
+case construct is
+
+     c = getchar()	; function that returns a character value
+     case ( c )
+     of ( 'q' )   call exit
+     of ( 'd' )   call dump
+                  continue_case ( not_done )
+     default      write(*,*) 'illegal character, try again'
+                  continue_case
+     end_case
+
+In this example the continue statements pass control back to the case, so
+getchar is not reevaluated.  If getchar() were put in the case expression
+however, it would be evaluated for each OF statement as
+
+     if ( 'q' .eq. getchar() ) etc
+
+which is probably not what was intended.  Therefore, continue_case is rather
+useless here unless the value of variable c is changed by the OF clause.
+The example will write indefinitely if any character other than q or d
+is entered.  The right way to do this is by switching the 1st 2 lines:
+
+     case ( c )
+     c = getchar()	; function that returns a character value
+     of ( 'q' )   call exit
+           ...
+           ...
+     end_case
+
+This will evaluate the function getchar on entry and once every time
+continue_case is encountered.  An example which uses logical expressions is
+
+     case
+     c = getchar()
+     of ( 'q' == c ) call exit
+           ...
+     end case
+
+The nesting limit for case constructs is again 10.  If continue_case
+is too long a command name, it can always be abbreviated with a macro
+definition (in premac.h the definition ": ->case continue_case ;" does
+this).
+
+
+
+ do ... end_do
+
+     The syntax here is like that of vms fortran, except for the leave_do
+which jumps out of the loop if the logical expression is true, and 
+continue_do which jumps to the end_do and continues the loop.  An
+example:
+
+     do i = 1, 10
+	line of code
+     continue do ( i == 2 )	; goes to end_do if true
+	line of code
+	line of code
+     leave do ( i*j == 4 )	; exits loop if true
+	line of code
+     end do
+
+The leave_do and continue_do commands cannot be used in normal labeled
+do loops.  If the logical expressions are omitted they are assumed
+true.
+
+
+
+
+Vector Arithmetic
+     When writing large number crunching programs in fortran it often
+happens that there are a large number of arrays with the same dimensions.
+More than likely the loop parameters will be the same for many loops,
+and even a simple routine may be rather long and difficult to read
+because of all the excess baggage.  It is therefore helpful to have
+a shorthand method for writing loops that use common loop parameters.
+     A few examples of the shorthand supported by PREP follow.
+
+	a(#,#) = b(#,#) + 1
+
+This has the obvious meaning that all of the elements of array a are
+set equal to those of b incremented by 1.  Assuming the appropriate
+default loop parameters have been set, this will be expanded as
+
+	do 10001 i001 = 1, my
+	do 10000 i000 = 1, mx
+	a(i000,i001) = b(i000,i001) + 1
+10000	continue
+10001	continue
+
+The labels will be generated uniquely.  The variables i000 -> i009 are
+reserved for this purpose.  PREP assumes that the usual fortran 
+conventions hold and that variables beginning with i are integers.
+In fortran the first index of an array changes the most rapidly as
+one proceeds through the memory, so the loops are always generated
+with the innermost loop over the first index.  This is essential for
+efficiency on machines with virtual memory (VAX) or those that rely
+on sequential addressing for vectorization (Cyber).
+     More than one line can be placed in the core of a loop by using
+square brackets to group them together.
+
+	c(#,#) = exp( d(#,#) ) + c(#,#)
+[	a(#,#) = b(#,#,1)*c(#,#) - 100
+	x = y
+	d(#,#) = e(#,#) 		]
+
+is expanded as
+
+	do 10001 i001 = 1, my
+	do 10000 i000 = 1, mx
+	c(i000, i001) = exp( d(i000,i001) ) + c(i000,i001)
+10000	continue
+10001	continue
+	do 10003 i001 = 1, my
+	do 10002 i000 = 1, mx
+	a(i000,i001) = b(i000,i001,1)*c(i000,i001) - 100
+	x = y
+	d(i000,i001) = e(i000,i001)
+10002	continue
+10003	continue
+
+Yes the output can get very ugly, but computers don't care.  PREP will 
+always continue to the next line if necessary so there is no need
+to worry about line length.
+    The above loops use default loop limits, and these must be set
+with the do_limits command.  The general form is:
+
+do_limits [ (mi, mf, minc), (ni, nf, ninc), .... ]
+
+The number of triples (do i000=mi, mf, minc) determines how many
+indices will be looped over.  If a triple has only 2 elements they are
+assumed to be the initial value and final value and the increment is
+taken to be 1.  If a triple has just one element (parens then not needed)
+it is assumed to be the final value and the initial value and increment
+are both taken to be 1.  Therefore the above examples could have their
+limits set with
+
+do_limits [ mx, my ]
+
+Usually the do_limits statement will be tucked out of the way at the
+beginning of the program file or in a PREP #include file.  Again the
+underline can be replaced by a blank.
+     As a rule the number of # symbols in each array should equal the
+number of indices implied by the current default limits.  A common
+exception is
+
+	a(#) = a(#) + b(#,#)*c(#,#)
+
+which expands as
+
+	do 10001 i001 = 1, my
+	do 10000 i000 = 1, mx
+	a(i000) = a(i000) + b(i000,i001)*c(i000,i001)
+10000	continue
+10001	continue
+
+This does a lot of dot products in parallel on a vector machine like
+the Cray.  The compiler will vectorize the inner loop, but is not 
+smart enough to realize that the vector "a" should be kept in a vector
+register from one outer iteration to the next, and does an unnecessary
+save and fetch each time.  Because this loop is memory bound (the
+performance is limited by the time it takes to fetch and store the
+data rather than the floating point speed of the machine because
+there are so few operations in the loop) the performance can be 
+increased by unrolling the loop.  This is done automatically by PREP
+to any depth.  Unrolling this example to a depth of 4 gives
+
+      do 10001 i001=1,int((1.0*(( my )-1+1))/(1*4))*1*4+1-1,1*4
+      do 10000 i000 = 1, ( mx), 1
+      a(i000) = a(i000) + b(i000,i001)*c(i000,i001)
+      a(i000) = a(i000) + b(i000,i001+1*1)*c(i000,i001+1*1)
+      a(i000) = a(i000) + b(i000,i001+1*2)*c(i000,i001+1*2)
+      a(i000) = a(i000) + b(i000,i001+1*3)*c(i000,i001+1*3)
+10000 continue
+10001 continue
+      do 10003 i001=int((1.0*(( my )-1+1))/(1*4))*1*4+1,( my ),1
+      do 10002 i000 = 1, ( mx), 1
+      a(i000) = a(i000) + b(i000,i001)*c(i000,i001)
+10002 continue
+10003 continue
+
+The second set of loops is a clean up operation.  This technique
+improves performance because now the compiler will see that the
+same vector will be used in the next vector statement and therefore
+keeps it in a register.  The example above which is not unrolled runs
+at about 50 Mflops.  Unrolling to a depth of 16 results in a speed
+of 80 Mflops (when mx=my=100)
+     Unrolling can be controlled with the command line switches
+mentioned earlier and with the command
+
+unroll ( 8 )
+
+imbedded in the source.  The depth must be explicit of course.
+Using the imbedded command individual loops can be controlled
+independently.
+     Unfortunately, using the same trick on more complicated loops
+actually degrades performance, since the loops become too
+complicated for the optimizer.  For this reason there is a command
+line switch -l n, which inhibits unrolling unless the vector
+statement is on n or fewer lines.  Unrolling is always disabled
+if the number of indices is not greater than 1, since it would
+serve no purpose for 1 index loops on the vector machines for
+which it is intended (Unrolling a 1 index loop will inhibit
+vectorization).  This should perhaps be a command line option
+as well, since scalar machines may derive some benefit for such
+loops.
+     Loops should never be unrolled unless one is certain that
+the result is independent of the order over which the indices are
+swept.  Usually if a loop is vectorizable on the Cray and can be
+written in this notation, it can be unrolled.  A loop such as
+
+[	a(#,#) = i
+	i = i + 1
+]
+
+is not vectorizable and if unrolled the result will not be
+independent of the unrolling depth.  Low precision calculations may
+show differences depending on the depth because of round off errors.
+For instance, if sum is a 32 bit real and a is an array of 32 or
+64 bit reals with a(i,j)=i+mi*j where the dimensions are large,
+the loop
+
+	sum = sum + a(#,#)
+
+may differ in the least significant digits when unrolled.  This is
+because when not unrolling (in this example) small numbers have a
+chance to add up before being added to large ones.  The unrolled
+loops may add small numbers directly to large ones and lose them.
+Of course this is just a precision problem and has nothing to do
+with the correctness of the algorithm.  Examples could just as
+easily be invented where the unrolled version is more accurate.
+     Some performance improvements have been noted for scalar
+machines.  Parallel processors have not yet been tested but
+may allow the most improvement, since the technique will be
+of greater assistance if the number of parallel paths to memory
+is increased.  In principle each processor could access a local
+memory store simultaneously, and unrolling would allow an 
+optimizing compiler to realize more easily that fetches could
+be done in parallel.  PREP allows such matters to be investigated
+without the need for a great deal of text editing to unroll
+loops by hand.
+     The program has recently been tested on an Alliant FX/8
+parallel processor.  This machine has 8 vector processors and 8
+parallel paths to a common memory, which makes it an ideal candidate
+for this unrolling trick.  However, the Alliant compiler is a very
+advanced beast, and optimizes two levels deep (vectorizes inner
+loops and distributes outer loops).  This eliminates any possible
+gains from unrolling, and in fact performance is retarded by doing
+so.  In principle the Alliant scheme could be implemented at the
+preprocessor level.  I have no immediate plans to do it, but this
+preprocessor might be a good starting point for such a project.
+
+disclaimer: The unrolling feature of this program is present only
+because I was curious about such matters.  It should be viewed as
+an experimental tool.  I doubt that there exists a machine where
+performance can be greatly improved simply by globally unrolling
+the loops.
+
+
+
+     If you have used this program and have any comments or 
+suggestions, they can be sent via lectric-mail to the addresses
+mentioned above.

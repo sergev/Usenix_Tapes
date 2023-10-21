@@ -1,0 +1,241 @@
+
+		RATFOR LANGUAGE REFERENCE MANUAL
+
+			27-Apr-1980
+
+
+
+
+INTRODUCTION
+
+Ratfor ("Rational Fortran") is a programming language that avoids the
+worst deficiencies of Fortran while retaining its advantages of
+efficiency, availability, and portability.  The Ratfor preprocessor
+creates Fortran source files from Ratfor source language input files;
+the Fortran files are then compiled and linked as usual.  Since
+practically every computer has an ANSI Fortran 66 compiler available,
+and since Ratfor is written in Ratfor, the preprocessor is quite
+portable.  To bootstrap Ratfor on a new system, one merely modifies the
+Ratfor sources as required (on an existing system), then transports the
+Fortran code produced from the modified sources to the new environment.
+
+The Ratfor language was designed by Brian W. Kernighan and is described
+in "Software Tools" by Kernighan and Plauger (Addison-Wesley, 1976).
+Ratfor is actually Fortran except for enhanced flow control constructs,
+symbol substitution, file inclusion, and various cosmetic enhancements.
+The ability to define symbolic constants aids greatly in attaining
+system-independent coding, while improved control constructs permit
+readable, more rapid, error-free coding.  One normally includes
+"SysDef", a file containing system-wide definitions, at the beginning
+of a source file.  Common blocks can be included also, in order that
+changes to the master defining file may be propagated to all instances
+of the common block.
+
+In addition to the language described in "Software Tools", this version
+of Ratfor allows an input line to be passed through the preprocessor
+without being altered; this is useful when a non-standard Fortran
+construct is desired which would otherwise be garbled by preprocessing,
+or when control cards must be imbedded in the source.  Lines to be
+protected in this way should have a percent sign (%) in column 1; the
+percent sign is removed and the remainder of the line is copied
+directly into the Fortran code.
+RATFOR SOURCE FILE FORMAT
+
+Ratfor sources are generally lower case, except for symbolic constants
+in UPPER case.  Symbol substitution is performed only when a token
+exactly matches a defined symbol, including case matching.
+
+Ratfor source lines are free-format; it is a good idea to use
+indentation to indicate the scope of control structures.  Keywords must
+be set off from other alphanumeric tokens with spaces or tabs; this is
+a good idea in any case.  Lines are continued when obviously incomplete
+(such as in the middle of a boolean condition), when ending in a comma
+(,), and when terminated by an underscore (_) -- which is deleted.
+Multiple statements may appear on the same line if they are separated
+by semicolons (;).  A semicolon standing alone on a line is a null
+statement.  An integer beginning a line is assumed to be a Fortran
+statement label; Ratfor generally lets the programmer avoid labels
+except on format statements.  Comments may begin anywhere on a line;
+they are delimited by a sharp sign (#) and the end of the source line.
+Blank lines may be used freely to improve readability of the code.
+
+
+THE "INCLUDE" STATEMENT
+
+When a line
+
+	include filnam
+
+is encountered, the contents of the named file are included in-line
+as a replacement for the line containing the "include".  Typically this
+feature is used to include common blocks or system-wide definitions.
+"filnam" is a system-independent alphanumeric token; it is
+automatically extended to an appropriate complete file specification.
+
+
+THE "DEFINE" STATEMENT
+
+A text string may be substituted for a symbol by use of the construct
+
+	define(symbol,replacement)
+
+.  The replacement string will be substituted for each occurrence of
+the symbol token.  Typically, this is used to set up symbolic
+constants such as EOS for an "end-of-string" marker.
+
+
+QUOTED STRINGS
+
+In order to save counting characters, a Hollerith string may be written
+as a sequence of characters enclosed in single or double quotes.  If a
+quote character must be in the string, use the other type of quote to
+enclose the string.
+LITERAL LINES
+
+If the character % appears at the beginning of a line, it is removed
+and the remainder of the line is passed directly to the Fortran output
+without interpretation.  This feature is required only in unusual
+circumstances.
+
+
+STRING CONSTANTS
+
+The construct
+
+	string name "text"
+
+is converted in effect to
+
+	character name(5)
+	data name /t, e, x, t, EOS/
+
+by which is meant the creation of an EOS-terminated character array
+with right-justified ASCII (R1) character codes in the data statement.
+The symbols "character" (lower case) and "EOS" (upper case) must be
+defined (e.g., by "SysDef") upon occurrence of a "string" statement.
+String statements should be inserted after declarations but before data
+statements.
+
+
+STATEMENT GROUPING
+
+Any set of Ratfor statements may be enclosed in braces { } to form a
+single composite statement.  This can be used wherever a single
+statement is permitted.
+
+
+SPECIAL SYMBOLS
+
+The following abbreviations are understood by Ratfor:
+
+	>	.GT.			<	.LT.
+	>=	.GE.			<=	.LE.
+	==	.EQ.			^=	.NE.
+	^	.NOT.			&	.AND.
+	|	.OR.
+
+
+THE "DO" STATEMENT
+
+This is similar to the Fortran DO except that the label must be omitted
+(it is supplied by Ratfor):
+
+	do limits
+		statement
+
+where limits might be, for example, i = 1, 13, 2 .  Remember that
+"statement" can be a sequence enclosed in braces.
+THE "IF" STATEMENT
+
+This has two forms:
+
+	if (condition)				if (condition)
+		statement				statement
+						else
+							statement
+
+.  A common use is in a "case" statement:
+
+	if (one)
+		do-one
+	else if (two)
+		do-two
+	else if (three)
+		do-three
+	else
+		none-of-the-above
+
+.
+
+
+THE "WHILE" STATEMENT
+
+This has the form
+
+	while (condition)
+		statement
+
+.  Notice that this tests at the top of the loop, unlike a do statement.
+
+
+
+THE "REPEAT" STATEMENT
+
+This takes one of two forms:
+
+	repeat					repeat
+		statement				statement
+						until (condition)
+
+.  The first of these repeats forever, or until a "break" is executed.
+"statement" is always executed at least once, since condition
+testing is performed at the bottom of the loop.
+THE "FOR" STATEMENT
+
+This is a general loop-forming construct:
+
+	for (initialize; condition; re-initialize)
+		statement
+
+.  "initialize" is performed only once at the beginning.  A loop is
+then performed while "condition" is true; testing is done at the top of
+the loop as with the "while" statement.  After executing "statement",
+"re-initialize" is performed and the top-of-loop testing done again,
+etc.  Any of the three parts of the "for" can be null (but the
+semicolons must remain as place-markers); if "condition" is null, it
+is taken to be .TRUE. .
+
+
+THE "BREAK" AND "NEXT" STATEMENTS
+
+In "do", "while", "repeat", and "for" statements,
+
+	next
+
+skips immediately to the next iteration of the loop (re-initialize
+clause for "for" loop).  The
+
+	break
+
+statement jumps out of the innermost loop of the forms mentioned.  Note
+that an "if" statement is NOT considered a loop in this regard.
+
+
+PORTABILITY
+
+Properly-coded Ratfor program sources typically require no modification
+when moved to a new environment; system-dependent definitions in the
+"SysDef" file are easily edited once and for all.  Access to system-
+dependent services is generally best done through a portable interface
+to library routines, which have to be provided by systems programmers
+for each system.  Since Ratfor controls constructs are similar to
+those provided by C, Algol, and Pascal, a well-written Ratfor program
+can be readily converted to any of these langauges.  (The converse
+is NOT true, due to Fortran's lack of support for certain features.)
+
+
+SUGGESTION
+
+In order to appreciate the utility of Ratfor, one needs to see examples
+of its use.  The best guide in this respect is the book mentioned in
+the introduction, "Software Tools".

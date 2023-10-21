@@ -1,0 +1,49 @@
+#!/bin/sh
+######        Vspell        ######
+#
+# Uses spell(1) to check the spelling of your document.
+# If there are spelling mistakes, it invokes your
+# editor on the spell output.  Misspelled words are
+# corrected and the editor exited normally.  Changed
+# words are fixed automatically in the document.
+# Words not changed are added to a local dictionary.
+#
+#           Brent Callaghan     October 1985
+#           Changes for 4.2 BSD by Peter Lamb  Feb 1986
+
+if test $# = 0 -o $# -gt 2 ; then
+   echo "Usage: $0 filename  [ dictionary ]"
+   exit 1
+   fi
+doc=$1
+if test ! -r $doc ; then
+   echo "Can't open $doc"
+   exit 1 
+   fi
+dict=${2-${DICT-spelldict}}
+f1=/tmp/spell1$$
+f2=/tmp/spell2$$
+f3=/tmp/spell3$$
+trap "rm /tmp/spell[123]$$ ; exit" 0 1 2 3
+
+if test -s "$dict" ; then
+#  spell +$dict $1                      # use local dict (Sys V only)
+   spell $1 | fgrep -v -f $dict         # use local dict 
+else
+   spell $1                             # no local dict
+   fi > $f1
+if test ! -s $f1 ; then exit ; fi       # exit if no misspellings
+cp $f1 $f2
+${EDITOR-vi} $f2                        # edit
+comm -12 $f1 $f2 > $f3
+if test -s $f3 ; then                   # remember new words
+   sort -f -m -o $dict $dict $f3
+   set `wc -w $f3`
+   echo "$1 words added to \"$dict\""
+   fi
+if cmp -s $f1 $f2 ; then exit ; fi      # exit if no changes
+paste -d\| $f1 $f2 |\
+awk -F\| \
+'$1 != $2 {printf "1,$s/\\<%s\\>/%s/g\n", $1, $2}END{printf "w\nq\n"}' |\
+ex - $doc                               # make corrections
+exit

@@ -1,0 +1,198 @@
+/*
+ * argument.h:  definitions of ARGUMENT, Arg_Control, etc., 
+ * for use by argument package routines.
+ * history:     created 21 September 1981       John S. Quarterman.
+ *              3 October 1981  add AS_func      JS Quarterman.
+ *              20 October 1981 add Arg_Order   JS Quarterman.
+ *              23 October 1981 converted for lists JSQuarterman.
+ *              3 December 1981 add Arg_REach and Arg_RProc JSQ.
+ *              6 December 1981 add actual arg echoing, reorder codes, JSQ.
+ *              23 March 1982 JSQ obsolete ARG_SAME.
+ *              27 March 1982 jsq:  System III compatibility.
+ *              5 April 1982 jsq:  add ARG_STDIO, AS_stdio.
+ *              13 April 1982 jsq:  make arg_spec a macro.
+ * 2 May 1982 jsq:  use arg_null for NULL pointer (System III compatibility).
+ */
+
+/* standard initialization routine */
+extern int arg_init ();         /* arg_init (&argc, &argv, desc) */
+
+/* formal argument specification routine */
+#define arg_spec(t, f, n, s, pval, p, desc, cfunc, cfarg)\
+  _argspec (t, f, n, s, (char *) (pval), p, desc, cfunc, (char *) (cfarg))
+extern int _argspec ();
+
+/* formal argument processing routines */
+extern int arg_process ();      /* process a set of arguments */
+
+/* ordinary argument type flags:  given as the second argument to arg_spec */
+#define ARG_FFIX        ""      /* fixed argument */
+#define ARG_FPOS        "["     /* possible argument */
+#define ARG_FVAR        "[]"    /* variable argument */
+
+/* wild card options, to match any otherwise unmatched option */
+#define ARG_WFLAG       "-?"    /* wild flag or switch */
+#define ARG_WKEY        "?"     /* wild key */
+
+/* System III ``end of options'' option */
+#define ARG_EOPT        "--"    /* end of options switch */
+/* System III standard input or output argument */
+#define ARG_STDIO       "-"     /* */
+/**/
+/*
+ * Defines for the first argument to arg_spec (and ARGUMENT.AS_type).
+ * The printing order of the types is Arg_Control.Arg_Order.
+ */
+/* ordinary argument */
+/* these are processed in bitwise order */
+#define ARG_ORDINARY    0000037 /* five bits */
+#define ARG_FIXED       0000001 /* ordinary arguments which must be given */
+#define ARG_POSSIBLE    0000002 /* ordinaries, some may be given */
+#define ARG_VARIABLE    0000004 /* ordinaries, all may be given */
+
+/* option */
+#define ARG_OPTION      0000740 /* four bits */
+#define ARG_FLAG        0000040 /* flag (strlen (flag) != ARG_SLENGTH)) */
+#define ARG_SWITCH      0000100 /* switch (strlen (switch) == ARG_SLENGTH)) */
+#define ARG_KEY         0000200 /* ar(1) type key, must be given first */
+				/* (strlen (key) == ARG_KLENGTH) */
+
+/* special types */
+/* these apply only to options */
+#define ARG_SPECIAL     0077000 /* six bits */
+#define ARG_VALUE       0001000 /* optarg (name arg given to arg_spec) */
+#define ARG_TOGGLE      0002000 /* nooptarg (no name arg to arg_spec) */
+
+#define ARG_SAME              0 /* obsolete */
+#define ARG_NOCHECK     0010000 /* no check for is value flag option */
+#define ARG_DEFAULT     0020000 /* default no value to ARG_TON */
+#define ARG_WILDCARD    0040000 /* matches otherwise unmatched options:  */
+				/* set for ARG_WKEY or ARG_WFLAG */
+
+/* obsolete function code:  don't use this with arg_spec */
+#define ARG_FUNCTION    0100000 /* AS_func is given */
+
+/* the length of a switch (including the '-' ) */
+#define ARG_SLENGTH     2       /* any option longer than this is a flag */
+/* the length of a key */
+#define ARG_KLENGTH     1       /* keys must be exactly this length */
+
+/* ARG_TOGGLE and ARG_DEFAULT defines */
+#define ARG_TFORMAT     "%d"    /* ARG_TOGGLE and ARG_DEFAULT format */
+typedef int ARG_TTYPE;          /* ARG_TOGGLE and ARG_DEFAULT variable type */
+#define ARG_TON         1       /* ARG_TOGGLE and ARG_DEFAULT set value */
+#define ARG_TOFF        0       /* ARG_TOGGLE and ARG_DEFAULT off value */
+
+/* direct assignment format defines:  the value of this is known internally */
+#define ARG_DSCAN       ""      /* pseudo scanf format */
+#define ARG_DPRINT      "%s"    /* printf format (prints ARG_SCHAR, too) */
+typedef char *ARG_DTYPE;        /* type of argument variable */
+#define ARG_SCHAR       '&'     /* first char of stdio formats */
+extern char *arg_null ();       /* printf "(null)" for %s of NULL */
+/**/
+/* formal argument processing routines */
+extern int arg_each ();         /* process a formal argument */
+extern int arg_all ();          /* all done? */
+
+/* display routines */
+extern int arg_man ();          /* all three of the following */
+extern int arg_synopsis ();     /* synopsis */
+extern int arg_help ();         /* give help message */
+extern int arg_nprompt (), arg_tprompt ();      /* give prompt */
+
+extern int arg_describe ();     /* give a description from a string array */
+extern char arg_replace[];      /* replace this string with progname */
+extern char arg_bracket[];      /* put angle brackets around the next string */
+extern char arg_indirect[];     /* indirect through next string as (char **) */
+extern char arg_escape[];       /* call next as func on next after */
+
+extern int arg_show ();         /* show argument values */
+extern int arg_error ();        /* report an error */
+
+/*
+ * Each ARGUMENT defines a formal argument to be used by arg_process
+ * in converting actual arguments.
+ */
+typedef struct ARGUMENT         
+{
+  struct ARGUMENT *AS_next;     /* next list element */
+  int AS_type;                  /* AS_type defines are below */
+  char *AS_flag;                /* the flag name */
+  char *AS_name;                /* the argument name */
+  char *AS_scanf;               /* scanf format */
+  char *AS_value;               /* where the value goes */
+  char *AS_printf;              /* printf format */
+  char *AS_desc;                /* a description of the argument */
+  int (* AS_func) ();           /* function to call on conversion */
+  char *AS_farg;                /* first argument for the function */
+  char *AS_stdio;               /* name of fopened file */
+} ARGUMENT;
+/**/
+/* 
+ * Control information used by the argument routines arg_formal, etc.
+ * Modification of this structure by any but argument routines is not advised.
+ * Initialization is in arg_formal.c.
+ */
+extern struct Arg_Control
+{
+  ARGUMENT      *Arguments;     /* the formal argument array in use */
+  int           *Arg_Order;     /* printing order of argument types */
+  int           Arg_Code;       /* special handling code */
+  int           Arg_SOpt;       /* suppress recognition of options */
+  ARGUMENT      *Arg_Next;      /* the next ordinary argument expected */
+  int           Arg_NType;      /* the type of the ordinary expected */
+  char          *Arg_Flag;      /* the last flag actual converted */
+  char          *Arg_Switch;    /* the next switch or key to be converted */
+  char          *Arg_Actual;    /* the last actual argument converted */
+  ARGUMENT      *Arg_Last;      /* the last formal argument converted */
+  int           Arg_LType;      /* the type of the last formal */
+  int           Arg_REach;      /* the last value returned from arg_each */
+  int           Arg_RProc;      /* the last value returned from arg_process */
+} 
+  Arg_Control;
+
+/* for Arg_Code */
+
+/* echo codes */
+#define ARGEACTUAL      0001    /* echo each actual argument as converted */
+#define ARGEFORMAL      0002    /* echo each formal argument as converted */
+#define ARG_ECHO (ARGEFORMAL | ARGEACTUAL)
+
+/* noexit codes */
+#define ARGNEHELP       0200    /* no help or synopsis exit */
+#define ARGNEERROR      0400    /* no arg_error exit:  this is dangerous */
+
+/* the functions */
+int arg_code ();                /* set Arg_Code */
+int arg_decode ();              /* decode Arg_Code and act on it */
+
+/* Arg_Control routines */
+extern ARGUMENT *arg_change (); /* set Arg_Control */
+extern int arg_status ();       /* print Arg_Control */
+
+/* routines for looking through the Arguments array */
+/* these are for internal use */
+extern ARGUMENT *arg_first ();  /* get first ARGUMENT of given type */
+extern ARGUMENT *arg_next ();   /* get next ARGUMENT of given type */
+extern ARGUMENT *arg_of ();     /* get ARGUMENT of given type from value */
+
+/**/
+/* routines to deal with actual arguments */
+extern char *progname;          /* name of the program for errors */
+extern int argv_init ();        /* set up for argv */
+extern int argv_file ();        /* set up to read a file */
+extern int argv_eof ();         /* all done? */
+extern char *argv_get ();       /* get next actual */
+extern char *argv_unget ();     /* unget actual */
+
+/*
+ * The function switch, set by argv_init or argv_file,
+ * which determines which argv_eof and argv_get to use.
+ */
+struct argv_switch
+{
+  char *argv_save;              /* place to save ungot argument */
+  int (* argv_eof) ();          /* argv or file specific argv_eof */
+  char * (* argv_get) ();       /* argv or file specific argv_get */
+};
+extern struct argv_switch argv_switch;

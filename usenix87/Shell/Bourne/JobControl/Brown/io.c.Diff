@@ -1,0 +1,226 @@
+*** io.c	Mon Nov 24 17:49:24 1986
+--- /cs/simon/c/shdiff-sources/io.c	Fri Feb 20 12:51:13 1987
+***************
+*** 313,315
+  	}
+  	topfd = last;
+  }
+
+--- 313,529 -----
+  	}
+  	topfd = last;
+  }
++ 
++ 
++ 
++ #ifdef JOB
++ 
++ /*
++  *	fetch current tty characteristics.
++  */
++ terminal(tp)
++ TTYNOD *tp;
++ {
++ # ifdef sysV
++ 	return(ioctl(0,TCGETA,tp));
++ # else
++ 	return(ioctl(0,TIOCGETP,tp));
++ # endif sysV
++ }
++ 
++ 
++ #ifdef JOBSXT
++ /*
++  *	sxt virtual-terminal stuff for SystemV Job-Control (layers)
++  */
++ #undef input
++ #include 	"job.h"
++ #include	<sys/types.h>
++ #include	<sys/tty.h>
++ #include	<sys/sxt.h>
++ #include	<errno.h>
++ 
++ #define SXTIO	  13
++ #define CONSTTYIO 14
++ 
++ /* this is a bit naughty: still... its only declared for sgtty, not termio! */
++ #define TIOCEXCL (('t'<<8)|13)
++ 
++ static char sxt[] = "/dev/sxt/000";
++ static char no_jobs[] = "; thus no job-control\n";
++ #define SXT_CHAN 11
++ extern int sxtchan;
++ extern int savsxtchan;
++ extern struct jobnod *jobs[];
++ 
++ 
++ 
++ /*
++  *	open a new channel
++  */
++ sxtopen(chan)
++ {
++ 	int rc;
++ 	struct termio tb;
++ 
++ 	if (chan>SXTMAX) return(-1);
++ 	sxt[SXT_CHAN] = chan+'0';
++ 	if ((rc=open(sxt,2)) < 0){
++ 		failed(sxt,errno);
++ 		/*NOTREACHED*/
++ 	}
++ 	tb = realtty;
++ 	if (chan>1){
++ 		tb.c_cc[VSWTCH] = '\032';	/* sorry! - only ^Z allowed */
++ 		tb.c_cflag |= LOBLK;		/* blocking allowed */
++ 	} else 	{
++ 		tb.c_cflag &= ~LOBLK;	    /* shell is immune to blocking */
++ 	}
++ 	ioctl(rc,TCSETA,&tb);
++ 	return(rc);
++ }
++ 
++ char *sxtstr[] = { SSHLIBRARY/sxtalloc`", 0 };
++ 
++ 
++ /*
++  *	initialize sxt
++  */
++ sxtinit()
++ {
++ 	int fd;
++ #ifdef SXT_SUSPEND
++ 	struct namnod *np;
++ #endif
++ 
++ 	iflags &= ~jobflg;
++ 	if (TTYnod.namval) goto nomesg;	/* its a subshell! */
++ 	if (setjmp(errshell)) goto bad;
++ 	execexp("REALTTY=`", sxtstr);
++ 	attrib(&TTYnod, (N_RDONLY|N_EXPORT));
++ 	sxtchan = 0;
++ 	if (exitval) goto bad;
++ 
++ 	while ((fd=open(sxt,O_RDWR)) == -1)
++ 		switch(errno){
++ 		    case ENOENT:
++ 			prs_buff("No sxt channels available");
++ 			prs_buff(no_jobs);
++ 			flushb();
++ 			sxtchan = -1;
++ 			return;
++ 		    case EBUSY:
++ 		    case EACCES:
++ 			sxtchan++;
++ 			if (sxtchan>9)
++ 				sxt[SXT_CHAN-2] = (sxtchan/10)+'0';
++ 			sxt[SXT_CHAN-1] = (sxtchan%10)+'0';
++ 			break;
++ 		    default:
++ 			prs_buff("sxt error\n");
++ 			flushb();
++ 			exit(1);
++ 		}
++ 	if (ioctl(fd,SXTIOCLINK,MAXPCHAN) != 0){
++ 	    	if (errno==ENOTTY || errno==EBUSY){
++ 			prs_buff("Controlling terminal not a real device");
++ 			prs_buff(no_jobs);
++ 			flushb();
++ 			sxtchan = -1;
++ 			close(fd);
++ 			return;
++ 		} else {
++ 			prs_buff("sxt ioctl error\n");
++ 			flushb();
++ 			exit(1);
++ 		}
++ 	}
++ 	ioctl(fd,SXTIOCUBLK,0);		/* controller mustn't block on output */
++ 	ioctl(fd,TIOCEXCL,0);
++ 	ioctl(fd,TCSETA,&realtty);
++ #ifdef SXT_SUSPEND
++ 	rename(fd,sxt_fd=SXTIO);	/* so subprocesses can "suspend..." */
++ 	itos(SXTIO);
++ 	np=lookup("SXT_CONTROL");
++ 	assign(np,numbuf);
++ 	attrib(np,N_EXPORT);
++ #else
++ 	Ldup(fd,sxt_fd=SXTIO);
++ #endif SXT_SUSPEND
++ 	if (getppid() == 1){		/* kernel bug; so just use sxt 0 */
++ 		Ldup(dup(0),CONSTTYIO);
++ #ifdef notdef
++ 		sxtkludge = 0;
++ 		fd = sxt_fd;
++ #else
++ 		fd = sxtopen(1);
++ #endif notdef
++ 	} else {
++ 		setpgrp();		/* setpgrp will work */
++ 		fd = sxtopen(1);	/* BETTER work! */
++ 	}
++ 	close(0);
++ 	close(1); close(2);		/* forget real tty */
++ 	dup(fd);			/* input is channel 0 or 1 */
++ 	dup(0); dup(0);			/* stdout/stderr channel 0 or 1 too*/
++ 	close(fd);
++ 	iflags |= jobflg;
++ 	return;
++ 
++     bad:
++ 	prs_buff("cannot initialize sxt");
++ 	prs_buff(no_jobs);
++ 	flushb();
++     nomesg:
++ 	sxtchan = -1;
++ 	iflags &= ~jobflg;
++ 	return;
++ }
++ 
++ 
++ /*
++  *	release sxt
++  */
++ sxtrelease(suicide)
++ {
++ 	if (sxtchan != -1){
++ 		exitset();
++ 		if (suicide) 
++ 			flags &= ~rshflg;	/* late enough now */
++ 		sxtchan = -1;		/* no more! */
++ 		close(sxt_fd);		/* really!  */
++ 		execexp(SSHLIBRARY/sxtalloc \"$REALTTY\" $?",(char * *)0);
++ 		if (suicide) done();
++ 		close(0); close(1); close(2);
++ 		dup(CONSTTYIO); dup(0); dup(1); 	/* restore old tty */
++ 	}
++ }
++ 
++ 
++ /* temporarily forget about sxt's */
++ hide_sxt()
++ {
++ 	if (sxtchan!=-1){
++ 		savsxtchan = sxtchan;
++ 		sxtchan = -1;
++ 		iflags &= ~jobflg;
++ 		return(1);
++ 	} else return(0);
++ }
++ 
++ 
++ /* ... and remember them again */
++ restore_sxt()
++ {
++ 	if (sxtchan==-1){
++ 		sxtchan = savsxtchan;
++ 		savsxtchan = -1;
++ 		iflags |= jobflg;
++ 	}
++ }
++ 
++ #endif JOBSXT
++ 
++ #endif JOB
++ 
++ 

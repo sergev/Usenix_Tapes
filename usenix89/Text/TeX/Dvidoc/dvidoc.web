@@ -1,0 +1,1779 @@
+% This is DVIDOC, a TeX device driver for text files.  It was written
+% at OSU in April, 1983, by modifying the TeX utility DVItype.
+
+% Here is TeX material that gets inserted after \input webhdr
+\def\hang{\hangindent 3em\indent\ignorespace}
+\def\TeX{T\hbox{\hskip-.1667em\lower.424ex\hbox{E}\hskip-.125em X}}
+\font\ninerm=cmr9
+\let\mc=\ninerm % medium caps for names like PASCAL
+\def\PASCAL{{\mc PASCAL}}
+
+\def\(#1){} % this is used to make module names sort themselves better
+\def\9#1{} % this is used for sort keys in the index
+
+\def\title{DVIDOC}
+\def\contentspagenumber{1}
+\def\topofcontents{\null
+  \def\titlepage{F} % include headline on the contents page
+  \def\rheader{\mainfont\hfil \contentspagenumber}
+  \vfill
+  \ctrline{\titlefont The {\ttitlefont DVIDOC} processor}
+  \vskip 15pt
+  \ctrline{(Version 1, April 1983)}
+  \vfill}
+\def\botofcontents{\vfill
+  \ctrline{\hsize 5in\baselineskip9pt
+    \vbox{\ninerm\noindent
+   `\TeX' is a
+    trademark of the American Mathematical Society.}}}
+\setcount0=\contentspagenumber \advcount0 by 1
+
+@* Introduction.
+The \.{DVIDOC} utility program reads binary device-independent (``\.{DVI}'')
+files that are produced by document compilers such as \TeX, and 
+approximates the intended document as a text file suitable for typing at
+a terminal or on a line printer.
+
+This program is based on the program \.{DVItype}, which was written by
+Donald Knuth and David Fuchs.
+It contained a great deal of code checking for malformed \.{DVI}
+files.  Most of that code remains in \.{DVIDOC}, not because it is
+important (we trust TeX) to produce correct \.{DVI} files), but
+because is was easier not to disturb the logic in modifying
+\.{DVItype} to produce \.{DVIDOC}.
+
+The |banner| string defined here should be changed whenever \.{DVIDOC}
+gets modified.
+
+@d banner=='This is DVIDOC, Version 1' {printed when the program starts}
+
+@ Unlike the programs distributed with \TeX, which are written in a
+least-common-denominator Pascal that runs on no machine, this program
+is written to run on TOPS-20 using Rutgers Pascal.  Nevertheless, all
+places where nonstandard constructions are used have been listed in
+the index under ``system dependencies.''
+@!@^system dependencies@>
+
+One of the extensions to standard \PASCAL\ that we shall deal with is the
+ability to move to a random place in a binary file; another is to
+determine the length of a binary file.
+Another extension is to use a default |case| as in \.{TANGLE}, \.{WEAVE},
+etc.
+
+@d othercases == others: {default for cases not listed explicitly}
+@d endcases == @+end {follows the default case in an extended |case| statement}
+@f othercases == else
+@f endcases == end
+
+@ The binary input comes from |dvi_file|, and the document is written
+on the file |doc_file|
+Their definitions in the |program| statement indicate that
+they should use an existing version and a new version, respectively.
+|term_in| and |term_out| are used throughout this program as files for
+dialog with the user.  These are associated by macro with the file
+|tty|, and are retained as a concession to portability.
+@^system dependencies@>
+
+@d term_in==tty
+@d term_out==tty
+
+@p program DVIDOC(@!dvi_file:-,@!doc_file:+);
+label @<Labels in the outer block@>@/
+const @<Constants in the outer block@>@/
+type @<Types in the outer block@>@/
+var@?@<Globals in the outer block@>@/
+procedure initialize; {this procedure gets things started properly}
+  var i:integer; {loop index for initializations}
+  begin @/
+  @<Set initial values@>@/
+  end;
+
+@ If the program has to stop prematurely, it goes to the
+`|final_end|'. Another label, |done|, is used when stopping normally.
+
+@d final_end=9999 {label for the end of it all}
+@d done=30 {go here when finished with a subtask}
+
+@<Labels...@>=final_end,done;
+
+@ The following parameters can be changed at compile time to extend or
+reduce \.{DVIDOC}'s capacity.
+
+@<Constants...@>=
+@!max_fonts=100; {maximum number of distinct fonts per \.{DVI} file}
+@!max_widths=10000; {maximum number of different characters among all fonts}
+@!terminal_line_length=150; {maximum number of characters input in a single
+  line of input from the terminal}
+@!stack_size=100; {\.{DVI} files shouldn't |push| beyond this depth}
+@!name_size=1000; {total length of all font file names}
+@!name_length=50; {a file name shouldn't be longer than this}
+@!page_width_max=132; {maximum number of characters per line in the document}
+@!page_length_max=88; {maximum number of lines per page in the document}
+
+@ Here are some macros for common programming idioms.
+
+@d incr(#) == #:=#+1 {increase a variable by unity}
+@d decr(#) == #:=#-1 {decrease a variable by unity}
+@d do_nothing == {empty statement}
+
+@ If the \.{DVI} file is badly malformed, the whole process must be aborted;
+\.{DVIDOC} will give up, after issuing an error message about the symptoms
+that were noticed.
+
+Such errors might be discovered inside of subroutines inside of subroutines,
+so a procedure called |jump_out| has been introduced. This procedure, which
+simply transfers control to the label |final_end| at the end of the program,
+contains the only non-local |goto| statement in \.{DVIDOC}.
+@^system dependencies@>
+
+@d abort(#)==begin write(term_out,' ',#); jump_out;
+    end
+@d bad_dvi(#)==abort('Bad DVI file: ',#,'!')
+@.Bad DVI file@>
+
+@p procedure jump_out;
+begin goto final_end;
+end;
+
+@* The character set.
+Like all programs written with the  \.{WEB} system, \.{DVIDOC} can be
+used with any character set. But it uses ascii code internally, because
+the programming for portable input-output is easier when a fixed internal
+code is used, and because \.{DVI} files use ascii code for file names
+and certain other strings.
+
+The next few modules of \.{DVIDOC} have therefore been copied from the
+analogous ones in the \.{WEB} system routines. They have been considerably
+simplified, since \.{DVIDOC} need not deal with the controversial
+ascii codes less than @'40. If such codes appear in the \.{DVI} file,
+they will be printed as question marks.
+
+@<Types...@>=
+@!ascii_code=" ".."~"; {a subrange of the integers}
+
+@ The original \PASCAL\ compiler was designed in the late 60s, when six-bit
+character sets were common, so it did not make provision for lower case
+letters. Nowadays, of course, we need to deal with both upper and lower case
+alphabets in a convenient way, especially in a program like \.{DVIDOC}.
+So we shall assume that the \PASCAL\ system being used for \.{DVIDOC}
+has a character set containing at least the standard visible characters
+of ascii code (|"!"| through |"~"|).
+
+Some \PASCAL\ compilers use the original name |char| for the data type
+associated with the characters in text files, while other \PASCAL s
+consider |char| to be a 64-element subrange of a larger data type that has
+some other name.  In order to accommodate this difference, we shall use
+the name |text_char| to stand for the data type of the characters in the
+output file.  We shall also assume that |text_char| consists of
+the elements |chr(first_text_char)| through |chr(last_text_char)|,
+inclusive. The following definitions should be adjusted if necessary.
+@^system dependencies@>
+@d text_char == char {the data type of characters in text files}
+@d first_text_char=0 {ordinal number of the smallest element of |text_char|}
+@d last_text_char=127 {ordinal number of the largest element of |text_char|}
+
+@<Types...@>=
+@!text_file=packed file of text_char;
+
+@ The \.{DVIDOC} processor converts between ascii code and
+the user's external character set by means of arrays |xord| and |xchr|
+that are analogous to \PASCAL's |ord| and |chr| functions.
+
+@<Globals...@>=
+@!xord: array [text_char] of ascii_code;
+  {specifies conversion of input characters}
+@!xchr: array [0..255] of text_char;
+  {specifies conversion of output characters}
+
+@ Under our assumption that the visible characters of standard ascii are
+all present, the following assignment statements initialize the
+|xchr| array properly, without needing any system-dependent changes.
+
+@<Set init...@>=
+for i:=0 to @'37 do xchr[i]:='?';
+xchr[@'40]:=' ';
+xchr[@'41]:='!';
+xchr[@'42]:='"';
+xchr[@'43]:='#';
+xchr[@'44]:='$';
+xchr[@'45]:='%';
+xchr[@'46]:='&';
+xchr[@'47]:='''';@/
+xchr[@'50]:='(';
+xchr[@'51]:=')';
+xchr[@'52]:='*';
+xchr[@'53]:='+';
+xchr[@'54]:=',';
+xchr[@'55]:='-';
+xchr[@'56]:='.';
+xchr[@'57]:='/';@/
+xchr[@'60]:='0';
+xchr[@'61]:='1';
+xchr[@'62]:='2';
+xchr[@'63]:='3';
+xchr[@'64]:='4';
+xchr[@'65]:='5';
+xchr[@'66]:='6';
+xchr[@'67]:='7';@/
+xchr[@'70]:='8';
+xchr[@'71]:='9';
+xchr[@'72]:=':';
+xchr[@'73]:=';';
+xchr[@'74]:='<';
+xchr[@'75]:='=';
+xchr[@'76]:='>';
+xchr[@'77]:='?';@/
+xchr[@'100]:='@@';
+xchr[@'101]:='A';
+xchr[@'102]:='B';
+xchr[@'103]:='C';
+xchr[@'104]:='D';
+xchr[@'105]:='E';
+xchr[@'106]:='F';
+xchr[@'107]:='G';@/
+xchr[@'110]:='H';
+xchr[@'111]:='I';
+xchr[@'112]:='J';
+xchr[@'113]:='K';
+xchr[@'114]:='L';
+xchr[@'115]:='M';
+xchr[@'116]:='N';
+xchr[@'117]:='O';@/
+xchr[@'120]:='P';
+xchr[@'121]:='Q';
+xchr[@'122]:='R';
+xchr[@'123]:='S';
+xchr[@'124]:='T';
+xchr[@'125]:='U';
+xchr[@'126]:='V';
+xchr[@'127]:='W';@/
+xchr[@'130]:='X';
+xchr[@'131]:='Y';
+xchr[@'132]:='Z';
+xchr[@'133]:='[';
+xchr[@'134]:='\';
+xchr[@'135]:=']';
+xchr[@'136]:='^';
+xchr[@'137]:='_';@/
+xchr[@'140]:='`';
+xchr[@'141]:='a';
+xchr[@'142]:='b';
+xchr[@'143]:='c';
+xchr[@'144]:='d';
+xchr[@'145]:='e';
+xchr[@'146]:='f';
+xchr[@'147]:='g';@/
+xchr[@'150]:='h';
+xchr[@'151]:='i';
+xchr[@'152]:='j';
+xchr[@'153]:='k';
+xchr[@'154]:='l';
+xchr[@'155]:='m';
+xchr[@'156]:='n';
+xchr[@'157]:='o';@/
+xchr[@'160]:='p';
+xchr[@'161]:='q';
+xchr[@'162]:='r';
+xchr[@'163]:='s';
+xchr[@'164]:='t';
+xchr[@'165]:='u';
+xchr[@'166]:='v';
+xchr[@'167]:='w';@/
+xchr[@'170]:='x';
+xchr[@'171]:='y';
+xchr[@'172]:='z';
+xchr[@'173]:='{';
+xchr[@'174]:='|';
+xchr[@'175]:='}';
+xchr[@'176]:='~';
+for i:=@'177 to 255 do xchr[i]:='?';
+
+@ The following system-independent code makes the |xord| array contain a
+suitable inverse to the information in |xchr|.
+
+@<Set init...@>=
+for i:=first_text_char to last_text_char do xord[chr(i)]:=@'40;
+for i:=" " to "~" do xord[xchr[i]]:=i;
+
+@* Device-independent file format.
+The device-independent file format is described in the \.{DVItype} 
+documentation.
+
+When \.{DVIDOC} "typesets" a character, it simply puts its ascii code
+into the document file in the proper place according to the rounding of
+|h| and |v| to whole character positions.  It may, of course, obliterate
+a character previously stored in the same position.  Especially if a
+symbol font is being used, the ascii code may print ultimately as an
+entirely different character than the one the document designer originally
+intended.  For \.{DVIDOC} to produce more than a rough approximation to 
+the intended document, fonts need to be chosen very carefully.
+
+@ @d set_char_0=0 {typeset character 0 and move right}
+@d set1=128 {typeset a character and move right}
+@d set_rule=132 {typeset a rule and move right}
+@d put1=133 {typeset a character}
+@d put_rule=137 {typeset a rule}
+@d nop=138 {no operation}
+@d bop=139 {beginning of page}
+@d eop=140 {ending of page}
+@d push=141 {save the current positions}
+@d pop=142 {restore previous positions}
+@d right1=143 {move right}
+@d w0=147 {move right by |w|}
+@d w1=148 {move right and set |w|}
+@d x0=152 {move right by |x|}
+@d x1=153 {move right and set |x|}
+@d down1=157 {move down}
+@d y0=161 {move down by |y|}
+@d y1=162 {move down and set |y|}
+@d z0=166 {move down by |z|}
+@d z1=167 {move down and set |z|}
+@d fnt_num_0=171 {set current font to 0}
+@d fnt1=235 {set current font}
+@d xxx1=239 {extension to \.{DVI} primitives}
+@d xxx4=242 {potentially long extension to \.{DVI} primitives}
+@d fnt_def1=243 {define the meaning of a font number}
+@d pre=247 {preamble}
+@d post=248 {postamble beginning}
+@d post_post=249 {postamble ending}
+@d undefined_commands==250,251,252,253,254,255
+@d id_byte=2 {identifies the kind of \.{DVI} files described here}
+
+@* Input from binary files.
+We have seen that a \.{DVI} file is a sequence of 8-bit bytes. The bytes
+appear physically in what is called a `|packed file of 0..255|'
+in \PASCAL\ lingo.
+
+Packing is system dependent, and many \PASCAL\ systems fail to implement
+such files in a sensible way (at least, from the viewpoint of producing
+good production software).  For example, some systems treat all
+byte-oriented files as text, looking for end-of-line marks and such
+things. Therefore some system-dependent code is often needed to deal with
+binary files, even though most of the program in this section of
+\.{DVIDOC} is written in standard \PASCAL.
+@^system dependencies@>
+
+We shall stick to simple \PASCAL\ in this program, for reasons of clarity,
+even if such simplicity is sometimes unrealistic.
+
+@<Types...@>=
+@!eight_bits=0..255; {unsigned one-byte quantity}
+@!byte_file=packed file of eight_bits; {files that contain binary data}
+
+@ The program deals with two binary file variables: |dvi_file| is the main
+input file that we are translating into symbolic form, and |tfm_file| is
+the current font metric file from which character-width information is
+being read.
+
+@<Glob...@>=
+@!dvi_file:byte_file; {the stuff we are \.{DVI}typing}
+@!tfm_file:byte_file; {a font metric file}
+
+@ To prepare these files for input, we |reset| them. An extension of
+\PASCAL\ is needed in the case of |tfm_file|, since we want to associate
+it with external files whose names are specified dynamically (i.e., not
+known at compile time). The following code assumes that `|reset(f,s)|'
+does this, when |f| is a file variable and |s| is a string variable that
+specifies the file name. If |eof(f)| is true immediately after
+|reset(f,s)| has acted, we assume that no file named |s| is accessible.
+Another \PASCAL\ extention, a flag in the third parameter to |reset|,
+is used to indicate that these two files are 
+stored externally with four 8-bit bytes per 36-bit word.
+@^system dependencies@>
+
+@p procedure open_dvi_file; {prepares to read packed bytes in |dvi_file|}
+begin reset(dvi_file,'','/B:8');
+cur_loc:=0;
+end;
+@#
+procedure open_tfm_file; {prepares to read packed bytes in |tfm_file|}
+begin reset(tfm_file,cur_name,'/B:8');
+end;
+
+@ If you looked carefully at the preceding code, you probably asked,
+``What are |cur_loc| and |cur_name|?'' Good question. They're global
+variables: |cur_loc| is the number of the byte about to be read next from
+|dvi_file|, and |cur_name| is a string variable that will be set to the
+current font metric file name before |open_tfm_file| is called.
+
+@<Glob...@>=
+@!cur_loc:integer; {where we are about to look, in |dvi_file|}
+@!cur_name:packed array[1..name_length] of char; {external name,
+  with no lower case letters}
+
+@ It turns out to be convenient to read four bytes at a time, when we are
+inputting from \.{TFM} files. The input goes into global variables
+|b0|, |b1|, |b2|, and |b3|, with |b0| getting the first byte and |b3|
+the fourth.
+
+@<Glob...@>=
+@!b0,@!b1,@!b2,@!b3: eight_bits; {four bytes input at once}
+
+@ The |read_tfm_word| procedure sets |b0| through |b3| to the next
+four bytes in the current \.{TFM} file.
+@^system dependencies@>
+
+@p procedure read_tfm_word;
+begin read(tfm_file,b0); read(tfm_file,b1);
+read(tfm_file,b2); read(tfm_file,b3);
+end;
+
+@ We shall use another set of simple functions to read the next byte or
+bytes from |dvi_file|. There are seven possibilities, each of which is
+treated as a separate function in order to minimize the overhead for
+subroutine calls.
+@^system dependencies@>
+
+@p function get_byte:integer; {returns the next byte, unsigned}
+var b:eight_bits;
+begin if eof(dvi_file) then get_byte:=0
+else  begin read(dvi_file,b); incr(cur_loc); get_byte:=b;
+  end;
+end;
+@#
+function signed_byte:integer; {returns the next byte, signed}
+var b:eight_bits;
+begin read(dvi_file,b); incr(cur_loc);
+if b<128 then signed_byte:=b @+ else signed_byte:=b-256;
+end;
+@#
+function get_two_bytes:integer; {returns the next two bytes, unsigned}
+var a,@!b:eight_bits;
+begin read(dvi_file,a); read(dvi_file,b);
+cur_loc:=cur_loc+2;
+get_two_bytes:=a*256+b;
+end;
+@#
+function signed_pair:integer; {returns the next two bytes, signed}
+var a,@!b:eight_bits;
+begin read(dvi_file,a); read(dvi_file,b);
+cur_loc:=cur_loc+2;
+if a<128 then signed_pair:=a*256+b
+else signed_pair:=(a-256)*256+b;
+end;
+@#
+function get_three_bytes:integer; {returns the next three bytes, unsigned}
+var a,@!b,@!c:eight_bits;
+begin read(dvi_file,a); read(dvi_file,b); read(dvi_file,c);
+cur_loc:=cur_loc+3;
+get_three_bytes:=(a*256+b)*256+c;
+end;
+@#
+function signed_trio:integer; {returns the next three bytes, signed}
+var a,@!b,@!c:eight_bits;
+begin read(dvi_file,a); read(dvi_file,b); read(dvi_file,c);
+cur_loc:=cur_loc+3;
+if a<128 then signed_trio:=(a*256+b)*256+c
+else signed_trio:=((a-256)*256+b)*256+c;
+end;
+@#
+function signed_quad:integer; {returns the next four bytes, signed}
+var a,@!b,@!c,@!d:eight_bits;
+begin read(dvi_file,a); read(dvi_file,b); read(dvi_file,c); read(dvi_file,d);
+cur_loc:=cur_loc+4;
+if a<128 then signed_quad:=((a*256+b)*256+c)*256+d
+else signed_quad:=(((a-256)*256+b)*256+c)*256+d;
+end;
+
+@ Finally we come to the routines that do random file access.
+The driver program below needs two such routines: |dvi_length| should
+compute the total number of bytes in |dvi_file|, possibly also
+causing |eof(dvi_file)| to be true; and |move_to_byte(n)|
+should position |dvi_file| so that the next |get_byte| will read byte |n|,
+starting with |n=0| for the first byte in the file.
+@^system dependencies@>
+
+Such routines are, of course, highly system dependent. They are implemented
+here in terms of two assumed system routines called |set_pos| and |cur_pos|.
+The call |set_pos(f,n)| moves to item |n| in file |f|, unless |n| is
+negative or larger than the total number of items in |f|; in the latter
+case, |set_pos(f,n)| moves to the end of file |f|.
+The call |cur_pos(f)| gives the total number of items in |f|, if
+|eof(f)| is true; we use |cur_pos| only in such a situation.
+
+@p function dvi_length:integer;
+begin set_pos(dvi_file,-1); dvi_length:=cur_pos(dvi_file);
+end;
+@#
+procedure move_to_byte(n:integer);
+begin set_pos(dvi_file,n); cur_loc:=n;
+end;
+
+@* Reading the font information.
+\.{DVI} file format does not include information about character widths, since
+that would tend to make the files a lot longer. But a program that reads
+a \.{DVI} file is supposed to know the widths of the characters that appear
+in \\{set\_char} commands. Therefore \.{DVIDOC} looks at the font metric
+(\.{TFM}) files for the fonts that are involved.
+@.TFM {\rm files}@>
+
+@ For purposes of this program, we need to know only two things about a
+given character |c| in a given font |f|: (1)@@Is |c| a legal character
+in@@|f|? (2)@@If so, what is the width of |c|? We also need to know the
+symbolic name of each font, so it can be printed out, and we need to know
+the approximate size of inter-word spaces in each font.
+
+The answers to these questions appear implicitly in the following data
+structures. The current number of known fonts is |nf|. Each known font has
+an internal number |f|, where |0<=f<nf|; the external number of this font,
+i.e., its font identification number in the \.{DVI} file, is
+|font_num[f]|, and the external name of this font is the string that
+occupies positions |font_name[f]| through |font_name[f+1]-1| of the array
+|names|. The latter array consists of |ascii_code| characters, and
+|font_name[nf]| is its first unoccupied position.  A horizontal motion
+less than |font_space[f]| will be treated as a `kern'.
+The
+legal characters run from |font_bc[f]| to |font_ec[f]|, inclusive; more
+precisely, a given character |c| is valid in font |f| if and only if
+|font_bc[f]<=c<=font_ec[f]| and |char_width(f)(c)<>invalid_width|.
+(Exception: If |font_ec[f]=256|, all characters |c>=256| are valid and have
+the same width |char_width(f)(256)|.)
+@^oriental characters@>@^Chinese characters@>@^Japanese characters@>
+Finally, |char_width(f)(c)=width[width_base[f]+c]|, and |width_ptr| is the
+first unused position of the |width| array.
+
+@d char_width_end(#)==#]
+@d char_width(#)==width[width_base[#]+char_width_end
+@d invalid_width==@'17777777777
+
+@<Glob...@>=
+@!font_num:array [0..max_fonts] of integer; {external font numbers}
+@!font_name:array [0..max_fonts] of 0..name_size; {starting positions
+  of external font names}
+@!names:array [0..name_size] of ascii_code; {characters of names}
+@!font_check_sum:array [0..max_fonts] of integer; {check sums}
+@!font_scaled_size:array [0..max_fonts] of integer; {scale factors}
+@!font_design_size:array [0..max_fonts] of integer; {design sizes}
+@!font_space:array [0..max_fonts] of integer; {boundary between ``small''
+  and ``large'' spaces}
+@!font_bc:array [0..max_fonts] of integer; {beginning characters in fonts}
+@!font_ec:array [0..max_fonts] of integer; {ending characters in fonts}
+@!width_base:array [0..max_fonts] of integer; {index into |width| table}
+@!width:array [0..max_widths] of integer; {character widths, in \.{DVI} units}
+@!nf:0..max_fonts; {the number of known fonts}
+@!width_ptr:0..max_widths; {the number of known character widths}
+
+@ @<Set init...@>=
+nf:=0; width_ptr:=0; font_name[0]:=0;
+
+@ It is, of course, a simple matter to print the name of a given font.
+
+@p procedure print_font(@!f:integer); {|f| is an internal font number}
+var k:0..name_size; {index into |names|}
+begin if f=nf then write(term_out,'UNDEFINED!')
+@.UNDEFINED@>
+else  begin for k:=font_name[f] to font_name[f+1]-1 do
+    write(term_out,xchr[names[k]]);
+  end;
+end;
+
+@ An auxiliary array |in_width| is used to hold the widths as they are
+input. The global variable |tfm_check_sum| is set to the check sum that
+appears in the current \.{TFM} file.
+
+@<Glob...@>=
+@!in_width:array[0..255] of integer; {\.{TFM} width data in \.{DVI} units}
+@!tfm_check_sum:integer; {check sum found in |tfm_file|}
+
+@ Here is a procedure that absorbs the necessary information from a
+\.{TFM} file, assuming that the file has just been successfully reset
+so that we are ready to read its first byte. (A complete description of
+\.{TFM} file format appears in the documentation of \.{TFtoPL} and will
+not be repeated here.) The procedure does not check the \.{TFM} file
+for validity, nor does it give explicit information about what is
+wrong with a \.{TFM} file that proves to be invalid; \.{DVI}-reading
+programs need not do this, since \.{TFM} files are almost always valid,
+and since the \.{TFtoPL} utility program has been specifically designed
+to diagnose \.{TFM} errors. The procedure simply returns |false| if it
+detects anything amiss in the \.{TFM} data.
+
+There is a parameter, |z|, which represents the scaling factor being
+used to compute the font dimensions; it must be in the range $0<z<2^{27}$.
+
+@p function in_TFM(@!z:integer):boolean; {input \.{TFM} data or return |false|}
+label 9997, {go here when the format is bad}
+  9998,  {go here when the information cannot be loaded}
+  9999;  {go here to exit}
+var k:integer; {index for loops}
+@!lh:integer; {length of the header data, in four-byte words}
+@!nw:integer; {number of words in the width table}
+@!wp:0..max_widths; {new value of |width_ptr| after successful input}
+@!alpha,@!beta:integer; {quantities used in the scaling computation}
+begin @<Read past the header data; |goto 9997| if there is a problem@>;
+@<Store character-width indices at the end of the |width| table@>;
+@<Read and convert the width values, setting up the |in_width| table@>;
+@<Move the widths from |in_width| to |width|, and append |pixel_width| values@>;
+width_ptr:=wp; in_TFM:=true; goto 9999;
+9997: write_ln(term_out,'---not loaded, TFM file is bad');
+@.TFM file is bad@>
+9998: in_TFM:=false;
+9999: end;
+
+@ @<Read past the header...@>=
+read_tfm_word; lh:=b2*256+b3;
+read_tfm_word; font_bc[nf]:=b0*256+b1; font_ec[nf]:=b2*256+b3;
+if font_ec[nf]<font_bc[nf] then font_bc[nf]:=font_ec[nf]+1;
+if width_ptr+font_ec[nf]-font_bc[nf]+1>max_widths then
+  begin write_ln(term_out,'---not loaded, DVIDOC needs larger width table');
+@.DVIDOC needs larger...@>
+    goto 9998;
+  end;
+wp:=width_ptr+font_ec[nf]-font_bc[nf]+1;
+read_tfm_word; nw:=b0*256+b1;
+if (nw=0)or(nw>256) then goto 9997;
+for k:=1 to 3+lh do
+  begin if eof(tfm_file) then goto 9997;
+  read_tfm_word;
+  if k=4 then
+    if b0<128 then tfm_check_sum:=((b0*256+b1)*256+b2)*256+b3
+    else tfm_check_sum:=(((b0-256)*256+b1)*256+b2)*256+b3;
+  end;
+
+@ @<Store character-width indices...@>=
+if wp>0 then for k:=width_ptr to wp-1 do
+  begin read_tfm_word;
+  if b0>nw then goto 9997;
+  width[k]:=b0;
+  end;
+
+@ The most important part of |in_TFM| is the width computation, which
+involves multiplying the relative widths in the \.{TFM} file by the
+scaling factor in the \.{DVI} file. This fixed-point multiplication
+must be done with precisely the same accuracy by all \.{DVI}-reading programs,
+in order to validate the assumptions made by \.{DVI}-writing programs
+like \TeX82.
+
+Let us therefore summarize what needs to be done. Each width in a \.{TFM}
+file appears as a four-byte quantity called a |fix_word|.  A |fix_word|
+whose respective bytes are $(a,b,c,d)$ represents the number
+$$x=\left\{\vcenter{\halign{\lft{$#$,}\qquad&if \lft{$#$}\cr
+b\cdot2^{-4}+c\cdot2^{-12}+d\cdot2^{-20}&a=0;\cr
+-16+b\cdot2^{-4}+c\cdot2^{-12}+d\cdot2^{-20}&a=255.\cr}}\right.$$
+(No other choices of $a$ are allowed, since the magnitude of a \.{TFM}
+dimension must be less than 16.)  We want to multiply this quantity by the
+integer@@|z|, which is known to be less then $2^{27}$. Let $\alpha=16z$.
+If $|z|<2^{23}$, the individual multiplications $b\cdot z$, $c\cdot z$,
+$d\cdot z$ cannot overflow; otherwise we will divide |z| by 2, 4, 8, or
+16, to obtain a multiplier less than $2^{23}$, and we can compensate for
+this later. If |z| has thereby been replaced by $|z|^\prime=|z|/2^e$, let
+$\beta=2^{4-e}$; we shall compute
+$$\lfloor(b+c\cdot2^{-8}+d\cdot2^{-16})\,z^\prime/\beta\rfloor$$ if $a=0$,
+or the same quantity minus $\alpha$ if $a=255$.  This calculation must be
+done exactly, for the reasons stated above; the following program does the
+job in a system-independent way, assuming that arithmetic is exact on
+numbers less than $2^{31}$ in magnitude.
+
+@<Read and convert the width values...@>=
+@<Replace |z| by $|z|^\prime$ and compute $\alpha,\beta$@>;
+for k:=0 to nw-1 do
+  begin read_tfm_word;
+  in_width[k]:=(((((b3*z)div@'400)+(b2*z))div@'400)+(b1*z))div beta;
+  if b0>0 then if b0<255 then goto 9997
+    else in_width[k]:=in_width[k]-alpha;
+  end
+
+@ @<Replace |z|...@>=
+begin alpha:=16*z; beta:=16;
+while z>=@'40000000 do
+  begin z:=z div 2; beta:=beta div 2;
+  end;
+end
+
+@ A \.{DVI}-reading program usually works with font files instead of
+\.{TFM} files, so \.{DVIDOC} is atypical in that respect. Font files
+should, however, contain exactly the same character width data that is
+found in the corresponding \.{TFM}s. In addition, font files usually
+also contain the widths of characters in pixels, since the device-independent
+character widths of \.{TFM} files are generally not perfect multiples of
+pixels.
+
+The |pixel_width| array contains this information; when |width[k]| is the
+device-independent width of some character in \.{DVI} units, |pixel_width[k]|
+is the corresponding width of that character in an actual font.
+The macro |char_pixel_width| is set up to be analogous to |char_width|.
+
+@d char_pixel_width(#)==pixel_width[width_base[#]+char_width_end
+
+@<Glob...@>=
+@!pixel_width:array[0..max_widths] of integer; {actual character widths,
+  in pixels}
+@!horiz_conv:real; {converts \.{DVI} units to horizontal pixels}
+@!vert_conv:real; {converts \.{DVI} units to vertical pixels}
+@!true_horiz_conv:real; {converts unmagnified \.{DVI} units to pixels}
+@!true_vert_conv:real; {converts unmagnified \.{DVI} units to pixels}
+@!numerator,@!denominator:integer; {stated conversion ratio}
+@!mag:integer; {magnification factor times 1000}
+
+@ The following code computes pixel widths by simply rounding the \.{TFM}
+widths to the nearest integer number of pixels, based on the conversion factor
+|horiz_conv| that converts \.{DVI} units to pixels. 
+
+@d horiz_pixel_round(#)==trunc(horiz_conv*(#)+0.5)
+@d vert_pixel_round(#)==trunc(vert_conv*(#)+0.5)
+
+@<Move the widths from |in_width| to |width|, and append |pixel_width| values@>=
+width_base[nf]:=width_ptr-font_bc[nf];
+if wp>0 then for k:=width_ptr to wp-1 do
+  begin width[k]:=in_width[width[k]];
+  pixel_width[k]:=horiz_pixel_round(width[k]);
+  end
+
+@* Optional modes of output.
+\.{DVIDOC} output will vary depending on some
+options that the user must specify: The typeout can be confined to a
+restricted subset of the pages by specifying the desired starting page and
+the maximum number of pages. Furthermore there is an option to specify the
+horizontal and vertical
+resolution of the printer or display; and there is an option to override the
+magnification factor that is stated in the \.{DVI} file.
+
+The starting page is specified by giving a sequence of 1 to 10 numbers or
+asterisks separated by dots. For example, the specification `\.{1.*.-5}'
+can be used to refer to a page output by \TeX\ when $\.{\\count0}=1$
+and $\.{\\count2}=-5$. (Recall that |bop| commands in a \.{DVI} file
+are followed by ten `count' values.) An asterisk matches any number,
+so the `\.*' in `\.{1.*.-5}' means that \.{\\count1} is ignored when
+specifying the first page. If several pages match the given specification,
+\.{DVIDOC} will begin with the earliest such page in the file. The
+default specification `\.*' (which matches all pages) therefore denotes
+the page at the beginning of the file.
+
+When \.{DVIDOC} begins, it engages the user in a brief dialog so that the
+options will be specified. This part of \.{DVIDOC} requires nonstandard
+\PASCAL\ constructions to handle the online interaction.
+@^system dependencies@>
+
+@<Glob...@>=
+@!max_pages:integer; {at most this many |bop..eop| pages will be printed}
+@!horiz_resolution:real; {pixels per inch}
+@!vert_resolution:real; {pixels per inch}
+@!new_mag:integer; {if positive, overrides the postamble's magnification}
+
+@ The starting page specification is recorded in two global arrays called
+|start_count| and |start_there|. For example, `\.{1.*.-5}' is represented
+by |start_there[0]=true|, |start_count[0]=1|, |start_there[1]=false|,
+|start_there[2]=true|, |start_count[2]=-5|.
+We also set |start_vals=2|, to indicate that count 2 was the last one
+mentioned. The other values of |start_count| and |start_there| are not
+important, in this example.
+
+@<Glob...@>=
+@!start_count:array[0..9] of integer; {count values to select starting page}
+@!start_there:array[0..9] of boolean; {is the |start_count| value relevant?}
+@!start_vals:0..9; {the last count considered significant}
+@!count:array[0..9] of integer; {the count values on the current page}
+
+@ @<Set init...@>=
+max_pages:=1000000; start_vals:=0; start_there[0]:=false;
+
+@ Here is a simple subroutine that tests if the current page might be the
+starting page.
+
+@p function start_match:boolean; {does |count| match the starting spec?}
+var k:0..9;  {loop index}
+@!match:boolean; {does everything match so far?}
+begin match:=true;
+for k:=0 to start_vals do
+  if start_there[k]and(start_count[k]<>count[k]) then match:=false;
+start_match:=match;
+end;
+
+@ The |input_ln| routine waits for the user to type a line at his or her
+terminal; then it puts ascii-code equivalents for the characters on that line
+into the |buffer| array. 
+@^system dependencies@>
+
+@<Glob...@>=
+@!buffer:array[0..terminal_line_length] of ascii_code;
+
+@ Since the terminal is being used for both input and output, some systems
+need a special routine to make sure that the user can see a prompt message
+before waiting for input based on that message. (Otherwise the message
+may just be sitting in a hidden buffer somewhere, and the user will have
+no idea what the program is waiting for.) We shall call a system-dependent
+subroutine |update_terminal| in order to avoid this problem.
+@^system dependencies@>
+
+@d update_terminal == break(term_out) {empty the terminal output buffer}
+
+@ During the dialog, \.{DVIDOC} will treat the first blank space in a
+line as the end of that line. Therefore |input_ln| makes sure that there
+is always at least one blank space in |buffer|.
+@^system dependencies@>
+
+@p procedure input_ln; {inputs a line from the terminal}
+var k:0..terminal_line_length;
+begin update_terminal; reset(term_in);
+if eoln(term_in) then read_ln(term_in);
+k:=0;
+while (k<terminal_line_length)and not eoln(term_in) do
+  begin buffer[k]:=xord[term_in^]; incr(k); get(term_in);
+  end;
+buffer[k]:=" ";
+end;
+
+@ The global variable |buf_ptr| is used while scanning each line of input;
+it points to the first unread character in |buffer|.
+
+@<Glob...@>=
+@!buf_ptr:0..terminal_line_length; {the number of characters read}
+
+@ Here is a routine that scans a (possibly signed) integer and computes
+the decimal value. If no decimal integer starts at |buf_ptr|, the
+value 0 is returned. The integer should be less than $2^{31}$ in
+absolute value.
+
+@p function get_integer:integer;
+var x:integer; {accumulates the value}
+@!negative:boolean; {should the value be negated?}
+begin if buffer[buf_ptr]="-" then
+  begin negative:=true; incr(buf_ptr);
+  end
+else negative:=false;
+x:=0;
+while (buffer[buf_ptr]>="0")and(buffer[buf_ptr]<="9") do
+  begin x:=10*x+buffer[buf_ptr]-"0"; incr(buf_ptr);
+  end;
+if negative then get_integer:=-x @+ else get_integer:=x;
+end;
+
+@ The selected options are put into global variables by the |dialog|
+procedure, which is called just as \.{DVIDOC} begins.
+@^system dependencies@>
+
+@p procedure dialog;
+label 1,2,3,4,5;
+var k:integer; {loop variable}
+begin rewrite(term_out); {prepare the terminal for output}
+write_ln(term_out,banner);
+@<Determine the desired |start_count| values@>;
+@<Determine the desired |max_pages|@>;
+@<Determine the desired |horiz_resolution|@>;
+@<Determine the desired |vert_resolution|@>;
+@<Determine the desired |new_mag|@>;
+end;
+
+@ @<Determine the desired |start...@>=
+2: write(term_out,'Starting page (default=*): ');
+start_vals:=0; start_there[0]:=false;
+input_ln; buf_ptr:=0; k:=0;
+if buffer[0]<>" " then
+  repeat if buffer[buf_ptr]="*" then
+    begin start_there[k]:=false; incr(buf_ptr);
+    end
+  else  begin start_there[k]:=true; start_count[k]:=get_integer;
+    end;
+  if (k<9)and(buffer[buf_ptr]=".") then
+    begin incr(k); incr(buf_ptr);
+    end
+  else if buffer[buf_ptr]=" " then start_vals:=k
+  else  begin write(term_out,'Type, e.g., 1.*.-5 to specify the ');
+    write_ln(term_out,'first page with \count0=1, \count2=-5.');
+    goto 2;
+    end;
+  until start_vals=k
+
+@ @<Determine the desired |max_pages|@>=
+3: write(term_out,'Maximum number of pages (default=1000000): ');
+max_pages:=1000000; input_ln; buf_ptr:=0;
+if buffer[0]<>" " then
+  begin max_pages:=get_integer;
+  if max_pages<=0 then
+    begin write_ln(term_out,'Please type a positive number.');
+    goto 3;
+    end;
+  end
+
+@ @<Determine the desired |horiz_resolution|@>=
+1: write(term_out,'Horizontal resolution');
+write(term_out,' in characters per inch (default=10/1): ');
+horiz_resolution:=10.0; input_ln; buf_ptr:=0;
+if buffer[0]<>" " then
+  begin k:=get_integer;
+  if (k>0)and(buffer[buf_ptr]="/")and
+    (buffer[buf_ptr+1]>"0")and(buffer[buf_ptr+1]<="9") then
+    begin incr(buf_ptr); horiz_resolution:=k/get_integer;
+    end
+  else  begin write(term_out,'Type a ratio of positive integers;');
+    write_ln(term_out,' (1 character per mm would be 254/10).');
+    goto 1;
+    end;
+  end
+
+@ @<Determine the desired |vert_resolution|@>=
+4: write(term_out,'Vertical resolution');
+write(term_out,' in lines per inch (default=6/1): ');
+vert_resolution:=6.0; input_ln; buf_ptr:=0;
+if buffer[0]<>" " then
+  begin k:=get_integer;
+  if (k>0)and(buffer[buf_ptr]="/")and
+    (buffer[buf_ptr+1]>"0")and(buffer[buf_ptr+1]<="9") then
+    begin incr(buf_ptr); vert_resolution:=k/get_integer;
+    end
+  else  begin write(term_out,'Type a ratio of positive integers;');
+    write_ln(term_out,' (1 line per mm would be 254/10).');
+    goto 4;
+    end;
+  end
+
+@ @<Determine the desired |new_mag|@>=
+5: write(term_out,'New magnification (default=0 to keep the old one): ');
+new_mag:=0; input_ln; buf_ptr:=0;
+if buffer[0]<>" " then
+  if (buffer[0]>="0")and(buffer[0]<="9") then new_mag:=get_integer
+  else  begin write(term_out,'Type a positive integer to override ');
+    write_ln(term_out,'the magnification in the DVI file.');
+    goto 5;
+    end
+
+@* Defining fonts.
+\.{DVIDOC} reads the postamble first and loads
+all of the donts defined there; then it processes the pages. In this
+case, a \\{fnt\_def} command should match a previous definition if and only
+if the \\{fnt\_def} being processed is not in the postamble. 
+
+A global variable |in_postamble| is provided to tell whether we are
+processing the postamble or not.
+
+@<Glob...@>=
+@!in_postamble:boolean; {are we reading the postamble?}
+
+@ @<Set init...@>=
+in_postamble:=false;
+
+@ The following subroutine does the necessary things when a \\{fnt\_def}
+command is being processed.
+
+@p procedure define_font(@!e:integer); {|e| is an external font number}
+var f:0..max_fonts;
+@!p:integer; {length of the area/directory spec}
+@!n:integer; {length of the font name proper}
+@!c,@!q,@!d:integer; {check sum, scaled size, and design size}
+@!r:0..name_length; {index into |cur_name|}
+@!j,@!k:0..name_size; {indices into |names|}
+@!mismatch:boolean; {do names disagree?}
+begin if nf=max_fonts then abort('DVIDOC capacity exceeded (max fonts=',
+    max_fonts:0,')!');
+@.DVIDOC capacity exceeded...@>
+font_num[nf]:=e; f:=0;
+while font_num[f]<>e do incr(f);
+@<Read the font parameters into position for font |nf|, and
+  print the font name@>;
+if in_postamble then
+  begin if f<nf then write_ln(term_out,'---this font was already defined!');
+@.this font was already defined@>
+  end
+else  begin if f=nf then write_ln(term_out,'---this font wasn''t loaded before!');
+@.this font wasn't loaded before@>
+  end;
+if f=nf then @<Load the new font, unless there are problems@>
+else @<Check that the current font definition matches the old one@>;
+end;
+
+@ @<Check that the current...@>=
+begin if font_check_sum[f]<>c then
+  write_ln(term_out,'---check sum doesn''t match previous definition!');
+@.check sum doesn't match@>
+if font_scaled_size[f]<>q then
+  write_ln(term_out,'---scaled size doesn''t match previous definition!');
+@.scaled size doesn't match@>
+if font_design_size[f]<>d then
+  write_ln(term_out,'---design size doesn''t match previous definition!');
+@.design size doesn't match@>
+j:=font_name[f]; k:=font_name[nf]; mismatch:=false;
+while j<font_name[f+1] do
+  begin if names[j]<>names[k] then mismatch:=true;
+  incr(j); incr(k);
+  end;
+if k<>font_name[nf+1] then mismatch:=true;
+if mismatch then write_ln(term_out,'---font name doesn''t match previous definition!');
+@.font name doesn't match@>
+write_ln(term_out)
+end
+
+@ @<Read the font parameters into position for font |nf|...@>=
+c:=signed_quad; font_check_sum[nf]:=c;@/
+q:=signed_quad; font_scaled_size[nf]:=q;@/
+d:=signed_quad; font_design_size[nf]:=d;@/
+p:=get_byte; n:=get_byte;
+if font_name[nf]+n+p>name_size then
+  abort('DVIDOC capacity exceeded (name size=',name_size:0,')!');
+@.DVIDOC capacity exceeded...@>
+font_name[nf+1]:=font_name[nf]+n+p;
+write(term_out,'Font ',e:0,': ');
+if n+p=0 then write(term_out,'null font name!')
+@.null font name@>
+else for k:=font_name[nf] to font_name[nf+1]-1 do names[k]:=get_byte;
+incr(nf); print_font(nf-1); decr(nf)
+
+@ @<Load the new font, unless there are problems@>=
+begin @<Move font name into the |cur_name| string@>;
+open_tfm_file;
+if eof(tfm_file) then
+  write(term_out,'---not loaded, TFM file can''t be opened!')
+@.TFM file can\'t be opened@>
+else  begin if (q<=0)or(q>=@'1000000000) then
+    write(term_out,'---not loaded, bad scale (',q:0,')!')
+@.bad scale@>
+  else if (d<=0)or(d>=@'1000000000) then
+    write(term_out,'---not loaded, bad design size (',d:0,')!')
+@.bad design size@>
+  else if in_TFM(q) then @<Finish loading the new font info@>;
+  end;
+write_ln(term_out,' ');
+end
+
+@ @<Finish loading...@>=
+begin font_space[nf]:=q div 6; {this is a 3-unit ``thin space''}
+if (c<>0)and(tfm_check_sum<>0)and(c<>tfm_check_sum) then
+  begin write_ln(term_out,'---beware: check sums do not agree!');
+@.beware: check sums do not agree@>
+@.check sums do not agree@>
+  write_ln(term_out,'   (',c:0,' vs. ',tfm_check_sum:0,')');
+  write(term_out,'   ');
+  end;
+write(term_out,'---loaded at size ',q:0,' DVI units');
+d:=trunc((100.0*horiz_conv*q)/(true_horiz_conv*d)+0.5);
+if d<>100 then
+  begin write_ln(term_out,' '); write(term_out,' (this font is magnified ',d:0,'%)');
+  end;
+@.this font is magnified@>
+incr(nf); {now the new font is officially present}
+end
+
+@ If |p=0|, i.e., if no font directory has been specified, \.{DVIDOC}
+is supposed to use the default font directory, which is a
+system-dependent place where the standard fonts are kept.
+The string variable |default_directory| contains the name of this area.
+@^system dependencies@>
+@^changed module@>
+
+@d default_directory_name=='TEXFONTS:' {changed to the correct name}
+@d default_directory_name_length=9 {changed to the correct length}
+
+@<Glob...@>=
+@!default_directory:packed array[1..default_directory_name_length] of char;
+
+@ @<Set init...@>=
+default_directory:=default_directory_name;
+
+@ The string |cur_name| is supposed to be set to the external name of the
+\.{TFM} file for the current font. This usually means that we need to
+prepend the name of the default directory, and
+to append the suffix `\.{.TFM}'. Furthermore, we change lower case letters
+to upper case, since |cur_name| is a \PASCAL\ string.
+@^system dependencies@>
+
+@<Move font name into the |cur_name| string@>=
+for k:=1 to name_length do cur_name[k]:=' ';
+if p=0 then
+  begin for k:=1 to default_directory_name_length do
+    cur_name[k]:=default_directory[k];
+  r:=default_directory_name_length;
+  end
+else r:=0;
+for k:=font_name[nf] to font_name[nf+1]-1 do
+  begin incr(r);
+  if r+4>name_length then
+    abort('DVIDOC capacity exceeded (max font name length=',
+      name_length:0,')!');
+@.DVIDOC capacity exceeded...@>
+  if (names[k]>="a")and(names[k]<="z") then
+      cur_name[r]:=xchr[names[k]-@'40]
+  else cur_name[r]:=xchr[names[k]];
+  end;
+cur_name[r+1]:='.'; cur_name[r+2]:='T'; cur_name[r+3]:='F'; cur_name[r+4]:='M'
+
+@* Low level output routines.
+Characters set by the \.{DVI} file are placed in |page_buffer|, a two
+dimensional array of characters with one element for each print
+position on the page.  The |page_buffer| is cleared at the beginning
+of each page and printed at the end of each page.  
+|doc_file|, the file to which the document is destined, is an ordinary text
+file.
+
+To optimize the initialization and printing of |page_buffer|, a high
+water mark line number, |page_hwm|, is kept to indicate the last line
+that contains any printable characters, and for each line a high water
+mark character number, |line_hwm|, is kept to indicate the location of
+the last printable character in the line.
+
+@<Glob...@>=
+@!doc_file:text_file;
+@!page_buffer:packed array[1..page_width_max,1..page_length_max] of ascii_code;
+                 {storage for a document page}
+@!line_hwm:array[1..page_length_max] of 0..page_width_max;
+                 {high water marks for each line}
+@!page_hwm: 0..page_length_max;  {high water mark for page}
+
+@ |doc_file| needs to be opened.
+
+@<Set initial values@>=
+rewrite(doc_file);
+
+@ The |flush_page| procedure will print the |page_buffer|.
+
+@p procedure flush_page;
+var i:0..page_width_max; j:0..page_length_max;
+begin
+  for j := 1 to page_hwm do begin
+    for i := 1 to line_hwm[j] do
+      write (doc_file, xchr[page_buffer[i,j]]);
+    write_ln (doc_file) end;
+  write (doc_file, chr(12))  {end the page with a form feed}  
+end;
+
+@ The |empty_page| procedure will empty the |page_buffer| data structure.
+
+@p procedure empty_page;
+begin page_hwm := 0 end;
+
+@ And the |out_char| procedure puts something into it.  The usual printable
+ascii characters will be put into the buffer as is.  Non-printable characters,
+including the blank, will be put into the buffer as question mark chracters.
+
+@p procedure out_char(p,hh,vv:integer);
+var i:1..page_width_max; j:1..page_length_max;
+     {|hh| and |vv| range from zero up while |i| and |j| range from one up.}
+    k: integer;
+    c: ascii_code;
+begin
+  if 
+    (p>" ")and(p<="~") then c:=p
+    else c:=xord['?'];
+  if 
+    (hh>page_width_max-1) or (vv>page_length_max-1) then begin 
+      write_ln (term_out);
+      write (term_out, 'Character "', xchr[c], '" set at column ', hh+1:0);
+      write_ln (term_out, ' and row ', vv+1:0, ',');
+      write (term_out, 'outside the range of DVIDOC (');
+@.outside the range of DVIDOC@>
+      write (term_out, page_width_max:0, ',', page_length_max:0, ').');
+      write_ln (term_out) end
+    else begin
+      i := hh + 1;
+      j := vv + 1;
+      if j>page_hwm then begin {initialize any as yet untouched lines}
+        for k := page_hwm+1 to j do line_hwm[k]:=0;
+        page_hwm := j end;
+      if i>line_hwm[j] then begin {initialize any as yet untouched characters}
+        for k := line_hwm[j]+1 to i do page_buffer[k,j] := xord[' '];
+        line_hwm[j] := i end;
+      page_buffer[i,j] := c {put the character in its place}  end
+end;
+
+@* Translation to symbolic form.
+The main work of \.{DVIDOC} is accomplished by the |do_page| procedure,
+which produces the output for an entire page, assuming that the |bop|
+command for that page has already been processed. This procedure is
+essentially an interpretive routine that reads and acts on the \.{DVI}
+commands.
+
+@ The definition of \.{DVI} files refers to six registers,
+$(h,v,w,x,y,z)$, which hold integer values in \.{DVI} units.  In practice,
+we also need registers |hh| and |vv|, the pixel analogs of $h$ and $v$,
+since it is not always true that |hh=horiz_pixel_round(h)| or
+|vv=vert_pixel_round(v)|.
+
+The stack of $(h,v,w,x,y,z)$ values is represented by eight arrays
+called |hstack|, $\ldotss$, |zstack|, |hhstack|, and |vvstack|.
+
+@<Glob...@>=
+@!h,@!v,@!w,@!x,@!y,@!z,@!hh,@!vv:integer; {current state values}
+@!hstack,@!vstack,@!wstack,@!xstack,@!ystack,@!zstack:
+  array [0..stack_size] of integer; {pushed down values in \.{DVI} units}
+@!hhstack,@!vvstack:
+  array [0..stack_size] of integer; {pushed down values in pixels}
+
+@ Three characteristics of the pages (their |max_v|, |max_h|, and
+|max_s|) are specified in the postamble, and a warning message
+is printed if these limits are exceeded. Actually |max_v| is set to
+the maximum height plus depth of a page, and |max_h| to the maximum width,
+for purposes of page layout. Since characters can legally be set outside
+of the page boundaries, it is not an error when |max_v| or |max_h| is
+exceeded. But |max_s| should not be exceeded.
+
+The postamble also specifies the total number of pages; \.{DVIDOC}
+checks to see if this total is accurate.
+
+@<Glob...@>=
+@!max_v:integer; {the value of |abs(v)| should probably not exceed this}
+@!max_h:integer; {the value of |abs(h)| should probably not exceed this}
+@!max_s:integer; {the stack depth should not exceed this}
+@!max_v_so_far,@!max_h_so_far,@!max_s_so_far:integer; {the record high levels}
+@!total_pages:integer; {the stated total number of pages}
+@!page_count:integer; {the total number of pages seen so far}
+
+@ @<Set init...@>=
+max_v:=@'17777777777; max_h:=@'17777777777; max_s:=stack_size+1;@/
+max_v_so_far:=0; max_h_so_far:=0; max_s_so_far:=0; page_count:=0;
+
+@ Before we get into the details of |do_page|, it is convenient to
+consider a simpler routine that computes the first parameter of each
+opcode.
+
+@d four_cases(#)==#,#+1,#+2,#+3
+@d eight_cases(#)==four_cases(#),four_cases(#+4)
+@d sixteen_cases(#)==eight_cases(#),eight_cases(#+8)
+@d thirty_two_cases(#)==sixteen_cases(#),sixteen_cases(#+16)
+@d sixty_four_cases(#)==thirty_two_cases(#),thirty_two_cases(#+32)
+
+@p function first_par(o:eight_bits):integer;
+begin case o of
+sixty_four_cases(set_char_0),sixty_four_cases(set_char_0+64):
+  first_par:=o-set_char_0;
+set1,put1,fnt1,xxx1,fnt_def1: first_par:=get_byte;
+set1+1,put1+1,fnt1+1,xxx1+1,fnt_def1+1: first_par:=get_two_bytes;
+set1+2,put1+2,fnt1+2,xxx1+2,fnt_def1+2: first_par:=get_three_bytes;
+right1,w1,x1,down1,y1,z1: first_par:=signed_byte;
+right1+1,w1+1,x1+1,down1+1,y1+1,z1+1: first_par:=signed_pair;
+right1+2,w1+2,x1+2,down1+2,y1+2,z1+2: first_par:=signed_trio;
+set1+3,set_rule,put1+3,put_rule,right1+3,w1+3,x1+3,down1+3,y1+3,z1+3,
+  fnt1+3,xxx1+3,fnt_def1+3: first_par:=signed_quad;
+nop,bop,eop,push,pop,pre,post,post_post,undefined_commands: first_par:=0;
+w0: first_par:=w;
+x0: first_par:=x;
+y0: first_par:=y;
+z0: first_par:=z;
+sixty_four_cases(fnt_num_0): first_par:=o-fnt_num_0;
+end;
+end;
+
+@ Here are two other subroutines that we need: They compute the number of
+pixels in the height or width of a rule. Characters and rules will line up
+properly if the sizes are computed precisely as specified here.  (Since
+|horiz_conv| and |vert_conv| 
+are computed with some floating-point roundoff error, in a
+machine-dependent way, format designers who are tailoring something for a
+particular resolution should not plan their measurements to come out to an
+exact integer number of pixels; they should compute things so that the
+rule dimensions are a little less than an integer number of pixels, e.g.,
+4.99 instead of 5.00.)
+
+@p function horiz_rule_pixels(x:integer):integer;
+  {computes $\lceil|horiz_conv|\cdot x\rceil$}
+var n:integer;
+begin n:=trunc(horiz_conv*x);
+if n<horiz_conv*x then horiz_rule_pixels:=n+1 @+ else horiz_rule_pixels:=n;
+end;
+
+function vert_rule_pixels(x:integer):integer;
+  {computes $\lceil|vert_conv|\cdot x\rceil$}
+var n:integer;
+begin n:=trunc(vert_conv*x);
+if n<vert_conv*x then vert_rule_pixels:=n+1 @+ else vert_rule_pixels:=n;
+end;
+
+@ Strictly speaking, the |do_page| procedure is really a function with
+side effects, not a `\&{procedure}'; it returns the value |false| if
+\.{DVIDOC} should be aborted because of some unusual happening. The
+subroutine is organized as a typical interpreter, with a multiway branch
+on the command code followed by |goto| statements leading to routines that
+finish up the activities common to different commands. We will use the
+following labels:
+
+@d fin_set=41 {label for commands that set or put a character}
+@d fin_rule=42 {label for commands that set or put a rule}
+@d move_right=43 {label for commands that change |h|}
+@d move_down=44 {label for commands that change |v|}
+@d show_state=45 {label for commands that change |s|}
+@d change_font=46 {label for commands that change |cur_font|}
+
+@ Some \PASCAL\ compilers severely restrict the length of procedure bodies,
+so we shall split |do_page| into two parts, one of which is
+called |special_cases|. The different parts communicate with each other
+via the global variables mentioned above, together with the following ones:
+
+@<Glob...@>=
+@!s:integer; {current stack size}
+@!ss:integer; {stack size to print}
+@!cur_font:integer; {current internal font number}
+
+@ Here is the overall setup.
+
+@p @<Declare the function called |special_cases|@>@;
+function do_page:boolean;
+label fin_set,fin_rule,move_right,show_state,done,9998,9999;
+var o:eight_bits; {operation code of the current command}
+@!p,@!q:integer; {parameters of the current command}
+@!a:integer; {byte number of the current command}
+i,j:integer; {for loop indices for setting rules}
+begin empty_page; cur_font:=nf; {set current font undefined}
+s:=0; h:=0; v:=0; w:=0; x:=0; y:=0; z:=0; hh:=0; vv:=0;
+  {initialize the state variables}
+while true do @<Translate the next command in the \.{DVI} file;
+    |goto 9999| with |do_page=true| if it was |eop|;
+    |goto 9998| if premature termination is needed@>;
+9998: write_ln(term_out,'!'); do_page:=false;
+9999: end;
+
+@ 
+@d error(#)==write(term_out,' ',#)
+
+@<Translate the next command...@>=
+begin a:=cur_loc; 
+o:=get_byte; p:=first_par(o);
+if eof(dvi_file) then abort('the file ended prematurely!');
+@.the file ended prematurely@>
+@<Start translation of command |o| and |goto| the appropriate label to
+  finish the job@>;
+fin_set: @<Finish a command that either sets or puts a character, then
+    |goto move_right| or |done|@>;
+fin_rule: @<Finish a command that either sets or puts a rule, then
+    |goto move_right| or |done|@>;
+move_right: @<Finish a command that sets |h:=h+q|, then |goto done|@>;
+show_state: ;
+done: ;
+end
+
+@ The multiway switch in |first_par|, above, was organized by the length
+of each command; the one in |do_page| is organized by the semantics.
+
+@<Start translation...@>=
+if o<set_char_0+128 then @<Translate a |set_char| command@>
+else case o of
+  four_cases(set1): begin out_char(p,hh,vv); goto fin_set;
+    end;
+  set_rule: begin goto fin_rule;
+    end;
+  put_rule: begin goto fin_rule;
+    end;
+  @t\4@>@<Cases for commands |nop|, |bop|, $\ldotss$, |pop|@>@;
+  @t\4@>@<Cases for horizontal motion@>@;
+  othercases if special_cases(o,p,a) then goto done@+else goto 9998
+  endcases
+
+@ @<Declare the function called |special_cases|@>=
+function special_cases(@!o:eight_bits;@!p,@!a:integer):boolean;
+label change_font,move_down,done,9998;
+var q:integer; {parameter of the current command}
+@!k:integer; {loop index}
+@!bad_char:boolean; {has a non-ascii character code appeared in this \\{xxx}?}
+@!pure:boolean; {is the command error-free?}
+begin pure:=true;
+case o of
+four_cases(put1): begin goto done;
+  end;
+@t\4@>@<Cases for vertical motion@>@;
+@t\4@>@<Cases for fonts@>@;
+four_cases(xxx1): @<Translate an |xxx| command and |goto done|@>;
+pre: begin error('preamble command within a page!'); goto 9998;
+  end;
+@.preamble command within a page@>
+post,post_post: begin error('postamble command within a page!'); goto 9998;
+@.postamble command within a page@>
+  end;
+othercases begin error('undefined command ',o:0,'!');
+  goto done;
+@.undefined command@>
+  end
+endcases;
+move_down: @<Finish a command that sets |v:=v+p|, then |goto done|@>;
+change_font: @<Finish a command that changes the current font,
+  then |goto done|@>;
+9998: pure:=false;
+done: special_cases:=pure;
+end;
+
+@ @<Cases for commands |nop|, |bop|, $\ldotss$, |pop|@>=
+nop: begin goto done;
+  end;
+bop: begin error('bop occurred before eop'); goto 9998;
+@.bop occurred before eop@>
+  end;
+eop: begin 
+  if s<>0 then error('stack not empty at end of page (level ',
+    s:0,')!');
+@.stack not empty...@>
+  do_page:=true; flush_page; goto 9999;
+  end;
+push: begin 
+  if s=max_s_so_far then
+    begin max_s_so_far:=s+1;
+    if s=max_s then error('deeper than claimed in postamble!');
+@.deeper than claimed...@>
+@.push deeper than claimed...@>
+    if s=stack_size then
+      begin error('DVIDOC capacity exceeded (stack size=',
+        stack_size:0,')'); goto 9998;
+      end;
+    end;
+  hstack[s]:=h; vstack[s]:=v; wstack[s]:=w;
+  xstack[s]:=x; ystack[s]:=y; zstack[s]:=z;
+  hhstack[s]:=hh; vvstack[s]:=vv; incr(s); ss:=s-1; goto show_state;
+  end;
+pop: begin 
+  if s=0 then error('Pop illegal at level zero!')
+  else  begin decr(s); hh:=hhstack[s]; vv:=vvstack[s];
+    h:=hstack[s]; v:=vstack[s]; w:=wstack[s];
+    x:=xstack[s]; y:=ystack[s]; z:=zstack[s];
+    end;
+  ss:=s; goto show_state;
+  end;
+
+@ Rounding to the nearest pixel is best done in the manner shown here, so as
+to be inoffensive to the eye: When the horizontal motion is small, like a
+kern, |hh| changes by rounding the kern; but when the motion is large, |hh|
+changes by rounding the true position |h| so that accumulated rounding errors
+disappear.
+
+
+@d out_space==if abs(p)>=font_space[cur_font] then
+    begin hh:=horiz_pixel_round(h+p);
+    end
+  else hh:=hh+horiz_pixel_round(p);
+  q:=p; goto move_right
+
+@<Cases for horizontal motion@>=
+four_cases(right1):begin out_space;
+  end;
+w0,four_cases(w1):begin w:=p; out_space;
+  end;
+x0,four_cases(x1):begin x:=p; out_space;
+  end;
+
+@ Vertical motion is done similarly, but with the threshold between
+``small'' and ``large'' increased by a factor of five. The idea is to make
+fractions like ``$1\over2$'' round consistently, but to absorb accumulated
+rounding errors in the baseline-skip moves.
+
+@d out_vmove==if abs(p)>=5*font_space[cur_font] then vv:=vert_pixel_round(v+p)
+  else vv:=vv+vert_pixel_round(p);
+  goto move_down
+
+@<Cases for vertical motion@>=
+four_cases(down1):begin out_vmove;
+  end;
+y0,four_cases(y1):begin y:=p; out_vmove;
+  end;
+z0,four_cases(z1):begin z:=p; out_vmove;
+  end;
+
+@ @<Cases for fonts@>=
+sixty_four_cases(fnt_num_0): begin 
+  goto change_font;
+  end;
+four_cases(fnt1): begin 
+  goto change_font;
+  end;
+four_cases(fnt_def1): begin 
+  define_font(p); goto done;
+  end;
+
+@ @<Translate an |xxx| command and |goto done|@>=
+begin write(term_out,'xxx'''); bad_char:=false;
+for k:=1 to p do
+  begin 
+    q:=get_byte;
+    if 
+      (q>="!")and(q<="~") then write(term_out,xchr[q])
+      else bad_char:=true
+  end;
+write(term_out,'''');
+if bad_char then error('non-ascii character in xxx command!');
+@.non-ascii character...@>
+goto done;
+end
+
+@ @<Translate a |set_char|...@>=
+begin 
+      out_char(p,hh,vv)  
+end
+
+@ @<Finish a command that either sets or puts a character...@>=
+if font_ec[cur_font]=256 then p:=256; {width computation for oriental fonts}
+if (p<font_bc[cur_font])or(p>font_ec[cur_font]) then q:=invalid_width
+else q:=char_width(cur_font)(p);
+if q=invalid_width then
+  begin error('character ',p:0,' invalid in font ');
+@.character $c$ invalid...@>
+  print_font(cur_font);
+  if cur_font<>nf then write(term_out,'!');
+  end;
+if o>=put1 then goto done;
+if q=invalid_width then q:=0
+else hh:=hh+char_pixel_width(cur_font)(p);
+goto move_right
+
+@ @<Finish a command that either sets or puts a rule...@>=
+q:=signed_quad;
+if (p>0) and (q>0) then
+  for i:=hh to hh+horiz_rule_pixels(q)-1 do
+    for j:=vv downto vv-vert_rule_pixels(p)+1 do
+      out_char(xord['-'],i,j);
+if o=put_rule then goto done;
+hh:=hh+horiz_rule_pixels(q); goto move_right
+
+@ Since \.{DVIDOC} is intended to diagnose strange errors, it checks
+carefully to make sure that |h| and |v| do not get out of range.
+Normal \.{DVI}-reading programs need not do this.
+
+@d infinity==@'17777777777 {$\infty$ (approximately)}
+
+@<Finish a command that sets |h:=h+q|, then |goto done|@>=
+if (h>0)and(q>0) then if h>infinity-q then
+  begin error('arithmetic overflow! parameter changed from ',
+@.arithmetic overflow...@>
+    q:0,' to ',infinity-h:0);
+  q:=infinity-h;
+  end;
+if (h<0)and(q<0) then if -h>q+infinity then
+  begin error('arithmetic overflow! parameter changed from ',
+    q:0, ' to ',(-h)-infinity:0);
+  q:=(-h)-infinity;
+  end;
+h:=h+q;
+if abs(h)>max_h_so_far then
+  begin max_h_so_far:=abs(h);
+  if abs(h)>max_h then error('warning: |h|>',max_h_so_far:0,'!');
+@.warning: |h|...@>
+  end;
+goto done
+
+@ @<Finish a command that sets |v:=v+p|, then |goto done|@>=
+if (v>0)and(p>0) then if v>infinity-p then
+  begin error('arithmetic overflow! parameter changed from ',
+@.arithmetic overflow...@>
+    p:0,' to ',infinity-v:0);
+  p:=infinity-v;
+  end;
+if (v<0)and(p<0) then if -v>p+infinity then
+  begin error('arithmetic overflow! parameter changed from ',
+    p:0, ' to ',(-v)-infinity:0);
+  p:=(-v)-infinity;
+  end;
+v:=v+p;
+if abs(v)>max_v_so_far then
+  begin max_v_so_far:=abs(v);
+  if abs(v)>max_v then error('warning: |v|>',max_v_so_far:0,'!');
+@.warning: |v|...@>
+  end;
+goto done
+
+@ @<Finish a command that changes the current font...@>=
+font_num[nf]:=p; cur_font:=0;
+while font_num[cur_font]<>p do incr(cur_font);
+goto done
+
+@* Skipping pages.
+@ Global variables called |old_backpointer| and |new_backpointer|
+are used to check whether the back pointers are properly set up.
+Another one tells whether we have already found the starting page.
+
+@<Glob...@>=
+@!old_backpointer:integer; {the previous |bop| command location}
+@!new_backpointer:integer; {the current |bop| command location}
+@!started:boolean; {has the starting page been found?}
+
+@ @<Set init...@>=
+old_backpointer:=-1; started:=false;
+
+@ @<Pass a |bop| command, setting up the |count| array@>=
+new_backpointer:=cur_loc-1; incr(page_count);
+for k:=0 to 9 do count[k]:=signed_quad;
+if signed_quad<>old_backpointer
+  then write_ln(term_out,'backpointer in byte ',cur_loc-4:0,
+    ' should be ',old_backpointer:0,'!');
+@.backpointer...should be p@>
+old_backpointer:=new_backpointer
+
+@* Using the backpointers.
+First comes a routine that illustrates how to find the postamble quickly.
+
+@<Find the postamble, working back from the end@>=
+n:=dvi_length;
+if n<57 then bad_dvi('only ',n:0,' bytes long');
+@.only n bytes long@>
+m:=n-4;
+repeat if m=0 then bad_dvi('all 223s');
+@.all 223s@>
+move_to_byte(m); k:=get_byte; decr(m);
+until k<>223;
+if k<>id_byte then bad_dvi('ID byte is ',k:0);
+@.ID byte is wrong@>
+move_to_byte(m-3); q:=signed_quad;
+if (q<0)or(q>m-36) then bad_dvi('post pointer ',q:0,' at byte ',m-3:0);
+@.post pointer is wrong@>
+move_to_byte(q); k:=get_byte;
+if k<>post then bad_dvi('byte ',q:0,' is not post');
+@.byte n is not post@>
+post_loc:=q; first_backpointer:=signed_quad
+
+@ Note that the last steps of the above code save the locations of the
+the |post| byte and the final |bop|.  We had better declare these global
+variables, together with another one that we will need shortly.
+
+@<Glob...@>=
+@!post_loc:integer; {byte location where the postamble begins}
+@!first_backpointer:integer; {the pointer following |post|}
+@!start_loc:integer; {byte location of the first page to process}
+
+@ The next little routine shows how the backpointers can be followed
+to move through a \.{DVI} file in reverse order. Ordinarily a \.{DVI}-reading
+program would do this only if it wants to print the pages backwards or
+if it wants to find a specified starting page that is not necessarily the
+first page in the file; otherwise it would of course be simpler and faster
+just to read the whole file from the beginning.
+
+@<Count the pages and move to the starting page@>=
+q:=post_loc; p:=first_backpointer; start_loc:=-1;
+if p>=0 then
+  repeat {now |q| points to a |post| or |bop| command; |p>=0| is prev pointer}
+  if p>q-46 then
+    bad_dvi('page link ',p:0,' after byte ',q:0);
+@.page link wrong...@>
+  q:=p; move_to_byte(q); k:=get_byte;
+  if k=bop then incr(page_count)
+  else bad_dvi('byte ',q:0,' is not bop');
+@.byte n is not bop@>
+  for k:=0 to 9 do count[k]:=signed_quad;
+  if start_match then start_loc:=q;
+  p:=signed_quad;
+  until p<0;
+if start_loc<0 then abort('starting page number could not be found!');
+move_to_byte(start_loc+1); old_backpointer:=start_loc;
+for k:=0 to 9 do count[k]:=signed_quad;
+p:=signed_quad; started:=true
+
+@* Reading the postamble.
+Now imagine that we are reading the \.{DVI} file and positioned just
+four bytes after the |post| command. That, in fact, is the situation,
+when the following part of \.{DVIDOC} is called upon to read, translate,
+and check the rest of the postamble.
+
+@p procedure read_postamble;
+var k:integer; {loop index}
+@!p,@!q,@!m:integer; {general purpose registers}
+begin 
+move_to_byte(cur_loc+12); {skip over numerator, denominator, and magnification}
+max_v:=signed_quad; max_h:=signed_quad;@/
+max_s:=get_two_bytes; total_pages:=get_two_bytes;@/
+@<Process the font definitions of the postamble@>;
+@<Make sure that the end of the file is well-formed@>;
+end;
+
+@ When we get to the present code, the |post_post| command has
+just been read.
+
+@<Make sure that the end of the file is well-formed@>=
+q:=signed_quad;
+m:=get_byte;
+k:=cur_loc; m:=223;
+while (m=223)and not eof(dvi_file) do m:=get_byte;
+if not eof(dvi_file) then abort('signature in byte ',cur_loc-1:0,
+@.signature...should be...@>
+    ' should be 223!')
+else if cur_loc<k+4 then
+  write_ln(term_out,'not enough signature bytes at end of file (',
+@.not enough signature bytes...@>
+    cur_loc-k:0,')');
+
+@ @<Process the font definitions...@>=
+repeat k:=get_byte;
+if (k>=fnt_def1)and(k<fnt_def1+4) then
+  begin p:=first_par(k); define_font(p); write_ln(term_out,' '); k:=nop;
+  end;
+until k<>nop
+
+@* The main program.
+Now we are ready to put it all together. This is where \.{DVIDOC} starts,
+and where it ends.
+
+@p begin initialize; {get all variables initialized}
+dialog; {set up all the options}
+@<Process the preamble@>;
+@<Find the postamble, working back from the end@>;
+in_postamble:=true; read_postamble; in_postamble:=false;
+@<Count the pages and move to the starting page@>;
+if not in_postamble then @<Translate up to |max_pages| pages@>;
+final_end:end.
+
+@ The main program needs a few global variables in order to do its work.
+
+@<Glob...@>=
+@!k,@!m,@!n,@!p,@!q:integer; {general purpose registers}
+
+@ A \.{DVI}-reading program that reads the postamble first need not look at the
+preamble; but \.{DVIDOC} looks at the preamble in order to do error
+checking, and to display the introductory comment.
+
+@<Process the preamble@>=
+open_dvi_file;
+p:=get_byte; {fetch the first byte}
+if p<>pre then bad_dvi('First byte isn''t start of preamble!');
+@.First byte isn't...@>
+p:=get_byte; {fetch the identification byte}
+@<Compute the conversion factor@>;
+p:=get_byte; {fetch the length of the introductory comment}
+write(term_out,'''');
+while p>0 do
+  begin decr(p); write(term_out,xchr[get_byte]);
+  end;
+write_ln(term_out,'''')
+
+@ The conversion factors |horiz_conv| and 
+|vert_conv| are figured as follows: There are exactly
+|n/d| \.{DVI} units per decimicron, and 254000 decimicrons per inch,
+and |horiz_resolution| or |vert_resolution| characters per inch. Then we have to adjust this
+by the stated amount of magnification.
+
+@<Compute the conversion factor@>=
+numerator:=signed_quad; denominator:=signed_quad;
+if numerator<=0 then bad_dvi('numerator is ',numerator:0);
+@.numerator is wrong@>
+if denominator<=0 then bad_dvi('denominator is ',denominator:0);
+@.denominator is wrong@>
+horiz_conv:=(numerator/254000.0)*(horiz_resolution/denominator);
+vert_conv:=(numerator/254000.0)*(vert_resolution/denominator);
+mag:=signed_quad;
+if new_mag>0 then mag:=new_mag
+else if mag<=0 then bad_dvi('magnification is ',mag:0);
+@.magnification is wrong@>
+true_horiz_conv:=horiz_conv; horiz_conv:=true_horiz_conv*(mag/1000.0);
+true_vert_conv:=vert_conv; vert_conv:=true_vert_conv*(mag/1000.0);
+
+@ The code shown here uses a convention that has proved to be useful:
+If the starting page was specified as, e.g., `\.{1.*.-5}', then
+all page numbers in the file are displayed by showing the values of
+counts 0, 1, and@@2, separated by dots. Such numbers can, for example,
+be displayed on the console of a printer when it is working on that
+page.
+
+@<Translate up to...@>=
+begin while max_pages>0 do
+  begin decr(max_pages);
+  write_ln(term_out); write(term_out,'Beginning of page ');
+  for k:=0 to start_vals do
+    begin write(term_out,count[k]:0);
+    if k<start_vals then write(term_out,'.')
+    else write_ln(term_out);
+    end;
+  if not do_page then abort('page ended unexpectedly!');
+@.page ended unexpectedly@>
+  repeat k:=get_byte;
+  if (k>=fnt_def1)and(k<fnt_def1+4) then
+    begin p:=first_par(k); define_font(p); k:=nop;
+    end;
+  until k<>nop;
+  if k=post then
+    begin in_postamble:=true; goto done;
+    end;
+  if k<>bop then bad_dvi('byte ',cur_loc-1:0,' is not bop');
+@.byte n is not bop@>
+  @<Pass a |bop|...@>;
+  end;
+done:end
+
+@* System-dependent changes.
+This module should be replaced, if necessary, by changes to the program
+that are necessary to make \.{DVIDOC} work at a particular installation.
+It is usually best to design your change file so that all changes to
+previous modules preserve the module numbering; then everybody's version
+will be consistent with the printed program. More extensive changes,
+which introduce new modules, can be inserted here; then only the index
+itself will get a new module number.
+@^system dependencies@>
+
+@* Index.
+Pointers to error messages appear here together with the section numbers
+where each ident\-i\-fier is used.

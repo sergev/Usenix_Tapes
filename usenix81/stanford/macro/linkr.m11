@@ -1,0 +1,2822 @@
+
+;this is the bob bowering linkr
+;that has been modified by brent byer to work
+;for unix
+;various bugs have been fixed by forrest howard
+;symbols have been added by forrest howard for ddt
+;symbols are in unix format, except there are also half-kills
+;and register symbols
+
+;registers are 200
+;half kills are 400
+;there are also some "undefined" symbols, namely .macro
+;,.globl, and the various module titles.
+;these have mode 37, and there values are pointers to
+;inside the file.
+
+	.title	atlink	v65x	17-dec-73
+
+	.ident	/7mar75/
+
+	.mcall	(at)always,ch.mne,st.flg,ct.mne
+	always
+	ch.mne
+	st.flg
+	ct.mne
+
+	.mcall	(at)param,setnz,xmit,genswt
+;	.mcall	(at)mul,div
+	.mcall	(at)zread,zwrite
+	.mcall	(at)putkb,putkbl,putlp
+	.mcall	(at)search,next,scan,scanw,append,zap
+
+	.mcall	$indir, $seek
+
+	.globl	xmit0,	movbyt,	savreg,	insert,	scanc
+	.globl	cvtnum,	r50unp,	setwrd
+	.globl	rolndx,	rolpnt,	rolupd
+
+	.globl	symbol,	value
+	.globl	rolndx
+	.globl	xctpas,	xctlin
+
+	.globl	prop1,	endp1,	prop2,	endp2, absexp
+	.globl	setlc,	seted
+	.globl	bksiz
+
+	.macro	$error	text,	symbol,	value
+	jsr	r5,$error
+	 .word	symbol,	value
+	 .asciz	\text\
+	 .even
+	.endm	$error
+
+	.globl	pass,	errcnt,	slrcnt,	prosw,	openo
+	.globl	putkb,	putkbl,	putlp,	putoc
+
+	.globl	chrpnt,	setchr,	getchr,	setnb,	getnb
+	.globl	getsrc,	mactop
+	.globl	linbuf,	hdrttl
+	.globl	dostim,	dosdat,	doscor,	dattim
+
+.if gt ft.unx
+	.globl	iargv
+.endc
+
+	.globl	$wrsys, $wrcnt, $wrbfp, chntbl
+	.globl	crfref,	crfdef,	opclas,	pagnum,	linnum
+	.globl	buftbl,	cnttbl,	objchn,	srcchn,	lstchn
+	.globl	objlen,	ioftbl,	ioltbl,	chrtbl,	exttbl
+	.globl	io.eof,	io.tty,	cmochn,	bintbl,	lstflg
+
+	.psect	rolbas	con
+	.psect	roltop	con
+	.psect	rolsiz	con
+	.psect	txtbuf	con
+	.psect	txtbyt	con
+
+	entsec	mixed
+setlc:
+seted:
+	return
+	entsec	impure
+errcnt:	.blkw
+	.blkw
+slrcnt:	.blkw
+linbuf:	.blkb	132.
+
+
+.if	ne,mk.symbol
+nummods:	.blkw
+modnmp:	.blkw	2	;store ptr for module name
+numsym:	.blkw	;for coumting number of 6 wd blocks output
+curnum: .blkw		;for number of symbols in current module
+modasm:	.blkw	14	;where convert to unix ddt form
+symnmp:	.blkw	2	;ptr to where the next symbol goes
+glbonly:	.blkw	;0 normal, 1 global only
+out$ym:	.blkw		;0 normal, 1 no symbols (inc glob )
+narof: .blkw		;used to tell blkt06 to output name when 
+			;we have blk21 less module
+
+
+
+.globl	out$ym
+
+.endc
+
+	xitsec
+	.sbttl			object file
+
+rldt00=	00	; absolute data
+rldt01=	01	; internal relocation		tst	#c
+rldt02=	02	; global relocation		tst	#g
+rldt03=	03	; internal displaced relocation	tst abs
+rldt04=	04	; global displaced relocation	tst	x
+rldt05=	05	; global additive relocation	tst	#x+6
+rldt06=	06	; global additive displaced relocation	tst	#x+6
+rldt07=	07	; new csect
+rldt10=	10	; sequence break
+rldt11=	11	; limit
+rldt15=	15	; sector additive relocation	tst	#6+o
+rldt16=	16	; sector additive displaced relocation	tst	o+6
+; following two added by f.h. as per dec specs
+rldt12= 12	; sector base relocation	tst	#o
+rldt14= 14	; sector base displaced relocation	tst	o
+
+
+cc.opr=	040
+cc.nam=	020
+cc.sec=	010
+cc.val=	004
+cc.dsp=	002
+
+gsdt00=	00		; object module name
+gsdt01=	01		; program section name
+gsdt02=	02		; internal symbol table
+gsdt03=	03		; transfer address
+gsdt04=	04		; symbol declaration
+gsdt05=	05		; local section name
+gsdt06=	06		; version identification
+
+blkt01=	01		; gsd
+blkt02=	02		; gsd end
+blkt03=	03		; text block
+blkt04=	04		; rld block
+blkt05=	05		; isd
+blkt06=	06		; module end
+blkt07=	07		; library start
+blkt10=	10		; library end
+blkt17=	17
+
+rl.byt=	200
+
+wpsent=	5		;words per sector entry
+	.macro	chscan	table	;character scan
+	mov	#table,r0
+	call	chscan
+	.endm
+
+	.macro	gchtbl	char,	addr	;gen character scan table
+	.word	addr,	char
+	.endm
+
+
+	.macro	imuli	count,addr
+	.endm
+	.sbttl	roll definitions
+
+;the following sectors are used to collect the
+;base, top, and entry size of the various rolls.
+
+	entsec	rolbas		;roll base
+rolbas	=	.
+	entsec	roltop		;roll top
+	entsec	rolsiz		;entry size
+
+
+
+	xitsec			;always leave in default sector
+
+
+
+	.macro	genrol	name,	limits,	size
+	entsec	rolbas
+	.globl	name'rol
+name'rol=	.-rolbas
+	.if nb	<limits>
+	.word	<^pl limits>
+	.iff
+	.word	0
+	.endc
+	entsec	roltop
+	.if nb	<limits>
+	.word	<^ph limits>
+	.iff
+	.word	0
+	.endc
+	entsec	rolsiz
+	.word	size*2
+	xitsec
+	.iif gt	size-maxxmt,	maxxmt=size
+	.endm
+
+maxxmt=	0		;max xmit
+
+				;start of table to be filled in
+
+	genrol	sym,     ,4	;symbol table
+	genrol	sec,     ,wpsent	;section roll
+	genrol	prg,     ,6	;program roll
+
+	genrol	dum,     ,0	;dummy (separates variable from fixed)
+
+	genrol	swt,swtsec,2	;command string switches
+	entsec	impure
+
+pass:	.blkw
+				;next group must stay together
+symbol:	.blkw	2		;symbol accumulator
+mode:
+flags:	.blkb	1		;flag bits
+sector:	.blkb	1		;symbol/expression type
+value:	.blkw	1		;expression value
+rellvl:	.blkw
+	.rept	maxxmt-<<.-symbol>/2>	;end of grouped data
+	.blkw
+	.endr
+
+clcnam:	.blkw	2		;current location counter symbol
+clcfgs:	.blkb	1
+clcsec:	.blkb	1
+clcloc:	.blkw	1
+clcmax:
+clcabs:	.blkw	1
+
+	xitsec			;return to normal
+
+so.mod=	4
+so.sec=	5
+so.val=	6
+so.abs=	10
+so.siz=	10
+	.sbttl	program initialization
+
+	entsec	xctprg
+	mov	#-1,bintbl+objchn	;fudge executable
+	mov	#objext,exttbl+srcchn
+	mov	#mapext,exttbl+lstchn
+	mov	#outext,exttbl+objchn
+	mov	#hdrttl,r2
+	.irpc	x,lnkex
+	movb	#''x,(r2)+
+	.endm
+
+	entsec	dpure		;magic sectors
+
+.if le ft.unx
+.odust:	.rad50	/.odust/
+.syslr:	.rad50	/.syslr/
+outext:	.asciz	/lda/
+.endc
+
+.if gt ft.unx
+outext:	.asciz	/out/
+.endc
+
+objext:	.asciz	/obj/
+mapext:	.asciz	/map/
+
+	.even
+macrol:
+pstrol:	.word	0
+
+	.globl	macrol,pstrol
+
+
+	xitsec
+.if le ft.unx			;******** a few pages!!  ********
+
+setslr:				;initiate single level relocation
+	tst	zzzflg		;requested?
+	beq	9$		;  no
+	call	savreg
+	mov	#symbol,r2	;yes, establish sector
+	mov	.syslr,(r2)+
+	mov	.syslr+2,(r2)+
+	movb	#defflg!glbflg!relflg,(r2)+
+	movb	<^pl rolsiz>+1+secrol,(r2)+
+	mov	prgsiz,r3	;get current top
+	mov	r3,(r2)+
+	add	#37,r3		;round up
+	clc
+	ror	r3
+	asr	r3
+	asr	r3
+	asr	r3
+	bic	#1,r3
+	add	r3,prgsiz	;update size
+	tst	bksiz+2
+	beq	1$
+	mov	prgsiz,bksiz
+1$:	mov	r3,(r2)+
+	append	secrol
+	mov	mactop,r2
+	mov	r2,zzzbas
+	add	r3,r2
+	mov	r2,zzzbas+2
+	add	#bpmb-1,r2
+	bic	#bpmb-1,r2
+	mov	r2,mactop
+8$:	clr	-(r2)
+	cmp	r2,zzzbas
+	bhi	8$
+9$:	return
+tstslr:	clr	r3
+	asr	rellvl
+	bne	10$
+	rol	r3
+	tst	zzzbas
+	beq	9$
+	mov	#1,r0
+	mov	clcloc,r4
+	sub	limlow,r4
+	clc
+	ror	r4
+	bcs	9$
+1$:	bit	#7,r4
+	beq	23$
+	dec	r4
+	asl	r0
+	br	1$
+
+23$:
+2$:	clc
+	ror	r4
+	ror	r4
+	ror	r4
+	add	zzzbas,r4
+	bicb	r0,(r4)
+	tst	r3
+	beq	9$
+	bisb	r0,(r4)
+9$:	add	r3,slrcnt
+	bit	r3,picsw
+	beq	99$
+	 $error	<non-pic>,,clcloc
+99$:	return
+
+10$:	tst	zzzbas
+	beq	9$
+	 $error	<illegal relocation>,,clcloc
+	br	9$
+dmpslr:	mov	zzzbas,r4
+	beq	9$
+	mov	#.syslr+4,r2
+	mov	#symbol+4,r1
+	mov	-(r2),-(r1)
+	mov	-(r2),-(r1)
+	scan	secrol
+	beq	9$
+	mov	#clcnam,r2
+	xmit	4
+1$:	clr	mode
+	mov	(r4)+,value
+	call	pcrolf
+	cmp	r4,zzzbas+2
+	blo	1$
+9$:	return
+
+
+	genswt	z,setzzz
+setzzz:	inc	zzzflg
+	return
+
+	genswt	bk,setbk
+
+setbk:	inc	zzzflg		;combination /z
+	clr	limlow		;  and /b:0
+	inc	limlow+2
+	inc	bksiz+2
+	return
+
+	genswt	pi,	setpic
+
+setpic:	mov	#-1,picsw
+	return
+
+	entsec	impure
+zzzflg:	.blkw
+zzzbas:	.blkw	2
+bksiz:	.blkw	2
+picsw:	.blkw
+
+	xitsec
+
+.endc			;************  from a few pages back! *********
+.if gt ft.unx
+
+	shr2cd=	2		;d-space only; but separate shr. & prv.
+	prv1cd=	4		;everything in one big private piece
+.if gt ft.id
+	prv2cd=	6		;i- & d-space separate, but private
+
+
+	genswt	d2,setd2
+setd2:	mov	#ddtnam,@iargv
+	br	setp2
+
+	genswt	o2,seto2
+seto2:	mov	#odtnam,@iargv
+	br	setp2
+
+	genswt	p2,setp2
+setp2:	mov	#prv2cd,r0	;set override to 2 private segs (i & d)
+	br	ck.ovr
+
+	genswt	s2,sets2
+sets2:	mov	#shr2cd,r0	;set override to 2 shr. segs (unix 410)
+	br	ck.ovr
+
+.endc
+
+.if	ne,mk.symbol
+glb$only:	inc	glbonly
+	return
+
+
+
+	genswt	p1,setp1
+setp1:	mov	#prv1cd,r0	;set override to 1 private seg
+ck.ovr:	tst	ovride		;only one setting allowed
+	bne	1$		;whoops!
+	mov	r0,ovride	;ok, set it
+	return
+1$:	tst	(sp)+		;flush one level
+	clr	r0		;cause error return
+	return
+
+	genswt	dd,setdd
+setdd:	mov	#ddtnam,@iargv
+	br	setp1
+
+	genswt	sd,setsdd
+setsdd:	mov	#sddtnam,@iargv
+	br	setp1
+
+	genswt	od,setod
+setod:	mov	#odtnam,@iargv
+	br	setp1
+
+pr$sym:
+setslr:
+tstslr:
+dmpslr:	return
+
+
+	entsec	dpure
+
+ddtnam:	.asciz	%/sys/ddt/bin/ddt%
+sddtnam: .asciz	%/sys/ddt/bin/shareddt%
+odtnam:	.asciz	%/sys/ddt/bin/odt%
+.even
+	xitsec
+.endc
+	.sbttl	linker proper
+
+prop1:
+	call	xctpas
+1$:	clr	odtflg
+	call	getsrc
+	mov	r5,csisav
+	call	progsd
+	tst	ccflg
+	beq	3$
+2$:	call	getlin
+	cmp	r5,#blkt06
+	bne	2$
+3$:	tst	csisav
+	beq	1$
+	return
+progsd:
+10$:
+;*******
+	cmp	usepnt,#usetbh
+	blo	21$
+	.mcall	$exit,$write
+	mov	#1,r0
+	$write
+	22$
+	23$-22$
+	mov	#1,r0		;indicate error status
+	$exit
+22$:	.ascii  /fatal error-- too many modules to check/
+	.byte	12
+23$:
+	.even
+21$:
+;*********
+
+	call	getgsd
+	beq	12$
+	movb	(r2),r5
+	cmp	r5,#gsdt06
+	blos	11$
+	mov	r5,value
+	$error	<illegal gsd>,	symbol,	value
+	br	10$
+
+11$:	asl	r5
+	call	@gsdtbl(r5)
+	br	10$
+
+12$:
+	tstb	@usepnt
+	beq	18$
+	mov	#prgsav,r1
+	mov	#symbol,r2
+	xmit	2
+	scan	prgrol
+	beq	13$
+	$error	<non-unique object module name>,symbol
+
+13$:	xmit	4
+	append	prgrol
+	mov	#prgttl,r2
+	tst	(r2)
+	bne	18$
+	mov	#symbol,r1
+	xmit	6
+18$:	add	#2,usepnt
+	tst	lswbit
+	bne	10$
+	return
+
+	entsec	dpure
+gsdtbl:	.word	pgsd00
+	.word	pgsd01
+	.word	pgsd02
+	.word	pgsd03
+	.word	pgsd04
+	.word	pgsd05
+	.word	pgsd06
+	xitsec
+
+pgsd00:	inc	@usepnt
+	movb	<^pl rolsiz>+1+secrol,(r2)
+	movb	(r2),secbas
+	mov	#prgsav,r2
+	xmit	4
+	clr	(r2)+
+	clr	(r2)+
+	mov	#prgnam,r2
+.if	ne,mk.symbol
+	inc	nummods
+	jmp	mr50unp		;insure that module name is lower case
+.iff
+	jmp	r50unp
+.endc
+
+	return
+pgsd01:	bit	#relflg,(r3)
+	beq	1$
+	tst	(r1)
+	beq	pgsd05
+1$:	bis	#glbflg!ovrflg,(r3)
+2$:
+
+pgsd05:	bic	#defflg,(r3)
+	bit	#relflg,(r3)
+	bne	1$
+	bis	#defflg,(r3)
+1$:	mov	(r4)+,(r4)
+	clr	-(r4)
+	movb	<^pl rolsiz>+1+secrol,(r2)
+	append	secrol
+	movb	(r2),cursec
+	return
+pgsd02:	return
+
+pgsd03:	mov	#odtvec,r2
+	tst	odtflg
+	bne	1$
+	mov	#endvec,r2
+	bit	#1,so.val(r2)
+	beq	2$
+1$:	mov	(r4),-(sp)
+	call	scusec
+	mov	#symbol,r0
+	mov	(r0)+,(r2)+
+	mov	(r0)+,(r2)+
+	mov	(r0)+,(r2)+
+	mov	(sp)+,(r2)
+2$:	return
+
+pgsd04:	movb	cursec,(r2)
+	mov	(r3),-(sp)
+	mov	(r4),-(sp)
+	search	symrol
+	beq	1$
+	bit	#defflg,(r3)
+	beq	1$
+	tst	(sp)+
+	bit	#defflg,(sp)+
+	beq	2$
+	$error	<multiply defined>,	symbol,	value
+	br	2$
+
+1$:	mov	(sp)+,(r4)
+	mov	(sp)+,(r3)
+	call	insert
+2$:	return
+
+pgsd06:	mov	(r1)+,prgsav+10
+	mov	(r1)+,prgsav+12
+	return
+
+	entsec	impure
+cursec:	.blkw
+	xitsec
+getgsd:
+	tst	lswbit
+	bgt	13$
+	blt	10$
+1$:	tst	auxcnt
+	bgt	3$
+20$:	call	getlin
+	cmp	r5,#blkt01
+	beq	1$
+	cmp	r5,#blkt02
+	beq	2$
+	cmp	r5,#blkt07
+	beq	9$
+;	mov	r5,value
+;	$error	<illegal gsd type>,	symbol,	value
+;	br	1$
+	cmp	r5,#gsdt06		;are we concerned??
+	bne	20$
+	$error	<unterminated gsd>,	symbol
+					;simulate end of gsd
+
+2$:	clr	r0
+	return
+
+3$:	call	setxpr
+	mov	r1,-(sp)
+4$:	call	getwrd
+	mov	r5,(r1)+
+	cmp	r1,#symbol+10
+	blo	4$
+	mov	(sp)+,r1
+	setnz	r0
+	return
+
+9$:	clr	auxcnt
+10$:	mov	mactmp,-(sp)
+	bne	11$
+	mov	mactop,(sp)
+	mov	(sp),mactmp
+11$:	call	1$
+	beq	12$
+	mov	(sp)+,r2
+	mov	#symbol,r1
+	xmit	4
+	cmp	r2,mactop
+	blos	21$
+	mov	r2,mactop
+21$:	mov	r2,-(sp)
+	tstb	@usepnt
+	bne	11$
+	cmpb	sector,#gsdt04
+	bne	11$
+	bit	#defflg,mode
+	beq	11$
+	search	symrol
+	beq	11$
+	bit	#defflg,mode
+	bne	11$
+	bis	#1,@usepnt
+	br	11$
+
+12$:	mov	#1,lswbit
+	mov	mactmp,lswbit+2
+	mov	(sp)+,lswbit+4
+	tstb	@usepnt
+	bne	13$
+15$:	clr	lswbit
+	call	getlin
+	cmp	r5,#blkt10
+	beq	2$
+	com	lswbit
+	bis	#100000,@usepnt
+	br	2$
+
+13$:	cmp	lswbit+2,lswbit+4
+	bhis	15$
+	call	setxpr
+	mov	lswbit+2,r1
+	mov	#symbol,r2
+	xmit	4
+	mov	r1,lswbit+2
+	call	setxpr
+	setnz	r0
+	return
+
+	entsec	impure
+mactmp:	.blkw
+lswbit:	.blkw	3
+usepnt:	.blkw	2
+usetbl:	.blkw	600.	;it was 100.
+usetbh:
+
+
+	entsec	xctpas
+	mov	usepnt,usepnt+2
+	mov	#usetbl,usepnt
+	xitsec
+prop2:
+	call	xctpas
+	inc	pagnum
+	tst	ioftbl+objchn	;really doing output?
+	beq	1$		;no
+	call	objini
+	call	dmpcmd
+1$:	clr	odtflg
+	call	getsrc
+	mov	r5,csisav
+11$:	clr	p2tflg
+	tstb	@usepnt
+	beq	4$
+2$:	call	getlin
+	chscan	prop2t
+	bne	3$
+	mov	r5,value
+	 $error	<illegal block type>,,value
+	br	2$
+
+3$:	call	@r0
+	tst	p2tflg
+	beq	2$
+4$:	mov	@usepnt,r0
+	add	#2,usepnt
+	cmp	usepnt,usepnt+2
+	bhis	5$
+	tst	r0
+	bpl	49$
+	tst	p2tflg
+	bne	11$
+41$:	call	getlin
+	cmp	r5,#blkt06
+	bne	41$
+	br	11$
+
+49$:	tst	csisav
+	beq	1$
+5$:	call	pr$sym
+	call	dmpslr
+9$:	return
+
+	entsec	dpure
+prop2t:
+	gchtbl	blkt01,	p2t01
+	gchtbl	blkt02,	p2t02
+	gchtbl	blkt03,	p2t03
+	gchtbl	blkt04,	p2t04
+	gchtbl	blkt06,	p2t06
+	gchtbl	blkt07,	p2t07
+	gchtbl	blkt17,	p2t17
+.if	ne,mk.symbol
+	gchtbl	 21,p2t21
+	gchtbl	 22,p2t22
+.endc
+	.word	0
+	xitsec
+.if le ft.unx
+
+pr$sym:
+	tst	sytflg		;symbol table requested?
+	beq	9$		;  no
+	mov	.odust,symbol
+	mov	.odust+2,symbol+2
+	scan	secrol
+	beq	9$
+	mov	#symbol,r1
+	mov	#clcnam,r2
+	xmit	4
+	clr	rolupd
+3$:	call	setxpr
+	next	symrol
+	beq	9$
+	bit	#relflg,(r3)
+	beq	4$
+	movb	(r2),r0
+	call	pntsec
+	add	so.val(r0),(r4)
+4$:	mov	#temp+so.val,r2
+	cmp	(r4)+,(r2)+
+5$:	mov	-(r4),-(r2)
+	clr	(r4)
+	cmp	r4,r1
+	bhi	5$
+6$:	clr	(r3)
+	mov	(r2)+,value
+	call	pcrolf
+	cmp	r2,#temp+so.val
+	blos	6$
+	br	3$
+
+9$:	return
+
+	entsec	impure
+temp:	.blkw	4
+	xitsec
+
+.endc
+p2t01:
+.if	ne,mk.symbol
+	mov	#1,narof
+.endc
+1$:	call	setxpr
+2$:	call	getwrd
+	mov	r5,(r1)+
+	cmp	r1,#symbol+10
+	blo	2$
+	movb	(r2),r5
+	cmp	r5,#gsdt00
+	bne	5$
+	inc	linnum
+	scan	prgrol
+	movb	(r2),secbas
+	mov	#prgnam,r2
+	call	mr50unp
+	br	9$
+
+5$:	mov	#crfdef,r0
+	mov	#secrol,rolndx
+	cmp	r5,#gsdt01
+	beq	7$
+	cmp	r5,#gsdt05
+	beq	7$
+	cmp	r5,#gsdt04
+	bne	9$
+	bit	#defflg,mode
+	bne	6$
+	mov	#crfref,r0
+6$:	mov	#symrol,rolndx
+7$:	call	(r0)
+9$:	tst	auxcnt
+	bgt	1$
+	return
+
+p2t02:	return
+
+p2t07:	call	getlin
+	cmp	r5,#blkt10
+	bne	p2t07
+	return
+p2t03:
+	call	txtdmp
+	call	getwrd
+	add	clcabs,r5
+	mov	r5,clcloc
+	mov	r5,clctmp
+1$:	call	getbyt
+	bmi	2$
+	movb	r5,@txtpni
+	inc	txtpni
+	br	1$
+
+2$:	return
+
+p2t04:
+1$:	call	getbyt
+	bpl	9$
+	jmp	txtdmp
+
+9$:	movb	r5,r4
+	call	getbyt
+	add	#txtbuf-4,r5
+	mov	r5,r2
+	clr	r3
+	bisb	r4,r3
+	aslb	r3
+	mov	pcrtbl(r3),-(sp)
+	asl	(sp)
+	bpl	2$
+	call	getwrd
+	mov	r5,symbol
+	call	getwrd
+	mov	r5,symbol+2
+2$:	clr	r1
+	asl	(sp)
+	bpl	3$
+	call	getwrd
+	mov	r5,r1
+3$:	asl	(sp)+
+	bpl	4$
+	sub	r2,r1
+	add	#txtbuf-4+2,r1
+	sub	clctmp,r1
+4$:	mov	r3,r5
+	asr	r5
+	chscan	p2t04t
+	bne	7$
+	mov	r5,value
+	$error	<illegal text type>,,value
+	br	1$
+
+7$:	call	@r0
+	br	1$
+
+	entsec	impure
+clctmp:	.blkw
+	xitsec
+	entsec	dpure
+p2t04t:
+	gchtbl	rldt01,	p2r01
+	gchtbl	rldt02,	p2r02
+	gchtbl	rldt03,	stotxt
+	gchtbl	rldt04,	p2r02
+	gchtbl	rldt05,	p2r02
+	gchtbl	rldt06,	p2r02
+	gchtbl	rldt07,	p2r07
+	gchtbl	rldt10,	txtdmp
+	gchtbl	rldt11,	p2r11
+	gchtbl	rldt12, p2r15
+	gchtbl	rldt14, p2r15
+	gchtbl	rldt15,	p2r15
+	gchtbl	rldt16,	p2r15
+	.word	0
+	xitsec
+
+p2r01:	add	clcabs,r1
+	br	stotxt
+
+p2r02:	search	symrol
+;
+;the following few lines added by fh to help linkr find undefineds
+	bit	#defflg,flags
+	bne	10$
+	$error	<undefined symbol:>,symbol
+	br	stotxt
+10$:
+	add	value,r1
+	movb	sector,r0
+	call	pntsec
+	add	so.val(r0),r1
+	br	stotxt
+	.globl	p2r07,symbol,clcnam
+
+p2r07:	call	txtdmp
+	call	scusec
+	mov	#symbol,r0
+	mov	#clcnam,r2
+	mov	(r0)+,(r2)+
+	mov	(r0)+,(r2)+
+	mov	(r0)+,(r2)+
+	mov	r1,(r2)
+	add	(r0),(r2)+
+	mov	(r0),(r2)
+	return
+
+p2r11:	mov	limlow,r1
+	call	stotxt
+	mov	limhgh,r1
+	br	stotxt
+
+p2r15:	call	scusec
+	add	value,r1
+
+stotxt:	movb	r1,(r2)+
+	tstb	r4
+	bmi	1$
+	swab	r1
+	movb	r1,(r2)+
+	swab	r1
+1$:	return
+p2t06:
+.if	ne,mk.symbol
+	tst	narof
+	beq	32$
+		;it's up to us to output name now
+	clr	narof
+	tst	glbonly
+	bne	32$
+	tst	out$ym
+	bne	32$	;no symbols
+	mov	r0,-(sp)
+	mov	r1,-(sp)
+	mov	r2,-(sp)
+	mov	r3,-(sp)
+	mov	modnmp,r1
+	mov	modnmp+2,r2
+	call	symseek
+	mov	#modasm,r3
+	mov	#prgnam,r2
+	mov	#6,r1
+17$:	clrb	(r3)
+	cmpb	(r2),#' 
+	beq	18$
+	movb	(r2)+,(r3)
+18$:	inc	r3
+	sob	r1,17$
+	clr	(r3)+
+	mov	#37,(r3)+
+	clr	(r3)+
+	call	dmsybk
+	call	fixsym
+	clr	curnum
+	mov	(sp)+,r3
+	mov	(sp)+,r2
+	mov	(sp)+,r1
+	mov	(sp)+,r0
+.endc
+32$:	inc	p2tflg
+	br	txtdmp
+
+	entsec	impure
+p2tflg:	.blkw
+	xitsec
+
+txtdmp:
+	call	savreg
+	mov	txtpno,r2
+1$:	cmp	r2,txtpni
+	beq	2$
+	mov	#rl.byt*400,mode
+	movb	(r2)+,value
+	call	pcrolf
+	br	1$
+
+2$:
+.if le ft.unx
+	tst	xxflag
+	beq	txtini
+	call	objdmp		;temporary************
+.endc
+
+txtini:
+	mov	#txtbuf,txtpni
+	mov	#txtbuf,txtpno
+	return
+	entsec	txtbuf
+txtpni:	.blkw
+txtpno:	.blkw
+txtbuf:	.blkw	100.
+
+	entsec	xctprg
+	call	txtini
+	xitsec
+
+.if le ft.unx
+	genswt	xx,xxset
+
+xxset:	inc	xxflag
+	return
+
+	entsec	impure
+xxflag:	.blkw
+	xitsec
+.endc
+p2t17:	call	txtdmp
+1$:	call	getbyt
+	bmi	19$		;exit if end
+	mov	#1$,-(sp)	;return to beginning of loop
+	mov	r5,-(sp)	;stack code
+	mov	#rellvl,r1
+	clr	(r1)
+	clr	-(r1)
+	mov	r1,r4		;point to value
+	clr	-(r1)
+	mov	clcnam+2,-(r1)
+	mov	clcnam,-(r1)
+	bit	#cc.nam,(sp)
+	beq	4$
+	call	getwrd
+	mov	r5,(r1)+
+	call	getwrd
+	mov	r5,(r1)+
+	bit	#cc.sec,(sp)
+	bne	5$
+	mov	-(r1),r2	;get symbol+2
+	tst	-(r1)
+	bne	3$
+	asl	r2
+	asl	r2
+	mov	oprbuf-4(r2),(r4)
+	mov	oprbuf-2(r2),2(r4)
+	br	10$
+
+3$:	search	symrol
+	bit	#defflg,mode
+	bne	31$
+	 $error	<undefined symbol>, symbol
+31$:	com	opclas		;  "@"
+	call	crfref
+	clr	opclas
+	movb	sector,r0
+	call	pntsec
+	add	so.val(r0),(r4)
+	br	6$
+
+4$:	bit	#cc.sec,(sp)
+	beq	10$
+5$:	call	scusec
+6$:	clr	rellvl
+	bit	#relflg,mode
+	beq	10$
+	inc	rellvl
+10$:	bit	#cc.val,(sp)
+	beq	11$
+	call	getbyt
+	add	r5,(r4)
+	bit	#rl.byt,(sp)
+	bne	11$
+	call	getbyt
+	swab	r5
+	add	r5,(r4)
+11$:	bit	#cc.dsp,(sp)
+	beq	12$
+	sub	clcloc,(r4)
+	sub	#2,(r4)
+	bit	#relflg,clcfgs	;are we in rel section?
+	beq	12$		;  no, leave as is
+	dec	2(r4)		;yes, account for deduction
+12$:	bit	#cc.opr,(sp)
+	bne	p2t17c
+	bic	#^c<rl.byt>,(sp)
+	movb	(sp)+,sector
+	call	tstslr
+	call	pcrolf
+19$:	return
+p2t17c:	call	getbyt
+	aslb	r5
+	bcs	p2t17d
+	bne	1$
+	tst	(sp)+
+	mov	#symbol,r1
+	mov	#clcnam,r2
+	jmp	xmit0-<2*4>
+
+1$:	call	@2$-2(r5)
+	clr	r5
+	br	p2t17d
+
+2$:	.word	10$		;low limit
+	.word	20$		;high limit
+	.word	30$		;low psect limit
+	.word	40$		;high psect limit
+	.word	50$		;^c
+	.word	60$		;-
+
+10$:	mov	limlow,(r4)
+	inc	2(r4)
+	return
+
+20$:	mov	limhgh,(r4)
+	inc	2(r4)
+	return
+
+30$:	mov	#symbol,r3
+31$:	call	getbyt
+	movb	r5,(r3)+
+	cmp	r3,#symbol+4
+	blo	31$
+	scan	secrol
+	bne	32$
+	 $error	<psect missing>,symbol
+
+32$:	com	opclas
+	call	crfref
+	clr	opclas
+	mov	value,r1
+33$:	mov	value,r2
+	add	value+2,r2
+34$:	call	scanc
+	beq	39$
+	mov	value,r0
+	add	value+2,r0
+	cmp	r0,r2
+	bhi	33$
+	br	34$
+
+39$:	mov	r1,(r4)
+	inc	2(r4)
+	return
+
+40$:	call	30$
+	mov	r2,(r4)
+	return
+
+50$:	com	(r4)
+	com	2(r4)
+	return
+
+60$:	neg	(r4)
+	neg	2(r4)
+	return
+p2t17d:	movb	r5,(sp)
+	call	getbyt
+	asl	r5
+	asl	r5
+	add	#oprbuf-4,r5
+	mov	(sp)+,r0
+	jmp	@40$(r0)
+
+40$:	.word	50$		; load
+	.word	51$		; +
+	.word	52$		; -
+	.word	53$		; *
+	.word	54$		; /
+	.word	55$		; &
+	.word	56$		; !
+
+50$:	mov	(r4),(r5)
+	mov	2(r4),2(r5)
+	return
+
+51$:	add	(r4),(r5)
+	add	2(r4),2(r5)
+	return
+
+52$:	sub	(r4),(r5)
+	sub	2(r4),2(r5)
+	return
+
+53$:	call	savreg
+	mov	(r4),r3
+	mov	(r5),r0
+	mul	r3,r0
+	mov	r1,(r5)
+	return
+
+54$:	call	savreg
+	mov	(r4),r3
+	clr	r0
+	mov	(r5),r1
+	div	r3,r0
+	mov	r0,(r5)
+	return
+
+55$:	com	(r4)
+	bic	(r4),(r5)
+	mov	sp,2(r5)
+	return
+
+56$:	bis	(r4),(r5)
+	mov	sp,2(r5)
+	return
+
+	entsec	impure
+opclas:	.blkw
+oprbuf:	.blkw	100.
+	xitsec
+
+;.globl	p2t21,p2t22
+
+
+.if	ne,mk.symbol
+
+p2t21:	tst	out$ym
+	bne	32$
+	tst	glbonly
+	bne	32$
+	mov	r0,-(sp)
+	mov	r1,-(sp)
+	mov	r2,-(sp)
+	mov	r3,-(sp)	;save registers least we invoke
+					;wrath of god
+	;this is system end. of module symbol name
+	;we should output module name here, with size of symbol talbe
+
+	clr	narof	;set indicator to blkty06 to not do
+	mov	modnmp,r1
+	mov	modnmp+2,r2
+	call	symseek
+	mov	#prgnam,r1
+	mov	#modasm,r2
+	mov	#6,r3
+1$:	clrb	(r2)
+	cmpb	(r1),#' 
+	beq	11$
+	movb	(r1)+,(r2)
+11$:	inc	r2
+	sob	r3,1$		;got name in
+	clr	(r2)+
+	mov	#37,(r2)+
+	mov	curnum,r1	;number fo symbols
+	mul	#^d12,r1
+	mov	r1,(r2)
+	call	dmsybk
+	call	fixsym
+	clr	curnum		;to zero for future
+	mov	(sp)+,r3
+	mov	(sp)+,r2
+	mov	(sp)+,r1
+	mov	(sp)+,r0
+32$:	return
+
+
+
+
+
+
+
+p2t22:	;this is for the symbol output section
+		;what this little routine does is to 
+		;seek to cursym 
+		; output place. it then 
+		; gets symbols from the file
+		;relocates them, and stuffs them
+		; in to the object module
+	tst	out$ym
+	bne	32$	;no symbols
+	tst	glbonly	;only globals
+	bne	32$
+		;now do the seek
+		;afterrr saving registers
+	mov	r0,-(sp)
+	mov	r1,-(sp)
+	mov	r2,-(sp)
+	mov	symnmp,r1
+	mov	symnmp+2,r2
+	call	symseek
+;file ptr is now in right place......
+;any more to do????
+28$:	call	getbyte
+	blt	29$	;no more-->quit this trip through
+	mov	r5,-(sp)	;save the byte
+	mov	#modasm,r2	;and clean up
+	mov	#zero64,r1
+	xmit	6
+	call	getbyte
+	swab	r5	;make word !a!!!!
+	bisb	(sp)+,r5	;get word back
+	mov	r5,symbol
+	call	getwrd
+	mov	r5,symbol+2
+	call	getbyt
+	mov	r5,-(sp)
+	call	getbyt
+	mov	r5,-(sp)
+	call	getwrd
+	mov	r5,modasm+2+2+2+2+2
+	mov	#modasm,r2
+	call	mr50unp	;get rad50 stuff
+	mov	(sp)+,r5
+	mov	#modasm+2+2+2+2+2,r3
+	bit	#regflg,(sp)
+	bne	7$
+	inc	modasm+10	;assume  absolute...
+	bit	#relflg,(sp)
+	beq	8$		;no...
+	clr	r0
+	bisb	secbas,r0	;get module base????
+	add	r5,r0	;and get current section?????
+	call	pntsec		;get ptr to offset
+	add	so.val(r0),(r3)
+	inc	modasm+10	;turn into text seg symbol
+	bit	symmask,so.mod(r0)	;see if shr or ins (depending on if i&d)
+	bne	8$
+	bit	#bssflg,so.mod(r0)	;see if bss
+	beq	18$			;isn't
+	inc	modasm+10
+18$:	inc	modasm+10
+	br	8$
+7$:	bis	#100,-(r3)
+	mov	#modasm+2,r3
+	tst	(r3)
+	bne	8$	;see if pc,r0-r5,sp
+	cmp	-(r3),#<143*400>+160	;pc
+	beq	11$
+	cmp	@r3,#<160*400>+163	;sp
+	beq	11$
+	cmpb	(r3)+,#162
+	bne	8$
+	cmpb	(r3),#60
+	blo	8$
+	cmpb	(r3),#65
+	bhi	8$
+11$:	tst	(sp)+
+	br	28$
+8$:	bit	#200,(sp)	;is half killed???
+	beq	9$
+	bis	#200,modasm+10
+9$:	bit	#defflg,(sp)+
+	bne	10$
+	mov	#200,modasm+10
+10$:	call	dmsybk
+	call	fixsys
+	br	28$
+29$:	mov	(sp)+,r2
+	mov	(sp)+,r1
+	mov	(sp)+,r0
+32$:	return				;go home
+.endc
+dmpcmd:
+
+.if le ft.unx
+	call	setxpr
+	clr	(r3)
+	mov	limlow,clcloc
+	mov	#1+<14*400>,(r4)
+	call	pcrolf
+	mov	limlow,(r4)
+	call	pcrolf
+	mov	limhgh,(r4)
+	sub	limlow,(r4)
+	call	pcrolf
+	mov	endvec+so.abs,(r4)
+	call	pcrolf
+	mov	odtvec+so.abs,(r4)
+	call	pcrolf
+	clr	(r4)
+	call	pcrolf
+	mov	prgttl,(r4)
+	call	pcrolf
+	mov	prgttl+2,(r4)
+	call	pcrolf
+	mov	prgttl+10,(r4)
+	call	pcrolf
+	mov	prgttl+12,(r4)
+	call	pcrolf
+	mov	dostim,(r4)
+	call	pcrolf
+	mov	dostim+2,(r4)
+	call	pcrolf
+	mov	dosdat,(r4)
+	call	pcrolf
+	mov	#2,(r4)
+	call	pcrolf
+	clr	(r4)
+	call	pcrolf
+	jmp	objdmp
+.iff
+	return
+.endc
+getlin:
+	clr	auxcnt
+	clr	chksum
+	mov	#auxbuf,auxpnt
+1$:	call	fetbyt
+	tst	r5
+	beq	1$
+	cmp	r5,#1
+	bne	21$
+	call	fetbyt
+	tst	r5
+	beq	22$
+21$:	 $error	<illegal format>
+	br	getlin
+
+22$:	call	fetbyt
+	mov	r5,-(sp)
+	call	fetbyt
+	movb	r5,1(sp)
+	sub	#4,(sp)
+3$:	call	fetbyt
+	dec	(sp)
+	bmi	4$
+	mov	auxcnt,r0
+	movb	r5,auxbuf(r0)
+	cmp	r0,#300.
+	bhis	3$
+	inc	auxcnt
+	br	3$
+4$:	tstb	chksum
+	beq	5$
+	 $error	<chksum>
+5$:	tst	(sp)+
+6$:
+getwrd:	call	getbyt
+	mov	r5,-(sp)
+	call	getbyt
+	swab	r5
+	bis	(sp)+,r5
+	tst	r0
+	return
+
+getbyt:	clr	r5
+	dec	auxcnt
+	blt	1$
+	bisb	@auxpnt,r5
+	inc	auxpnt
+1$:	mov	auxcnt,r0
+cpopj:	return
+
+fetbyt:	clr	r5
+	dec	@cnttbl+srcchn
+	bge	1$
+	zread	src
+	tst	@cnttbl+srcchn
+	bgt	fetbyt
+	br	2$
+
+1$:	bisb	@chrtbl+srcchn,r5
+	add	r5,chksum
+	inc	chrtbl+srcchn
+2$:	return
+
+	entsec	imppas
+csisav:	.blkw
+auxbuf:	.blkb	300.
+auxcnt:	.blkw
+auxpnt:	.blkw
+chksum:	.blkw
+	xitsec
+	entsec	impure
+endvec:	.blkw	5		;end vector storage
+odtvec:	.blkw	5
+odtflg:	.blkw	1
+sytflg:	.blkw
+ccflg:	.blkw
+
+	entsec	xctprg
+	inc	endvec+6	;default to no end vector
+
+	xitsec
+
+.if le ft.unx
+	genswt	dd,setddt
+setddt:	call	setodt
+	br	setsyt
+
+	genswt	sy,setsyt
+setsyt:	inc	sytflg
+	return
+
+	genswt	od,setodt
+setodt:	inc	odtflg
+	return
+.endc
+
+	genswt	cc,setcc
+setcc:	inc	ccflg
+	return
+
+	genswt	e,cpopj
+scusec:	mov	secbas,r0
+	call	pntsec
+	mov	r0,rolpnt
+	mov	#secrol,rolndx
+	jmp	scanc
+
+pntsec:
+	bic	#^c377,r0
+	imuli	wpsent*2,r0
+	mov	r0,-(sp)
+	asl	r0
+	asl	r0
+	add	(sp)+,r0
+	asl	r0
+	add	<^pl rolbas>+secrol,r0
+	return
+
+
+	entsec	impure
+prgttl:	.blkw	6
+prgsav:	.blkw	6
+secbas:	.blkw
+	xitsec
+	.sbttl	object code handlers
+
+endp1:				;end of pass handler
+.if le ft.unx
+	clr	rolupd		;set for re-init scan
+1$:	call	setxpr
+	next	secrol		;get the next entry
+	beq	endp1c		;  branch if finished
+	bit	#defflg,(r3)
+	bne	1$
+	clr	sizsav
+	tst	sytflg		;symbols requested?
+	beq	2$		;  no
+	cmp	symbol,.odust
+	bne	2$
+	cmp	symbol+2,.odust+2
+	bne	2$
+	mov	<^pl roltop>+symrol,value+2
+	sub	<^pl rolbas>+symrol,value+2
+2$:	call	14$
+	bit	#glbflg,(r3)
+	beq	1$
+	mov	rolupd,-(sp)
+11$:	call	setxpr
+	call	scanc
+	beq	12$
+	bit	#glbflg,(r3)
+	beq	11$
+	call	14$
+	add	#wpsent*2,rolpnt
+	br	11$
+
+12$:	mov	(sp)+,rolupd
+	add	sizsav,prgsiz
+	br	1$
+
+14$:	bis	#defflg,(r3)
+	mov	prgsiz,(r4)+
+	inc	(r4)
+	bic	#1,(r4)
+	add	(r4),prgsiz
+	bit	#glbflg,(r3)
+	beq	15$
+	bit	#ovrflg,(r3)
+	beq	15$
+	sub	(r4),prgsiz
+	cmp	(r4),sizsav
+	blos	15$
+	mov	(r4),sizsav
+15$:	call	insert
+	return
+.endc
+.if gt ft.unx
+	mov	ovride,r0	;get override indicator
+	mov	sgtbpt(r0),-(sp)	;stack ptr. to byte list
+	mov	#<bssflg-1>*2,-(sp)	;stack initial segment code
+	clr	-(sp)		;make room for code to be matched
+	inc	segflg+<<bssflg-1>*2>	;force first pass thru
+	br	3$		;get started
+1$:	mov	2(sp),r0	;get seg. just handled
+	mov	#cursiz,r1	;point to size of cur. seg.
+	mov	(r1),segsiz(r0)	;set its size
+	add	(r1),prgsiz	;update prog. size
+	clr	(r1)		;init for next seg.
+	cmp	r0,#bssflg*2*b.idf		;did we just do bss?
+;	beq	endp1b		;yes, pop stack and move on
+;***
+	bne	51$
+	jmp	endp1b
+51$:
+;****
+	sub	#2,2(sp)	;no, move to next segment code.
+	bge	3$		;still some remaining, do this one
+	mov	#bssflg*2*b.idf,r0	;time for some bs
+	mov	r0,(sp)
+	mov	r0,2(sp)
+	dec	4(sp)		;back up byte pointer
+	br	31$		;already set up
+3$:	inc	4(sp)		;point to next code to handle
+	movb	@4(sp),r0	;get it
+	beq	1$		;none left this seg. - move to next
+	bgt	31$		;ok if positive
+	clr	r0		;else make neg. zero
+31$:	mov	r0,(sp)		;ok, store flag code to be matched
+	tst	segflg(r0)	;but are there any of these?
+	beq	3$		;no, try next code
+32$:	clr	rolupd		;init scan
+33$:	call	setxpr
+	next	secrol		;get next
+	beq	3$		;no more, do next code
+	mov	(r3),r0		;get flags
+	bit	#defflg,r0	;are we concerned?
+	bne	33$		;no
+	ash	#b.idf,r0	;maybe, isolate our bits
+	bic	#^c<m.idf*2*b.idf>,r0
+	cmp	r0,#bssflg*2*b.idf	;must be in range
+	ble	4$		;ok
+	$error	<bad psect>,symbol
+	br	33$
+4$:	inc	segflg(r0)	;note at least one of this code
+	cmp	r0,(sp)		;is it our turn?
+	bne	33$		;no, maybe next time around
+	clr	sizsav		;yes, init our size
+	mov	rolupd,-(sp)	;save roll pointer
+	call	sec.sz		;contribute our size & set over-ridden bits
+	bit	#glbflg,(r3)	;expecting company?
+	beq	43$		;no
+41$:	call	setxpr
+	call	scanc		;look for kinfolk
+	beq	42$		;none left
+	bit	#glbflg,(r3)	;but only friendly ones
+	beq	41$
+	call	sec.sz		;ok, add to the clan
+	add	#wpsent*2,rolpnt
+	br	41$
+
+42$:	add	sizsav,cursiz
+;******
+	bcc	43$
+	call	ermess
+;*******
+43$:	mov	(sp)+,rolupd
+	br	33$
+
+sec.sz:	bis	#defflg,(r3)	;only once
+	mov	6(sp),r0	;get final code contents
+	ash	#-b.idf,r0	;position it
+	bic	#m.idf,(r3)	;mask out current code
+	bis	r0,(r3)		;set to this one
+	mov	cursiz,(r4)+	;save offset in seg.
+	inc	(r4)		;form size (even)
+	bic	#1,(r4)
+	add	(r4),cursiz	;add to seg. size
+;***
+	bcs	2$
+;***
+	bit	#glbflg,(r3)
+	beq	1$
+	bit	#ovrflg,(r3)
+	beq	1$
+4$:	sub	(r4),cursiz
+	cmp	(r4),sizsav
+	blos	1$
+	mov	(r4),sizsav
+1$:	call	insert
+	return
+;*****
+2$:	bit	#glbflg,(r3)
+	beq	3$
+	bit	#ovrflg,(r3)
+	bne	4$
+3$:	$error	<overflow- try a larger machine>
+	br	1$
+;*******
+
+endp1b:	add	#6,sp		;flush stack
+
+	entsec	dpure
+
+.if gt ft.id
+
+sgtbpt:	s4adr-1			; 4-seg. byte table (no override)
+	s2adr-1			; shr. (d-space only) [unix 410]
+	p1adr-1			; prv. (d-space only) [unix 407]
+	p2adr-1			; prv. (i- & d-space)
+
+s4adr:	.byte	6,0		; si <- si
+	.byte	4,0		; pi <- pi
+	.byte	2,0		; sd <- sd
+	.byte	377,0		; pd <- pd
+
+s2adr:	.byte	0		; si <- null
+	.byte	0		; pi <- null
+	.byte	6,2,0		; sd <- si+sd
+	.byte	4,377,0		; pd <- pi+pd
+
+p1adr:	.byte	0		; si <- null
+	.byte	0		; pi <- null
+	.byte	0		; sd <- null
+	.byte	6,4,2,377,0	; pd <- si+pi+sd+pd
+
+p2adr:	.byte	0		; si <- null
+	.byte	6,4,0		; pi <- si+pi
+	.byte	0		; sd <- null
+	.byte	2,377,0		; pd <- sd+pd
+.iff
+
+sgtbpt:	s2adr-1			; shr.table (no override - unix 410)
+	p1adr-1			; prv. ( unix 407 )
+
+s2adr:	.byte	2,0		; sd <- sd
+	.byte	377,0		; pd <- pd
+
+p1adr:	.byte	0		; sd <- null
+	.byte	2,377,0		; pd <- sd+pd
+
+.endc
+
+	.even
+
+	xitsec
+.endc
+endp1c:	call	setslr
+
+.if	le,ft.unx
+	mov	limlow,r0
+ .iftf
+	tst	limhgh+2
+	beq	3$
+	mov	limhgh,r0
+	sub	prgsiz,r0
+	mov	r0,limlow
+ .iff
+3$:
+ .ift
+	br	32$
+3$:
+	add	prgsiz,r0
+	mov	r0,limhgh
+32$:
+.endc
+.if gt ft.unx
+ .if	ne,<ft.id*idtype> ;below for bell 411
+	tst	pisiz		;any pi??
+	bne	41$		;complain
+	tst	sisiz		;si
+	bne	42$
+	br	43$		;if no, skip around
+41$:	call	idwarn
+42$:	clr	fourk		;now relocation up
+43$:
+
+ .endc
+	mov	limlow,r0	;base of data space - if non-zero,
+				; then this is one-seg.
+	mov	#<bssflg-1>*2,r3	;start with initial seg. code
+5$:	mov	segsiz(r3),r1	;get size of seg.
+	beq	6$		;empty
+	mov	r0,segbas(r3)	;non-empty; set base
+	add	r1,r0		;form new base
+	bcc	35$
+	call	ermess
+35$:
+	bit	#2,r3		;shr. seg.?
+	beq	6$		;no
+ .if	eq,<ft.id*idtype>
+	add	#17777,r0	;yes, move to 4k boundary
+  .iff
+	add	fourk,r0	;fourk is 0 or 17777
+  .iftf
+	bcc	38$
+	call	ermess
+38$:
+  .ift
+	bic	#17777,r0
+  .iff
+	bic	fourk,r0
+ .endc
+6$:
+ .if gt ft.id
+	cmp	r3,#pisiz-segsiz	;non-shr. is it p.i.?
+	bne	7$		;no
+	clr	r0		;yes, set new base for s.d.
+7$:
+ .endc
+	sub	#2,r3		;set index to next seg.
+	bge	5$		;do si, pi, sd, & pd.
+	mov	r0,bsbas	;form bs base
+	add	bssiz,r0
+	bcs	36$
+	cmp	r0,#<^d28 * ^d 2048>
+	blos	37$
+36$:	call	ermess
+37$:
+	clr	-(sp)		;for carry below
+ .if	eq,<ft.id*idtype>	;if bell, we do backwards...
+	mov	#sdsiz+2,r3	;point to seg. sizes to set up
+				;file offsets for each seg.
+	mov	#sgfofs+10,r2
+  .iff
+	mov	#sisiz+2,r3	;backwards for bell
+	mov	#sgfofs+20,r2	; 20 is si offset + 2
+  .iftf
+	mov	#20,r0		;allow for file header
+9$:	mov	r0,r1		;copy current offset
+	sub	segbas-segsiz-2(r3),r1
+	mov	r1,-(r2)
+	sbc	-(r2)
+	add	(sp),(r2)
+	add	-(r3),r0
+	adc	(sp)		;***** fix!!!
+  .ift
+   .if gt ft.id
+	cmp	r3,#pisiz	;thru with all?
+	beq	10$		;yes
+    .iftf
+	cmp	r3,#pdsiz	;thru with data?
+	bhi	9$		;no
+    .ift
+	mov	#sisiz+2,r3	;yes, do i-space offsets
+	mov	#sgfofs+20,r2
+	br	9$
+10$:
+   .endc
+  .iff			;idtype above
+	cmp	r3,#pdsiz
+	bhi	9$
+ .endc
+	tst	(sp)+
+
+.endc		;ft.unx
+
+	clr	rolupd
+	call	setxpr
+11$:	next	secrol
+	beq	ep1cf
+	mov	(r3),r0		;get flags
+	bit	#relflg,r0
+	beq	11$
+.if gt ft.unx
+	ash	#b.idf,r0	;turn flags into index
+	bic	#^c<m.idf*2*b.idf>,r0
+	add	segbas(r0),(r4)
+ .iff
+	add	limlow,(r4)
+.endc
+	call	insert
+	br	11$
+
+ep1cf:	mov	#endvec+so.sec,r2
+	movb	(r2)+,r0
+	call	pntsec
+	mov	(r2)+,(r2)
+	add	so.val(r0),(r2)
+	mov	#odtvec+so.sec,r2
+	movb	(r2)+,r0
+	call	pntsec
+	mov	(r2)+,(r2)
+	add	so.val(r0),(r2)
+.if	gt,ft.unx
+	mov	bsbas,r0
+	add	bssiz,r0
+	mov	r0,limhgh
+.endc
+	jmp	endp1x
+
+; stuff for module overflow
+
+ermess:	$error <overflow--try a larger machine>
+	return
+.if	ne,<ft.id*idtype>
+
+idwarn:	$error <warning::converting private instruction\<12>\					 to sharable instruction>
+	return
+
+.endc
+
+;*****
+
+
+	entsec	impure
+sizsav:	.blkw
+
+.if gt ft.unx
+filhdr:	.blkw	10	; 20 (8) byte file header
+
+segsiz:
+pdsiz:	.blkw
+sdsiz:	.blkw
+.if gt ft.id
+pisiz:	.blkw
+sisiz:	.blkw
+.endc
+bssiz:	.blkw
+
+segbas:
+pdbas:	.blkw
+sdbas:	.blkw
+.if gt ft.id
+pibas:	.blkw
+sibas:	.blkw
+.endc
+bsbas:	.blkw
+
+cursiz:	.blkw
+ovride:	.blkw
+segflg:	.blkw	bssflg+1
+sgfofs:	.blkw	<bssflg+1>*2
+
+
+ .if	ne,<ft.id * idtype >	;need below for bell header
+
+	entsec	mixed
+fourk:	17777
+ .endc
+
+	xitsec
+
+.if	ne,mk.symbol
+mr50unp:				;rad 50 unpack routine
+	mov	r4,-(sp)	;save reg
+	mov	#symbol,r4	;point to symbol storage
+1$:	mov	(r4)+,r1	;get next word
+	mov	#50*50,r3	;set divisor
+	call	10$		;divide and stuff it
+	mov	#50,r3
+	call	10$		;again for next
+	mov	r1,r0
+	call	11$		;finish last guy
+	cmp	r4,#symbol+4	;through?
+	bne	1$		;  no
+	mov	(sp)+,r4	;yes, restore register
+	return
+
+
+10$:	clr	r0
+	div	r3,r0
+11$:	tst	r0		;space?
+	beq	32$		;  yes
+	cmp	r0,#33		;test middle
+	blt	22$		;alpha
+	beq	21$		;dollar
+	add	#22-11,r0	;dot or dollar
+21$:	add	#11-140,r0
+22$:	add	#140-40,r0
+23$:	add	#40,r0
+32$:	movb	r0,(r2)+	;stuff it
+	return
+
+sym1seek:
+		;does seek to start of symbols, leaving
+		; 0's up to there.  the location is moved to
+		;lstadr,lastadr+2
+		;args are in r1,r2
+	mov	r1,-(sp)
+	mov	r2,-(sp)
+	mov	chntbl+objchn,r0
+	mov	r2,r3	;save for future
+	ash	#10.,r1
+	ash	#-6,r2
+	bic	#176000,r2
+	add	r1,r2	;got number of 64 word blocks
+	beq	3$
+1$:	mov	#64.,r1
+	call	wrt.z
+	sob	r2,1$
+;now do rest
+3$:	mov	r3,r1
+	bic	#^c77,r1
+	beq	2$
+	call	wrt.z
+;here is over
+2$:	mov	(sp)+,r2
+	mov	r2,lstadr+2
+	mov	r2,curadr+2
+	mov	(sp)+,r1
+	mov	r1,curadr
+	mov	r1,lstadr
+	return
+symseek:		;takes arg in r1 and r2
+				;leaves objchn ptr in right place
+				;fixes up curptr
+				;does not output zeros up to.
+
+	cmp	r1,curadr
+	bne	1$
+	cmp	r2,curadr+2
+	beq	2$
+1$:	clr	$skptr
+	mov	objchn+chntbl,r0
+	mov	r2,$skofs
+	$indir
+	$sksys
+	mov	r1,curadr
+	ash	#7,r1
+	beq	3$
+	mov	r1,$skofs
+	mov	#4,$skptr
+	$indir
+	$sksys
+3$:	mov	r2,curadr+2
+2$:	return
+
+dmsybk:	inc	numsym
+	inc	curnum
+	mov	chntbl+objchn,r0
+	trap	4.
+	modasm
+	14
+	add	#14,curadr+2
+	adc	curadr
+	return
+.endc
+endp1x:
+.if	ne,mk.symbol
+	add	#2,nummods	;allow for macro and .globl
+	tst	out$ym
+	bne	31$
+	tst	glbonly
+	beq	30$
+	mov	#2,nummods	;set for only macro and globl
+30$:					;now get file offset for macro
+	mov	#modnmp+2,r0	;high order, low order
+	mov	#20,(r0)
+	mov	#pdsiz,r1	;mov in stuff
+	add	(r1)+,(r0)	;pdsiz
+	adc	-2(r0)
+	add	(r1)+,(r0)	;sdsiz
+	adc	-2(r0)
+.if	gt,ft.id
+	add	(r1)+,(r0)	;pisiz
+	adc	-2(r0)
+	add	(r1),(r0)	;sisiz
+	adc	-(r0)
+	;see if symmask should be changed
+	tst	(r1)		;any si
+	bne	18$		;yes, change mask
+	tst	-(r1)
+	beq	17$		;no pi either
+18$:	inc	symmask
+17$:
+
+.endc
+	;now fix up first symbol output slot
+	mov	nummods,r0
+	mul	#^d12,r0
+	add	modnmp+2,r1
+	adc	r0
+	add	modnmp,r0
+	mov	r0,symnmp
+	mov	r1,symnmp+2
+31$:
+.endc
+
+	mov	#objchn,r0
+	call	openo		;open object file
+	tstb	lstdev
+.if	eq,mk.symbol
+	bne	4$
+  .iff
+	beq	29$
+	call	4$
+29$:	tst	out$ym
+	bne	28$
+	call	soutglb
+28$:
+
+.endc
+19$:	return
+
+4$:	mov	#linbuf,r2
+	movb	#ff,(r2)+
+	mov	prgttl,symbol
+	mov	prgttl+2,symbol+2
+	call	r50unp
+	movb	#tab,(r2)+
+	mov	#hdrttl,r1
+	call	movbyt
+	movb	#tab,(r2)+
+	mov	#dattim,r1
+	call	movbyt
+	call	endp2b
+	call	endp2b
+	mov	#epmt,r4
+6$:	mov	(r4)+,r1
+	call	movbyt
+	mov	@(r4)+,value
+	mov	#mode,r1
+	call	setwrd
+	call	endp2b
+	tst	(r4)
+	bne	6$
+	clr	-(sp)
+	movb	#-1,cursec
+endp2a:	cmp	r2,#linbuf
+	beq	1$
+	call	endp2b
+1$:	incb	cursec
+	clr	rolupd
+10$:	next	prgrol
+	beq	11$
+	cmpb	sector,cursec
+	bne	10$
+21$:	mov	#stars0,r1
+	call	movbyt
+	call	endp2b
+	mov	#modtxt,r1
+	call	movbyt
+	call	r50unp
+	movb	#tab,(r2)+
+	mov	symbol+10,symbol
+	mov	symbol+12,symbol+2
+	call	r50unp
+	call	endp2b
+	mov	#sas,r1
+	call	movbyt
+	call	endp2b
+11$:	mov	(sp)+,rolupd
+	next	secrol
+	bne	27$
+	return
+27$:	mov	rolupd,-(sp)
+	movb	sector,cursec
+	mov	value,curbas
+22$:	movb	#ch.lab,(r2)+
+	call	r50unp
+	movb	#ch.rab,(r2)+
+	movb	#tab,(r2)+
+	mov	#mode,r1
+	call	setwrd
+	movb	#tab,(r2)+
+	mov	#value,r1
+	call	setwrd
+	call	endp2b
+	clr	rolupd		;set for symbol table scan
+endp2g:
+3$:	next	symrol		;get the next symbol
+	beq	endp2a		;  no more
+	cmpb	sector,cursec
+	bne	3$
+	movb	#tab,(r2)+
+	call	r50unp		;unpack the symbol
+	movb	#tab,(r2)+
+	mov	#mode,r1	;point to mode bits
+	bit	#defflg,(r1)	;defined?
+	beq	5$		;  no
+	bit	#relflg,(r1)
+	beq	4$
+	add	curbas,value
+4$:	call	setwrd
+	bit	#relflg,(r1)
+	beq	6$
+	movb	#'',(r2)+
+	br	6$
+
+5$:	mov	#stars,r1
+	call	movbyt		;undefined, substitute ******
+6$:	movb	#tab,(r2)+
+	cmp	r2,#linbuf+34.
+	blo	3$
+	call	endp2b		;output line
+	br	3$		;next line
+
+18$:	return
+	entsec	impure
+curbas:	.blkw
+curflg:	.blkw
+	xitsec
+
+.if	ne,mk.symbol
+	;this code outputs the global symbols, and
+	;the .macro and .globl blocks
+
+soutglb:	mov	symnmp,r1
+	mov	symnmp+2,r2
+	call	sym1seek
+
+;file ptr in position now
+;so initilize to output all globals
+	clr	curnum		;of symbols associated with this
+	clr	-(sp)	;get counter
+	movb	#1,cursec
+1$:	incb	cursec
+	clr	rolupd
+10$:	next	prgrol
+	beq	11$
+	cmpb	sector,cursec
+	bne	10$
+21$:				;got sector name
+				;now find sectors
+11$:	mov	(sp)+,rolupd
+	next	secrol
+	beq	30$
+	mov	rolupd,-(sp)	;save
+	movb	sector,cursec
+	mov	value,curbas
+	mov	#curflg,r2
+	mov	#42,(r2)	;make text external symbol
+	bit	symmask,mode	;see if is either shr(if only d) or i(if i&d)
+	bne	40$		;if bit is on, say it's text
+	bit	#bssflg,mode	;is bss
+	beq	41$
+	inc	(r2)
+41$:
+	inc	(r2)
+40$:				;now resume
+22$:	clr	rolupd
+3$:	next	symrol		;find symbols
+	beq	1$
+	cmpb	sector,cursec
+	bne	3$
+	mov	#modasm,r2
+	call	mr50unp
+	clr	modasm+12
+	clr	modasm+10
+	bit	#defflg,mode
+	beq	5$
+
+	mov	value,modasm+12
+	mov	#41,modasm+10
+	bit	#relflg,mode
+	beq	4$
+	add	curbas,modasm+12
+	mov	curflg,modasm+10	;set proper mode
+4$:	bit	#200,mode
+	beq	6$
+5$:	bis	#200,modasm+10	;half kill
+6$:	call	dmsybk
+	call	fixsys
+	br	3$
+
+30$:		;now output the macro and globl names
+	mov	modnmp,r1
+	mov	modnmp+2,r2
+	call	symseek
+	mov	#$macro,r1
+	mov	#modasm,r2
+	xmit	5
+	mov	nummods,r0
+	dec	r0
+	mul	#14,r0
+	mov	r1,(r2)
+	call	dmsybk
+	call	fixsym
+	mov	#$globl,r1
+	mov	#modasm,r2
+	xmit	5
+	mov	curnum,r0
+	dec	r0		;the .macro isn't include0
+	mul	#14,r0
+	mov	r1,(r2)
+	call	dmsybk
+	call	fixsym
+	clr	curnum	;clean up for kids
+	mov	#1,narof	;set for blkt06 indication
+	return
+
+fixsys:	add	#14,symnmp+2
+	adc	symnmp
+	return
+
+fixsym:	add	#14,modnmp+2
+	adc	modnmp
+	return
+
+	entsec	dpure
+$macro: .asciz  /.macro/
+	.byte 0
+	.word 0
+$globl: .asciz  /.globl/
+	.byte	0
+	.word	0
+
+	xitsec
+.endc
+endp2b:	clrb	(r2)
+	tstb	lstdev
+	beq	1$
+	putlp	#linbuf
+1$:	mov	#linbuf,r2	;reset to start of buffer
+	return
+
+endp2e:	return
+
+	entsec	txtbyt
+stars0:	.ascii	/****/
+stars:	.asciz	/******/
+modtxt:	.asciz	/module/<tab>
+sas:	.asciz	/section		address	size/
+
+	entsec	dpure
+epmt:	;***** .word	epm1,	endvec+10
+	.word	epm2,	limlow
+	.word	epm3,	limhgh
+	.word	0
+
+	entsec	txtbyt
+epm1:	.asciz	/transfer address: /
+epm2:	.asciz	/low limit:        /
+epm3:	.asciz	/high limit:       /
+
+	xitsec
+	genswt	b,setbot
+setbot:	call	absexp
+	mov	r0,limlow
+	inc	limlow+2
+.if gt ft.unx
+	br	settp1
+.iff
+	return
+.endc
+
+	genswt	t,settop
+settop:	call	absexp
+	mov	r0,limhgh
+	inc	limhgh+2
+.if gt ft.unx
+settp1:	jmp	setp1		;force one-seg.
+.iff
+	return
+.endc
+
+
+	entsec	impure
+prgsiz:	.blkw
+limlow:	.blkw	2
+limhgh:	.blkw	2
+	xitsec
+endp2:				;end of pass 2
+	tst	objpnt		;any object output?
+	beq	9$		;  no
+	call	objdmp		;yes, dump it
+.if gt ft.unx
+ .if	eq,<ft.id*idtype>
+.if	ne,mk.symbol
+	mov	numsym,r1
+	mul	#^d12,r1
+	mov	r1,filhdr+10
+	mov	r1,filhdr+14	;save twice for i/d case
+.endc
+	mov	#1,filhdr+16	;turn off reloc
+	mov	#filhdr,r0	;point to file header
+	mov	#sdsiz,r1	;  and a pointer to shr. data size
+	mov	#407,r2		;assume type 407 to start.
+	tst	(r1)+		;any shr. data ?
+	beq	1$		;no
+	inc	r2		;yes, type <- 410
+1$:
+.if gt ft.id
+	tst	(r1)+		;any p.i. ?
+	bne	2$		;yes
+	tst	(r1)		;no, any s.i. ?
+	beq	3$		;no
+2$:	mov	#411,r2		;yes, type <- 411
+3$:	tst	(r1)+		;point to bssiz
+	mov	r1,r4		;save pointer
+.iftf
+	mov	(r1),r3		;get bssiz while we are here
+	mov	r2,(r0)+	;store type in first header word
+.ift
+	cmp	-(r1),-(r1)	;skip back over s.i. & p.i.
+.iftf
+	mov	-(r1),(r0)+	;store sd size in header
+	mov	-(r1),(r0)+	;and pd size
+	mov	r3,(r0)+	;now store bssiz
+.ift
+	cmp	r2,#411		;any i-space?
+	bne	4$		;no
+	mov	-(r4),(r0)+	;yes, store sizes of si & pi
+	mov	-(r4),(r0)+
+4$:
+ .endc
+ .iff			;that is ft.id&idtype, for bell header
+  .if	ne,mk.symbols
+	mov	numsym,r1
+	mul	#^d12,r1
+	mov	#filhdr+16,r0
+	inc	(r0)	;no reloc
+	mov	r1,-(r0)
+	tst	-(r0)
+	mov	r1,-(r0)	;now points at symbols...
+    .iff
+	inc	filhdr+16
+	mov	#filhdr+10,r0	;at symbols also
+  .endc
+	mov	#bssiz,r1
+	mov	(r1),-(r0)	;filhdr points at bss
+	mov	#411,r2		;assume i&d
+	mov	-(r1),r3	;get si into r0
+	add	-(r1),r3	;as pi
+	beq	2$		;if not, then branch
+	add	-(r1),-2(r1)	;add together data
+	br	3$
+2$:	dec	r2		;demote to 410
+	mov	-(r1),r3	;get sd
+	bne	3$
+	dec	r2
+3$:	mov	-(r1),-(r0)
+	mov	r3,-(r0)
+	mov	r2,-(r0)	;just wrote data then text then header
+.endc
+	clr	$skptr		;point to beginning
+	clr	$skofs
+	mov	chntbl+objchn,r0
+	$indir
+	$sksys
+	mov	#filhdr,$wrbfp
+	mov	#20,$wrcnt
+	$indir
+	$wrsys
+	bcc	9$
+	jmp	wrt.er
+.iff
+	mov	objpnt,r0
+	mov	endvec+10,(r0)+	;set end vector
+	mov	r0,objpnt
+	call	objdmp
+.endc
+
+9$:	return
+	.sbttl	code roll handlers
+
+pcrolf:
+	call	savreg
+	clr	r5		;assume byte
+	bitb	#rl.byt,sector
+	bne	1$		;branch if byte
+	inc	r5		;  word, bump to 1
+1$:	tst	objpnt		;any object code called for?
+	beq	pcrol2		;  no
+	bitb	#bssflg,clcfgs	;is this bss?
+	bne	pcrol2		;yes, no output
+
+
+10$:	cmp	clcloc,objloc	;did pc move on us?
+	beq	14$		;  no
+13$:	call	objdmp		;dump buffer
+14$:	mov	objpnt,r0	;get code pointer
+	add	r5,r0		;compute new end
+	sub	buftbl+objchn,r0
+	cmp	r0,#objlen-1	;room?
+	bhi	13$		;  no
+	mov	objpnt,r1
+	cmp	r1,buftbl+objchn	;first item?
+	bne	16$		;  no
+.if gt ft.unx
+	mov	#filofs+2,r0	;point to low-order file offset
+	mov	clcfgs,r2	;get sector flags
+	ash	#b.idf+1,r2	;form word offset
+	bic	#^c<m.idf*4*b.idf>,r2	;for table of 2-word entries
+	mov	clcloc,(r0)	;form file offset of this block
+	add	sgfofs+2(r2),(r0)
+	mov	sgfofs(r2),-(r0)
+	adc	(r0)
+
+.iff
+	mov	clcloc,(r1)+	;  and starting address
+.endc
+16$:	movb	value,(r1)+
+	tst	r5
+	beq	29$		;branch if byte instruction
+	movb	value+1,(r1)+
+29$:	mov	r1,objpnt
+
+pcrol2:	inc	r5		;make count 1 or 2
+	add	r5,clcloc	;update pc
+	mov	clcloc,objloc	;set sequence break
+	setnz	r0		;set true return
+	return
+	entsec	dpure
+pcrtbl:				;table by rld type
+	.word	0
+	.word	120004		;rldt01
+	.word	140006		;rldt02
+	.word	130004		;rldt03
+	.word	150006		;rldt04
+	.word	160010		;rldt05
+	.word	170010		;rldt06
+	.word	060000		;rld07
+	.word	020000		;rldt10
+	.word	100000		;rldt11
+	.word	140010		;rldt12
+	.word	0		;not assigned
+	.word	150010		;rldt14
+	.word	160010		;rldt15
+	.word	170010		;rldt16
+
+
+	entsec	imppas
+	.odd
+objsec:	.blkb	1		;object file sector
+objloc:	.blkw	1		;object file location
+
+
+	entsec	xctpas		;execute each pass
+	comb	objsec		;force sequence break
+	com	objloc
+	xitsec
+objdmp:				;dump the object buffer
+	mov	objpnt,@cnttbl+objchn
+	beq	objinx
+	sub	buftbl+objchn,@cnttbl+objchn
+	beq	objini
+	tst	ioftbl+objchn
+	beq	objini
+.if le ft.unx
+	zwrite	obj
+.iff
+	mov	chntbl+objchn,r0	;set up file cookie
+	mov	filofs+2,r3	;get file offset
+	mov	filofs,r2
+	cmp	r2,curadr	;are we in position now?
+	bne	1$		;no
+	cmp	r3,curadr+2
+	beq	13$		;yes, no seek necessary
+1$:	mov	r2,curadr	;no, point to where we are heading.
+	mov	r3,curadr+2
+	cmp	r2,lstadr	;have we been that far before?
+	bgt	10$		;no, fill gap with zeroes
+	blt	17$		;yes, just seek
+	cmp	r3,lstadr+2
+	blos	17$		;yes
+10$:	mov	lstadr,r2	;seek to cur. end
+	mov	lstadr+2,r3
+	call	do.sk
+	mov	curadr,r2
+	mov	curadr+2,r3
+	sub	lstadr+2,r3	;form # of 0's needed
+	sbc	r2
+	sub	lstadr,r2
+	ash	#10.,r2		;form # 64-byte units needed
+	mov	r3,r1		;copy low-order
+	ash	#-6,r1
+	bic	#176000,r1
+	add	r1,r2
+	beq	12$		;move on if no 64-byte units needed
+11$:	mov	#64.,r1
+	call	wrt.z		;send packet of 0's
+	sob	r2,11$
+12$:	mov	r3,r1		;send residue of 0's
+	bic	#^c77,r1
+	beq	13$
+	call	wrt.z
+13$:	mov	@cnttbl+objchn,$wrcnt	;get byte count
+	mov	buftbl+objchn,$wrbfp
+	$indir
+	$wrsys
+	bcs	wrt.er
+	add	r0,curadr+2	;update cur. offset
+	adc	curadr
+	cmp	curadr,lstadr	;ever been this far?
+	blt	objini		;yes
+	bgt	15$		;no
+	cmp	curadr+2,lstadr+2
+	blos	objini		;yes
+15$:	mov	curadr,lstadr
+	mov	curadr+2,lstadr+2
+	br	objini
+17$:	call	do.sk
+	br	13$
+.endc
+
+objini:	mov	buftbl+objchn,objpnt
+objinx:	return
+
+.if gt ft.unx
+wrt.z:	mov	#zero64,$wrbfp
+	mov	r1,$wrcnt
+	$indir
+	$wrsys
+	bcc	wrt.zz
+wrt.er:	halt
+wrt.zz:	mov	chntbl+objchn,r0	;reload r0
+	return
+
+do.sk:	clr	$skptr		;do low-order seek absolutely
+	mov	r3,$skofs
+	$indir
+	$sksys
+	ash	#7,r2		;form # blocks offset for high-order
+	beq	1$		;none, return
+	mov	r2,$skofs	;set up # blocks
+	mov	#4,$skptr	;relatively speaking
+	$indir
+	$sksys
+1$:	return
+.endc
+
+	entsec	impure
+objpnt:	.blkw
+
+.if gt ft.unx
+
+curadr:	.blkw	2
+filofs:	.blkw	2
+zero64:	.blkw	32.
+
+	entsec	mixed
+.if	ne,mk.symbols
+symmask: .word	shrflg	;mask to determine type of masking
+.endc
+
+$sksys:	$seek
+$skofs:	.word	0
+$skptr:	.word	0
+lstadr:	.word	0
+	.word	20
+
+.endc
+	xitsec
+$error:				;error print routine
+	inc	errcnt
+	.irpc	x,012
+	mov	r'x,-(sp)
+	.endm
+	mov	#symbol+10,r0
+	.rept	4		;save temps
+	mov	-(r0),-(sp)
+	.endr
+	mov	#linbuf,r2	;store in line buffer
+	mov	#stars,r1
+	call	movbyt
+	movb	#tab,(r2)+
+	mov	#prgnam,r1
+	call	movbyt		;move title into position
+	movb	#tab,(r2)+
+	mov	(r5)+,r1	;fetch first arg
+	beq	1$		;branch if null
+	mov	(r1)+,(r0)+	;move into "symbol"
+	mov	(r1)+,(r0)+
+	call	r50unp		;unpack it
+1$:	movb	#tab,(r2)+
+	mov	(r5)+,r0	;get value pointer
+	beq	2$		;branch if null
+	mov	(r0),-(sp)	;fetch value
+	clr	-(sp)
+	mov	sp,r1
+	call	setwrd		;print it
+	cmp	(sp)+,(sp)+	;prune stack
+2$:	movb	#tab,(r2)+
+3$:	movb	(r5)+,(r2)+	;move in message
+	bne	3$
+	tstb	lstdev
+	bne	32$
+	putkbl	#linbuf		;output line
+	br	31$
+32$:	putlp	#linbuf
+31$:	mov	#symbol,r1	;restore "symbol"
+	.rept	4
+	mov	(sp)+,(r1)+
+	.endr
+	.irpc	x,210
+	mov	(sp)+,r'x
+	.endm
+	inc	r5		;round up return address
+	bic	#1,r5
+	rts	r5
+
+	entsec	impure
+prgnam:	.blkw	5		;program name "asciz"
+	xitsec
+lst.kb=	1			;teletype listing
+lst.lp=	2			;lpt listing
+
+	entsec	xctpas
+	mov	#lst.kb*400,r0	;set error slot
+	tstb	ioftbl+lstchn	;listing device?
+	beq	1$		;  no
+	bis	#lst.kb!100200,r0	;yes, assume teletype
+	bit	#io.tty,ioftbl+lstchn	;true?
+	bne	1$		;  yes
+	add	#<lst.lp-lst.kb>*401,r0	;no, upgrade to lp
+1$:	mov	r0,lstdev	;set flags
+
+	xitsec
+
+
+putkb:	mov	#lst.kb,lstreq	;set request
+	br	putlin
+
+putkbl:	mov	#lst.kb,lstreq	;set for tty
+putlp:	tst	lstflg		;doing a listing?
+	beq	putlin		;no, forget it
+	bisb	lstdev,lstreq	;yes, turn on
+
+putlin:				;output a line
+	call	savreg		;stack registers
+	mov	r0,r2		;arg to r2
+	movb	lstreq,r4	;get request
+	clr	lstreq		;clear it
+	tst	r4
+	beq	putli9		;just exit if empty
+20$:	movb	(r2)+,r1	;get a char.
+	beq	21$		;end on null
+	call	o.kblp		;transmit appropriately
+	br	20$		;send till null
+21$:	movb	#cr,r1		;end with cr/lf
+	call	o.kblp
+	movb	#lf,r1
+	call	o.kblp
+	bit	#lst.kb,r4	;if sending to cmochn,
+	beq	putli9		;no
+	zwrite	cmo		;yes, type the line now
+putli9:	return
+o.kblp:	bit	#lst.kb,r4	;cmo on?
+	beq	1$		;no
+	mov	#cmochn,r0	;yes
+	call	putoc
+1$:	bit	#lst.lp,r4	;lst on?
+	beq	2$		;no
+	mov	#lstchn,r0
+	call	putoc
+2$:	return
+
+
+	entsec	impure
+lstreq:	.blkw			;list request flags
+lstdev:	.blkb	2		;error(lh), listing(rh)
+	xitsec
+	.sbttl	expression evaluator
+
+absexp:
+	call	expr
+	bne	9$
+	$error
+9$:	mov	value,r0
+	return
+
+expr:				;expression evaluation
+	call	savreg		;save registers
+	call	term		;try for a term
+	return
+
+
+term:				;term evaluator
+	call	savreg
+	call	setxpr
+	clr	(r3)		;clear mode
+	clr	(r4)		;  and value
+
+	mov	#^d8,r2		;assume number, current radix
+21$:	call	cvtnum		;convert
+	beq	29$		;  nope, missed again
+	bpl	22$		;number, any overflow?
+	$error			;  yes, flag it
+22$:	tstb	r0		;no, any numbers out of range?
+	beq	28$		;  no
+	$error			;yes, flag it
+
+28$:	call	setnb		;return pointing to non-blank
+	setnz	r0		;flag as found
+29$:	return
+prosw:
+	call	savreg
+	call	setnb
+	call	setxpr
+	mov	r0,(r1)+	;set "symbol"
+	scanw	swtrol
+	beq	9$
+	call	@(r1)+
+	mov	sp,r0
+9$:	return
+
+
+chscan:				;character scan routine
+1$:	tst	(r0)+		;end (zero)?
+	beq	2$		;  yes
+	cmp	(r0)+,r5	;this the one?
+	bne	1$		;  no
+	tst	-(r0)		;yes, move pointer back
+2$:	mov	-(r0),r0	;move addr or zero into r0
+	return
+
+
+setxpr:				;set expression registers
+	mov	#symbol,r1
+	mov	#sector,r2
+	mov	#mode,r3
+	mov	#value,r4
+	return
+
+
+	.end

@@ -1,0 +1,212 @@
+trap 'echo uush: abort; rm -f /tmp/UUSH$$ /tmp/XXSH$$; exit 0' 1 2 3 4 5 10 12
+LOCAL=`uname -n`
+VERBOSE=no
+
+if test ! "$USER"
+then
+	USER=$LOGNAME
+fi
+
+R_UMASK=`sh -c umask 2>&1`
+R_USER=$USER
+R_SYS=
+R_PATH=:/bin:/usr/bin:/usr/local/bin:/usr/lbin:
+R_MBOX=$LOCAL!$USER
+R_XQT=/usr/spool/uucppublic
+
+for f in $*
+do
+	case "$f" in
+		-S*) R_SYS=`echo $f | sed 's/-S//'`
+			;;
+	esac
+done
+
+if test -f $HOME/.uushrc
+then
+	. $HOME/.uushrc
+fi
+
+# scan rest of args so that command opts have presidence
+#
+
+ENDSCAN=no
+
+for f in $*
+do
+	case "$f" in
+		-S*)	if test $ENDSCAN = no
+			then
+				R_SYS=`echo $f | sed 's/-S//'`
+			fi
+			;;
+		-F*)	if test $ENDSCAN = no
+			then
+				R_UMASK=`echo $f | sed 's/-F//'`
+			fi
+			;;
+		-P*)	if test $ENDSCAN = no
+			then
+				R_PATH=`echo $f | sed 's/-P//'`
+			fi
+			;;
+		-M*)	if test $ENDSCAN = no
+			then
+				 R_MBOX=`echo $f | sed 's/-M//'`
+			fi
+			;;
+		-X*)	if test $ENDSCAN = no
+			then
+				 R_XQT=`echo $f | sed 's/-X//'`
+			fi
+			;;
+		-U*)	if test $ENDSCAN = no
+			then
+				 R_USER=`echo $f | sed 's/-U//'`
+			fi
+			;;
+		-V*)	if test $ENDSCAN = no
+			then
+				 VERBOSE=yes
+			fi
+			;;
+		*)	ENDSCAN=yes
+			rest="$rest $f";;
+	esac
+done
+
+# no scan rest of arguments, stop when we find one that starts without -
+
+COPT=no
+COM=no
+
+
+for f in $rest
+do
+	case "$f" in
+		#-c mean sh -c commands...
+		-c | -c*)	if test $COM = yes
+			then
+				COMOPTS="$COMOPTS $f"
+			else
+				COPT=yes
+				SHOPTS="$SHOPTS $f"
+			fi
+			;;
+		-*)	if test $COM = yes
+			then
+				COMOPTS="$COMOPTS $f"
+			else
+				SHOPTS="$SHOPTS $f"
+			fi
+			;;
+		*)	if test $COPT = yes
+			then
+				SHOPTS="$SHOPTS $f"
+			else
+				if test "$COMFILE"
+				then
+					COMOPTS="$COMOPTS $f"
+				else
+					COMFILE="$f"
+				fi
+				COM=yes
+			fi
+			;;
+	esac
+done
+
+if test $VERBOSE = yes
+then
+	echo 'Remote command: 
+'
+fi
+
+DATA=yes
+
+if test $COPT = yes
+then
+	if test $VERBOSE = yes
+	then
+		echo '	'sh $SHOPTS $COMOPTS
+	fi
+	DATA=no
+else
+	if test "$COMFILE"
+	then
+		if test ! -f "$COMFILE"
+		then
+			echo uush: Input file '('$COMFILE') does not exist.'
+			exit 255
+		fi
+		type=`file $COMFILE | grep ' exec'`
+		if test "$type"
+		then
+			echo uush: Input file '('$COMFILE') is not a shell script'
+			exit 255
+		fi
+		if test $VERBOSE = yes
+		then
+			echo '	'sh $SHOPTS $COMFILE $COMOPTS
+		fi
+	else
+		if test $VERBOSE = yes
+		then
+			echo '	'sh $SHOPTS $COMOPTS '< stdin'
+		fi
+	fi
+fi
+
+if test $VERBOSE = yes
+then
+	echo '
+Remote shell runtime parameters:
+
+	In directory:   '$R_SYS!$R_XQT'
+	Command Path:   '$R_PATH'
+	Startup file:   '$R_SYS!~$R_USER/.uuprofile'
+	Output to   :   '$R_MBOX'
+'
+fi
+
+if test "$COMFILE"
+then
+	cat $COMFILE > /tmp/UUSH$$
+else
+	if test $COPT = no
+	then
+		tty > /dev/null 2>&1
+		case $? in
+			0)
+				echo 'Enter commands followed by control-d:
+' ;;
+		esac
+		cat > /tmp/UUSH$$
+	fi
+fi
+
+echo $R_UMASK'
+'$$'
+'$R_PATH'
+'$R_SYS'
+'$R_MBOX'
+'$R_XQT'
+'$R_USER'
+'$USER'
+'$LOCAL'
+'$SHOPTS'
+'$COMOPTS'
+'$DATA'
+' > /tmp/XXSH$$
+
+if test -f /tmp/UUSH$$
+then
+	cat /tmp/UUSH$$ >> /tmp/XXSH$$
+fi
+
+
+uux - $R_SYS!/usr/local/uubin/uush.uu < /tmp/XXSH$$
+echo Job $$ queued.
+
+rm -f /tmp/XXSH$$ /tmp/UUSH$$
+

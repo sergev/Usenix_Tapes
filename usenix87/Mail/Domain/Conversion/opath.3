@@ -1,0 +1,115 @@
+.TH OPATH 3 "PE SDC"
+.SH NAME
+opath - Generate a UUCP route from an RFC822 address
+.br
+oupath - Generate a UUCP route from a (possibly disconnected) UUCP path
+.SH SYNOPSIS
+char *opath(s)
+.br
+char *s;
+.sp 1
+char *oupath(s)
+.br
+char *s;
+.SH DESCRIPTION
+These routines use the \fBpathalias\fR database to generate UUCP routing
+paths from your local site to specified remote sites on either the UUCP
+network or other connected networks.
+.PP
+\fBopath\fR takes one argument, an RFC822 address, as described in
+ADDRESS(1).  From this, it generates and returns a UUCP path to the site
+named in the argument.
+.PP
+\fBoupath\fR takes one argument, a UUCP path.  If the next site on this
+path is named \fIx\fR, \fBoupath\fR will prepend a path from your site to
+\fIx\fR, if \fIx\fR is nonadjacent to your site.  If \fIx\fR is a domain,
+i.e. contains a dot (.), \fBoupath\fR will generate a path to a gateway
+for this domain.  Note that \fBoupath\fR will \fInot\fR alter the argument
+path, other than to make the above transformations; it does not check whether
+sites in the argument are adjacent to one another, or whether they represent
+an optimal path; it is assumed that if the user has specified a path, then
+he wants to use that path.
+.PP
+The principal difference between \fBopath\fR and \fBoupath\fR is that the
+former gives precedence to ``@'', whereas the latter gives precedence
+to ``!''.  The former is intended to be invoked when receiving mail from
+a user interface or a non-UUCP source (if the subsequent transport mechanism
+is to be UUCP), whereas the latter is intended solely to be used by UUCP
+internal software, principally \fBrmail\fR, in routing mail through the
+UUCP network.
+.SH "FILES"
+\fI/usr/lib/uucp/archive\fR - The pathalias database, in DBM(3) format.
+See PATHALIAS(1) for information; pathalias is a public-domain program
+distributed via the Usenet's net.sources facility.
+.br
+.sp 1
+\fI/usr/lib/uucp/domains\fR - The domain/gateway table.  Each line of this
+file consists of either a ``#'' followed by arbitrary comment text, or
+an entry of the form:
+.br
+.in 1i
+<domain>,<path>,<reserved>,<template>
+.br
+.in
+Where <domain> is the string (in capital letters) identifying a particular
+<path> is a string which may be included at an arbitrary point in the
+generated route, <reserved> is currently unused, and <template> is a string
+indicating the format of the generated route.
+.PP
+The <template> is a printf-style string; it is \fBnot\fR quoted, and
+begins at the character immediately following the comma which separates
+<template> from <reserved>.  The <template> may consist of arbitrary ASCII
+characters, which are copied unchanged into the generated route; or of
+a percent (%) sign followed by one of the following characters:
+.IP P
+The <path> string is inserted.  The <path> may consist either of a string
+which is inserted unchanged; or of the character ``>'' followed by the
+name of a UUCP site, in which case the entire <path> string is replaced
+with a string representing the path to the named site.  The last token on
+this string is the site named in the original <path> string, without a
+following ``!''.
+.IP U
+The user name from the original address is inserted.
+.IP N
+The site name from the original address, with the domain specifiers
+removed, is inserted.
+.IP D
+The site name from the original address, including the domain specifiers,
+is inserted.
+.IP R
+The UUCP path to the site named in the original address is looked up in
+the pathalias database and inserted.  Note that this path is looked up
+only when the %R is seen while scanning the <template>, so an error message
+for an invalid site name is generated if and only if it appears in an
+address with a domain which contains a %R in its template.
+.PP
+When making entries in the domain table, domain names which are a suffix of
+another domain name in the table should be ordered such that the longer
+string(s) appear first.  For example, .WA.UUCP should preceed .UUCP in
+the table.  A linear search is made of the table, and the first domain
+found in the table which is a suffix of the domain in the designated address
+is used as the domain in generating the routing.
+.PP
+Following are some example entries for the domain table.  Note that all
+domain names begin with a ``.''.
+.sp 1
+.nf
+.in 1i
+# This is a comment
+\&.HP.UUCP,,,%R!%U
+\&.UUCP,,,%R!%U
+\&.CSNET,>decwrl,,%P!%U%%%S@CSNET-RELAY.ARPA
+\&.EDU,>ucbvax,,%P!%D
+.in
+.fi
+.sp 1
+.SH "SEE ALSO"
+PATHALIAS(1), ADDRESS(1), RMAIL(1)
+.SH "AUTHOR"
+Eric Roskos, Perkin-Elmer Corp. SDC.
+.SH "NOTE"
+The <reserved> field in the domain table currently has a function which
+may be determined by examining the source code for opath.  However, this
+function is a vestigal function provided for sites that used an earlier
+version of opath; future opath versions will use this field for a different
+purpose, and new users of opath therefore should \fBnot\fR use this field.

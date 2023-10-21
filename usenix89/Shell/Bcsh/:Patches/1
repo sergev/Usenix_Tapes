@@ -1,0 +1,235 @@
+Path: plus5!wuphys!wucs!busch!we53!ltuxa!cuae2!ihnp4!cbosgd!clyde!watmath!utzoo!utcs!mnetor!globetek!chris
+From: chris@globetek.UUCP (chris)
+Newsgroups: net.sources.bugs
+Subject: Patch #1 for Bcsh (Bourne Shell Cshell-Emulator)
+Message-ID: <224@globetek.UUCP>
+Date: 4 Feb 86 22:58:35 GMT
+Reply-To: chris@.UUCP (chris)
+Organization: Globetek Ltd., Toronto
+Lines: 224
+Posted: Tue Feb  4 16:58:35 1986
+
+This is Patch #1 for bcsh, the Bourne shell cshell-emulator.  It is a context
+diff, suitable for use with patch (say 'patch < thisfile').  If you do not
+have patch, I will be happy to mail you a copy, or else you can simply apply
+the diffs by hand.
+
+Problem:	Aliasing did not work properly.  The alias was written to the
+		alias file, but gave a "command not found" message when used.
+		Unaliasing also gave a "command not found" message.
+
+Repeat by:	Create an alias, try to use it, try to remove it.
+
+Warning:	The format of the alias file has been changed -- edit any
+		current aliasfile to REMOVE the 'alias' from the beginning
+		of lines.  This will be done automatically the first time
+		an alias is created.
+
+Problem:	Numerical substitutes in the history list sometimes failed
+		in a bizzare way.
+
+Repeat by:	Start up bcsh, run up 15 or so commands.  Enter "!1".  A list
+		of commands 10 to current is printed and bcsh attempts to
+		execute all of them, failing miserably.
+
+Index: bcsh
+
+*** newbcsh	Tue Feb  4 09:53:47 1986
+--- bcsh	Thu Jan 30 12:26:08 1986
+***************
+*** 646,653
+  
+  						wanted="`expr \"$i\" : '\([0-9][0-9]*\).*'`"
+  						rest="`expr \"$i\" : '[0-9][0-9]*\(.*\)'`"
+! 						i="`grep -n . $histfile | grep \"^${wanted}:\"`"
+! 						i="`expr \"$i\" : \"${wanted}:\(.*\)\"`"
+  						;;
+  					\?*)
+  
+
+--- 646,653 -----
+  
+  						wanted="`expr \"$i\" : '\([0-9][0-9]*\).*'`"
+  						rest="`expr \"$i\" : '[0-9][0-9]*\(.*\)'`"
+! 						i="`grep -n . $histfile | grep \"^$wanted\"`"
+! 						i="`expr \"$i\" : \"${wanted}.\(.*\)\"`"
+  						;;
+  					\?*)
+  
+***************
+*** 695,701
+  
+  				case "$i" in
+  					"")
+! 						badsub="$wanted: Event not found"
+  						break
+  						;;
+  					*)
+
+--- 695,701 -----
+  
+  				case "$i" in
+  					"")
+! 						badsub="Event not found"
+  						break
+  						;;
+  					*)
+***************
+*** 1021,1026
+  					continue
+  					;;
+  			esac
+  
+  			# make sure there is always 1 blank line in file so
+  			# unaliasing will always work -- ed normally refuses
+
+--- 1021,1029 -----
+  					continue
+  					;;
+  			esac
++ 			set - $cmd
++ 			shift
++ 			cmd="$*"
+  
+  			# make sure there is always 1 blank line in file so
+  			# unaliasing will always work -- ed normally refuses
+***************
+*** 1026,1031
+  			# unaliasing will always work -- ed normally refuses
+  			# to write an empty file
+  
+  			cat << ++++ >> $aliasfile
+  $cmd
+  ++++
+
+--- 1029,1035 -----
+  			# unaliasing will always work -- ed normally refuses
+  			# to write an empty file
+  
++ 			echo "" >> $aliasfile
+  			cat << ++++ >> $aliasfile
+  $cmd
+  ++++
+***************
+*** 1032,1038
+  			ed - $aliasfile << '++++'
+  			g/alias[ 	]/s///
+  			g/^['"]\(.*\)['"]$/s//\1/
+! 			g/^$/d
+  			w
+  ++++
+  			echo "" >> $aliasfile
+
+--- 1036,1042 -----
+  			ed - $aliasfile << '++++'
+  			g/alias[ 	]/s///
+  			g/^['"]\(.*\)['"]$/s//\1/
+! 			g/^/s//alias	/
+  			w
+  ++++
+  			sort -u -o $aliasfile $aliasfile
+***************
+*** 1035,1041
+  			g/^$/d
+  			w
+  ++++
+- 			echo "" >> $aliasfile
+  			sort -u -o $aliasfile $aliasfile
+  			doalias=yes
+  			run=no
+
+--- 1039,1044 -----
+  			g/^/s//alias	/
+  			w
+  ++++
+  			sort -u -o $aliasfile $aliasfile
+  			doalias=yes
+  			cmd="alias $cmd"
+***************
+*** 1038,1043
+  			echo "" >> $aliasfile
+  			sort -u -o $aliasfile $aliasfile
+  			doalias=yes
+  			run=no
+  			;;
+  		unalias[\ \	]*)
+
+--- 1041,1047 -----
+  ++++
+  			sort -u -o $aliasfile $aliasfile
+  			doalias=yes
++ 			cmd="alias $cmd"
+  			run=no
+  			;;
+  		unalias[\ \	]*)
+***************
+*** 1051,1057
+  					continue
+  					;;
+  			esac
+! 			if ed - $aliasfile << ++++ > /dev/null 2>&1
+  			/^$cmd[ 	]/d
+  			w
+  ++++
+
+--- 1055,1061 -----
+  					continue
+  					;;
+  			esac
+! 			ed - $aliasfile << ++++
+  			/^$cmd[ 	]/d
+  			w
+  ++++
+***************
+*** 1055,1064
+  			/^$cmd[ 	]/d
+  			w
+  ++++
+! 				then
+! 				case "`set - \`wc -l $aliasfile\`;echo $1``" in
+! 					1)
+! 						# just removed last alias
+  
+  						doalias=no
+  						;;
+
+--- 1059,1067 -----
+  			/^$cmd[ 	]/d
+  			w
+  ++++
+! 			case "`set - \`wc -l $aliasfile\`;echo $1``" in
+! 				1)
+! 					# just removed last alias
+  
+  					doalias=no
+  					;;
+***************
+*** 1060,1071
+  					1)
+  						# just removed last alias
+  
+! 						doalias=no
+! 						;;
+! 				esac
+! 			else
+! 				echo "$cmd: no such alias"
+! 			fi
+  			run=no
+  			;;
+  		*)
+
+--- 1063,1071 -----
+  				1)
+  					# just removed last alias
+  
+! 					doalias=no
+! 					;;
+! 			esac
+  			run=no
+  			;;
+  		*)
+-- 
+
+Christine Robertson  {linus, ihnp4, decvax}!utzoo!globetek!chris
+
+Money may not buy happiness, but misery in luxury has its compensations...

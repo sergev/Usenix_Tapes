@@ -1,0 +1,298 @@
+.TH BADM 8 10/31/85
+.SH NAME
+badm \- disk formating and bad sector maintenance
+.SH SYNOPSIS
+.B badm w
+diskdevice
+.PP
+.B badm wb
+diskdevice
+.PP
+.B badm wbi
+diskdevice packsn
+.PP
+.B badm r
+diskdevice
+.PP
+.B badm t
+diskdevice
+.PP
+.B badm a
+diskdevice sectorno [ sectorno ... ]
+.SH DESCRIPTION
+.I Badm
+gives the system administrator control over the bad sector information
+on a disk pack.  Some of the salient features are:
+.TP 3
+\(bu
+Comprehensive, thorough formating capability available under
+timesharing, eliminating the need to devote an entire Vax
+system for a disk format operation
+.TP
+\(bu
+Read-only mode available to assist in locating deficient sectors
+on the disk without disturbing filesystems
+.TP
+\(bu
+Capability to add `johnny-come-lately' failing sectors to the bad
+sector table without disturbing other data on the disk
+.PP
+In the following command descriptions, the
+.I diskdevice
+argument refers to a disk drive by type and unit number (e.g., `hp1'), and
+.I sectorno
+is a sector number on the disk, expressed as an unsigned integer.
+.TP 3
+.B w
+Write and readback test patterns.  With no options, the
+.B w
+command writes a test pattern to every track of the disk and reads
+each track after writing it.  Any hard errors or soft ECC errors
+reported by the drive are also reported by
+.IR badm .
+If the
+.B b
+option is given,
+.I badm
+will also add all sectors with hard or soft errors to the bad
+sector table on the disk and mark the headers of the failing
+sectors as being bad.  If the
+.B i
+option is given,
+.I badm
+makes an initial pass over the disk, writing good headers on all
+sectors of the disk and marking all entries in the bad sector table
+as unused.  When invoking
+.I badm
+with the
+.B i
+option, the decimal serial number
+.RI ( packsn )
+of the disk must be included on the command line.  The function of
+.B badm wbi
+may be used in lieu of the traditional
+.I format
+procedure that the DEC VMS formater performs on new disks.
+When invoked with the
+.B w
+command,
+.I badm
+will cycle forever through all its test patterns, writing the patterns
+to the disk and reading them back.  Typing CTRL/C will exit the program.
+.TP
+.B r
+This function simply reads the entire disk from beginning to end
+ad infinitum, reporting soft ECC and hard errors to the user.
+It does not modify anything on the disk, and is thus safe to run
+at any time.  Type CTRL/C to exit.
+.TP
+.B t
+Torture the disk drive by moving the arm through a series of positions,
+ad infinitum.  This function does not alter any data on the disk.
+Type CTRL/C to exit.
+.TP
+.B a
+Each
+.I sectorno
+argument specifies (as a decimal number) a sector to be labeled as `bad'.
+.I Badm
+rewrites the sector header to indicate that the sector is `bad', adds the
+the sector to the disk's bad sector table, and copies the contents of the
+specified sector to its replacement sector.  If the contents of the sector
+cannot be read,
+.I badm
+complains and fills the replacement sector with zeros.  This function is
+useful for adding known failing sectors to the bad sector list without
+incurring the risk and expense of reformating the entire disk.
+.RB ( CAUTION:
+See operational restrictions below about other disk activity while using
+.IR badm .)
+.PP
+To format a brand new disk, use
+.B badm
+.BR wbi .
+The longer
+.I badm
+runs, the higher the probability that all of the marginal sectors on
+the disk have been classified as being `bad'.  The formating process
+begun by
+.B badm wbi
+can be continued after interruption (CTRL/C, system crash, etc.) by
+.B badm
+.BR wb .
+.PP
+When invoked with the
+.B w
+command,
+.I badm
+prints a message whenever it begins writing a different test pattern
+on the disk:
+.PP
+.ti +4
+Write pattern N = 0xV
+.PP
+where
+.I N
+is the pattern number and
+.I V
+is the test data composing the pattern.  The pattern number,
+.IR N ,
+will count upward from 0; when it returns to 0, all patterns have been
+written to the disk once.
+.PP
+When formating a disk, it is recommended to let
+.I badm
+write each of its test patterns on the disk at least once.  This may
+take many hours, depending upon the size of the disk, but any time
+invested in the formating process will pay off well in the long run.
+If it is necessary to have a formated disk quickly, use
+.B badm wbi
+and type CTRL/C after
+.I badm
+has begun to write the first test pattern.
+.SH OPERATIONAL RESTRICTIONS
+It is
+.I absolutely imperative
+that no other I/O activity be permitted
+on a disk that is being modified by the
+.BR wb ,
+.BR wbi ,
+or
+.B a
+command to
+.IR badm .
+This means if the disk is a user disk, none of its areas may be mounted.
+Also,
+.I badm cannot be used at all
+to modify a disk that is serving as a system disk; attempts to do so can
+result in corruption of the filesystem and/or format information on the disk.
+The proper technique for using
+.I badm
+on a pack that normally serves as a system disk is to boot UNIX from
+another system disk and to operate on the target pack as a non-system disk.
+.PP
+.I Badm
+should be used with the same care that one exercises when using
+.IR mkfs (8).
+.SH DIAGNOSTICS
+.TP 5
+BAD SECTOR TABLE IS FULL, CANNOT ADD
+An attempt to place more than 126 bad sectors in the bad sector file failed.
+DEC Standard 144 limits the number of `bad' blocks on a disk to 126.
+Try reformating the disk completely
+.RB ( badm
+.BR wbi );
+if this message appears again, the disk has too many bad spots and
+should be returned to the vendor for replacement.
+.TP
+ALREADY IN BAD SECTOR TABLE (ALTERNATE IS BAD!)
+.I Badm
+detected a failure in a sector that is already marked as being bad.
+This usually means that the alternate sector is failing as well; DEC
+standard 144 does not deal well with this situation.
+.TP
+Write pattern N = 0xV
+.I Badm
+is beginning pass
+.I N
+over the disk, writing pattern
+.I V
+in all sectors of the disk.  (This message is informational only,
+and indicates no problem.)
+.TP
+snS: {soft (E), hard} read error
+.I Badm
+detected a soft ECC (with
+.I E
+corrections) or a hard read error while reading sector
+.IR S .
+When operating in
+.B w
+mode,
+.I badm
+attempts to classify any sector exhibiting a read error as a `bad' sector.
+This message is a normal consequence of the formating process.
+.TP
+WARNING: ECC COUNTS NOT AVAILABLE, LIMPING ALONG
+The UNIX driver for the disk does not support the
+.I ioctl
+call to return the number of soft ECC correction counts.
+The consequence of this is that
+.I badm
+cannot detect or act upon soft ECC errors on the disk.
+Consult a system programmer.
+.TP
+WARNING: CANNOT READ BAD SECTOR TABLE (snS)
+.I Badm
+cannot read the bad sector file from sector number
+.IR S .
+There are five identical copies of the bad sector file; if the first
+copy is unreadable,
+.I badm
+tries to read the other copies until it finds one that it can read.
+If none of the copies can be read, the disk should be completely
+reformated
+.RB ( badm
+.BR wbi ).
+.TP
+WARNING: Cannot inform driver of new bad sector table
+The UNIX driver for the disk does not support the
+.I ioctl
+call to update the in-core copy of the bad block table.
+Consult a system programmer.
+.TP
+Entry N: illegal disk address, cyl=X trksec=X
+The bad sector table on the disk contains a disk address that is
+not legal.  The entry number (from 0 to 125) is displayed, along
+with the contents of the cylinder and track/sector fields.
+This can be corrected by completely reformating the disk
+.RB ( badm
+.BR wbi ).
+.TP
+Entry N: out of order
+Entries in the bad sector table on the disk must be appear in order
+of ascending disk addresses.  Entry N in the bad sector table is
+out of order.  This can be corrected by completely reformating the disk
+.RB ( badm
+.BR wbi ).
+.PP
+There are other, more self-explanatory diagnostics.
+.PP
+While
+.I badm
+is running, reports of hard and soft disk ECC errors may appear
+at the Vax console.  These messages are normal; they indicate
+that bad sectors are being identified and dealt with by
+.IR badm .
+.SH BUGS
+.I Badm
+updates the bad sector table of the disk; this is technically a violation
+of DEC standard 144, which specifies that this information is recorded at
+the time of manufacture.  In practice, however, there seem to be no
+operational problems incurred by updating the bad sector table in the field.
+.PP
+The implementation of the
+.B wb
+and
+.B wbi
+functions of
+.I badm
+requires support from the UNIX kernel in the form of additional
+.IR ioctl (2)
+services.  These are currently available only for RM05, RP06, RP05,
+RP04, and Eagle disks.
+.SH SEE ALSO
+bad144(8), badsect(8), format(8V)
+.PP
+DEC Standard 144
+.PP
+DEC EK-ORM05-UG-002 RM05 Disk Subsystem User Guide
+.PP
+Emulex SC7851001 SC780 Disk Controller Technical Manual
+.SH AUTHOR
+.nf
+Rick Ace
+New York Institute of Technology
+Computer Graphics Laboratory
+Old Westbury, NY 11568
+.fi

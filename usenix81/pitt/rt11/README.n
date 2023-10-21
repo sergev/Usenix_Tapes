@@ -1,0 +1,207 @@
+.ce 999
+YET ANOTHER RT11 EMULATOR
+.sp
+Daniel R. Strick
+Office of Communications Programs
+833 LIS building
+University of Pittsburgh
+Pittsburgh, PA  15260
+.sp
+August 17, 1981
+.ce 0
+.sp 2
+This directory contains all of the files needed to build an "RT11
+emulator" for the V6, V7, 32V, 3BSD and 4.0BSD dialects of UNIX.
+The emulator is a program that creates an environment which can
+support the execution of many useful RT11 "save files"
+(binary images of programs that are directly executable in the
+"background" of a real DEC RT11 system).
+.sp
+The emulator cannot run all RT11 programs because
+it does not support all of the facilities available in a
+real RT11 environment.
+The missing features (things like "foreground" programs,
+multiterminal jobs, and "extended memory") are not commonly
+used.
+As a result,
+the emulator can run many important system utilities
+(such as MACRO, FORTRAN, LINK)
+and the most important applications
+(such as ADVENT and ZORK).
+.sp 3
+.ce
+BUILDING AN RT11 EMULATOR
+.sp
+The emulator needs a version 7 C compiler.
+If you have a V6 system but not the phototypesetter C compiler,
+you will have to diddle the emulator source.
+.sp
+Whenever the emulator cannot find a file,
+it will prefix the given filename with a library name and try again
+(library files are always read only).
+The name of this library is stored in the character vector "libpref"
+defined in the source file "rtio.c".
+Unless you change it, the prefix will be "/user/rtfiles/".
+.sp
+Subdirectories PDP11 and VAX11 contain the files that are peculiar
+to each of these flavors of UNIX.
+Move the files from the selected subdirectory into this one before
+attempting to build an emulator.
+If your version of UNIX supports the "make" command, you can use
+the makefile from the selected subdirectory.
+Just say "make".
+If you can't use the make command (you are running V6),
+there is a shell file called "makrt" (from the PDP11 subdirectory)
+that should do the job.
+.sp
+If you are using a PDP11 UNIX, you might consider making a modification
+to your kernel that will allow the emulator to catch TRAP machine instructions
+(which are seldom used by most RT11 programs but look like system calls to
+UNIX kernels).
+Find a line in trap.c containing
+.nf
+	case 6+USER: /* sys call */
+and insert
+		if (u.u_signal[18] != 0) {
+			i = 18;
+			break;
+		}
+.fi
+after it.
+The new lines turn trap instructions into signal 18s
+whenever the user program has set a trap for signal 18.
+If you don't make this modification, most RT11 programs will run adequately
+well most of the time,
+but they may occasionally exhibit antisocial behavior
+(such as dumping core or filling up all of the process slots on a V6 system).
+As far as I know, no program on a "standard" V6 or V7 system uses signal 18.
+.sp
+If you are using a 32V or 3BSD system, you will have to replace the
+emulator source file trap.s with the file trap.s.32v
+and change two lines in the VMUNIX kernel source file machdep.c.
+.nf
+The line containing
+			| (mask << 16) | (regs[PS] & 0xffff));
+should become
+			| (mask << 16) | (regs[PS] & 0xfff1));
+and the line containing
+	regs[PS] &=  ~0x8000001f;
+should become
+	regs[PS] &=  ~0x1f;
+.fi
+These are bug fixes.
+The first change stops the kernel from clearing the user process
+condition codes before a signal trap.
+The second change causes the kernel to throw a process out of
+compatibility mode before a signal trap.
+.sp
+Try running the sample binary RT11 program in subdirectory "testfiles".
+.sp 3
+.ce
+HOW TO USE THE EMULATOR
+.sp
+The command "rtrun xxx.sav" will cause the RT11 binary "xxx.sav" to be
+loaded and executed.
+If the given file cannot be found in the current directory or the
+library directory, the emulator will automatically append ".sav"
+and try again.
+.sp
+The command "rtrun -s38 xxx" will run the program "xxx.sav" in 38k bytes
+of memory (not counting the emulator itself).
+.sp
+If you have a VAX and the program "xxx.sav" is overlayed,
+the command "rtrun -v xxx" will instruct the emulator to save copies of
+the overlays in memory where they can be retrieved without explicit disk reads.
+.sp 3
+.ce
+CAVEATS
+.sp
+The emulator was primarily developed to support the important
+applications mentioned above.
+A small amount of effort was spent extending the emulator to support
+the RT11 version 2 assembler, linker, and fortran compiler.
+The basic interpreter and the text editor were pretty much ignored.
+A few version 3 system calls were implemented, but the emulator has
+been used with very few version 3 programs.
+The emulator has never seen a version 4 program.
+.sp
+The emulator was originally developed on a significantly hacked V6
+system with the phototypesetter c compiler.
+It was later transported to 32V where it ran inconspicuously in
+compatibility mode via a V6 emulator for a long time.
+In January and February of 1981, the emulator was dusted off
+and hacked to run directly under 3BSD and 4BSD.
+.sp
+In July and August,
+the emulator was repackaged for the next USENIX distribution.
+This involved the reconciliation of the VAX and PDP versions and
+the implementation of a few apparently important system calls that
+somehow had never been needed.
+Major alterations were made in the procedure used to create an address
+space for the RT11 program.
+None of this stuff has been adequately tested.
+The new PDP11 version has been run only on our VAX
+(in compatibility mode with V6 and V7 emulators).
+I cannot guarantee that it will even load on a real V6 or V7 system.
+.sp
+Unix path names that don't look like RT11 file names
+are sometimes mangled.
+In particular, the "command string interpreter" programmed requests
+will choke on forward slashes.
+There are 1001 possible fixes.
+.sp
+A few bugs have been detected in the source but never (obviously)
+exercised by an RT11 program.
+For example, large octal values will not work in command string switches
+(large decimal values are ok).
+.sp
+The emulator copies itself into the stack as it starts up so that
+it can load the RT11 program into the bottom of the address space.
+Unfortunately the emulator occupies slightly more that 8k bytes.
+Since the PDP11 address space is managed in 8k byte chunks,
+the stack segment must use two chunks and the data segment is
+limited to six chunks (48k byte).
+Certain very important programs seem to require slightly more
+than 48k byte.
+The PDP11 versions of the emulator avoid this problem by creating
+a full 64k byte address space and effectively ignoring the -s# option.
+.sp
+The PDP11 and VAX11 directories contain the modified crt0.s routines
+that relocate the emulator into the stack.
+If you don't have the necessary UNIX source licenses,
+these files will be missing.
+There is a way around this difficulty.
+The Makefiles describe an object called "rtabs" that uses the regular
+crt0.o from /lib and some code named "memalloc.s" to create the RT11
+address space.
+.sp 3
+PS: Just in case anyone asks, DEC, RT11, PDP11, VAX11 are trademarks of
+Digital Equipment Corporation, and UNIX is a trademark of
+Bell Laboratories.
+.sp 5
+.ce 2
+REVISIONS
+.br
+to the version of 8/17/81
+.sp
+In September, I gave a copy of the emulator to a friend with a real V7 system.
+Sure enough, it didn't work.
+It seems that the code that restored reset traps
+got lost when the old PDP11 version was VAXinated
+and the V6/V7 emulators were not precise enough to expose the omission.
+This newer version of the emulator should fix that bug.
+It also has a few minor enhancements and is known to
+work on some RT11 version 4 stuff.
+.sp
+Another benefit of the attempt to run the RT11 emulator on a real V7
+system was the verification of the hypothesis that no program on a
+standard V7 system uses signal 18.
+Unfortunately, this is because a standard V7 system does not support signal 18.
+There are several solutions:
+(1) ignore the problem -- most programs will run ok,
+(2) use signal 16 instead,
+(3) invent a special system call for trapping the trap instruction.
+The third solution might be the most efficient but also requires the
+most work.
+.sp
+DRS, 10/15/81

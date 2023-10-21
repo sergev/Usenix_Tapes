@@ -1,0 +1,314 @@
+.\" pltroff -manl $1
+.TH UUTTY 8
+.VE 5
+.SH NAME
+uutty  \-  two-ended login protocol with intelligent modem handling and uucp lockfiles
+.SH SYNOPSIS
+.B /etc/uutty
+device
+[
+.B \-b<speed>
+] [
+.B \-d<level>
+] [
+.B \-e
+] [
+.B \-f
+] [
+.B \-l
+] [
+.B \-i
+initializer
+] [
+2>>audit_file
+]
+.br
+file
+.SH DESCRIPTION
+.fi
+.B Uutty
+is a program that is invoked by
+.IR init (8).
+It is similar in function to getty(8) and login(1),
+but has some extra intelligence so that it may be run
+with a single modem used for both incoming and outgoing calls,
+or on both ends of a direct port-to-port link.
+.PP
+With
+.B uutty
+running on both ends of a line,
+terminal emulators like cu(1) may be used
+in either direction.
+Also, file transfer utilities like uucp(1)
+may be initiated from either end.
+.PP
+An important feature of
+.B uutty
+is that is recognizes the lockfiles created by uucico(8),
+cu(1), uux(1), and other programs.
+On most Unix(TM) systems,
+these are named "/usr/spool/uucp/LCK..<device>",
+where <device> is the last field of the device name.
+.B Uutty
+checks for the presence of such lockfiles before every read,
+and sleeps until they disappear.
+.PP
+Thus
+.B uutty
+may be left running on a port while other programs use it.
+When a lockfile is created by another program
+(such as uucico or cu),
+.B uutty
+will read at most one more chunk of input
+before noticing the lockfile.
+It will then "back off" until the other program
+signals that it is done with the device by
+unlinking the lockfile.
+.PP
+.B Uutty
+is normally run as a background daemon by init(1M).
+The entry in /etc/inittab typically looks like:
+.nf
+.in +5
+t42: 34:respawn: uutty /dev/tty42 -B96 -L 2>>somewhere
+.in -5
+.fi
+where
+.I somewhere
+is an audit file or /dev/null.
+.PP
+Initially
+.B uutty
+writes the initialization string, if one is given,
+then writes a "login:" prompt to the line.
+It then reads the response,
+and attempts to determine whether it is an
+acceptable login attempt,
+or whether it is from another login process
+(like itself or getty or login).
+In the former case, a password prompt is
+written to the device;
+in the latter case, the input is ignored.
+.PP
+An important difference between
+.B uutty
+and
+.B getty
+is that
+.B uutty
+echoes nothing back to the input device.
+This avoids uncontrolled feedback
+when programs are run on both ends of a line.
+However, with the
+.B \-e
+option, echoing is done.
+.PP
+.B Uutty
+does not invoke the
+.IR login (1)
+command;
+rather it does the entire login interview itself.
+.PP
+.I Device
+is the name of a serial port
+(normally in \f3/dev\fP) to which
+.B uutty
+is to attach itself.
+.B Uutty
+uses this string as the filename
+to open for reading and writing;
+it should be the full pathname of the device.
+.PP
+The optional argument,
+.B \-B
+.I <speed>,
+is a numeric line speed.
+Arbitrary speeds may not be recognized;
+typically -B300, -B1200, -B2400, -B4800, and -B9600
+are the only ones that work correctly.
+The default speed is -B9600.
+The final
+.I 00
+may be omitted.
+.PP
+.B Uutty
+sends a login prompt whenever it receives a single CR of LF character as input.
+It then expects a login id,
+which may be terminated by a new-line or carriage-return character.
+Either will cause
+.B uutty
+to examine the preceding characters for acceptability.
+The rules are:
+Only printable ASCII characters are accepted,
+and of those, most punctuation is rejected.
+In particular, any input containing a colon (:)
+is assumed to be a prompt from another login process,
+and causes
+.B uutty
+to become very uncommunicative.
+White space (blanks and tabs) are unacceptable,
+as are any ASCII control characters
+(those below hex 20).
+.PP
+Note that the initial CR or LF must be 'alone',
+ining that they must not be followed too soon by
+any other characters.
+If
+.B uutty
+finds junk in the input buffer after a CR or LF,
+the entire chunk of input is discarded.
+This is done to try to avoid getting into
+discussions with intelligent modems.
+.PP
+When acceptable input is received,
+a password prompt is sent,
+and the response (if any) is subjected to the same
+tests as for the login id.
+.PP
+If the login id and password agree with an entry in the
+password file /etc/passwd,
+the user's shell is initiated via execv(2),
+in the same process in which
+.B uutty
+was running.
+.PP
+If a ^C character (numeric 3) is received,
+.B uutty
+terminates.
+Also, this will usually result in the device not being open by any process,
+resulting in a "hangup" operation being performed by
+the device driver.
+See termio(8) for details.
+Normally, init(1M) will soon restart the process,
+and a new initialization string and login prompt will
+be sent to the device.
+.PP
+The
+.B \-i
+option is used to supply an initialization string
+to be sent when uutty determines that a connection
+exists to another system which should be terminated.
+The rest of the command-line argument should be the
+string, in which several types of notation may be
+used to produce non-printing characters.
+A complicated example is:
+.in +5
+.B "-i'\\\\33^T[j%7Fxx\\\\r'"
+.in -5
+The quotes are to prevent the shell from interpreting anything.
+The
+.B "\\\\33"
+is an octal value for an ASCII ESC character.
+The
+.B "^T"
+is a CTRL-T character, i.e., octal 24 or hex 14, ASCII DC4.
+The
+.B j
+represents itself.
+The
+.B "%7F"
+is a hex value for a DEL character.
+The
+.B xx
+represent themselves.
+The final
+.B "\\\\r"
+is a carriage-return character,
+as in the C language conventions.
+.PP
+A debug option is provided.  When
+.B getty
+is invoked with the
+.B \-d<n>
+option, various debugging messages are produced,
+depending on the value of the digit <n>.
+Such messages are always written to the "standard error" file.
+The default is
+.B \-d1 ,
+which produces output giving the times at which
+.B uutty
+is started, and when it initiates a shell for some user.
+The
+.B \-d0
+level suppresses all output except fatal error messages.
+Higher numbers produce successively more output.
+The
+.B \-d4
+level will generally give sufficient information to
+explain just what messages are seen by
+.B uutty
+and why logins are succeeding or failing.
+.PP
+If user logins are desired on a port used by uucp(1),
+it is a good idea to create lockfiles.
+Otherwise, a uucp demon (uucico) may attempt to use the port,
+and sheer insanity results.
+The
+.B \-l
+option causes a uucp lockfile to be created for the duration of a login,
+preventing uucp from attempting to use the port.
+On logout, the lockfile will be removed.
+Note:
+This implies that the shell is run as a subprocess to uutty,
+so ps(1) will show both processes running.
+Don't kill the uutty process;
+doing so will block further accesses to the port by
+uutty or uucp,
+until you delete the lockfile by hand.
+.PP
+If for some reason you wish to start shells in subprocesses,
+this may be done via the
+.B \-f
+option, which stands for "fork".
+The
+.B \-l
+option implies the
+.B \-f
+option.
+.SH FILES
+/etc/passwd
+/etc/utmp
+/usr/spool/uucp/LCK..<device> .
+Note: /etc/gettydefs is not referenced by
+.I uutty .
+.SH "SEE ALSO"
+cu(1),
+getty(8),
+init(8),
+inittab(5),
+ioctl(2),
+login(1),
+tty(7),
+uucico(8),
+uucp(1),
+uux(1)
+.SH "BUGS"
+Programs that don't know how to create uucp(1) lockfiles shouldn't
+be run on a port controlled by
+.B uutty .
+If you must, try surrounding them with a script that creates the
+lockfile.
+.PP
+The
+.B \-e
+option entails a high risk of feedback saturating either or both
+of the computers involved.
+.PP
+If a
+.B CR
+or
+.B LF
+is followed too quickly by further input,
+it will be silently discarded.
+This is frustrating to people that like to bang
+on the RETURN key.
+.PP
+There are all sorts of truly demented modems on the market;
+you may well have to twiddle with the code a bit to persuade
+.B uutty
+to ingore your modem's noise.
+.PP
+At debug levels -d2 and above,
+.B uutty
+is a Trojan Horse,
+writing login ids and passwords in the clear to the audit trail.

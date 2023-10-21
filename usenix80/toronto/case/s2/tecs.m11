@@ -1,0 +1,1269 @@
+	.title tecs
+	.ident	/23jan6/
+	.list	meb	;while hacking
+	.enabl	ama	; ditto
+
+	.mcall $param, $close, $break, $indir, $open
+	.mcall $exit, $gtty, $stty, $sig, $create
+	.mcall $write, $read, $link, $unlink, $stat
+	.mcall $pipe, $fork, $wait, $dup, $exec
+	.mcall $fstat, $seek, $getpid
+
+	$param		;define register symbols
+	base =	r5
+	meminc =	2048.
+
+	.globl $tyi, $typeb, $typer, $tyob, $tyo, $tyerr
+	.globl $tyoer, $crlfb, $crlf, $decin, $decout
+	.globl $prinit, $pri, $ppinit, $ppo, $clo, $backt
+	.globl $octout, $prompt
+
+	.globl intty, quitx, finish, decoux, ppol
+	.globl delit, caltst, getuc, stfil, setrnm, setfnm
+	.globl getmem, checkc, checkz, tecox, redo
+	.globl calsh, oldtty, tectty, texit, macsiz, getmac
+
+	.globl ttymax, ttybuf, gosw, ttybp, ttyep, datasp
+	.globl linflg, ffsw, rdptr, rdfil
+	.globl bakfil, tmpfil, pinmax, pinbuf, pincnt, pinptr
+	.globl oupfh, inpfh, outflg, inpflg, bakflg, state
+	.globl filstr, udsw, crsw, ttyend, exstat, cmodsw
+
+	.macro	hiseg	x
+	.psect	x	con, shr
+	.endm
+
+	.macro	loseg	x
+	.psect	x	con, prv
+	.endm
+
+	.macro	empty	x
+	.psect	x	con, prv, bss
+	.endm
+
+	.macro	syserr	type
+	.if ndf $.'type
+	$.'type =	0
+	se$cnt =	se$cnt + 1
+		.irp	x,<\se$cnt>
+		.macro	se$'x
+	$.'type = .
+		.asciz	\type\
+		.endm
+		.endm
+	.endc
+	jsr	pc,syserh
+	.word	$.'type
+	.endm
+
+	.iif ndf se$cnt,	se$cnt = 0
+
+	hiseg	prosct
+teco:				;teco entry point
+	$getpid			;##stt 5/3/76 get process id
+	mov	r0,myid
+	mov	#datasp,r5	;base
+	mov	r5,r4
+	add	#4096.,r4	;break pt
+	mov	r4,brkpt
+	$indir
+	.word	brksys
+	bcs	9$
+	clr	cmdin		;in channel
+	mov	#1,cmdou	;out channel
+	mov	#2,corsiz	;start with 1k core
+	clrb	tmpflg		;tmp outfile flag
+	jmp	tecox
+
+9$:	syserr	<core.unavailable>
+	$exit
+
+intty:				;init tty handling
+	clrb	crsw(base)	;map cr --> lf
+	mov	base,ttybp(base)
+	add	#ttybuf,ttybp(base)
+	mov	ttybp(base),ttyep(base)
+	mov	#linbuf,linptr	;tty out ptr
+	clrb	suptyo		;suppress tyo flag
+	mov	#ttymax,ttysiz
+	clr	r0
+	$fstat
+	.word	fstbuf
+	bcs	fserr
+	mov	fstbuf+4,r2
+	bic	#^c60000,r2
+	tst	r2		;check for pipes!
+	bne	11$		;not a plain file
+	clr	r0
+	$seek
+	.word	0
+	.word	1
+	bcc	2$
+	cmp	r0,#29.
+	beq	1$		;got a pipe!
+	br	2$
+
+11$:	cmp	r2,#20000
+	bne	2$
+	movb	fstbuf+13.,r2
+	beq	1$
+	cmpb	#4,r2 ; search for subdevice 4 (Beehive)
+	beq	1$
+2$:	mov	#1,ttysiz
+	incb	suptyo
+
+inttyx = .
+1$:	jsr	pc,settec	;save old ttymode and set 'teco'
+				; mode##stt-5/3/76
+	$sig
+	.word	1		;catch hangups
+	.word	hangup
+getsig:	$sig
+	.word	2		;catch ^c's
+	.word	ctlc
+	$sig
+	.word	3		;catch ^b's
+	.word	ctlb
+	rts	pc
+
+fserr:	syserr	<fstat>
+	br	inttyx
+ctlb:	mov	r0,-(sp)
+	$sig			;reset signal
+	.word	3
+	.word	ctlb
+	br	ctlcb
+
+ctlc:	mov	r0,-(sp)
+	$sig			;reset signal
+	.word	2
+	.word	ctlc
+ctlcb:	mov	base,r0
+	add	#ttybuf,r0
+	mov	r0,ttybp(base)
+	mov	r0,ttyep(base)
+	incb	gosw(base)	;^c flag
+;		flush i/o	gtty/stty not necessary##stt 5/3
+;	mov	cmdin,r0
+;	$gtty
+;	.word	ttymod
+;	$stty			;flush system i/o
+;	.word	ttymod
+	mov	#linbuf,linptr
+	mov	(sp)+,r0
+	cmp	(sp),#tyiwt
+	beq	1$
+	mov	#3,@ttybp(base)	;^c
+	inc	ttyep(base)
+	rti
+1$:	clrb	gosw(base)
+	jmp	redo
+
+hangup:	mov	#huper,ttybp(base)
+	mov	#hupnd,ttyep(base)
+	cmp	(sp),#tyiwt
+	bne	1$
+	mov	#1,r0
+1$:	rti
+
+oldtty:	mov	#2,r0
+	$stty
+	.word	ttysav
+	rts	pc
+
+settec:	mov	#2,r0	;set up teco mode##stt 5/3/76
+	$gtty
+	.word	ttysav
+	mov	ttysav+4,r0
+	bis	#100000,r0	; set "break on control char" mode
+;bic	#000020,r0	; clear "map CR to LF" mode
+	mov	r0,ttymod+4
+	mov	ttysav,ttymod
+	mov	ttysav+2,ttymod+2
+;  and drop through...
+tectty:	mov	#2,r0
+	$stty
+	.word	ttymod
+	rts	pc
+$prompt: mov	#'*,r0		;type a * prompt
+	tstb	suptyo
+	beq	$tyo
+	rts	pc
+
+				;type a char from r0
+$tyob:	incb	linflg		;buffered typeout
+$tyo:	jsr	pc,checkc	;immediate typeout
+	mov	r3,-(sp)
+	mov	r4,-(sp)
+	mov	linptr,r3
+	mov	#linend,r4
+	jsr	pc,typroc
+	jmp	tyfin
+
+$crlfb:	incb	linflg
+$crlf:	mov	#12,r0
+	br	$tyo
+
+;	.enabl	lsb
+
+$tyi:				;get char from tty to r0
+	cmp	ttybp(base),ttyep(base)
+	blo	20$
+	mov	base,r0
+	add	#ttybuf,r0
+	mov	r0,ttybp(base)
+	mov	r0,ttyep(base)
+	mov	r0,rdbuf
+	mov	ttysiz,rdcnt
+	mov	cmdin,r0
+	$indir
+	.word	rdsys
+tyiwt=.
+	bcs	25$
+	add	r0,ttyep(base)
+	tst	r0		;^d input?
+	beq	26$
+21$:	movb	r0,lstlng	;save read length
+	br	$tyi
+20$:	movb	@ttybp(base),r0
+	cmp r0,#40 ;is it a control character
+	blo	30$	;yes go process
+40$:	cmp	r0,#15
+	bne	24$
+	tstb	crsw(base)
+	bne	28$
+	mov	#12,r0
+24$:	cmp 	r0,#33	; check for escape
+	beq	27$	; yes, go print a $
+29$:	inc	ttybp(base)
+	rts	pc
+28$:	movb	#12,@ttybp(base)
+	rts	pc
+26$:	tstb	lstlng		;was ^d last input also?
+	bne	21$
+	mov	#12,r0
+	jsr	pc,$tyo		;output a <lf>
+	jmp	quitx		; and die
+25$:	syserr	<tty.read>
+	jmp	redo
+
+27$:	mov	#44,r0	;insert a $
+	jsr	pc,$tyo ;print it
+	mov	#33,r0	;replace the esc
+	jmp	29$	; go back to the old flow
+30$:	mov	r0,savr	;save the character
+	cmp	r0,#33	;is it an escape?
+	beq	40$	;yes, do nothing
+	cmp	r0,#12	;is it a <lf>?
+	beq	33$	;yes, print it
+	cmp	r0,#15	;is it a <cr>?
+	beq	32$	;yes go print it and a <lf>
+	mov	#136,r0 ;bring in and ^
+	jsr	pc,$tyo ; go print it
+	mov	savr,r0 ;restore the control character
+	add	#100,r0 ;map it into the real alphabet
+	jsr	pc,$tyo ;print it
+	mov	savr,r0 ;restore the control character
+	jmp	40$	;return to the flow
+32$:	mov	#12,r0	;load the <lf>
+33$:	jsr	pc,$tyo ;print the <lf>
+	mov	savr,r0	;replace the character
+	jmp	40$	;return to main flow
+		;type a string delimited by r1 and r2
+		;destroys r0
+		;return with r1,r2 pting to next byte after string
+$typeb:	incb	linflg		;buffered output
+$typer:	mov	r3,-(sp)	;immediate output
+	mov	r4,-(sp)
+	mov	linptr,r3
+	mov	#linend,r4
+	br	2$
+1$:	movb	(r1)+,r0
+	jsr	pc,typroc
+2$:	tstb	gosw(base)
+	bne	tyhalt
+	cmp	r1,r2
+	blo	1$
+tyfin:	mov	r3,linptr
+	mov	(sp)+,r4
+	mov	(sp)+,r3
+	tstb	linflg
+	bne	5$
+	jsr	pc,tyfl
+5$:	clrb	linflg
+	rts	pc
+tyhalt:	mov	(sp)+,r4
+	mov	(sp)+,r3
+	jmp	checkz
+
+tyfl:		;flush tty out buffer
+	mov	r1,-(sp)
+	mov	#linbuf,r1
+	mov	r1,wrtbuf
+	mov	linptr,r0
+	mov	r1,linptr
+	sub	r1,r0
+	ble	5$
+	mov	r0,wrtcnt
+	mov	cmdou,r0
+	$indir
+	.word	wrtsys
+;	bcs	9$
+	bcc	5$
+	cmp	r0,#4		;is it ^c interrupt??
+	bne	9$		;no, go bitch
+5$:	mov	(sp)+,r1
+	rts	pc
+9$:	syserr	<type.write>
+	jmp	redo
+		;diagnostic typeout routines:
+$tyerr:	jsr	pc,tyfl
+	mov	#2,cmdou
+	jsr	pc,$typer
+	mov	#1,cmdou
+	rts	pc
+
+$tyoer:	mov	r0,-(sp)
+	jsr	pc,tyfl
+	mov	(sp)+,r0
+	mov	#2,cmdou
+	jsr	pc,$tyo
+	mov	#1,cmdou
+	rts	pc
+		;typroc: char processor
+		;takes char in r0, puts appropriate symbol in
+		;out buffer (r3). outputs when buffer full (r3=r4).
+
+typcol:	cmp	r0,#' 		;need substitution?
+	bgt	1$
+	mov	r1,-(sp)
+	mov	#4,-(sp)
+	asl	r0
+	asl	r0
+	add	#ascnam,r0
+	mov	r0,r1
+	mov	#'<,r0
+	jsr	pc,nospec
+2$:	movb	(r1)+,r0
+	beq	3$
+	jsr	pc,nospec
+	dec	(sp)
+	bgt	2$
+3$:	tst	(sp)+
+	mov	(sp)+,r1
+	mov	#'>,r0
+	br	nospec
+1$:	cmp	r0,#101		;upper case?
+	blt	nospec
+	cmp	r0,#101+26.
+	bge	nospec
+	mov	r0,-(sp)
+	mov	#'\,r0
+	jsr	pc,nospec
+	mov	(sp)+,r0
+	br	nospec
+
+typroc:	tstb	cmodsw(base)	;:t??
+	 bne	typcol
+	cmp	r0,#214
+	beq	2$
+	cmp	r0,#40
+	bhis	10$
+	tst	r0
+	beq	tydone
+	cmp	r0,#33
+	bne	1$
+	mov	#'$,r0
+	br	10$
+2$:	mov	#14,r0
+	br	10$
+1$:	tstb	ffsw(base)
+	beq	3$
+	cmp	r0,#14
+	beq	10$
+3$:	cmp	r0,#12
+	beq	10$
+	cmp	r0,#15
+	beq	10$
+	cmp	r0,#11
+	beq	10$
+	movb	#'^,(r3)+
+	add	#100,r0
+	jsr	pc,tysiz
+10$:
+nospec:	movb	r0,(r3)+
+tysiz:	cmp	r3,r4
+	bhis	tybufr
+tydone:	rts	pc
+tybufr:	mov	r0,-(sp)
+	mov	#linbuf,r3
+	mov	r3,wrtbuf
+	mov	#linsiz,wrtcnt
+	mov	cmdou,r0
+	$indir
+	.word	wrtsys
+;	bcs	9$
+	bcc	5$
+	cmp	r0,#4
+	bne	9$		;branch only if not ^c interrupt
+5$:	mov	(sp)+,r0
+	rts	pc
+9$:	mov	#1,cmdou
+	tst	(sp)+
+	mov	r3,linptr
+	mov	(sp)+,r4
+	mov	(sp)+,r3
+	syserr	<type.write>
+	jmp	redo
+quitx:				;give up and die
+	movb	#-1,exstat(base)
+	tstb	outflg(base)
+	beq	1$
+	mov	oupfh(base),r0
+	$close
+1$:	tstb	tmpflg
+	beq	finish
+	mov	base,r0
+	add	#tmpfil,r0
+	mov	r0,unlsys+2
+	$indir
+	.word	unlsys
+finish:	jsr	pc,oldtty	;##stt reset ttymode
+texit:	movb	exstat(base),r0
+	$exit
+;decimal convert
+$decin:	mov	r3,-(sp)
+	clr	r3
+1$:	movb	(r1)+,r0	;next char
+	cmp	r0,#'0
+	blo	2$
+	cmp	r0,#'9
+	bhi	2$
+	mul	#10.,r3
+	sub	#'0,r0
+	add	r0,r3
+	br	1$
+2$:	mov	r3,r0
+	mov	(sp)+,r3
+	dec	r1		;adjust
+	rts	pc
+
+decoux:	mov	r1,r2
+	movb	#1,state+1(base)
+2$:	cmp	r0,#10.
+	blo	1$
+	incb	state+1(base)
+	mov	r0,r1
+	clr	r0
+	div	#10.,r0
+	mov	(sp),-(sp)
+	add	#60,r1
+	mov	r1,2(sp)
+	br	2$
+1$:	mov	r2,r1
+	mov	(sp)+,r2
+	add	#60,r0
+	mov	r0,-(sp)
+	movb	state+1(base),-(sp)
+	clrb	state+1(base)
+	jmp	@r2
+$octout: mov	#10,digbas
+	br	odskp
+
+$decout: mov	#10.,digbas
+odskp:	mov	r1,-(sp)
+	mov	r0,-(sp)
+	tst	r0
+	bge	1$
+	mov	#'-,r0
+	jsr	pc,$tyob
+	mov	(sp),r0
+	neg	r0
+1$:	jsr	pc,dnc
+	mov	(sp)+,r0
+	mov	(sp)+,r1
+	rts	pc
+
+dnc:	mov	r0,r1
+	clr	r0
+	div	digbas,r0
+	mov	r1,-(sp)
+	tst	r0
+	beq	1$
+	jsr	pc,dnc
+1$:	mov	(sp)+,r0
+	add	#'0,r0
+	jsr	pc,$tyob
+	rts	pc
+$prinit:		;init file input
+	jsr	pc,cloi		;close any previous input
+	mov	rdptr(base),opnbuf
+	clr	opnmod
+	clr	pincnt(base)	;reset input buf
+	$indir
+	.word	opnsys
+	bcs	2$
+	mov	r0,inpfh(base)
+	incb	inpflg(base)
+	rts	pc
+2$:	mov	rdptr(base),r1
+	jsr	pc,namerr
+	syserr	<open>
+	jmp	redo
+
+$pri:			;char from input file to r0
+	dec	pincnt(base)
+	bge	1$
+	mov	base,r0
+	add	#pinbuf,r0
+	mov	r0,pinptr(base)
+	mov	r0,rdbuf
+	mov	#pinmax,rdcnt
+	mov	inpfh(base),r0
+	$indir
+	.word	rdsys
+	bcs	10$
+	mov	r0,pincnt(base)
+	bne	$pri
+	jsr	pc,cloi
+	sec
+	rts	pc
+1$:	movb	@pinptr(base),r0
+	inc	pinptr(base)
+	clc
+	rts	pc
+10$:	syserr	<read>
+	jmp	redo
+$ppinit:			;init file output
+	mov	r1,-(sp)
+	mov	base,r1
+	add	#filstr,r1
+	mov	r1,r2
+	jsr	pc,getnam
+	mov	begadr,r2
+	mov	base,r0
+	add	#tmpfil,r0
+	mov	r0,crebuf
+	mov	r0,stanam
+	sub	r1,r2
+	beq	2$
+1$:	movb	(r1)+,(r0)+
+	sob	r2,1$
+2$:	.irpc	x,<teco>
+	movb	#''x!40,(r0)+
+	.endm
+	jsr	pc,uniq		;unique tmp name
+	.irpc	x,<.tmp>
+	movb	#''x!40,(r0)+
+	.endm
+	clrb	(r0)
+	$indir
+	.word	stacal
+	bcc	9$
+	$indir
+	.word	cresys
+	bcs	4$
+	incb	tmpflg
+	mov	r0,oupfh(base)
+	incb	outflg(base)
+	mov	(sp)+,r1
+	rts	pc
+4$:	syserr	<create>
+	jmp	redo
+
+9$:	syserr	<tmp.filename.used>
+	jmp	redo
+
+
+uniq:			;addr for unique number in r0
+	mov	r0,r2
+	mov	myid,r0
+1$:	mov	r0,r1
+	clr	r0
+	div	#10.,r0
+	add	#'0,r1
+	movb	r1,(r2)+
+	tst	r0
+	bne	1$
+	mov	r2,r0
+	rts	pc
+ppol:			;output text delimited by r1,r2 to file
+	sub	r1,r2
+	mov	r1,wrtbuf
+	mov	r2,wrtcnt
+	mov	oupfh(base),r0
+	$indir
+	.word	wrtsys
+	bcs	5$
+	rts	pc
+5$:	syserr	<write>
+	jmp	redo
+
+$ppo:			;output char in r0 to file
+	mov	r0,@linptr
+	mov	linptr,wrtbuf
+	mov	#1,wrtcnt
+	mov	oupfh(base),r0
+	$indir
+	.word	wrtsys
+	bcs	5$
+	rts	pc
+5$:	syserr	<write>
+	jmp	redo
+
+cloi:	tstb	inpflg(base)
+	beq	1$
+	clrb	inpflg(base)
+	mov	inpfh(base),r0
+	$close
+	bcs	5$
+1$:	rts	pc
+5$:	syserr	<input.close>
+	jmp	redo
+$clo:			;close output file and rename it
+cloo:	tstb	outflg(base)
+	beq	lnout
+	tstb	bakflg(base)
+	beq	lnfil
+	mov	r1,-(sp)
+	mov	base,r2
+	mov	base,r1
+	add	#filstr,r2
+	add	#bakfil,r1
+	mov	r1,unlsys+2
+	mov	r1,lnksys+4
+	mov	r2,lnksys+2
+	jsr	pc,getnam
+	mov	begadr,r0
+	mov	ptadr,r2
+	sub	r0,r2
+	cmp	r2,#10.
+	ble	1$
+	mov	#10.,r2
+1$:	add	r0,r2
+	mov	lnksys+2,r0
+	sub	r0,r2
+	beq	3$
+2$:	movb	(r0)+,(r1)+
+	sob	r2,2$
+3$:	.irpc	x,<.bak>
+	movb	#''x!40,(r1)+
+	.endm
+	clrb	(r1)+
+	mov	(sp)+,r1
+	tstb	udsw(base)
+	beq	4$
+	mov	unlsys+2,crebuf
+	mov	lnksys+2,opnbuf
+	mov	#2,opnmod	;##stt 5/3 check permission
+	$indir			; by opening for update
+	.word	opnsys
+	bcs	upderr		;trouble with update
+	$close			;## now close again
+	clr	opnmod
+	jsr	pc,transf
+	br	baker		;error return
+	br	lnfil		;real return
+4$:	$indir			;unlink backup name
+	.word	unlsys
+	clc			;backup may not exist yet
+	$indir
+	.word	lnksys		;link bak to old file
+	bcs	baker		;someone's kidding
+
+lnfil:	clrb	bakflg(base)	;##stt 5/3 clear after successful
+	clrb	outflg(base)	;##stt 5/3 clear out flg here and close file
+	mov	oupfh(base),r0
+	$close
+	bcs	cloer
+	mov	base,r0
+	add	#filstr,r0
+	mov	base,r2
+	add	#tmpfil,r2
+	tstb	udsw(base)
+	beq	2$
+	mov	r0,crebuf
+	mov	r2,opnbuf
+	clr	opnmod
+	jsr	pc,transf
+	br	lnker		;error return
+	br	3$		;safe return
+2$:	mov	r0,unlsys+2
+	mov	r0,lnksys+4
+	$indir			;free up file name
+	.word	unlsys
+	clc
+	mov	r2,lnksys+2
+	$indir			;rename tmp file
+	.word	lnksys
+	bcs	lnker
+3$:	mov	r2,unlsys+2
+	$indir			;forget temp name
+	.word	unlsys
+	clc
+lnout:	rts	pc
+
+cloer:	syserr	<close>
+	jmp	redo
+
+lnker:	mov	r2,r1
+	jsr	pc,namerr
+	syserr	<rename>
+	jmp	redo
+
+upderr:	mov	opnbuf,r1	;trouble with '-u' ##stt 5/3
+	jsr	pc,namerr
+	syserr	<update>
+	clrb	udsw(base)
+	jmp	redo
+
+baker:	clc
+	mov	r1,-(sp)
+	mov	lnksys+2,r1
+	jsr	pc,namerr
+	syserr	<no.backup.made>
+	mov	(sp)+,r1
+	br	lnfil
+
+transf:	$indir
+	.word	cresys
+	bcs	9$
+	mov	r1,-(sp)
+	mov	r0,r1
+	$indir
+	.word	opnsys
+	bcs	10$
+	mov	r2,-(sp)
+	mov	r0,r2
+	mov	#tfbuf,rdbuf
+	mov	#tfsiz,rdcnt
+	mov	#tfbuf,wrtbuf
+1$:	mov	r2,r0
+	$indir
+	.word	rdsys
+	bcs	11$
+	mov	r0,wrtcnt
+	beq	2$
+	mov	r1,r0
+	$indir
+	.word	wrtsys
+	bcs	12$
+	br	1$
+2$:	mov	r1,r0
+	$close
+	bcs	cloer
+	mov	r2,r0
+	$close
+	bcs	cloer
+	mov	(sp)+,r2
+	mov	(sp)+,r1
+	add	#2,(sp)
+	rts	pc
+
+9$:	syserr	<create>
+	br	13$
+11$:	syserr	<read>
+	br	13$
+12$:	syserr	<write>
+13$:	jmp	redo
+
+10$:	mov	(sp)+,r1
+	rts	pc
+$backt:			;edit with backup
+	mov	base,rdptr(base)
+	add	#filstr,rdptr(base)	;in and out files are same
+	jsr	pc,$prinit
+	jsr	pc,$ppinit
+	incb	bakflg(base)
+	rts	pc
+
+delit:				;delete a file
+	mov	r0,-(sp)
+	mov	base,unlsys+2
+	add	#filstr,unlsys+2
+	$indir			;unlink the name
+	.word unlsys
+	bcs	1$
+	mov	(sp)+,r0
+	rts	pc
+1$:	mov	unlsys+2,r1
+	jsr	pc,namerr
+	syserr	<delete>
+	jmp	redo
+
+;by what name was teco invoked?
+;tst zero if "make"
+caltst:	mov	4(sp),r2
+	jsr	pc,getnam
+	movb	@begadr,r2
+	cmp	r2,#155		;m
+	rts	pc
+
+getuc:	cmpb	r0,#140
+	blos	1$
+	cmpb	r0,#172
+	bhi	1$
+	sub	#40,r0
+1$:	rts	pc
+stfil:		;get file name, if any
+	clrb	udsw(base)
+	cmp	2(sp),#2
+	blt	2$
+	mov	6(sp),r1
+	cmpb	(r1),#'-
+	bne	3$
+	inc	r1
+	cmpb	(r1),#'u
+	beq	7$
+	cmpb	(r1),#'u - 40
+	bne	5$
+7$:	incb	udsw(base)
+	cmp	2(sp),#3
+	blt	2$
+	mov	8.(sp),r1
+	rts	pc
+5$:	mov	#50.,r0
+	syserr	<no.such.switch>
+2$:	clr	r0
+3$:	rts	pc
+1$:	clr	r1
+	rts	pc
+
+setrnm:			;get name of read file
+	mov	r1,-(sp)
+	mov	base,r0
+	add	#rdfil,r0
+	mov	r0,rdptr(base)
+	mov	#50.,r2
+1$:	cmpb	(r1),#33
+	beq	2$
+	movb	(r1)+,(r0)+
+	sob	r2,1$
+2$:	clrb	(r0)+
+	mov	(sp)+,r0
+	rts	pc
+
+setfnm:			;get name of write file
+	tstb	outflg(base)
+	bne	6$
+	mov	r1,-(sp)
+	mov	base,r0
+	add	#filstr,r0
+	mov	r0,-(sp)
+	mov	#50.,r2
+1$:	cmpb	(r1),#33
+	beq	2$
+	movb	(r1)+,(r0)+
+	beq	3$
+	sob	r2,1$
+2$:	clrb	(r0)+
+3$:	mov	(sp),r2
+	jsr	pc,getnam
+	mov	zeradr,r2
+	mov	ptadr,r0
+	sub	r0,r2
+	cmp	r2,#4
+	bne	8$
+	inc	r0
+	cmpb	(r0)+,#'b
+	bne	8$
+	cmpb	(r0)+,#'a
+	bne	8$
+	cmpb	(r0)+,#'k
+	bne	8$
+	mov	base,r1
+	add	#filstr,r1
+	jsr	pc,namerr
+	mov	#50.,r0
+	syserr	<cannot.edit.backups>
+	jmp	redo
+
+8$:	mov	(sp)+,stanam
+	$indir
+	.word	stacal
+	bcs	18$
+	mov	fstbuf+4,r0
+	bic	#170000,r0
+	mov	r0,cremod
+	br	19$		;skip uid check ##stt-5/3/76
+;	trap	47.		;effective uid
+;	tst	r0
+;	beq	19$		;no check for god
+;	movb	fstbuf+8.,fstbuf+6	;build uid
+;	cmp	r0,fstbuf+6
+;	bne	12$
+;	bit	#200,cremod
+;	beq	9$		;no permission
+;	br	19$
+;12$:	tstb	udsw(base)	;update inode? (stt 11/3/75)
+;	beq	23$		;nope, only needs read permission (stt 11/3/75)
+;	bit	#2,cremod	;non-owner check
+;	beq	9$
+;	br	19$
+;23$:	bit	#6,cremod	;check for read or write non-owner(stt 11/3/75)
+;	beq	9$		;no cigar (stt 11/3/75)
+;	br	19$ 		;(stt 11/3/75)
+
+18$:	mov	#644,cremod	;std. unix perm. ##stt-5/3/76
+19$:	mov	(sp)+,r0
+	rts	pc
+
+6$:	mov	#50.,r0
+	syserr	<existing.output.file>
+	jmp	redo
+
+;9$:	mov	#1,r0
+;	syserr	<create>
+;	jmp	redo
+getmem:			;get more core
+	add	#meminc,r0
+	bcs	5$
+	mov	r0,brkpt
+	$indir
+	.word	brksys
+	bcs	5$
+	inc	corsiz
+	movb	cmodsw(base),-(sp)	;##psl disable :t during core msg
+	clrb	cmodsw(base)		;##psl 4/76
+	mov	#'[,r0
+	jsr	pc,$tyob
+	mov	corsiz,r0
+	jsr	pc,$decout
+	mov	#mm2,r1
+	mov	#mm3,r2
+	jsr	pc,$typer
+	movb	(sp)+,cmodsw(base)	;##psl 4/76
+	mov	#meminc,r0
+	rts	pc
+5$:	clr	r0
+	rts	pc
+
+getnam:			;r2/ adr of file str; uses r0; saves r1
+	mov	r2,begadr
+	clr	r0
+1$:	tstb	(r2)
+	beq	3$
+	cmpb	(r2),#'.
+	beq	2$
+	cmpb	(r2)+,#'/
+	bne	1$
+	mov	r2,begadr
+	clr	r0
+	br	1$
+2$:	mov	r2,ptadr
+	inc	r0
+	inc	r2
+	br	1$
+3$:	tst	r0
+	bne	4$
+	mov	r2,ptadr
+4$:	mov	r2,zeradr
+	rts	pc
+;macsiz--size of a file containing a teco macro
+;filename delimited by r1->r0
+
+macsiz:	movb	(r0),-(sp)
+	clrb	(r0)
+	mov	r0,-(sp)
+	mov	r1,stanam
+	$indir
+	.word	stacal
+	mov	(sp)+,r2
+	movb	(sp)+,(r2)
+	bcs	9$
+	tstb	fstbuf+9.
+	bne	10$
+	mov	fstbuf+10.,r0
+	rts	pc
+
+9$:	syserr	<macro>
+	jmp	redo
+
+10$:	mov	#50.,r0
+	syserr	<macro.too.big>
+	jmp	redo
+
+
+;getmac--loads a macro into a q-reg
+;filename delimited by 4(sp)->2(sp)
+;q-reg address in r2
+
+getmac:	clr	opnmod
+	mov	4(sp),opnbuf
+	mov	2(sp),r0
+	mov	r1,-(sp)
+	movb	@r0,-(sp)
+	clrb	@r0
+	$indir
+	.word	opnsys
+	mov	8.(sp),r1
+	movb	(sp)+,@r1
+	bcs	9$
+	mov	r2,r1
+	tst	(r1)+
+	mov	(r1)+,rdcnt
+	mov	r1,rdbuf
+	mov	r0,-(sp)
+	$indir
+	.word	rdsys
+	bcs	11$
+	mov	r0,r1
+	mov	(sp)+,r0
+	$close
+	mov	r1,r0
+	mov	(sp)+,r1
+	cmp	r0,2(r2)
+	bne	13$
+	rts	pc
+
+11$:	mov	r0,r1
+	mov	(sp)+,r0
+	$close
+	mov	r1,r0
+9$:	mov	(sp)+,r1
+	syserr	<macro>
+	jmp	redo
+
+13$:	clr	r0
+	syserr	<qsize>
+	rts	pc
+;system error handler
+;dispatches on error code in r0
+syserh:	mov	r2,-(sp)
+	mov	r1,-(sp)
+	mov	r0,-(sp)
+	jsr	pc, tectty
+	clc
+	jsr	pc,tyfl
+	mov	#2,cmdou
+	mov	#linbuf,r2
+	movb	#'?,(r2)+
+	mov	@6(sp),r1
+1$:	movb	(r1)+,(r2)+
+	bne	1$
+	dec	r2
+	mov	(sp)+,r0
+	ble	6$
+	cmp	r0,#29.
+	bhi	6$
+	movb	#':,(r2)+
+	movb	#' ,(r2)+
+	asl	r0
+	mov	erhdsp(r0),r1
+2$:	movb	(r1)+,(r2)+
+	bne	2$
+	dec	r2
+6$:	movb	#12,(r2)+
+	mov	r2,linptr
+	jsr	pc,tyfl
+	mov	#1,cmdou
+	mov	(sp)+,r1
+	mov	(sp)+,r2
+	add	#2,(sp)
+	rts	pc
+
+namerr:			;type a file name on diagnostics channel
+	mov	r0,-(sp)
+	jsr	pc,tyfl
+	mov	#2,cmdou
+	mov	#linbuf,r0
+	movb	#'?,(r0)+
+1$:	movb	(r1)+,(r0)+
+	bne	1$
+	movb	#15,-1(r0)
+	movb	#12,(r0)+
+	mov	r0,linptr
+	jsr	pc,tyfl
+	mov	#1,cmdou
+	mov	(sp)+,r0
+	rts	pc
+calsh:	mov	r0,-(sp)
+	$sig
+	.word	2
+	.word	1
+	$sig			;ignore signals meant for shell
+	.word	3
+	.word	1
+	jsr	pc,oldtty	;##stt-5/3/76 save/restore ttymode
+	mov	(sp)+,r0
+	cmp	r0,r1		;null arg?
+	beq	15$		;yup - call real shell
+	movb	(r1),-(sp)
+	clrb	(r1)		;use "-c" flag in shell ##stt-5/3/76
+	mov	r0,msharg+4	;##stt
+	$fork
+	br	mshell
+	bcs	9$
+	movb	(sp)+,(r1)
+	$wait
+	br	16$		;##stt-5/3/76 restore tty mode
+9$:	syserr	<fork.failed>
+	jmp	getsig
+
+15$:	$fork
+	br	rshell
+	bcs	9$
+	$wait
+16$:	jsr	pc,settec	;##stt 5/3 reset ttysav, ttymode
+	jsr	pc,getsig
+	jmp	$crlfb
+
+mshell:
+	$sig
+	.word 2
+	.word 0
+	$sig
+	.word 3
+	.word 0
+	$exec
+	.word	mshnam
+	.word	msharg
+	syserr	<mshell.not.found>
+	$exit
+
+rshell:	$exec
+	.word	rshnam
+	.word	rsharg
+	syserr	<rshell.not.found>
+	$exit
+;error message table
+erhdsp:	.word	eer
+	.word	eperm
+	.word	enoent
+	.word	eer
+	.word	eer
+	.word	eio
+	.word	enxio
+	.word	eer
+	.word	eer
+	.word	ebadf
+	.word	eer
+	.word	eer
+	.word	enomem
+	.word	eperm
+	.word	eer
+	.word	eer
+	.word	eer
+	.word	eexist
+	.word	eer
+	.word	enodev
+	.word	eer
+	.word	eisdir
+	.word	eer
+	.word	enfil
+	.word	eer
+	.word	eer
+	.word	eer
+	.word	efbig
+	.word	enosp
+	.word	eer
+	.nlist	bex
+mm2:	.ascii	\k core]\<12>
+mm3:
+eer:	.asciz	\error\
+eperm:	.asciz	\access permission denied\
+enoent:	.asciz	\no such file\
+eio:	.asciz	\i/o error\
+enxio:	.asciz	\no i/o device\
+ebadf:	.asciz	\file desc error\
+enomem:	.asciz	\no more core\
+eexist:	.asciz	\file already exists\
+enodev:	.asciz	\improper device\
+eisdir:	.asciz	\attempt to write on a directory\
+enfil:	.asciz	\file table overflow\
+efbig:	.asciz	\file too large\
+enosp:	.asciz	\no space left on device\
+mshnam:	.asciz	%/bin/sh%
+mshflg:	.asciz	/-c/
+rshnam:	.asciz	%/bin/sh%
+minus:	.asciz	/-/	;##stt 5/3/76 name for rsh
+huper:	.asciz	/  /<33><33><7><7><27>/esb$ex$$/<12>//<27>/esb/<33>/ex/<33><33>
+hupnd=.
+	.even
+	.list	bex
+rsharg:	.word	minus		;##stt '-' name means ignore intrpts
+	.word	0
+	hiseg	errsct
+	.nlist	bex
+
+	e$xcnt = 0
+	.rept	se$cnt
+	e$xcnt = e$xcnt + 1
+	.irp	x,<\e$xcnt>
+	se$'x
+	.endm
+	.endm
+	.list bex
+
+	loseg	datsct
+
+myid:	.blkw
+cmdin:	.blkw
+cmdou:	.blkw
+corsiz:	.blkw
+ttysiz:	.blkw
+digbas:	.blkw
+suptyo:	.blkb
+lstlng:	.blkb
+	.even
+
+	linsiz=	^d128
+linbuf:	.blkb	linsiz
+linend:
+linptr:	.blkw
+linflg:	.blkb
+tmpflg:	.blkb
+	tfsiz =	^d512
+tfbuf:	.blkb	tfsiz
+tfend:
+begadr:	.blkw
+ptadr:	.blkw
+zeradr:	.blkw
+fstbuf:	.blkb	^d36
+ttymod:	.blkw	3
+ttysav:	.blkw	3
+
+msharg:	.word	mshnam		;##stt-5/3/76 moved to impure area
+	.word	mshflg
+	.word	0		;##stt 5/3/76 room for arg to '-c'
+	.word	0
+
+brksys:	$break
+brkpt:	.blkw
+wrtsys:	$write
+wrtbuf:	.blkw
+wrtcnt:	.blkw
+opnsys:	$open
+opnbuf:	.blkw
+opnmod:	.blkw
+cresys:	$creat
+crebuf:	.blkw
+cremod:	.blkw
+rdsys:	$read
+rdbuf:	.blkw
+rdcnt:	.blkw
+unlsys:	$unlink
+	.blkw
+lnksys:	$link
+	.blkw	2
+stacal:	$stat
+stanam:	.blkw
+	.word	fstbuf
+
+.macro	anam	a,b,c,d,e,f,g,h
+	.byte	0,0,0,0
+$$x=.
+	.blkb	-4
+	.ascii	%'a'%
+	. = $$x
+.iif nb <b>,	anam	b,c,d,e,f,g,h
+.endm	anam
+
+	.nlist bex
+ascnam:	anam	nul,soh,stx,etx,eot,enq,ack,bel ;for :t command
+	anam	bs,ht,lf,vt,ff,cr,so,si
+	anam	dle,dc1,dc2,dc3,dc4,nak,syn,etb
+	anam	can,em,sub,esc,fs,gs,rs,us
+	anam	sp
+savr:	.blkw
+	.end	teco

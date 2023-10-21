@@ -1,0 +1,1522 @@
+	include /v/wa1yyn/68lib.rom/maclib
+	global	pchar,gchar
+	global	_abh,_abl,_abx,_abt,_abt2,_abt3,_abt4,_abt5
+	global	_awt,_awt2,_awt3
+*
+*	6800 Symbolic Debugger
+*
+*	Peter D. Hallenbeck
+*
+*	Copyright (c) Jan, 1979
+*
+************************************************
+*
+*	R a m   V a r i a b l e s
+*
+CONMOD	equ	1	; 0 = Not continuous program,
+*			;(such as a rom with seperat
+*			;ram, stack, and symbol table
+*			;address) Note that the
+*			;symbols '_STACK', '_STABLE'
+*			;and '_RAMSTART' must be set
+*			;to the correct addresses.
+*			; 1 = continuous in memory
+*			;i.e. debugger to be down
+*			;loaded into one contiguous
+*			;piece of RAM.  Note that
+*			;'ACTSTART' MUST be defined as
+*			;the Final (after re-location)
+*			;starting address.
+ACTSTART	equ	2c00
+	if	CONMOD
+	jmp	main
+	org	ACTSTART	;must set up '_xxx' vars
+_FSTABLE	equ	$ - 2	;symbol table at bottom
+	ds	2	;gard space
+	ds	80
+_FSTACK	ds	1	;stack space
+	else
+_STACK	equ	0e1e4		;default stack start
+_STABLE	equ	3fff		;symbol table start
+_RAMSTART	equ	0e100	;FWA Ram
+	endif
+_ACIA	equ	0ee08	;Acia location
+_FILL	equ	0	;# of fill chars needed
+_FILLCHAR	equ  1	;Fill charactor
+	if	CONMOD
+	ds	1	;next memory is FWA ram
+	else
+	org	_RAMSTART	;start of ram
+	endif
+_pupf	ds	1	;Powerup Flag (5a = powered up)
+*	Rom library working variables		*
+_abh	ds	1
+_abl	ds	1
+_abx	ds	1
+_abt	ds	1
+_abt2	ds	1
+_abt3	ds	1
+_abt4	ds	1
+_abt5	ds	1
+_awt	ds	2
+_awt2	ds	2
+_awt3	ds	2
+*
+_symb	ds	1	;True if symbolic mode
+_radix	ds	1	;Current Radix
+_cloc	ds	2	;Current Open Location
+_cloop	ds	1	;Current lenght of opcode
+_ctop	ds	1	;Current type of opcode:
+*			0 = Imidiate
+*			1 = Direct
+*			2 = Indexed
+*			3 = Extended
+*			4 = Inherant
+*			5 = Relative
+*			6 = Undefined Instruction
+_istring	ds	22	;Input string buffer
+_tsv	ds	2	;Target string value
+_stable	ds	2	;Start of Symbol Table
+_temp	ds	2	;Various working variables
+_temp1	ds	2
+_temp2	ds	2
+_argim	ds	1	;argument instruction mode
+_arg1i	ds	1	;instruction (opcode)
+_arg1if	ds	1	;flag for opcode (true = have opcode)
+_argib	ds	2	;base for opcode array
+_arg1	ds	2	;1st argument
+_arg1f	ds	1	;1st arg. flag (true = have one)
+_arg2	ds	2	;2nd argument
+_arg2f	ds	1	;2nd arg. flag
+_arg3	ds	2	;3rd argument
+_arg3f	ds	1	;3rd arg. flag
+_argtc	ds	1	;arg. terminator char
+_arg	ds	2	;arg. accumulator
+_argt	ds	2	;arg. accumulator _temp reg.
+_argfun	ds	1	;arg. function (0 = startup)
+_argpnt	ds	1	;decimal point flag
+_fill	ds	1	;# of fill chars
+_fillc	ds	1	;fill char count
+_dqbuff	ds	3	;" comand buffer
+_nalts	ds	1	;# of alt modes
+_altgdef	ds	2	;$g default adress
+_ADDSTKLN	equ	20	;# of address on stack
+_addcnt	ds	1	;address stack count
+_addstk	ds	2 * _ADDSTKLN	;'(' address stack
+_addpnt	ds	2		;addstk pointer
+*
+*	M a i n    P r o g r a m
+*
+*	FWA Rom starts here
+	if	CONMOD
+	ds	2	;gard space
+	org	$ - ACTSTART
+	else
+	org	0	;ROM section is relocatable
+	endif
+main	sei		;kill those interupts!
+	if	CONMOD
+	lds	#_FSTACK
+	else
+	lds	#_STACK
+	endif
+	ldx	#_ACIA
+	ldaa	#3
+	staa	0,x
+	ldaa	#9h	;7 + even + 1
+	staa	0,x	;for two stops, store 1
+main1	dex
+	bne	main1
+	jsr	pcrlf
+	ldab	#7
+	jsr	pchar	;all good things beep
+	ldab	#5a
+	cmpb	_pupf	;first reset ever ?
+	beq	bigl	;no.
+	stab	_pupf
+	if	CONMOD
+	ldx	#_FSTABLE
+	else
+	ldx	#_STABLE
+	endif
+	jsr	set_stable	;init _symbol table
+	ldab	#16	;base 16
+	stab	_radix
+	ldx	#100h
+	stx	_cloc
+	ldab	#1
+	stab	_cloop
+	ldab	#6
+	stab	_ctop
+	stab	_symb	;symbolic mode
+	ldab	#_FILL
+	stab	_fill
+	ldx	#_addstk
+	stx	_addpnt	;clear address stack
+	clr	_addcnt
+*
+bigls	jsr	pdspace
+bigl	jsr	getargs
+	ldx	#dlist
+	jsr	tsearch
+	bcs	bigl10
+unknown	ldab	#'?'
+	jsr	pchar
+	bra	bigls
+bigl10	ldx	glist-dlist,x
+	jmp	0,x
+*
+dlist	db	'/',0
+	db	'\r',0
+	db	'\n',0
+	db	'=',0
+	db	':',0
+	db	4,0
+	db	'?',0
+	db	'"',0
+	db	'!',0
+	db	033,0	;Alt-mode
+	db	12,0	;form-feed
+	db	' ',0
+	db	'(',0
+	db	')',0
+	dw	0	;end of list
+*
+glist	dw	comslash
+	dw	comret
+	dw	comnl
+	dw	comeq
+	dw	comcol
+	dw	comlog
+	dw	comque
+	dw	comdq
+	dw	comex
+	dw	comalt
+	dw	comff
+	dw	comspc
+	dw	comop
+	dw	comcp
+	dw	0
+*
+*	C o m m a n d    R o u t i n e s
+*
+comslash	tst	_arg1f
+	bne	comslash1
+	ldx	_cloc
+	stx	_arg1
+comslash1	ldx	_arg1
+	stx	_cloc
+	jsr	pdspace
+	jsr	dumpcl
+	jmp	bigl
+*
+comret	jsr	storeit
+	jsr	pcrlf
+	jsr	bigl
+*
+comnl	ldab	#'\r'
+	jsr	pchar
+comnl05	jsr	storeit
+	jsr	in_cloc
+comnl10	jsr	prcloc
+	jsr	dumpcl
+	jmp	bigl
+*
+comspc	jsr	pdspace
+	bra	comnl05
+*
+comeq	tst	_arg1if	;dump out in current base
+	beq	comeq20	;if no instruction
+	ldab	_arg1i
+	clra
+	jsr	abtox
+	jsr	printx
+	jsr	pspace
+	tst	_arg1f
+	bne	comeq10
+comeqd	jmp	bigls
+comeq10	ldx	_arg1
+comeq15	jsr	printx
+	bra	comeqd
+comeq20	tst	_arg1f
+	bne	comeq10	;if just data
+	ldx	_cloc
+	tst	_symb	;dump current loc
+	bne	symeq30
+	ldab	0,x
+	clra
+	jsr	abtox
+	bra	comeq15
+symeq30	ldab	0,x
+	clra
+	jsr	abtox
+	jsr	printx
+	jsr	pspace
+	ldx	_cloc
+	ldaa	_cloop
+	cmpa	#1
+	beq	comeqd
+	cmpa	#2
+	bne	comeq40
+	ldab	1,x
+	clra
+	jsr	abtox
+comeq35	bra	comeq15
+comeq40	ldx	1,x
+	bra	comeq35
+*
+comcol	ldx	#_istring	;':' is enter _symbol
+	jsr	gets		;command
+	ldx	_arg1
+	jsr	syment
+	jmp	bigl
+*
+comlog	ldx	0fffe
+	jmp	0,x
+*
+comque	tst	_arg1if	;print as ascii char
+	beq	comque20	;if no instruction
+	ldab	_arg1i
+	jsr	ascout
+	tst	_arg1f
+	bne	comque10
+comqued	jmp	bigls
+comque10	ldx	_arg1
+comque15	stx	_temp
+	ldab	_temp
+	beq	comque18
+	jsr	ascout
+comque18	ldab	_temp + 1
+	jsr	ascout
+	bra	comqued
+comque20	tst	_arg1f
+	bne	comque10	;if just data
+	ldx	_cloc
+	tst	_symb	;dump current loc
+	bne	symque30
+	ldab	0,x
+	jsr	ascout
+	bra	comqued
+symque30	ldab	0,x
+	jsr	ascout
+	ldx	_cloc
+	ldaa	_cloop
+	cmpa	#1
+	beq	comqued
+	cmpa	#2
+	bne	comque40
+	ldab	1,x
+	clra
+	jsr	abtox
+comque35	bra	comque15
+comque40	ldx	1,x
+	bra	comque35
+*
+comdq	ldaa	_arg1 + 1
+	staa	_dqbuff
+	clr	_dqbuff + 1
+	clr	_dqbuff + 2
+	ldx	_cloc
+	jsr	pshx
+	ldx	#_dqbuff
+	stx	_cloc
+	jsr	dumpcl
+	jsr	pulx
+	ldab	#'"'
+	jsr	pchar
+	jmp	bigls
+*
+comex	ldx	_cloc
+	stx	_tsv
+	jsr	puttsv
+	ldab	#'\\'
+	jsr	pchar
+	jsr	pspace
+	ldaa	#8
+	staa	_dqbuff
+comex10	jsr	pspace
+	ldab	0,x
+	inx
+	jsr	pbyte
+	dec	_dqbuff
+	bne	comex10
+	ldx	_cloc
+	ldaa	#8
+	staa	_dqbuff
+comex20	jsr	pspace
+	ldab	0,x
+	inx
+	jsr	ascout
+	dec	_dqbuff
+	bne	comex20
+	stx	_cloc
+	ldaa	#1
+	staa	_cloop
+	ldaa	#6
+	staa	_ctop
+	jsr	pcrlf
+comex30	jmp	bigl
+*
+comff	jsr	storeit
+	ldab	#13	;ouput 16 line feeds
+	jsr	pchar
+	ldaa	#15
+	ldab	#10
+comff10	jsr	pchar
+	deca
+	bge	comff10
+	bra	comex30
+*
+comop	jsr	storeit	;go to branch or jump address
+	ldab	_addcnt
+	cmpb	#_ADDSTKLN
+	bne	comop10
+	ldx	#comop07
+	jsr	prints
+comop05	jmp	unknown
+comop07	ds	" Too many nested addresses\0"
+comop10	ldab	_ctop
+	cmpb	#3	;imidiate
+	beq	comop15
+	cmpb	#5
+	bne	comop05
+comop15	ldab	_addcnt
+	clra
+	jsr	abtox
+	ldab	_radix
+	pshb
+	ldab	#10
+	stab	_radix
+	jsr	bout
+	pulb
+	stab	_radix
+	jsr	pcrlf
+	ldx	_cloc
+	jsr	xtoab	;save current addess
+	ldx	_addpnt
+	staa	0,x
+	stab	1,x
+	inx
+	inx
+	stx	_addpnt
+	inc	_addcnt
+	ldab	_ctop
+	cmpb	#3	;only extended or
+	bne	comop20	;relative instructions
+	ldx	_cloc
+	ldx	1,x
+	bra	comop30
+comop20	jsr	getbea
+comop30	stx	_cloc
+	jmp	comnl10
+*
+comcp	jsr	storeit	;return to address of
+	tst	_addcnt	;most recent '(' command
+	bne	comcp10
+	ldx	#comcp05
+	jsr	prints
+	jmp	unknown
+comcp05	ds	"No address \0"
+comcp10	dec	_addcnt
+	clra
+	ldab	_addcnt
+	jsr	abtox
+	ldab	_radix
+	pshb
+	ldab	#10
+	stab	_radix
+	jsr	bout
+	pulb
+	stab	_radix
+	jsr	pcrlf
+	ldx	_addpnt
+	dex
+	ldab	0,x
+	dex
+	ldaa	0,x
+	stx	_addpnt
+	jsr	abtox
+	stx	_cloc
+	jmp	comnl10
+*
+comalt	clr	_nalts
+comalt05	ldab	#'$'
+	jsr	pchar
+	jsr	gchar
+	cmpb	#033	;double alt-mode
+	bne	comalt10
+	inc	_nalts
+	bra	comalt05
+comalt10	ldx	#daltlist
+	jsr	tsearch
+	bcs	comalt20
+	jmp	unknown
+comalt20	ldx	galtlist-daltlist,x
+	jmp	0,x
+*
+daltlist	db	's',0
+	db	'r',0
+	db	'g',0
+	db	'l',0
+	db	't',0
+	dw	0	;end of list
+galtlist	dw	alts
+	dw	altr	;goto the alter?
+	dw	altg
+	dw	altl
+	dw	altt
+	dw	0
+*
+alts	tst	_nalts
+	beq	alts10	;_symbolic on
+	clr	_symb
+alts05	jmp	bigls
+alts10	ldaa	#0ff
+	staa	_symb
+	bra	alts05
+*
+altr	ldaa	_radix
+	psha
+	ldaa	#10
+	staa	_radix
+	jsr	getnum
+	pshb
+	jsr	xtoab
+	andb	#1f	;no absurd bases
+	cmpb	#1
+	ble	altr20
+	stab	_radix
+	pulb
+	pula
+altr05	cmpb	#'\r'
+	bne	alts10
+	jsr	pcrlf
+altr10	jmp	bigl
+altr20	pulb		;Base 0 error message
+	pula
+	staa	_radix
+	bra	altr05
+*
+altg	jsr	gchar
+	cmpb	#'o'
+	beq	altg10
+	jmp	unknown
+altg10	tst	_arg1f
+	beq	altg20
+	ldab	_arg1 + 1
+	stab	_altgdef + 1
+	pshb
+	ldab	_arg1
+	stab	_altgdef
+	bra	altg30
+altg20	ldab	_altgdef + 1	;use default address
+	pshb
+	ldab	_altgdef
+altg30	pshb
+	nop
+	repeat	5
+	pshb
+	rti		;go to it!
+*
+altl	jsr	ichar
+	jsr	pchar
+	cmpb	#'S'
+	bne	altl
+	jsr	ichar
+	jsr	pchar
+	cmpb	#'9'
+	bne	alt10
+altl05	jmp	bigls
+alt10	cmpb	#'1'
+	bne	altl
+	jsr	gbyte
+	subb	#3
+	stab	_temp	;byte count
+	ldx	#_temp1
+	jsr	gbyte
+	stab	0,x
+	jsr	gbyte
+	stab	1,x
+	ldx	0,x
+altl20	jsr	gbyte
+	stab	0,x
+	inx
+	dec	_temp
+	bne	altl20
+	bra	altl
+*
+altt	tst	_arg1f	;set symbol table
+	bne	altt10
+	ldx	_stable	;table at same location
+	bra	altt20
+altt10	ldx	_arg1	;table at new location
+altt20	stx	_stable
+	jsr	set_stable	;clear table
+	jmp	bigls
+*
+*
+*	M a j o r    S u b r o u t i n e s
+*
+pbyte	pshb		;print out hex byte in (b)
+	repeat	4	;(b) gets clobbered
+	lsrb
+	bsr	phexdig
+	pulb
+phexdig	andb	#0f	;print hex digit
+	addb	#48
+	cmpb	#58
+	bmi	phex10
+	addb	#7
+phex10	jsr	pchar
+	rts
+*
+gbyte	psha
+	jsr	gchar
+	bsr	makehex
+	repeat	4
+	aslb
+	pshb
+	jsr	gchar
+	bsr	makehex
+	pula
+	aba
+	tab
+	pula
+	rts
+*
+makehex	subb	#'0'
+	cmpb	#9
+	ble	makehex1
+	subb	#'A'-':'
+makehex1	andb	#0f
+	clc
+	rts
+*
+in_cloc	pshx		;Increment clock to next location
+	pshb		;or instuction
+	ldx	_cloc
+	tst	_symb
+	beq	in_cloc10
+	jsr	xtoab
+	addb	_cloop
+	adca	#0
+	jsr	abtox
+	dex
+in_cloc10	inx
+	stx	_cloc
+	pulb
+	pulx
+	rts
+*
+prcloc	pshx		;Print out value of 'cloc'
+	pshb
+	ldx	_cloc
+	stx	_tsv
+	jsr	puttsv
+	ldab	#'\\'
+	jsr	pchar
+	jsr	pdspace
+	pulb
+	pulx
+	rts
+*
+getbea	ldx	_cloc
+	ldab	1,x
+	ldaa	_cloc
+	tstb
+	bmi	getbea40
+	addb	_cloc + 1
+	adca	#0
+	addb	#2
+	adca	#0
+	bra	getbea50
+getbea40	comb
+	decb
+	stab	_temp
+	ldab	_cloc + 1
+	subb	_temp
+	sbca	#0
+getbea50	staa	_tsv
+	stab	_tsv + 1
+	jsr	abtox
+	rts
+*
+mnemlu	ldx	#_istring	;look up (possible) mnemonic
+	ldaa	3,x		;in MOT, Carry = 1 if found.
+	cmpa	#'a'
+	bne	mnemlu10
+	ldab	1,x
+	orab	#80h
+	stab	1,x
+	bra	mnemlu18
+mnemlu10	cmpa	#'b'
+	beq	mnemlu15
+	tst	3,x
+	bne	mnemlu35
+	bra	mnemlu20
+mnemlu15	ldab	2,x
+	orab	#80h
+	stab	2,x
+mnemlu18	tst	4,x
+	bne	mnemlu35
+mnemlu20	ldx	#MOT-8
+mnemlu30	stx	_temp2
+	ldx	#_istring
+	stx	_temp
+	ldab	0,x
+	ldx	_temp2
+	repeat	8
+	inx
+	tst	0,x
+	bne	mnemlu40
+mnemlu35	ldx	#_istring
+	ldab	1,x
+	andb	#0177
+	stab	1,x
+	ldab	2,x
+	andb	#0177
+	stab	2,x
+	clc
+	rts
+mnemlu40	cmpb	0,x
+	bne	mnemlu30
+	stx	_temp2
+	ldx	_temp
+	inx
+	stx	_temp
+	ldab	0,x
+	ldx	_temp2
+	cmpb	1,x
+	bne	mnemlu30
+	stx	_temp2
+	ldx	_temp
+	inx
+	ldab	0,x
+	ldx	_temp2
+	cmpb	2,x
+	bne	mnemlu30
+	repeat	3
+	inx
+	sec
+	rts
+*
+symlu	pshab
+	ldx	#_istring	;Look up string in 'istring'
+	tst	0,x		;to see if is in _symbol
+	bne	symlu10		;table.  Carry = 1 if found,
+symlu05	pulab			;(x) = value if found.
+	clc
+	rts
+symlu10	ldx	_stable
+	repeat	4
+	inx
+symlu20	stx	_temp2
+	ldx	#_istring
+	stx	_temp
+	ldx	_temp2
+symlu30	tst	0,x
+	beq	symlu35
+	dex
+	bra	symlu30
+symlu35	repeat	3
+	dex
+	tst	0,x
+	beq	symlu05
+symlu40	stx	_temp2
+	ldx	_temp
+	ldab	0,x
+	inx
+	stx	_temp
+	ldx	_temp2
+	cmpb	0,x
+	bne	symlu20
+	tstb
+	beq	symlu50
+	dex
+	bra	symlu40
+symlu50	dex
+	ldaa	0,x
+	dex
+	ldab	0,x
+	jsr	abtox
+	pulab
+	sec
+	rts
+*
+syment	pshab		;enter string in '_istring'
+	stx	_temp	;into _symbol table with
+	ldx	_stable	;of (x).
+	repeat	3
+	inx
+syment10	tst	0,x
+	beq	syment20
+	dex
+	bra	syment10
+syment20	repeat	3
+	dex
+	tst	0,x
+	bne	syment10
+	stx	_temp1
+	ldx	#_istring
+	stx	_temp2
+	ldx	_temp1
+syment30	stx	_temp1	;_stable pointer
+	ldx	_temp2	;new _symbol pointer
+	ldab	0,x
+	beq	syment40	;if end of new _symb
+	inx
+	stx	_temp2
+	ldx	_temp1
+	stab	0,x
+	dex
+	bra	syment30
+syment40	ldx	_temp1
+	clr	0,x
+	dex
+	ldaa	_temp
+	staa	0,x
+	dex
+	ldaa	_temp + 1
+	staa	0,x
+	dex
+	clr	0,x
+	ldx	_temp
+	pulab
+	rts
+*
+*	Put value in '_tsv' out on terminal. (sym. table
+*	search only).  Takes into account Symbol/Byte
+*	mode and current _radix.  No registers modified.
+puttsv	pshx
+	pshab
+	tst	_symb
+	beq	puttsv60	;byte mode
+	ldx	_stable
+	ldaa	_tsv	;inverse Stable look-up
+	ldab	_tsv + 1
+puttsv10	stx	_temp
+puttsv15	tst	0,x
+	beq	puttsv20
+	dex
+	bra	puttsv15
+puttsv20	dex
+	cmpa	0,x
+	beq	puttsv30
+	dex
+puttsv25	dex
+	tst	0,x
+	bne	puttsv10
+	bra	puttsv60
+puttsv30	dex
+	cmpb	0,x
+	bne	puttsv25
+	ldx	_temp
+puttsv55	ldab	0,x
+	beq	puttsv70
+	jsr	pchar
+	dex
+	bra	puttsv55
+puttsv60	ldx	_tsv
+	jsr	printx
+puttsv70	pulab
+	pulx
+	rts
+*
+dumpcl	pshx		;Dump what '_cloc' points
+	pshab		;to in correct mode.  No
+	ldx	_cloc	;registers modified
+	ldab	0,x
+	beq	dumpcl05
+	tst	_symb
+	bne	dumpcl10
+dumpcl05	clra
+	jsr	abtox
+	jsr	printx
+	ldab	#1
+	stab	_cloop	;undefineds are 1 long
+	ldab	#6
+	jmp	dumpcl30
+dumpcl10	ldx	#MOT	;inverse MOT table look-up
+dumpcl20	tst	0,x
+	beq	dumpcl05
+	inx
+	inx
+	inx
+	cmpb	0,x
+	beq	dumpcli
+	cmpb	1,x
+	beq	dumpcld
+	cmpb	2,x
+	beq	dumpclx
+	cmpb	3,x
+	beq	dumpcle
+	cmpb	4,x
+	beq	dumpcln
+	repeat	5
+	inx
+	bra	dumpcl20
+dumpcli	pshb
+	jsr	dumpclo
+	ldab	#'#'
+	jsr	pchar
+	pulb
+	pshb
+	jsr	dumpclgo	;get operhand
+	cmpb	#3
+	beq	dumpcli1
+	pulb
+	jsr	printx
+	jsr	xtoab
+	cmpb	#' '
+	blt	dumpcli2
+	jsr	pspace	;print out in ascii
+	jsr	printsq
+	jsr	pchar
+	jsr	printsq
+	bra	dumpcli2
+dumpcli1	pulb
+	jsr	dumpclz
+dumpcli2	clrb
+	jmp	dumpcl30
+dumpcld	jsr	dumpclo
+	jsr	dumpclz
+	ldab	#','
+	jsr	pchar
+	ldab	#'d'
+	jsr	pchar
+	ldab	#1
+	jmp	dumpcl30
+dumpclx	jsr	dumpclo
+	jsr	dumpclgo
+	jsr	printx
+	ldab	#','
+	jsr	pchar
+	ldab	#'x'
+	jsr	pchar
+	ldab	#2
+	bra	dumpcl30
+dumpcle	jsr	dumpclo
+	jsr	dumpclz
+	ldab	#3
+dumpcl30	stab	_ctop
+	pulab
+	jsr	pdspace
+	pulx
+	rts
+dumpcln	pshb
+	jsr	dumpclo
+	pulb
+	cmpb	#8d
+	beq	dumpclr
+	andb	#0f0
+	cmpb	#20h
+	beq	dumpclr
+	ldab	#1
+	stab	_cloop
+	ldab	#4
+	jmp	dumpcl30
+dumpclr	ldab	#2
+	stab	_cloop
+	jsr	getbea
+	jsr	puttsv
+	ldab	#5
+	bra	dumpcl30
+dumpclgo	jsr	bcount
+	stab	_cloop
+	ldx	_cloc
+	inx
+	ldx	0,x
+	cmpb	#3
+	beq	dumpclgo1
+	jsr	xtoab
+	tab
+	clra
+	jsr	abtox
+	ldab	_cloop
+dumpclgo1	rts
+dumpclz	jsr	dumpclgo
+	stx	_tsv
+	jsr	puttsv
+	rts
+dumpclo	pshb
+	repeat	3
+	dex
+	ldab	0,x
+	jsr	pchar
+	ldab	1,x
+	andb	#0177
+	jsr	pchar
+	ldab	2,x
+	andb	#0177
+	jsr	pchar
+	tst	1,x
+	bpl	dumpclo1
+	ldab	#'a'
+	jsr	pchar
+dumpclo1	tst	2,x
+	bpl	dumpclo2
+	ldab	#'b'
+	jsr	pchar
+dumpclo2	jsr	pdspace
+	pulb
+	rts
+*
+printx	pshb
+	ldab	_radix	;print out (x) in
+	jsr	bout	;current _radix
+	pulb
+	rts
+*
+set_stable	psha	;set up the varable '_stable'
+	ldaa	#0ff	;for movable _symbol table.
+	staa	0,x	;(x) has FWA ram
+	dex
+	clr	0,x
+	dex
+	staa	0,x
+	dex
+	staa	0,x
+	dex
+	clr	0,x	;zero _symbol table
+	stx	_stable
+	pula
+	rts
+*
+getnum	clr	_arg	;get a number from the terminal
+	clr	_arg + 1	;take care of operators
+	clr	_argfun	;'argfun' is flag for null entry.
+	clr	_argpnt	;clear '.' flag
+getnum05	ldx	#_istring	;return # in (x),
+	jsr	gets	;terminating char. in (b)
+getnumhs	pshb	;"have string" entry point
+	ldx	#_istring
+	tst	0,x
+	bne	getnum7
+	cmpb	#'.'	;numer is current loc.
+	beq	getnum6
+	cmpb	#'\''
+	bne	getnum7
+	jsr	gchar
+	clra
+	jsr	abtox
+	jsr	printsq
+	bra	getnum6a
+getnum6	ldx _cloc
+getnum6a	pulb
+	inc	_argpnt	;flag the decimal point
+	jsr	gchar
+	pshb
+	bra	getnum20
+getnum7	ldab	#'@'
+	cmpb	0,x
+	bge	getnum10	;have number
+	jsr	symlu
+	bcs	getnum20
+	pulb
+	jsr	uerror
+	bra	getnum05
+getnum10	ldab	_radix
+	jsr	cnum
+getnum20	pulb	;(x) has #, b = term
+	tst	_argfun
+	bne	getnum30
+	stx	_arg	;funny stuff for 1st number
+	ldx	#_istring
+	tst	0,x	;and '_argfun' flag hack
+	beq	getnum25
+	inc	_argfun
+	bra	getnum40
+getnum25	tst	_argpnt
+	beq	getnum40
+	inc	_argfun	;the "number" was '.'
+	bra	getnum40
+getnum30	stab	_argtc	;examine term. char
+	stx	_argt
+	ldab	_argfun	;switch on last term. char
+	ldx	#adlist
+	jsr	tsearch	;look up last
+	bcs	getnum35
+	prints	I-error\r\n
+getnum35	ldx	aglist-adlist,x	;do function
+	jsr	0,x
+	ldab	_argtc	;get this term
+getnum40	ldx	#adlist
+	jsr	tsearch	;see if not function
+	bcs	getnum50
+	ldx	_arg
+	rts
+getnum50	stab	_argfun
+	jmp	getnum05
+*
+printsq	pshb		;print a single qoute '
+	ldab	#'\''
+	jsr	pchar
+	pulb
+	rts
+*
+adlist	db	'+'	;function data list
+	db	0
+	db	'-'
+	db	0
+	db	'*'
+	db	0
+	db	'|'
+	db	0
+	db	'&'
+	db	0
+	db	'^'
+	db	0
+	db	'#'
+	db	0
+	db	0
+	db	0
+aglist	dw	fnplus	;function 'go' list
+	dw	fnminus
+	dw	fnmul
+	dw	fnor
+	dw	fnand
+	dw	fnxor
+	dw	fnpnd
+	dw	0
+tsearch	tst	0,x	;search t_arget list table
+	beq	tsearch20	;for data in (b)
+	cmpb	0,x	;x points to list,
+	beq	tsearch10	;c = 1 if found
+	inx
+	inx
+	bra	tsearch
+tsearch10	sec
+	rts
+tsearch20	clc
+	rts
+*
+fnplus	bsr	fnloadab
+	addb	_argt + 1
+	adca	_argt
+fnstrab	stab	_arg + 1
+	staa	_arg
+	rts
+fnminus	bsr	fnloadab
+	subb	_argt + 1
+	sbca	_argt
+	bra	fnstrab
+fnmul	ldaa	_argt
+	ldab	_argt + 1
+	ldx	_arg
+	jsr	imul
+	jmp	fnstrab
+fnor	bsr	fnloadab
+	orab	_argt + 1
+	oraa	_argt
+	bra	fnstrab
+fnloadab	ldab	_arg + 1
+	ldaa	_arg
+	rts
+fnand	bsr	fnloadab
+	andb	_argt + 1
+	anda	_argt
+	bra	fnstrab
+fnxor	bsr	fnloadab
+	eora	_argt
+	eorb	_argt + 1
+	jmp	fnstrab
+fnpnd	ldx	_argt
+	stx	_arg
+	clr	_argim
+	rts
+*
+ascout	pshb
+	andb	#127	;types a char on terminal
+	cmpb	#32	;prefix control chars with
+	bge	ascout1	;up-arrow
+	addb	#64
+	pshb
+	ldab	#94
+	bra	ascout2
+ascout1	pshb
+	ldab	#' '
+ascout2	jsr	pchar
+	pulb
+	jsr	pchar
+	pulb
+	rts
+*
+getargs	ldab	#6	;get all (possible)
+	stab	_argim	;arguments
+	clr	_arg1if	;clear instruction flag
+	clr	_arg1f	;clear 1st flag
+	clr	_arg2f	;clear 2nd flag
+	clr	_arg3f	;clear 3rd flag
+	ldx	#_istring
+	jsr	gets
+	pshb
+	jsr	mnemlu
+	bcs	getarg10	;if instruction
+	ldx	#_istring
+	ldab	#'@'
+	cmpb	0,x
+	bge	getarg3
+	jsr	symlu
+	bcs	getarg3
+	pulb
+	jsr	uerror
+	bra	getargs
+getarg3	pulb
+	clr	_arg
+	clr	_arg + 1
+	clr	_argfun
+	clr	_argpnt
+	jsr	getnumhs	;get number
+	bra	getarg30	;and process
+getarg10	stx	_argib
+	com	_arg1if
+	pulb
+	cmpb	#' '
+	beq	getarg20	;if not inherant
+	ldaa	4,x
+	beq	getarg58	;if missing operhand
+	staa	_arg1i
+	ldaa	#4	;Note- don't know if is
+	staa	_argim	;relative or inherant
+	rts
+getarg20	jsr	getnum
+getarg30	stx	_arg1
+	tst	_argfun
+	beq	getarg40	;if no 1st argument
+	com	_arg1f
+getarg40	cmpb	#';'
+	beq	getarg70	;more args
+	cmpb	#','
+	bne	getarg60	;no more args
+	jsr	gchar
+	cmpb	#'x'
+	bne	getarg50
+	ldab	#2	;tag for indexed addressing
+	stab	_argim
+	bra	getarg55
+getarg50	cmpb	#'d'
+	beq	getarg53
+	jmp	getargbm	;bad addressing mode
+getarg53	ldab	#1
+	stab	_argim	;tag as direct addressing
+getarg55	jsr	gchar	;get terminating char
+	bra	getarg40	;and process
+getarg58	ldx	#getarmo
+	jsr	crprints
+getarg59	ldab	#7
+	jsr	pchar
+	jsr	pdspace
+	jmp	getargs
+getarmo	ds	"Missing operand "
+	db	7,0
+getarg60	jmp	getargdone	;branch bridge
+getarg70	jsr	getnum	;2nd arg
+	stx	_arg2
+	tst	_argfun
+	beq	getarg80	;if no arg
+	com	_arg2f
+getarg80	cmpb	#';'
+	bne	getarg60
+	jsr	getnum	;3rd _arg
+	stx	_arg3
+	tst	_argfun
+	beq	getargdone
+	com	_arg3f
+getargdone	tst	_arg1if
+	bne	getarg90
+	rts
+getarg90	pshb
+	ldx	_argib
+	ldab	_argim
+	bne	getarg100
+	ldab	0,x	;immid
+getarg95	beq	getarg144
+	stab	_arg1i
+	pulb
+	rts
+getarg100	cmpb	#1
+	bne	getarg110
+	ldab	1,x	;direct
+	bra	getarg95
+getarg110	cmpb	#2
+	bne	getarg120
+	ldab	2,x	;index
+	bra	getarg95
+getarg120	tst	3,x	;extended
+	beq	getarg130
+	ldab	#3
+	stab	_argim
+	ldab	3,x
+	bra	getarg95
+getarg130	tst	4,x
+	beq	getarg144
+	ldab	4,x
+	cmpb	#8d
+	beq	getarg140
+	stab	_temp
+	andb	#0f0
+	cmpb	#20h
+	bne	getarg144
+	ldab	_temp
+getarg140	pshb	;relative
+	ldab	#5
+	stab	_argim
+	ldaa	_arg1
+	ldab	_arg1 + 1
+	subb	#2
+	subb	_cloc + 1
+	sbca	_cloc
+	bpl	getarg141	;forward ref.
+	clr	_arg1
+	stab	_arg1 + 1
+	bra	getarg142
+getarg141	clr	_arg1	;backward ref
+	stab	_arg1 + 1
+getarg142	pulb
+	tstb
+	bra	getarg95
+getarg144	pulb	;bad mode
+getargbm	ldx	#getarbm
+	jsr	crprints
+	jmp	getarg59
+getarbm	ds	"Bad addressing mode \0"
+*
+storeit	pshx
+	pshab
+	tst	_symb
+	bne	storeit30	;if _symbolic
+	tst	_arg1if
+	bne	storeit10	;if instuctions
+	tst	_arg1f
+	bne	storeit20	;if data
+storeitd	pulab
+	pulx
+	rts
+storeit10	ldab	_arg1i	;instruction
+storeit15	ldx	_cloc
+	stab	0,x
+	bra	storeitd
+storeit20	ldab	_arg1 + 1
+	bra	storeit15	;data
+storeit30	ldx	_cloc
+	tst	_arg1if	;symbolic
+	bne	storeit60	;if instruction
+	tst	_arg1f
+	beq	storeitd	;nothing
+	ldaa	_cloop
+	ldab	_arg1 + 1
+	cmpa	#1
+	bne	storeit40
+	stab	0,x
+	bra	storeitd
+storeit40	cmpa	#2
+	beq	storeit50
+	inx
+storeit50	ldaa	_arg1
+	staa	0,x
+	stab	1,x
+	jmp	storeitd
+storeit60	ldaa	_cloop	;instruction
+	ldab	_argim
+	cmpb	#2
+	bgt	storeit80
+	cmpa	#2	;imidiate,dir,index
+	bge	storeit70
+	jmp	storeitse	;size error
+storeit70	ldaa	_arg1i
+	staa	0,x
+	ldaa	_arg1 + 1
+	staa	1,x
+	ldaa	#2
+	staa	_cloop
+	stab	_ctop
+	jmp	storeitd
+storeit80	cmpb	#5
+	bne	storeit90
+	cmpa	#2	;relative
+	bge	storeit70
+	jmp	storeitse	;size error
+storeit90	cmpb	#3
+	bne	storeit100
+	cmpa	#3	;extended
+	bne	storeitse
+	ldaa	_arg1i
+	staa	0,x
+	ldaa	_arg1
+	staa	1,x
+	ldaa	_arg1 + 1
+	staa	2,x
+	jmp	storeitd
+storeit100	ldaa	_arg1i	;must be inherant
+	staa	0,x
+	ldaa	#1
+	staa	_cloop
+	jmp	storeitd	;don't change ctop
+storeitse	ldx	#storeitm
+	jsr	crprints
+	jmp	storeitd
+storeitm	ds	"Size?  "
+	db	7,0
+*
+pchar	psha
+	ldaa	#2
+pcharl	bita	_ACIA
+	beq	pcharl
+	stab	_ACIA+1
+	pula
+	tst	_fill
+	bne	pchar3
+	rts
+pchar3	cmpb	#13	;_fill after CR ?
+	beq	pchar1
+	rts
+pchar1	pshb
+	ldab	_fill
+	stab	_fillc
+	ldab	#_FILLCHAR	;_fill stuff
+pchar2	bsr	pchar
+	dec	_fillc
+	bne	pchar2
+	pulb
+	rts
+*
+ichar	ldab	_ACIA	;full dup get charactor
+	lsrb
+	bcc	ichar
+	ldab	_ACIA + 1
+	rts
+*
+gchar	jsr	ichar	;get a charactor
+	andb	#0177	;(half-duplex, ignore _fills)
+	cmpb	#1	;fill char?
+	beq	gchar
+	cmpb	#033	;don't echo 'esc'
+	beq	gchar10
+	jsr	pchar	;half duplex
+gchar10	rts
+*
+uerror	pshx
+	ldx	#uerrorm
+	jsr	prints
+	pulx
+	rts
+uerrorm	ds	"  Undefinedd ?"
+	db	7,0
+crprints	jsr	pcrlf
+	jsr	prints
+	rts
+*
+*	M achine  O pcode  T able
+*
+*  char  char  char  imid  direct  index  ext.  inher/rel
+*       +80=A  +80=B
+MOT	db	'a',228,100,139,155,171,187,0
+	db	'a',100,228,203,219,235,251,0
+	db	'a',98,97,0,0,0,0,27
+	db	'a',228,99,137,153,169,185,0
+	db	'a',100,227,201,217,233,249,0
+	db	'a',238,100,132,148,164,180,0
+	db	'a',110,228,196,212,228,244,0
+	db	'b',233,116,133,149,165,181,0
+	db	'b',105,244,197,213,229,245,0
+	db	'c',108,114,0,0,111,127,0
+	db	'c',236,114,0,0,0,0,79
+	db	'c',108,242,0,0,0,0,95
+	db	'c',237,112,129,145,161,177,0
+	db	'c',109,240,193,209,225,241,0
+	db	'c',98,97,0,0,0,0,17
+	db	'c',111,109,0,0,99,115,0
+	db	'c',239,109,0,0,0,0,67
+	db	'c',111,237,0,0,0,0,83
+	db	'n',101,103,0,0,96,112,0
+	db	'n',229,103,0,0,0,0,64
+	db	'n',101,231,0,0,0,0,80
+	db	'd',97,97,0,0,0,0,25
+	db	'd',101,99,0,0,106,122,0
+	db	'd',229,99,0,0,0,0,74
+	db	'd',101,227,0,0,0,0,90
+	db	'e',239,114,136,152,168,184,0
+	db	'e',111,242,200,216,232,248,0
+	db	'i',110,99,0,0,108,124,0
+	db	'i',238,99,0,0,0,0,76
+	db	'i',110,227,0,0,0,0,92
+	db	'l',228,97,134,150,166,182,0
+	db	'l',100,225,198,214,230,246,0
+	db	'o',242,97,138,154,170,186,0
+	db	'o',114,225,202,218,234,250,0
+	db	'p',243,104,0,0,0,0,54
+	db	'p',115,232,0,0,0,0,55
+	db	'p',245,108,0,0,0,0,50
+	db	'p',117,236,0,0,0,0,51
+	db	'r',111,108,0,0,105,121,0
+	db	'r',239,108,0,0,0,0,73
+	db	'r',111,236,0,0,0,0,89
+	db	'r',111,114,0,0,102,118,0
+	db	'r',239,114,0,0,0,0,70
+	db	'r',111,242,0,0,0,0,86
+	db	'a',115,108,0,0,104,120,0
+	db	'a',243,108,0,0,0,0,72
+	db	'a',115,236,0,0,0,0,88
+	db	'a',115,114,0,0,103,119,0
+	db	'a',243,114,0,0,0,0,71
+	db	'a',115,242,0,0,0,0,87
+	db	'l',115,114,0,0,100,116,0
+	db	'l',243,114,0,0,0,0,68
+	db	'l',115,242,0,0,0,0,84
+	db	's',244,97,0,151,167,183,0
+	db	's',116,225,0,215,231,247,0
+	db	's',245,98,128,144,160,176,0
+	db	's',117,226,192,208,224,240,0
+	db	's',98,97,0,0,0,0,16
+	db	's',226,99,130,146,162,178,0
+	db	's',98,227,194,210,226,242,0
+	db	't',97,98,0,0,0,0,22
+	db	't',98,97,0,0,0,0,23
+	db	't',115,116,0,0,109,125,0
+	db	't',243,116,0,0,0,0,77
+	db	't',115,244,0,0,0,0,93
+	db	'c',112,120,140,156,172,188,0
+	db	'd',101,120,0,0,0,0,9
+	db	'd',101,115,0,0,0,0,52
+	db	'i',110,120,0,0,0,0,8
+	db	'i',110,115,0,0,0,0,49
+	db	'l',100,120,206,222,238,254,0
+	db	'l',100,115,142,158,174,190,0
+	db	's',116,120,0,223,239,255,0
+	db	's',116,115,0,159,175,191,0
+	db	't',120,115,0,0,0,0,53
+	db	't',115,120,0,0,0,0,48
+	db	'b',114,97,0,0,0,0,32
+	db	'b',99,99,0,0,0,0,36
+	db	'b',99,115,0,0,0,0,37
+	db	'b',101,113,0,0,0,0,39
+	db	'b',103,101,0,0,0,0,44
+	db	'b',103,116,0,0,0,0,46
+	db	'b',104,105,0,0,0,0,34
+	db	'b',108,101,0,0,0,0,47
+	db	'b',108,115,0,0,0,0,35
+	db	'b',108,116,0,0,0,0,45
+	db	'b',109,105,0,0,0,0,43
+	db	'b',110,101,0,0,0,0,38
+	db	'b',118,99,0,0,0,0,40
+	db	'b',118,115,0,0,0,0,41
+	db	'b',112,108,0,0,0,0,42
+	db	'b',115,114,0,0,0,0,141
+	db	'j',109,112,0,0,110,126,0
+	db	'j',115,114,0,0,173,189,0
+	db	'n',111,112,0,0,0,0,1
+	db	'r',116,105,0,0,0,0,59
+	db	'r',116,115,0,0,0,0,57
+	db	's',119,105,0,0,0,0,63
+	db	'w',97,105,0,0,0,0,62
+	db	'c',108,99,0,0,0,0,12
+	db	'c',108,105,0,0,0,0,14
+	db	'c',108,118,0,0,0,0,10
+	db	's',101,99,0,0,0,0,13
+	db	's',101,105,0,0,0,0,15
+	db	's',101,118,0,0,0,0,11
+	db	't',97,112,0,0,0,0,6
+	db	't',112,97,0,0,0,0,7
+	db	0,0,0,0,0,0,0,0
+	db	0,0,0,0,0,0,0,0
+	end

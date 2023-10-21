@@ -1,0 +1,124 @@
+/*
+ *	tail - list the tail end of a file
+ *
+ *	tail [-nn] file [file ... ]
+ *
+ *		nn	is the number of lines to be displayed
+ */
+
+int	bytes	0;	/* num bytes read into buffer */
+int	cbyte	0;	/* current byte (in buffer) */
+char	buf[512];	/* file buffer */
+int	io	-1;	/* I/O file descriptor */
+
+main(argc, argv)
+char **argv;
+{
+	extern fout;
+	char c;
+	int line, nline;
+
+	if (argc < 2) {
+		fout = 2;
+		printf("usage: tail [-nn] file [file ...]\n");
+		flush();
+		exit();
+	}
+
+	fout = dup(1);
+	flush();
+	nline = 23;
+
+	while (--argc) {
+		argv++;
+		if (**argv == '-') {
+			++*argv;
+			nline = 0;
+			while ('0' <= (c = *(*argv)++) && c <= '9')
+				nline = nline * 10 + c - '0';
+			if (++nline < 0)
+				nline = 0;
+			continue;
+		}
+		else {
+			if (io != -1) {
+				close(io);
+				io = -1;
+			}
+			if ((io = open(*argv, 0)) < 0) {
+				fout = 2;
+				printf("Can't open %s\n", *argv);
+				flush();
+				fout = 1;
+				continue;
+			}
+		}
+		bytes = cbyte = 0;
+		for (line = 0; line < nline; line++) {
+			if (backline() == 0) {
+				break;
+			}
+		}
+		copy();
+	}
+	flush();
+}
+
+backline() {
+	char c;
+
+	while ((c = backchar()) && c != '\n');
+	if (c)
+		return(1);
+	return(0);
+}
+
+backchar() {
+
+	if (--cbyte >= 0) {
+		return(buf[cbyte]);
+	}
+	if (fill(-1) == 0) {
+		return(0);
+	}
+	return(backchar());
+}
+
+fill(d) {
+
+	if (d < 0) {
+		if (bytes == 0) {
+			seek(io, -512, 2);
+		}
+		else {
+			seek(io, -1024, 1);
+		}
+	}
+	if ((bytes = read(io, buf, 512)) <= 0) {
+		return(0);
+	}
+	if (d < 0)
+		cbyte = bytes;
+	else
+		cbyte = 0;
+	return(1);
+}
+
+copy() {
+	char c;
+
+	while (c = getchar()) {
+		putchar(c);
+	}
+}
+
+getchar() {
+	char c;
+
+	if (++cbyte >= bytes) {
+		if (fill(1) == 0) {
+			return(0);
+		}
+	}
+	return(buf[cbyte]);
+}

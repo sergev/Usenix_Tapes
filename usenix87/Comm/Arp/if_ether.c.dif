@@ -1,0 +1,127 @@
+*** if_ether.c.orig	Sun Apr  6 14:42:51 1986
+--- if_ether.c	Sun Apr  6 14:42:53 1986
+***************
+*** 21,27 ****
+--- 21,29 ----
+  #include "syslog.h"
+  
+  #include "../net/if.h"
++ #include "../net/route.h"
+  #include "in.h"
++ #include "in_var.h"
+  #include "in_systm.h"
+  #include "ip.h"
+  #include "if_ether.h"
+***************
+*** 343,348 ****
+--- 345,364 ----
+  		    sizeof(ea->arp_sha));
+  		bcopy((caddr_t)ac->ac_enaddr, (caddr_t)ea->arp_sha,
+  		    sizeof(ea->arp_sha));
++ 	} else
++ 	/*
++ 	 * Subnet ARP hack (subarp).  This allows a site to run the subnet
++ 	 * kernel only on the gateway machines by allowing the gateway
++ 	 * to reply to ARP requests for a target machine on a locally 
++ 	 * attached subnet or reachable via a route from this gateway.
++ 	 */
++ 	if (ac->ac_if.if_flags & IFF_SUBARP
++ 	    && in_netof(isaddr) != in_netof(itaddr) 
++ 	    && if_subarp(isaddr, itaddr, &(ac->ac_if))) {
++ 		bcopy((caddr_t)ea->arp_sha, (caddr_t)ea->arp_tha,
++ 		    sizeof(ea->arp_sha));
++ 		bcopy((caddr_t)ac->ac_enaddr, (caddr_t)ea->arp_sha,
++ 		    sizeof(ea->arp_sha));
+  	} else {
+  		ARPTAB_LOOK(at, itaddr.s_addr);
+  		if (at == NULL || (at->at_flags & ATF_PUBL) == 0)
+***************
+*** 352,358 ****
+  		bcopy((caddr_t)at->at_enaddr, (caddr_t)ea->arp_sha,
+  		    sizeof(ea->arp_sha));
+  	}
+- 
+  	bcopy((caddr_t)ea->arp_spa, (caddr_t)ea->arp_tpa,
+  	    sizeof(ea->arp_spa));
+  	bcopy((caddr_t)&itaddr, (caddr_t)ea->arp_spa,
+--- 368,373 ----
+***************
+*** 528,531 ****
+--- 543,619 ----
+  	}
+  	*--cp = 0;
+  	return (etherbuf);
++ }
++ 
++ /*
++  * Determine if interface of target address has ARP subnet routing enabled.
++  */
++ int if_subarplog = 1;
++ #define sublog    if (if_subarplog) log
++ if_subarp(isaddr, itaddr, sifp)
++ struct in_addr isaddr, itaddr;
++ register struct ifnet *sifp;
++ {
++ 	register u_long net;
++ 	register struct in_ifaddr *ia;
++ 	struct route ro;
++ 	register struct sockaddr_in *sin;
++ 	register struct ifaddr *taddr;
++ 	register struct ifnet *tifp;
++ 
++ 	net = in_mainnetof(itaddr);
++ 	if (net != in_mainnetof(isaddr))	/* sanity check */
++ 		return(0);
++ 	for (ia = in_ifaddr; ia; ia = ia->ia_next)
++ 		if (net == ia->ia_net)
++ 			break;
++ 	if (ia) { /* don't respond to requests for IP broadcast addresses */
++ 		register u_long m, l;
++ 
++ 		m = ~ia->ia_subnetmask;
++ 		l = ntohl(itaddr.s_addr) & m;
++ 		if (l == (INADDR_BROADCAST & m) || l == (INADDR_ANY & m))
++ 			return(0);
++ 		m = ~ia->ia_netmask;
++ 		l = ntohl(itaddr.s_addr) & m;
++ 		if (l == (INADDR_BROADCAST & m) || l == (INADDR_ANY & m))
++ 			return(0);
++ 	}
++ 	sin = (struct sockaddr_in *)&(ro.ro_dst);
++ 	sin->sin_family = AF_INET;
++ 	sin->sin_addr = itaddr;
++ 	tifp = (struct ifnet *)0;
++ 	if ((taddr = ifa_ifwithnet((struct sockaddr *)sin)) != NULL)
++ 		tifp = taddr->ifa_ifp;	/* is subnet of an interface */
++ 	else {	/* look in routing table for non-local target */
++ 		extern struct rtentry nowildcard;
++ 
++ 		ro.ro_rt = &nowildcard;
++ 		(void) rtalloc(&ro);
++ 		if (ro.ro_rt != (struct rtentry *)0) {
++ 			tifp = ro.ro_rt->rt_ifp;
++ 			RTFREE(ro.ro_rt);
++ 		}
++ 	}
++ 	if (tifp == (struct ifnet *)0) {
++ 		if ((sifp->if_flags & IFF_DEBUG) != 0)
++ 		sublog(LOG_DEBUG, "subarp %s%d:%x to ?:%x - no route\n",
++ 			sifp->if_name, sifp->if_unit,
++ 			ntohl(isaddr.s_addr), ntohl(itaddr.s_addr));
++ 		return(0);
++ 	}
++ 	if ((tifp->if_flags & IFF_SUBARP) == 0)
++ 		return(0);
++ 	/* Sanity check:  ignore request if from same interface as target. */
++ 	if (sifp->if_addrlist->ifa_ifp == tifp) {
++ 		if ((sifp->if_flags & IFF_DEBUG) != 0)
++ 		sublog(LOG_DEBUG,"subarp %s%d:%x to %s%d:%x - same interface\n",
++ 			sifp->if_name, sifp->if_unit, ntohl(isaddr.s_addr),
++ 			tifp->if_name, tifp->if_unit, ntohl(itaddr.s_addr));
++ 		return(0);
++ 	}
++ 	sublog(LOG_INFO, "subarp %s%d:%x to %s%d:%x\n",
++ 		sifp->if_name, sifp->if_unit, ntohl(isaddr.s_addr),
++ 		tifp->if_name, tifp->if_unit, ntohl(itaddr.s_addr));
++ 	return(1);
+  }

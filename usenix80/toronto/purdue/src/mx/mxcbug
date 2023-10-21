@@ -1,0 +1,35 @@
+	if(!c->c_ib) {          /* if disconnected and drained */
+		if(c->c_flag&c_abort) goto bad; /* abnormal disconnect */
+		spl0();
+		return;         /* no bytes read */
+	}
+	*ka5 = c->c_ib;         /* access buffer */
+	n = min(u.u_count, b.p.p_count);        /* number of bytes for user */
+	i = c->c_flag&c_readleft ?      /* if leftover bytes from prev read */
+		b.h.h_check : &b.p.p_data;
+	bcopyout(i,u.u_base,n); /* move kernel to user space */
+	u.u_base =+ n;
+L20002:jsr	pc,_spl0
+jbr     L28
+L32:mov 4(r2),*_ka5
+mov     22+_b,(sp)
+mov     100+_u,-(sp)
+jsr     pc,*$_min
+tst     (sp)+
+mov     r0,r4
+bit     $100,10(r2)
+jeq     L10002
+mov     12+_b,r0
+ash     $11,r0
+jbr     L10003
+L10002:mov	$24+_b,r0
+L10003:mov	r0,r3
+mov	r4,(sp)
+mov	76+_u,-(sp)
+mov	r3,-(sp)
+jsr	pc,*$_bcopyout
+cmp	(sp)+,(sp)+
+add	r4,76+_u
+sub	r4,100+_u
+sub	r4,22+_b
+jeq	L33

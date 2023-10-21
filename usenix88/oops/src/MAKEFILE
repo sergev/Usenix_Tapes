@@ -1,0 +1,225 @@
+# $Header: MAKEFILE,v 1.1 88/01/14 23:50:29 keith Exp $
+CC = CC
+CCDEBUG =
+I = /usr/include/CC
+LIB = liboops
+CFLAGS = ${CCDEBUG}
+LFLAGS = ${CCDEBUG} ${OOPSLIB}
+# Target Directories
+OOPSLIBDIR = /usr/lib
+OOPSINCDIR = /usr/include/oops
+
+OBJECTS = regex.o ArrayOb.o Arraychar.o Assoc.o AssocInt.o Bag.o BitBoard.o Bitset.o Class.o Collection.o Date.o Dictionary.o Exception.o Float.o Fraction.o Heap.o IdentDict.o Integer.o Iterator.o Link.o LinkOb.o LinkedList.o LookupKey.o Nil.o Object.o OrderedCltn.o Point.o Process.o Random.o Range.o Rectangle.o Regex.o Scheduler.o Semaphore.o SeqCltn.o Set.o SharedQueue.o SortedCltn.o Stack.o String.o Time.o _main.o oopsIO.o oopserrs.o oopsinit.o
+
+GENERICS = Arraychar.h Arraychar.c
+
+.SUFFIXES: .s
+.c.o:
+	${CC} ${CFLAGS} -c $<
+.c.s:
+	${CC} ${CFLAGS} +i -S -c $<
+
+.PRECIOUS: ${LIB}.a
+
+all: always oopserrsx.h regex.o ${LIB}.a
+
+always:
+	make generic
+
+oopserrsx.h: oopserrs.err
+	csh -c 'if(-e /usr/bin/errcom) errcom oopserrs.err'
+	csh -c 'if( ! -e /usr/bin/errcom) errgen oopserrs.err'
+	sed -f oopserrs.sed <oopserrs.c >oopserrs.tmp
+	mv oopserrs.tmp oopserrs.c
+	sed -n -e "s/^\([A-Z][a-zA-Z]*\).*/int OOPS_\1	= OOPS__\1;/p" <oopserrs.err >oopserrsx.h
+
+generic: ${GENERICS}
+
+Arraychar.h: Array_h.m4
+	echo "ARRAYDECLARE(Arraychar,char)" | m4 Array_h.m4 - >Arraychar.h
+
+Arraychar.c: Array_c.m4 Arraychar.p
+	m4 Array_c.m4 Arraychar.p >Arraychar.c
+
+regex.o: regex/regex.c regex.h
+#	cc -O -I. -D'SIGN_EXTEND_CHAR(c)=(((c) & 0x80) ? ((c) | 0xffffff80) : (c))' -c regex/regex.c
+	cc -O -I. -c regex/regex.c
+
+${LIB}.a: ${OBJECTS}
+	ar rv $@ $?
+	-ranlib ${LIB}.a
+
+install:
+	-mkdir ${OOPSLIBDIR}
+	cp ${LIB}.a ${OOPSLIBDIR}/${LIB}.a
+	-ranlib ${OOPSLIBDIR}/${LIB}.a
+	-mkdir ${OOPSINCDIR}
+	-rm ${OOPSINCDIR}/*.h
+	cp *.h ${OOPSINCDIR}
+
+clean:
+	-rm *.o *..c ${LIB}.a oopserrs.c oopserrsx.h ${GENERICS}
+
+ArrayOb.o: ${I}/libc.h ArrayOb.h oopsIO.h Collection.h
+ArrayOb.o: ${I}/malloc.h Object.h Iterator.h ${I}/stdio.h
+ArrayOb.o: ${I}/stream.h ${I}/errors.h
+ArrayOb.o: ${I}/string.h ${I}/osfcn.h
+Arraychar.o: Arraychar.h oopsconfig.h ${I}/libc.h oopsIO.h
+Arraychar.o: Collection.h ${I}/malloc.h Object.h Iterator.h
+Arraychar.o: ${I}/stdio.h ${I}/stream.h
+Arraychar.o: ${I}/errors.h ${I}/string.h
+Arraychar.o: ${I}/osfcn.h
+Assoc.o: Assoc.h LookupKey.h Object.h ${I}/stdio.h
+Assoc.o: ${I}/stream.h ${I}/errors.h
+AssocInt.o: AssocInt.h oopsIO.h LookupKey.h Integer.h Object.h
+AssocInt.o: ${I}/stdio.h ${I}/stream.h
+AssocInt.o: ${I}/errors.h ${I}/string.h
+AssocInt.o: ${I}/osfcn.h
+Bag.o: Bag.h AssocInt.h Integer.h oopsIO.h LookupKey.h Collection.h Dictionary.h
+Bag.o: Object.h Iterator.h Set.h ${I}/stdio.h
+Bag.o: ${I}/stream.h ${I}/errors.h ArrayOb.h
+Bag.o: ${I}/malloc.h ${I}/string.h ${I}/osfcn.h
+BitBoard.o: BitBoard.h oopsIO.h Object.h ${I}/stdio.h
+BitBoard.o: ${I}/stream.h ${I}/errors.h
+BitBoard.o: ${I}/string.h ${I}/osfcn.h
+Bitset.o: Bitset.h oopsIO.h Object.h ${I}/stdio.h
+Bitset.o: ${I}/stream.h ${I}/errors.h
+Bitset.o: ${I}/string.h ${I}/osfcn.h
+Class.o: Object.h String.h Dictionary.h Assoc.h LookupKey.h Set.h
+Class.o: ${I}/stdio.h ${I}/stream.h
+Class.o: ${I}/errors.h Collection.h ArrayOb.h
+Class.o: ${I}/malloc.h Iterator.h ${I}/string.h
+Collection.o: Collection.h ArrayOb.h oopsIO.h ${I}/malloc.h Object.h
+Collection.o: Iterator.h ${I}/stdio.h ${I}/stream.h
+Collection.o: ${I}/errors.h ${I}/string.h
+Collection.o: ${I}/osfcn.h
+Date.o: Date.h String.h ${I}/ctype.h ${I}/string.h
+Date.o: ${I}/time.h oopsIO.h Object.h ${I}/stdio.h
+Date.o: ${I}/stream.h ${I}/errors.h
+Date.o: ${I}/malloc.h ${I}/osfcn.h
+Dictionary.o: Dictionary.h LookupKey.h Assoc.h Set.h Object.h
+Dictionary.o: ${I}/stdio.h ${I}/stream.h
+Dictionary.o: ${I}/errors.h Collection.h ArrayOb.h
+Dictionary.o: ${I}/malloc.h Iterator.h
+Exception.o: ExceptAct.h ${I}/osfcn.h ${I}/libc.h
+Exception.o: ${I}/errlib.h oopsconfig.h oopserrs.h oopserrsx.h
+Exception.o: Exception.h Object.h ${I}/setjmp.h
+Exception.o: ${I}/stdio.h ${I}/stream.h
+Exception.o: ${I}/errors.h
+Float.o: Float.h oopsIO.h Object.h ${I}/stdio.h
+Float.o: ${I}/stream.h ${I}/errors.h
+Float.o: ${I}/string.h ${I}/osfcn.h
+Fraction.o: Fraction.h ${I}/libc.h ${I}/math.h oopsIO.h
+Fraction.o: Object.h ${I}/stdio.h ${I}/stream.h
+Fraction.o: ${I}/errors.h ${I}/string.h
+Fraction.o: ${I}/osfcn.h
+Heap.o: ${I}/libc.h Heap.h oopsIO.h Collection.h OrderedCltn.h
+Heap.o: ArrayOb.h ${I}/malloc.h Object.h Iterator.h
+Heap.o: ${I}/stdio.h ${I}/stream.h
+Heap.o: ${I}/errors.h SeqCltn.h ${I}/string.h
+Heap.o: ${I}/osfcn.h
+IdentDict.o: IdentDict.h LookupKey.h Dictionary.h Set.h Object.h
+IdentDict.o: ${I}/stdio.h ${I}/stream.h
+IdentDict.o: ${I}/errors.h Collection.h ArrayOb.h
+IdentDict.o: ${I}/malloc.h Iterator.h
+Integer.o: Integer.h oopsIO.h Object.h ${I}/stdio.h
+Integer.o: ${I}/stream.h ${I}/errors.h
+Integer.o: ${I}/string.h ${I}/osfcn.h
+Iterator.o: Iterator.h Collection.h SeqCltn.h oopsIO.h Object.h
+Iterator.o: ${I}/stdio.h ${I}/stream.h
+Iterator.o: ${I}/errors.h ${I}/string.h
+Iterator.o: ${I}/osfcn.h
+Link.o: Link.h Object.h ${I}/stdio.h ${I}/stream.h
+Link.o: ${I}/errors.h
+LinkOb.o: LinkOb.h oopsIO.h Link.h Object.h ${I}/stdio.h
+LinkOb.o: ${I}/stream.h ${I}/errors.h
+LinkOb.o: ${I}/string.h ${I}/osfcn.h
+LinkedList.o: LinkedList.h oopsIO.h SeqCltn.h Link.h Object.h
+LinkedList.o: ${I}/stdio.h ${I}/stream.h
+LinkedList.o: ${I}/errors.h Collection.h Iterator.h
+LinkedList.o: ${I}/string.h ${I}/osfcn.h
+LookupKey.o: LookupKey.h Object.h ${I}/stdio.h
+LookupKey.o: ${I}/stream.h ${I}/errors.h
+Nil.o: Object.h ${I}/stdio.h ${I}/stream.h
+Nil.o: ${I}/errors.h
+Object.o: ${I}/ctype.h oopsconfig.h Object.h Dictionary.h LookupKey.h
+Object.o: IdentDict.h String.h ${I}/string.h Assoc.h AssocInt.h
+Object.o: OrderedCltn.h oopsIO.h Integer.h Set.h ${I}/stdio.h
+Object.o: ${I}/stream.h ${I}/errors.h SeqCltn.h ArrayOb.h
+Object.o: Collection.h ${I}/malloc.h Iterator.h
+Object.o: ${I}/osfcn.h
+OrderedCltn.o: ${I}/libc.h OrderedCltn.h oopsIO.h SeqCltn.h ArrayOb.h
+OrderedCltn.o: Collection.h ${I}/malloc.h Object.h Iterator.h
+OrderedCltn.o: ${I}/stdio.h ${I}/stream.h
+OrderedCltn.o: ${I}/errors.h ${I}/string.h
+OrderedCltn.o: ${I}/osfcn.h
+Point.o: Point.h oopsIO.h Object.h ${I}/math.h
+Point.o: ${I}/stdio.h ${I}/stream.h
+Point.o: ${I}/errors.h ${I}/string.h
+Point.o: ${I}/osfcn.h
+Process.o: Process.h Scheduler.h ExceptAct.h Exception.h oopserrs.h Object.h
+Process.o: ${I}/setjmp.h ${I}/stdio.h
+Process.o: ${I}/stream.h ${I}/errors.h Link.h String.h
+Process.o: oopsconfig.h LinkedList.h SeqCltn.h Collection.h Iterator.h
+Process.o: ${I}/string.h ${I}/malloc.h
+Random.o: Random.h oopsconfig.h ${I}/time.h oopsIO.h Object.h
+Random.o: ${I}/stdio.h ${I}/stream.h
+Random.o: ${I}/errors.h ${I}/string.h
+Random.o: ${I}/osfcn.h
+Range.o: Range.h oopsIO.h Object.h ${I}/stdio.h
+Range.o: ${I}/stream.h ${I}/errors.h
+Range.o: ${I}/string.h ${I}/osfcn.h
+Rectangle.o: Rectangle.h OrderedCltn.h oopsIO.h SeqCltn.h ArrayOb.h Collection.h
+Rectangle.o: ${I}/malloc.h Object.h Iterator.h
+Rectangle.o: ${I}/stdio.h ${I}/stream.h
+Rectangle.o: ${I}/errors.h Point.h ${I}/math.h
+Rectangle.o: ${I}/string.h ${I}/osfcn.h
+Regex.o: Regex.h oopsIO.h ${I}/ctype.h String.h Range.h regex.h
+Regex.o: Object.h ${I}/stdio.h ${I}/stream.h
+Regex.o: ${I}/errors.h ${I}/string.h
+Regex.o: ${I}/malloc.h ${I}/osfcn.h
+Scheduler.o: Process.h Scheduler.h ${I}/osfcn.h Link.h Exception.h
+Scheduler.o: String.h oopsconfig.h Object.h ${I}/setjmp.h
+Scheduler.o: ${I}/stdio.h ${I}/stream.h
+Scheduler.o: ${I}/errors.h LinkedList.h SeqCltn.h Collection.h
+Scheduler.o: Iterator.h ${I}/string.h ${I}/malloc.h
+Semaphore.o: Semaphore.h Process.h Scheduler.h oopsIO.h Link.h Exception.h
+Semaphore.o: String.h oopsconfig.h Object.h ${I}/setjmp.h
+Semaphore.o: ${I}/stdio.h ${I}/stream.h
+Semaphore.o: ${I}/errors.h LinkedList.h SeqCltn.h Collection.h
+Semaphore.o: Iterator.h ${I}/string.h ${I}/malloc.h
+Semaphore.o: ${I}/osfcn.h
+SeqCltn.o: SeqCltn.h Collection.h Object.h Iterator.h ${I}/stdio.h
+SeqCltn.o: ${I}/stream.h ${I}/errors.h
+Set.o: Set.h oopsIO.h Collection.h ArrayOb.h ${I}/malloc.h Object.h
+Set.o: Iterator.h ${I}/stdio.h ${I}/stream.h
+Set.o: ${I}/errors.h ${I}/string.h ${I}/osfcn.h
+SharedQueue.o: SharedQueue.h oopsIO.h ArrayOb.h Semaphore.h Collection.h
+SharedQueue.o: ${I}/malloc.h Object.h Iterator.h
+SharedQueue.o: ${I}/stdio.h ${I}/stream.h
+SharedQueue.o: ${I}/errors.h LinkedList.h SeqCltn.h Link.h
+SharedQueue.o: ${I}/string.h ${I}/osfcn.h
+SortedCltn.o: SortedCltn.h oopsIO.h OrderedCltn.h SeqCltn.h ArrayOb.h
+SortedCltn.o: Collection.h ${I}/malloc.h Object.h Iterator.h
+SortedCltn.o: ${I}/stdio.h ${I}/stream.h
+SortedCltn.o: ${I}/errors.h ${I}/string.h
+SortedCltn.o: ${I}/osfcn.h
+Stack.o: Stack.h oopsIO.h OrderedCltn.h SeqCltn.h ArrayOb.h Collection.h
+Stack.o: ${I}/malloc.h Object.h Iterator.h ${I}/stdio.h
+Stack.o: ${I}/stream.h ${I}/errors.h
+Stack.o: ${I}/string.h ${I}/osfcn.h
+String.o: String.h Range.h oopsconfig.h oopsIO.h ${I}/ctype.h
+String.o: Object.h ${I}/stdio.h ${I}/stream.h
+String.o: ${I}/errors.h ${I}/string.h
+String.o: ${I}/malloc.h ${I}/osfcn.h
+Time.o: Date.h Time.h oopsconfig.h oopsIO.h ${I}/time.h Object.h
+Time.o: ${I}/stdio.h ${I}/stream.h
+Time.o: ${I}/errors.h ${I}/string.h
+Time.o: ${I}/osfcn.h
+oopsIO.o: ${I}/ctype.h oopsIO.h Object.h ${I}/string.h
+oopsIO.o: ${I}/osfcn.h ${I}/stdio.h
+oopsIO.o: ${I}/stream.h ${I}/errors.h
+oopserrs.o: ${I}/errors.h oopserrs.h ${I}/stream.h
+oopserrs.o: ${I}/stdio.h
+oopsinit.o: Object.h ${I}/errlib.h ${I}/stdio.h
+oopsinit.o: ${I}/stream.h ${I}/errors.h

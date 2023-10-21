@@ -1,0 +1,32 @@
+#! /bin/sh
+# idlekill - kills idle logins
+#   Rex Sanders, USGS Pacific Marine Geology, 4/24/84
+#   modified 6/84 - CRONTAB warning, remove log - RS
+#   modified 12/84 - use 'w' instead of 'wi' - RS
+#   modified 4/85 - add lots more beeps to warning - RS
+#   modified 5/85 - put tty output in background - no hang on ^S terminals
+#
+# BUG:  if a user is in a process for a long time that uses /dev/tty
+#         directly (as in 'cc junk.c |& error -v'), 'w' reports idletime
+#         incorrectly, and may unjustly kill a login.
+
+# IDLEKILL is minutes of idle terminal before death eligibility
+IDLEKILL=30
+# CRONTAB is minutes between times idlekill is run by cron as in:
+#  2,12,22,32,42,52 * * * * /etc/idlekill
+CRONTAB=10
+WARN=`expr $IDLEKILL - $CRONTAB`
+
+for j in `/usr/ucb/w -h |   awk "{if (substr(\$0,27,2)*60+substr(\$0,30,2)+0 >= $IDLEKILL)     print \$2 }"`
+do
+  i=`expr $j : 'tty\(.*\)' '|' $j`
+  echo "Your login is being killed for more than $IDLEKILL minutes of inactivity!" > /dev/$j &
+  echo `date` > /dev/$j &
+  kill -9 `ps -t${i} | awk '/ -.*sh /{print \$1}'`
+done
+for j in `/usr/ucb/w -h |   awk "{if (substr(\$0,27,2)*60+substr(\$0,30,2)+0 >= $WARN)     print \$2 }"`
+do
+  echo -n "" > /dev/$j &
+  echo "Your login will be killed in the next $CRONTAB minutes!" > /dev/$j &
+  echo -n "" > /dev/$j &
+done

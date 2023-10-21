@@ -1,0 +1,30 @@
+: Broadcast a message to all ttys that a person is logged into.
+
+# System-dependent command (customize for your installation):
+MAILER='Mail'		# some systems use 'mailx'
+
+cmd=`basename $0`	# makes diagnostics under csh look better
+USAGE="Usage:  $cmd login  Your message here"
+
+# If we have enough args, find out who to talk at.
+if [ $# -lt 2 ]
+then	echo 1>&2 "$USAGE"; exit 1
+else	you=$1; shift
+fi
+
+# Send the message to each terminal the specified person is logged into.
+# If the person isn't logged in anywhere, mail the message to them.
+# This version is non-networked (for local delivery only).
+
+ttys=`who | sed -n '/^'$you' /s/^'$you'  *\(tty[^ ]*\) .*/\1/p'`
+if [ -z "$ttys" ]
+then	# not logged in
+	echo 1>&2 "$cmd: $you not logged in;" \
+		"sending your message via mail."
+	echo "$@" | $MAILER -s "Hey, $you!" $you
+else	# logged in one or more times
+	for tty in $ttys
+	do
+		echo "Hey, $you:  $@" | write $you $tty
+	done
+fi

@@ -1,0 +1,554 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site msdc.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!gatech!gt-stratus!msdc!dan
+From: dan@msdc.UUCP (Dan Forsyth)
+Newsgroups: net.sources
+Subject: Mods to 4.2 ps to show open files
+Message-ID: <136@msdc.UUCP>
+Date: 7 Sep 85 18:56:30 GMT
+Date-Received: 8 Sep 85 21:32:33 GMT
+Organization: Medical Systems Development Corp., Atlanta
+Lines: 542
+
+For those of you who like to fool with long files, here is a
+modification to "ps" that shows the position of open files.  I find it
+incredibly useful to spy on huge processes (we have a few whose
+run-times are measured in cpu-days).
+
+It is a modification of the "ps" in the BRL version of 4.2bsd for the VAX.
+Unfortunately, I don't have an original 4.2bsd release on-line, so I
+can't tell you whether the patches will apply cleanly.  Since it so
+closely resembles the 4.1 "ps" for which it was originally written, I
+assume that they will be pretty close.  For versions that use
+"/etc/psdatabase", you'll want to compile with "PSFILE=somethingelse" 
+since these mods change its contents.
+
+The following are two context diffs that should be easily applied with
+Larry Wall's "patch" program.  Just put "ps.c" and "ps.1" in a
+directory and run this article through patch.
+
+Please, no flames about programming style, etc.  I tried to make the
+mods in the same (nasty) style as the original.  To those of you
+running System V.*, my apologies; I don't have a SV native system to
+play with.  If it's deemed useful, maybe some charitable SV user
+will convert it.
+
+Dan Forsyth		({akgua,gatech,mcnc,ihnp4}!msdc!dan)
+Medical Systems Development Corporation, Atlanta, GA
+
+*** ps.1	Wed Sep  4 19:22:02 1985
+--- ps.1.new	Wed Sep  4 19:47:56 1985
+***************
+*** 5,11
+  .SH SYNOPSIS
+  .B ps
+  [
+! .B acegklstuvwxU#
+  ]
+  .SH DESCRIPTION
+  .I Ps
+
+--- 5,11 -----
+  .SH SYNOPSIS
+  .B ps
+  [
+! .B acefgklstuvwxU#
+  ]
+  .SH DESCRIPTION
+  .I Ps
+***************
+*** 66,71
+  .B e
+  Asks for the environment to be printed as well as the arguments to the command.
+  .TP 5
+  .B g
+  Asks for all processes.
+  Without this option,
+
+--- 66,79 -----
+  .B e
+  Asks for the environment to be printed as well as the arguments to the command.
+  .TP 5
++ .B f
++ Shows information about each process' open files after the process
++ display line.  The display 
++ consists of one line per open file, so output is voluminous for many
++ processes.  Information from both the file table and inode table
++ is shown for each file.  Items shown are
++ FD, DEV, INUM, IFLAG, CT, SIZE/DEV, POS, and FFLAG.
++ .TP 5
+  .B g
+  Asks for all processes.
+  Without this option,
+***************
+*** 229,234
+  	SDETACH	080000	detached inherited by init
+  	SOUSIG	100000	using old signal mechanism
+  .fi
+  .PD
+  .PP
+  A process that has exited and has a parent, but has not
+
+--- 237,270 -----
+  	SDETACH	080000	detached inherited by init
+  	SOUSIG	100000	using old signal mechanism
+  .fi
++ .IP FD 10
++ The file descriptor number open to the process.
++ .IP DEV 10
++ The device number on which the open inode resides.  (Not included for
++ sockets.)
++ .IP INUM 10
++ The i-number of the open inode.
++ (Not included for sockets.)
++ .IP IFLAG 10
++ The flags currently set in the inode (see <sys/inode.h>).  Flags are
++ L for ILOCKED, U for IUPD, A for IADD, N for IMOUNT, W for IWANT,
++ T for ITEXT, C for ICHG, S for ISHLOCK, E for IEXLOCK, C for ILWAIT,
++ M for IMOD, R for IRENAME, and X for IXMOD.
++ (Not included for sockets.)
++ .IP CT 10
++ The current user count of the inode.
++ (Not included for sockets.)
++ .IP SIZE/DEV 10
++ For files, the current file size; for devices, the device numbers.
++ (Not included for sockets.)
++ .IP POS 10
++ The offset in the file table entry for the file.
++ .IP FFLAG 10
++ The flags in the file table entry (see <sys/file.h>).  Flags are
++ R for FREAD, W for FWRITE, M for FMARK, D for FDEFER, S for FSHLOCK,
++ and E for FEXLOCK.
++ The P flag
++ is included for sockets.
+  .PD
+  .PP
+  A process that has exited and has a parent, but has not
+***************
+*** 261,263
+  .I ps
+  is running; the picture it gives is only a close
+  approximation to reality.
+
+--- 297,304 -----
+  .I ps
+  is running; the picture it gives is only a close
+  approximation to reality.
++ .PP
++ It would be nice if the
++ .B f
++ format could list the path names of open files.  However, i-numbers
++ are better than nothing.
+
+
+*** /usr/src/bin/ps.c	Fri Jan 11 23:56:39 1985
+--- /usr/dan/bin/src/ps.c	Sun Aug 25 11:09:58 1985
+***************
+*** 39,44
+  #include <sys/vm.h>
+  #include <sys/text.h>
+  #include <sys/stat.h>
+  #include <sys/mbuf.h>
+  #include <math.h>
+  #include <errno.h>
+
+--- 39,48 -----
+  #include <sys/vm.h>
+  #include <sys/text.h>
+  #include <sys/stat.h>
++ #include <sys/inode.h>
++ #define KERNEL	/* somebody screwed up the header file */
++ #include <sys/file.h>
++ #undef KERNEL
+  #include <sys/mbuf.h>
+  #include <math.h>
+  #include <errno.h>
+***************
+*** 68,73
+  #define	X_DMMIN		10
+  	{ "_dmmax" },
+  #define	X_DMMAX		11
+  	{ "_Sysmap" },
+  #define	X_SYSMAP	12
+  	{ "_Syssize" },
+
+--- 72,85 -----
+  #define	X_DMMIN		10
+  	{ "_dmmax" },
+  #define	X_DMMAX		11
++ 	{ "_file" },
++ #define X_FILE          12
++ 	{ "_nfile" },
++ #define X_NFILE         13
++ 	{"_inode" },
++ #define X_INODE         14
++ 	{"_ninode" },
++ #define X_NINODE        15
+  	{ "_Sysmap" },
+  #define	X_SYSMAP	16
+  	{ "_Syssize" },
+***************
+*** 69,75
+  	{ "_dmmax" },
+  #define	X_DMMAX		11
+  	{ "_Sysmap" },
+! #define	X_SYSMAP	12
+  	{ "_Syssize" },
+  #define	X_SYSSIZE	13
+  	{ "" },
+
+--- 81,87 -----
+  	{"_ninode" },
+  #define X_NINODE        15
+  	{ "_Sysmap" },
+! #define	X_SYSMAP	16
+  	{ "_Syssize" },
+  #define	X_SYSSIZE	17
+  	{ "" },
+***************
+*** 71,77
+  	{ "_Sysmap" },
+  #define	X_SYSMAP	12
+  	{ "_Syssize" },
+! #define	X_SYSSIZE	13
+  	{ "" },
+  };
+  
+
+--- 83,89 -----
+  	{ "_Sysmap" },
+  #define	X_SYSMAP	16
+  	{ "_Syssize" },
+! #define	X_SYSSIZE	17
+  	{ "" },
+  };
+  
+***************
+*** 82,87
+  		struct	vsav *vp;
+  		int	s_ssiz;
+  	} s_un;
+  	struct	asav *ap;
+  } *savcom;
+  
+
+--- 94,100 -----
+  		struct	vsav *vp;
+  		int	s_ssiz;
+  	} s_un;
++ 	struct  fsav *fp;
+  	struct	asav *ap;
+  } *savcom;
+  
+***************
+*** 97,102
+  	size_t	a_maxrss;
+  };
+  
+  char	*lhdr;
+  struct	lsav {
+  	short	l_ppid;
+
+--- 110,128 -----
+  	size_t	a_maxrss;
+  };
+  
++ struct fsav {
++ 	u_short   f_dev;
++ 	u_short   f_ino;
++ 	u_short   f_flag;
++ 	u_short   f_count;
++ 	int     f_size;
++ 	u_short	f_type;
++ 	int     f_offset;
++ 	u_short   f_rwflag;
++ 	u_short   f_mode;
++ };
++ 	
++ 
+  char	*lhdr;
+  struct	lsav {
+  	short	l_ppid;
+***************
+*** 107,112
+  
+  char	*uhdr;
+  char	*shdr;
+  
+  char	*vhdr;
+  struct	vsav {
+
+--- 133,139 -----
+  
+  char	*uhdr;
+  char	*shdr;
++ char    *fhdr;
+  
+  char	*vhdr;
+  struct	vsav {
+***************
+*** 134,140
+  #endif
+  
+  int	chkpid;
+! int	aflg, cflg, eflg, gflg, kflg, lflg, sflg,
+  	uflg, vflg, xflg, Uflg;
+  char	*tptr;
+  char	*gettty(), *getcmd(), *getname(), *savestr(), *state();
+
+--- 161,167 -----
+  #endif
+  
+  int	chkpid;
+! int	aflg, cflg, eflg, fflg, gflg, kflg, lflg, sflg,
+  	uflg, vflg, xflg, Uflg;
+  char	*tptr;
+  char	*gettty(), *getcmd(), *getname(), *savestr(), *state();
+***************
+*** 148,153
+  struct	text *atext;
+  double	ccpu;
+  int	ecmx;
+  struct	pte *Usrptmap, *usrpt;
+  int	nproc, ntext;
+  int	dmmin, dmmax;
+
+--- 175,183 -----
+  struct	text *atext;
+  double	ccpu;
+  int	ecmx;
++ struct  file *filep;
++ struct  inode *inodep;
++ int	nfile, ninode;
+  struct	pte *Usrptmap, *usrpt;
+  int	nproc, ntext;
+  int	dmmin, dmmax;
+***************
+*** 218,223
+  		case 'e':
+  			eflg++;
+  			break;
+  		case 'g':
+  			gflg++;
+  			break;
+
+--- 248,256 -----
+  		case 'e':
+  			eflg++;
+  			break;
++ 		case 'f':
++ 			fflg++;
++ 			break;
+  		case 'g':
+  			gflg++;
+  			break;
+***************
+*** 277,282
+  	printhdr();
+  	procp = getw(nl[X_PROC].n_value);
+  	nproc = getw(nl[X_NPROC].n_value);
+  	savcom = (struct savcom *)calloc((unsigned) nproc, sizeof (*savcom));
+  	for (i=0; i<nproc; i += NPROC) {
+  		klseek(kmem, (long)procp, 0);
+
+--- 310,321 -----
+  	printhdr();
+  	procp = getw(nl[X_PROC].n_value);
+  	nproc = getw(nl[X_NPROC].n_value);
++ 	if (fflg) {
++ 		nfile=getw(nl[X_NFILE].n_value);
++ 		ninode=getw(nl[X_NINODE].n_value);
++ 		filep=(struct file *)getw(nl[X_FILE].n_value);
++ 		inodep=(struct inode *)getw(nl[X_INODE].n_value);
++ 	}
+  	savcom = (struct savcom *)calloc((unsigned) nproc, sizeof (*savcom));
+  	for (i=0; i<nproc; i += NPROC) {
+  		klseek(kmem, (long)procp, 0);
+***************
+*** 337,342
+  		else
+  			printf(" %.*s", twidth - cmdstart - 2, sp->ap->a_cmdp);
+  		printf("\n");
+  	}
+  	exit(npr == 0);
+  }
+
+--- 376,403 -----
+  		else
+  			printf(" %.*s", twidth - cmdstart - 2, sp->ap->a_cmdp);
+  		printf("\n");
++ 		if (fflg) {
++ 			register int i;
++ 			char tmp[20], rwf[20];
++ 			for (i = 0; i < NOFILE; i++) {
++ 				register struct fsav *p = &sp->fp[i];
++ 				if (p->f_type == 0)
++ 					continue;
++ 
++ 				printf("\t%2d: ", i);
++ 				rwf[0] = '\0';
++ 				if (p->f_rwflag & FREAD) strcat(rwf, "R");
++ 				if (p->f_rwflag & FWRITE) strcat(rwf, "W");
++ 				if (p->f_rwflag & FMARK) strcat(rwf, "M");
++ 				if (p->f_rwflag & FDEFER) strcat(rwf, "D");
++ 				if (p->f_rwflag & FSHLOCK) strcat(rwf, "S");
++ 				if (p->f_rwflag & FEXLOCK) strcat(rwf, "E");
++ 
++ 				if (p->f_type == DTYPE_SOCKET) {
++ 					printf("%6s %5s %6s%2s %8s %11d P%-3s\n",
++ 						"", "", "", "", "",
++ 						p->f_offset, rwf);
++ 					continue;
+  				}
+  				sprintf(tmp, "%2d,%d ", major(p->f_dev),
+  					minor(p->f_dev));
+***************
+*** 338,343
+  			printf(" %.*s", twidth - cmdstart - 2, sp->ap->a_cmdp);
+  		printf("\n");
+  	}
+  	exit(npr == 0);
+  }
+  
+
+--- 399,436 -----
+  						p->f_offset, rwf);
+  					continue;
+  				}
++ 				sprintf(tmp, "%2d,%d ", major(p->f_dev),
++ 					minor(p->f_dev));
++ 				printf("%-6s ", tmp);
++ 				printf("%5d ", p->f_ino);
++ 				tmp[0] = '\0';
++ 				if (p->f_flag & ILOCKED) strcat(tmp, "L");
++ 				if (p->f_flag & IUPD) strcat(tmp, "U");
++ 				if (p->f_flag & IACC) strcat(tmp, "A");
++ 				if (p->f_flag & IMOUNT) strcat(tmp, "N");
++ 				if (p->f_flag & IWANT) strcat(tmp, "W");
++ 				if (p->f_flag & ITEXT) strcat(tmp, "T");
++ 				if (p->f_flag & ICHG) strcat(tmp, "C");
++ 				if (p->f_flag & ISHLOCK) strcat(tmp, "S");
++ 				if (p->f_flag & IEXLOCK) strcat(tmp, "E");
++ 				if (p->f_flag & ILWAIT) strcat(tmp, "C");
++ 				if (p->f_flag & IMOD) strcat(tmp, "M");
++ 				if (p->f_flag & IRENAME) strcat(tmp, "R");
++ 				if (p->f_flag & IXMOD) strcat(tmp, "X");
++ 				printf("%-6s", tmp);
++ 				printf("%2d ", sp->fp[i].f_count);
++ 				if ((p->f_mode&IFMT)==IFBLK
++ 				    || (p->f_mode&IFMT)==IFCHR)
++ 					sprintf(tmp, "%4d,%d",major(p->f_size),
++ 						minor(p->f_size));
++ 				else
++ 					sprintf(tmp, "%8d", p->f_size);
++ 				printf("%-8s ", tmp);
++ 				printf("%11d ", sp->fp[i].f_offset);
++ 				printf("%-4s\n", rwf);
++ 			}
++ 		}
++ 	}
+  	exit(npr == 0);
+  }
+  
+***************
+*** 539,544
+  		hdr += strlen("SSIZ ");
+  	cmdstart = strlen(hdr);
+  	printf("%s COMMAND\n", hdr);
+  	(void) fflush(stdout);
+  }
+  
+
+--- 632,639 -----
+  		hdr += strlen("SSIZ ");
+  	cmdstart = strlen(hdr);
+  	printf("%s COMMAND\n", hdr);
++ 	if (fflg)
++ 		printf("%s\n", fhdr);
+  	(void) fflush(stdout);
+  }
+  
+***************
+*** 806,811
+  			sp->s_un.s_ssiz = (&user.upages[UPAGES][0] - cp);
+  		}
+  	}
+  
+  	npr++;
+  }
+
+--- 898,952 -----
+  			sp->s_un.s_ssiz = (&user.upages[UPAGES][0] - cp);
+  		}
+  	}
++ 	if (fflg) {
++ 		struct file file;
++ 		struct inode inode;
++ 		int i;
++ 		sp->fp = (struct fsav *)calloc(NOFILE, sizeof (struct fsav));
++ 		for (i = 0; i < NOFILE; i++) {
++ 			if (u.u_ofile[i] == NULL)
++ 				continue;
++ 			if (u.u_ofile[i] < filep
++ 			    || u.u_ofile[i] >= &filep[nfile]) {
++ 				printf("ps: file %d of %d out of bounds\n",
++ 					i, mproc->p_pid);
++ 				continue;
++ 			}
++ 			lseek(kmem, u.u_ofile[i], 0);
++ 			if (read(kmem, &file, sizeof(file)) != sizeof(file)) {
++ 				printf("ps: can't read file %d of %d\n",
++ 					i, mproc->p_pid);
++ 				continue;
++ 			}
++ 			sp->fp[i].f_type = file.f_type;
++ 			sp->fp[i].f_offset = file.f_offset;
++ 			sp->fp[i].f_rwflag = file.f_flag;
++ 			if (file.f_type == DTYPE_INODE) {
++ 				if ((struct inode *)file.f_data < inodep
++ 				    || (struct inode *)file.f_data >= &inodep[ninode]) {
++ 					printf("ps: file %d of %d inode out of bounds\n",
++ 					    i, mproc->p_pid);
++ 					continue;
++ 				}
++ 				lseek(kmem, file.f_data, 0);
++ 				if (read(kmem, &inode, sizeof(inode)) != sizeof(inode)) {
++ 					printf("ps: can't read inode of file %d of %d\n",
++ 					    i, mproc->p_pid);
++ 					continue;
++ 				}
++ 				sp->fp[i].f_dev = inode.i_dev;
++ 				sp->fp[i].f_count = inode.i_count;
++ 				sp->fp[i].f_flag = inode.i_flag;
++ 				sp->fp[i].f_ino = inode.i_number;
++ 				if ((inode.i_mode&IFMT)==IFBLK
++ 				    || (inode.i_mode&IFMT)==IFCHR)
++ 					sp->fp[i].f_size = inode.i_rdev;
++ 				else
++ 					sp->fp[i].f_size = inode.i_size;
++ 				sp->fp[i].f_mode = inode.i_mode;
++ 			}
++ 		}
++ 	}
+  
+  	npr++;
+  }
+***************
+*** 1011,1016
+  
+  	printf("%3ld:%02ld", ap->a_cpu / 60, ap->a_cpu % 60);
+  }
+  
+  char	*uhdr =
+  "USER       PID %CPU %MEM   SZ  RSS TT STAT  TIME";
+
+--- 1152,1160 -----
+  
+  	printf("%3ld:%02ld", ap->a_cpu / 60, ap->a_cpu % 60);
+  }
++ 
++ char    *fhdr =
++ "\tFD   DEV    INUM IFLAG CT  SIZE/DEV        POS FFLAG";
+  
+  char	*uhdr =
+  "USER       PID %CPU %MEM   SZ  RSS TT STAT  TIME";

@@ -1,0 +1,379 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!ucbvax!ucbcad!nike!lll-crg!caip!im4u!ut-sally!husc6!wjh12!mirror!sources-request
+From: sources-request@mirror.UUCP
+Newsgroups: mod.sources
+Subject: v06i083:  Speed, etc., patches for BSD ps (bsd.ps.patch)
+Message-ID: <172@mirror.UUCP>
+Date: 1 Aug 86 15:59:59 GMT
+Sender: rs@mirror.UUCP
+Organization: Engineering Computer Network, University of Oklahoma
+Lines: 367
+Approved: rs@mirror.UUCP
+Posted: Fri Aug  1 10:59:59 1986
+
+Submitted by: "Michael A. Callahan" <cca!uokvax!mikec>
+Mod.sources: Volume 6, Issue 83
+Archive-name: bsd.ps.patch
+
+[  I ran this on a 4.2BSD 750, and it worked.  I took Mike's initial
+   comments, formatted them into the manpage, and published the diff
+   as part of the sharefile.  I also threw together the Makefile.
+   The technique of storing data that changes infrequently in a file in
+   order to speed up ps is probably a good one for any Un*x system,
+   and is in fact done in other versions of ps I've seen.  Sorry the
+   diffs aren't context; Mike's weren't, and I opted for consistency.
+   --r$  ]
+
+The diff's that follow are speedup modifications for ps.c.  These mods
+cut the system time of ps by more than half, and trim back the user
+time a bit also.  The main difference is that the ttys in /dev are not
+stat'ed each time ps runs.  Instead a file is created in /etc when the
+machine boots via /etc/rc, and that file is used instead.  Also in this
+file is kept a name list of /vmunix.
+
+				Mike Callahan
+				University of Oklahoma
+				ihnp4!okstate!uokvax!mikec
+				cbosgd!okstate!uokvax!mikec
+
+#!/bin/sh
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+# Wrapped by rs@mirror.UUCP on Fri Jul 25 19:38:44 EDT 1986
+# Contents:  Makefile ps.1.patch ps.c.patch
+ 
+echo x - Makefile
+sed 's/^XX//' > "Makefile" <<'@//E*O*F Makefile//'
+XXCFLAGS=-O -DECN
+XXps:	ps.c
+XX	cc $(CFLAGS) -o ps ps.c -lm
+@//E*O*F Makefile//
+chmod u=rw,g=rw,o=rw Makefile
+ 
+echo x - ps.1.patch
+sed 's/^XX//' > "ps.1.patch" <<'@//E*O*F ps.1.patch//'
+XX135,163d134
+XX< .TP 5
+XX< .B U
+XX< This flag instructs
+XX< .I ps
+XX< recreate its data files; all the files in
+XX< .I /etc/ttys
+XX< are stat'd, and the data is recorded in
+XX< .IR /etc/psdatabase ;
+XX< the namelist of
+XX< .I /vmunix
+XX< is stored in
+XX< .IR /etc/psdatabase .
+XX< This information changes only when the ttys are changed, or when a new
+XX< kernel is booted.
+XX< It is a good idea to put ``/bin/ps -U'' in
+XX< .IR /etc/rc.local .
+XX< .TP 5
+XX< .BI L login
+XX< This flag will do a ``ps x'' as the login name specified; i.e., is as
+XX< if the user with the indicated login name had run the command.
+XX< .TP 5
+XX< .B R
+XX< This will show the running processes in the system; it is faster than
+XX< .IR top (1L).
+XX< .TP 5
+XX< .BI N #
+XX< This flag will show all processes with a nice value greater than
+XX< or equal to #; e.g., ``ps lN4'' shows all the automatically-niced
+XX< processes.
+@//E*O*F ps.1.patch//
+chmod u=rw,g=rw,o=rw ps.1.patch
+ 
+echo x - ps.c.patch
+sed 's/^XX//' > "ps.c.patch" <<'@//E*O*F ps.c.patch//'
+XX% diff ps.c.old ps.c
+XX21a22,24
+XX> #ifdef ECN
+XX> #include <sys/file.h>
+XX> #endif
+XX23a27
+XX> #ifdef ECN /* share nlist with w so keep fields same */
+XX48a53,58
+XX> 	{ "_swapdev" },
+XX> #define	X_SWAPDEV	12
+XX> 	{ "_avenrun" },
+XX> #define	X_AVENRUN	13
+XX> 	{ "_boottime" },
+XX> #define	X_BOOTTIME	14
+XX50a61,89
+XX> #else
+XX> struct nlist nl[] = {
+XX> 	{ "_proc" },
+XX> #define	X_PROC		0
+XX> 	{ "_Usrptmap" },
+XX> #define	X_USRPTMA	1
+XX> 	{ "_usrpt" },
+XX> #define	X_USRPT		2
+XX> 	{ "_text" },
+XX> #define	X_TEXT		3
+XX> 	{ "_nswap" },
+XX> #define	X_NSWAP		4
+XX> 	{ "_maxslp" },
+XX> #define	X_MAXSLP	5
+XX> 	{ "_ccpu" },
+XX> #define	X_CCPU		6
+XX> 	{ "_ecmx" },
+XX> #define	X_ECMX		7
+XX> 	{ "_nproc" },
+XX> #define	X_NPROC		8
+XX> 	{ "_ntext" },
+XX> #define	X_NTEXT		9
+XX> 	{ "_dmmin" },
+XX> #define	X_DMMIN		10
+XX> 	{ "_dmmax" },
+XX> #define	X_DMMAX		11
+XX> 	{ "" },
+XX> };
+XX> #endif
+XX91a131,133
+XX> #ifdef ECN
+XX> struct	proc proc[400];		/* 400 = a few, for less syscalls */
+XX> #else
+XX92a135
+XX> #endif
+XX106a150,153
+XX> #ifdef ECN
+XX> int	Rflg, Nflg, nvalue, Uflg;
+XX> char	*mylogin, *lptr;
+XX> #endif
+XX139a187,189
+XX> #ifdef ECN
+XX> char bigoutbuf[BUFSIZ];
+XX> #endif ECN
+XX150a201,203
+XX> #ifdef ECN
+XX> 	setbuffer(stdout, bigoutbuf, BUFSIZ);
+XX> #endif ECN
+XX198a252,280
+XX> #ifdef ECN
+XX> 		case 'R':
+XX> 			Rflg++;
+XX> 			xflg++;
+XX> 			gflg++;
+XX> 			aflg++;
+XX> 			break;
+XX> 		case 'L':
+XX> 			if (*ap)
+XX> 				lptr = ap;
+XX> 			xflg++;
+XX> 			gflg++;
+XX> 			while (*ap)
+XX> 				ap++;
+XX> 			break;
+XX> 		case 'N':
+XX> 			if (*ap)
+XX> 				nvalue = atoi(ap) + 20;
+XX> 			aflg++;
+XX> 			gflg++;
+XX> 			xflg++;
+XX> 			Nflg++;
+XX> 			while (*ap)
+XX> 				ap++;
+XX> 			break;
+XX> 		case 'U':
+XX> 			Uflg++;
+XX> 			break;
+XX> #endif
+XX231a314,325
+XX> #ifdef ECN
+XX> 	if (lptr) {
+XX> 		struct passwd *pw, *getpwnam();
+XX> 		if ((pw = getpwnam(lptr)) == NULL) {
+XX> 			fprintf(stderr, "Unknown user: %s\n", lptr);
+XX> 			exit(1);
+XX> 		} else {
+XX> 			uid = pw->pw_uid;
+XX> 		}
+XX> 	} else
+XX> 		uid = getuid();
+XX> #else
+XX232a327
+XX> #endif ECN
+XX236a332,334
+XX> #ifdef ECN
+XX> 	for (i=0; i<nproc; i += 400) {
+XX> #else
+XX237a336
+XX> #endif
+XX240,241c339,345
+XX< 		if (j > 8)
+XX< 			j = 8;
+XX---
+XX> #ifdef ECN
+XX> 		if (j > 400)
+XX> 			j = 400;
+XX> #else
+XX> 		if (j > 400)
+XX> 			j = 400;
+XX> #endif
+XX252a357,367
+XX> 			if (Rflg) {
+XX> 				if (mproc->p_stat == SRUN)
+XX> 					save();
+XX> 				continue;
+XX> 			}
+XX> 			if (Nflg) {
+XX> 				if ((int)mproc->p_nice >= nvalue) {
+XX> 					save();
+XX> 				}
+XX> 				continue;
+XX> 			}
+XX358a474,490
+XX> #ifdef ECN
+XX> 	register int fd;
+XX> 	if (Uflg)
+XX> 		return;
+XX> 	else {
+XX> 		if (argc > 1)
+XX> 			nlist(argv[1],nl);
+XX> 		else {
+XX> 			if ((fd = open("/etc/psnlist", O_RDONLY)) < 0)
+XX> 				nlist("/vmunix", nl);
+XX> 			else {
+XX> 				read(fd, nl, sizeof(nl));
+XX> 				close(fd);
+XX> 			}
+XX> 		}
+XX> 	}
+XX> #else
+XX360a493
+XX> #endif ECN
+XX436a570,575
+XX> #ifdef ECN
+XX> #define MAXTTYS 150
+XX> struct ttys *hash_ttys[256]; /* 256 used to find minor */
+XX> struct ttys saved_tty_stat[MAXTTYS]; /* fixed sized used to quickly read in */
+XX> int next_stty = 0;
+XX> 
+XX438a578,667
+XX> 	register int fd;
+XX> 
+XX> 	if (Uflg) {
+XX> 		if ((fd = open("/etc/psnlist", O_CREAT|O_RDWR, 0444)) >= 0) {
+XX> 			nlist("/vmunix", nl);
+XX> 			write(fd, nl, sizeof(nl));
+XX> 			close(fd);
+XX> 		} else {
+XX> 			perror("/etc/psnlist");
+XX> 			exit(1);
+XX> 		}
+XX> 		domanual();
+XX> 		dosavettys();
+XX> 	}
+XX> 
+XX> 	if ((fd = open("/etc/psdatabase", O_RDONLY)) <= 0) {
+XX> 		domanual();
+XX> 		return;
+XX> 	}
+XX> 	read(fd, hash_ttys, sizeof(hash_ttys));
+XX> 	read(fd, saved_tty_stat, sizeof(saved_tty_stat));
+XX> 	close(fd);
+XX> }
+XX> 
+XX> dosavettys()
+XX> {
+XX> 	register int fd;
+XX> 
+XX> 	if ((fd = open("/etc/psdatabase", O_CREAT|O_RDWR, 0444)) <= 0)
+XX> 		return;
+XX> 	write(fd, hash_ttys, sizeof(hash_ttys));
+XX> 	write(fd, saved_tty_stat, sizeof(saved_tty_stat));
+XX> 	close(fd);
+XX> 	exit(0);
+XX> }
+XX> 
+XX> domanual()
+XX> {
+XX> 	register FILE *fp;
+XX> 	register int i;
+XX> 	register char c;
+XX> 	struct stat sbuf;
+XX> 
+XX> 	if ((fp = fopen("/etc/ttys", "r")) == NULL) {
+XX> 		perror("/etc/ttys");
+XX> 		exit(1);
+XX> 	}
+XX> 	i = 0;
+XX> 	while((c = getc(fp)) != EOF) {
+XX> 		if (c == '\n') {	/* jump the first 2 chars */
+XX> 			saved_tty_stat[next_stty].name[i] = '\0';
+XX> 			i = 0;
+XX> 			if (stat(saved_tty_stat[next_stty].name,&sbuf)==0 &&
+XX> 				(sbuf.st_mode & S_IFMT) == S_IFCHR)
+XX> 				saved_tty_stat[next_stty].ttyd = sbuf.st_rdev;
+XX> 			else
+XX> 				saved_tty_stat[next_stty].ttyd = -2;
+XX> 			saved_tty_stat[next_stty].next =
+XX> 				hash_ttys[saved_tty_stat[next_stty].ttyd % 256];
+XX> 			hash_ttys[saved_tty_stat[next_stty].ttyd % 256] =
+XX> 				&saved_tty_stat[next_stty];
+XX> 			next_stty++;
+XX> 			if ((c = getc(fp)) == EOF)
+XX> 				return;
+XX> 			if ((c = getc(fp)) == EOF)
+XX> 				return;
+XX> 		} else
+XX> 			saved_tty_stat[next_stty].name[i++] = c;
+XX> 	}
+XX> }
+XX> 
+XX> char *
+XX> gettty()
+XX> {
+XX> 	register struct ttys *dp;
+XX> 	register char *p;
+XX> 
+XX> 	for(dp = hash_ttys[u.u_ttyd % 256]; dp; dp = dp->next)
+XX> 		if (dp->ttyd == u.u_ttyd) {
+XX> 			p = dp->name;
+XX> 			if (p[0] == 't' && p[1] == 't' && p[2] == 'y')
+XX> 				p += 3;
+XX> 			return(p);
+XX> 		}
+XX> 	return("?");
+XX> }
+XX> 
+XX> #else ECN
+XX> getdev()
+XX> {
+XX596a826
+XX> #endif ECN
+XX1103a1334,1336
+XX> #ifdef ECN
+XX> 	struct passwd			*getpwuid();
+XX> #else
+XX1105a1339
+XX> #endif
+XX1118a1353,1359
+XX> #ifdef ECN
+XX> 	if ((pw = getpwuid(uid)) == NULL)
+XX> 		return((char *)NULL);
+XX> 	strncpy(n->nt_name, pw->pw_name, NMAX);
+XX> 	n->nt_uid = uid;
+XX> 	return(n->nt_name);
+XX> #else
+XX1145a1387
+XX> #endif
+@//E*O*F ps.c.patch//
+chmod u=rw,g=rw,o=rw ps.c.patch
+ 
+echo Inspecting for damage in transit...
+temp=/tmp/sharin$$; dtemp=/tmp/sharout$$
+trap "rm -f $temp $dtemp; exit" 0 1 2 3 15
+cat > $temp <<\!!!
+       3      10      54 Makefile
+      30     181     840 ps.1.patch
+     273     892    5101 ps.c.patch
+     306    1083    5995 total
+!!!
+wc  Makefile ps.1.patch ps.c.patch | sed 's=[^ ]*/==' | diff -b $temp - >$dtemp
+if test -s $dtemp
+then echo "Ouch [diff of wc output]:" ; cat $dtemp
+else echo "No problems found."
+fi
+exit 0

@@ -1,0 +1,92 @@
+Received: from wucs by plus5.uucp (UIUC-5.31/03Jun86-09:31:46) with UUCP
+	id AA11344; Mon, 16 Jun 86 19:46:22 EDT
+Received: from seismo by wucs.UUCP with UUCP; Mon, 16 Jun 86 18:39:20 CDT
+Received: by seismo.CSS.GOV; Mon, 16 Jun 86 16:18:51 EDT
+Received: from bboards by ICS.UCI.EDU id a013715; 16 Jun 86 11:14 PDT
+Received: from hplabs.hp.com by ICS.UCI.EDU id a013626; 16 Jun 86 11:00 PDT
+Received: by hplabs.HP.COM ; Mon, 16 Jun 86 10:56:28 pdt
+From: seismo!hplabs.hp.com!hpda!hpdsd!hpsemc!bd
+Received: from hpdsd.UUCP by hpda.UUCP (4.30/3.5)
+	id AA11070; Mon, 16 Jun 86 10:01:09 pdt
+Received: by hpdsd.UUCP (4.30/3.5)
+	id AA00501; Mon, 16 Jun 86 10:01:05 pdt
+Date: Mon, 16 Jun 86 10:01:05 pdt
+Message-Id: <8606161701.AA00501@hpdsd.UUCP>
+To: ICS.UCI.EDU!mh-workers
+Subject: HP-UX/Sys5 patch #2 of N for mh-6.5
+
+Here's the next round of patches to mh-6.5 for HP-UX System V systems. 
+The next 6 patches (2-7) grab the right directory-access routines out
+of <ndir.h>; if you #define NDIR, your system can get them too.  (You
+might need to put "ldoptlibs -lndir" in your conf/MH file; HP-UX 5.0
+puts the new directory-accessing routines directly in the defaultly-
+searched C library so you don't have to call -lndir explicitly.)
+
+Recall that patch #1, sent last week, was the fix to miscellany/less
+to do the right thing for terminals with the "xs" standout mode glitch.
+And now, on with the show.
+
+
+In sbr/m_gmsg.c, <sys/dir.h> is included for SYS5 systems.  Some
+machines like HP-UX are SYS5 yet prefer <ndir.h> for directory-access. 
+
+With the following patch, HP-UX systems will automatically configure
+themselves correctly; other SYS5 systems should #define NDIR if they
+want <ndir.h>.  [The NDIR define takes precedence over SYS5 or BSD42,
+although if you have BSD42 defined, you don't need or get <ndir.h>.]
+After installing this patch, you can force the use of <ndir.h> by
+adding "options NDIR" to your conf/MH file. 
+
+To install:
+	patch -p -d $MH_SOURCE < this-file-here
+
+Bob Desinger
+Hewlett-Packard Software Evaluation and Migration Center
+hpda!bd@hplabs.ARPA
+
+
+*** /tmp/,RCSt1a11747	Sun Jun  8 20:53:10 1986
+--- sbr/m_gmsg.c	Sun Jun  8 18:24:04 1986
+***************
+*** 4,9
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
+  #ifndef	BSD42
+  #ifndef SYS5
+  #include <ndir.h>
+
+--- 4,17 -----
+  #include <stdio.h>
+  #include <sys/types.h>
+  #include <sys/stat.h>
++ 
++ #ifdef	hpux
++ #define	NDIR	1
++ #endif	hpux
++ 
++ #ifdef	NDIR
++ #include <ndir.h>
++ #else	!NDIR
+  #ifndef	BSD42
+  #ifndef SYS5
+  #include <ndir.h>
+***************
+*** 13,18
+  #else	BSD42
+  #include <sys/dir.h>
+  #endif	BSD42
+  
+  
+  #define	NINFO	(MAXFOLDER / 5)	/* PLEASE be non-trivial... */
+
+--- 21,27 -----
+  #else	BSD42
+  #include <sys/dir.h>
+  #endif	BSD42
++ #endif	!NDIR
+  
+  
+  #define	NINFO	(MAXFOLDER / 5)	/* PLEASE be non-trivial... */
+
+

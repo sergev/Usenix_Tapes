@@ -1,0 +1,220 @@
+*** /tmp/,RCSt1001511	Thu May  1 09:59:09 1986
+--- collect.c	Wed Mar  5 10:45:21 1986
+***************
+*** 197,203 ****
+  	*/
+  
+  	if (hvalue("to") == NULL && hvalue("cc") == NULL &&
+! 	    hvalue("bcc") == NULL && hvalue("apparently-to") == NULL)
+  	{
+  		register ADDRESS *q;
+  
+--- 197,204 ----
+  	*/
+  
+  	if (hvalue("to") == NULL && hvalue("cc") == NULL &&
+! 	    hvalue("bcc") == NULL && hvalue("apparently-to") == NULL &&
+! 	    !bitset(EF_TTYSEND, CurEnv->e_flags))
+  	{
+  		register ADDRESS *q;
+  
+
+*** /tmp/,RCSt1001521	Thu May  1 09:59:18 1986
+--- deliver.c	Wed Mar  5 22:52:23 1986
+***************
+*** 1286,1292 ****
+  	{
+  		extern bool shouldqueue();
+  
+! 		if (shouldqueue(e->e_msgpriority))
+  			mode = SM_QUEUE;
+  		else
+  			mode = SendMode;
+--- 1288,1296 ----
+  	{
+  		extern bool shouldqueue();
+  
+! 		if (bitset(EF_TTYSEND, e->e_flags))
+! 			mode = SM_QUICKD;
+! 		else if (shouldqueue(e->e_msgpriority))
+  			mode = SM_QUEUE;
+  		else
+  			mode = SendMode;
+
+*** /tmp/,RCSt1001526	Thu May  1 09:59:31 1986
+--- main.c	Fri Mar 21 13:44:49 1986
+***************
+*** 451,457 ****
+  	expand("\001j", jbuf, &jbuf[sizeof jbuf - 1], CurEnv);
+  	MyHostName = jbuf;
+  
+! 	/* the indices of local and program mailers */
+  	st = stab("local", ST_MAILER, ST_FIND);
+  	if (st == NULL)
+  		syserr("No local mailer defined");
+--- 485,491 ----
+  	expand("\001j", jbuf, &jbuf[sizeof jbuf - 1], CurEnv);
+  	MyHostName = jbuf;
+  
+! 	/* the indices of local and program and tty mailers */
+  	st = stab("local", ST_MAILER, ST_FIND);
+  	if (st == NULL)
+  		syserr("No local mailer defined");
+***************
+*** 462,467 ****
+--- 496,506 ----
+  		syserr("No prog mailer defined");
+  	else
+  		ProgMailer = st->s_mailer;
++ 	st = stab("tty", ST_MAILER, ST_FIND);
++ 	if (st == NULL)
++ 		syserr("No tty mailer defined");
++ 	else
++ 		TTYMailer = st->s_mailer;
+  
+  	/* operate in queue directory */
+  	if (chdir(QueueDir) < 0)
+
+*** /tmp/,RCSt1001545	Thu May  1 09:59:49 1986
+--- recipient.c	Wed Mar  5 14:48:16 1986
+***************
+*** 192,199 ****
+  	stripquotes(buf, TRUE);
+  
+  	/* do sickly crude mapping for program mailing, etc. */
+! 	if (m == LocalMailer && buf[0] == '|')
+! 	{
+  		a->q_mailer = m = ProgMailer;
+  		a->q_user++;
+  		if (a->q_alias == NULL && !tTd(0, 1) && !QueueRun && !ForceMail)
+--- 193,200 ----
+  	stripquotes(buf, TRUE);
+  
+  	/* do sickly crude mapping for program mailing, etc. */
+! 	if (m == LocalMailer)
+! 	    if (buf[0] == '|') {
+  		a->q_mailer = m = ProgMailer;
+  		a->q_user++;
+  		if (a->q_alias == NULL && !tTd(0, 1) && !QueueRun && !ForceMail)
+***************
+*** 201,207 ****
+  			usrerr("Cannot mail directly to programs");
+  			a->q_flags |= QDONTSEND;
+  		}
+! 	}
+  
+  	/*
+  	**  Look up this person in the recipient list.
+--- 202,211 ----
+  			usrerr("Cannot mail directly to programs");
+  			a->q_flags |= QDONTSEND;
+  		}
+! 	} else
+! 		if (bitset(EF_TTYSEND, CurEnv->e_flags))
+! 			a->q_mailer = m = TTYMailer;
+! 	
+  
+  	/*
+  	**  Look up this person in the recipient list.
+***************
+*** 265,291 ****
+  	**  the user (which is probably correct anyway).
+  	*/
+  
+! 	if (!bitset(QDONTSEND, a->q_flags) && m == LocalMailer)
+  	{
+  		struct stat stb;
+  		extern bool writable();
+
+--- 269,309 ----
+  	**  the user (which is probably correct anyway).
+  	*/
+  
+! 	if (!bitset(QDONTSEND, a->q_flags) && (m == LocalMailer ||
+! 					       m == TTYMailer))
+  	{
+  		struct stat stb;
+  		extern bool writable();
+  
+*** /tmp/,RCSt1001550	Thu May  1 09:59:53 1986
+--- sendmail.h	Wed Mar  5 14:51:58 1986
+***************
+*** 153,158 ****
+--- 153,159 ----
+  
+  EXTERN MAILER	*LocalMailer;		/* ptr to local mailer */
+  EXTERN MAILER	*ProgMailer;		/* ptr to program mailer */
++ EXTERN MAILER	*TTYMailer;		/* ptr to tty mailer */
+  /*
+  **  Header structure.
+  **	This structure is used internally to store header items.
+***************
+*** 243,248 ****
+--- 244,250 ----
+  #define EF_KEEPQUEUE	000100		/* keep queue files always */
+  #define EF_RESPONSE	000200		/* this is an error or return receipt */
+  #define EF_RESENT	000400		/* this message is being forwarded */
++ #define	EF_TTYSEND	001000		/* this message go to tty mailer */
+  
+  EXTERN ENVELOPE	*CurEnv;	/* envelope currently being processed */
+  /*
+
+*** /tmp/,RCSt1001555	Thu May  1 09:59:58 1986
+--- srvrsmtp.c	Wed Mar 12 22:49:18 1986
+***************
+*** 60,69 ****
+--- 60,71 ----
+  # define CMDDBGKILL	13	/* kill -- kill sendmail */
+  # define CMDDBGWIZ	14	/* wiz -- become a wizard */
+  # define CMDONEX	15	/* onex -- sending one transaction only */
++ # define CMDSEND	17	/* send -- designate sender of a send */
+  
+  static struct cmd	CmdTab[] =
+  {
+  	"mail",		CMDMAIL,
++ 	"send",		CMDSEND,
+  	"rcpt",		CMDRCPT,
+  	"data",		CMDDATA,
+  	"rset",		CMDRSET,
+***************
+*** 209,219 ****
+--- 211,226 ----
+  
++ 		  case CMDSEND:
+  		  case CMDMAIL:		/* mail -- designate sender */
+  			SmtpPhase = "MAIL";
+  
+***************
+*** 245,250 ****
+--- 252,259 ----
+  			if (p == NULL)
+  				break;
+  			setsender(p);
++ 			if (c->cmdcode == CMDSEND)
++ 				CurEnv->e_flags |= EF_TTYSEND;
+  			if (Errors == 0)
+  			{
+  				message("250", "Sender ok");
+***************
+*** 640,645 ****
+--- 650,656 ----
+  	char *label;
+  {
+  	int childpid;
++ 	char *s;
+  
+  	if (!OneXact)
+  	{
+***************
+*** 669,675 ****
+--- 680,689 ----
+  			/* child */
+  			InChild = TRUE;
+  			QuickAbort = FALSE;
++ 			s = macvalue('s', CurEnv);
+  			clearenvelope(CurEnv, FALSE);
++ 			if (s)
++ 				define('s', s, CurEnv);
+  		}
+  	}
+  

@@ -1,0 +1,85 @@
+ 
+# shell functions
+
+DIRSTACK=...	# for pushd, popd
+
+ch(){
+	if [ $# -lt 1 ]
+	then	cd
+	else	cd $1
+	fi
+	PS1=`uname`:`pwd`' $ '
+}
+
+j(){ (set +u; exec jove $*); }
+
+l(){ (set +u; exec ls -bCF $*); }
+
+not(){	$*
+	if [ $? -eq 0 ]
+	then	return 1
+	else	return 0
+	fi
+}
+
+popd(){
+	set $DIRSTACK
+	if [ $# -ge 2 ]
+	then	DIRSTACK="$*"
+		ch $1
+		set $DIRSTACK	# ch clobbered $*
+		shift
+		DIRSTACK="$*"
+	fi
+}
+
+print(){ (set +u; pr $* | lpr); }
+
+pushd(){
+	DIRSTACK=`pwd`" $DIRSTACK"
+	if [ $# -lt 1 ]
+	then	set $HOME
+	fi
+	if (cd $1)
+	then	cd $1 >&-
+		echo $DIRSTACK
+		PS1=`uname`:`pwd`' $ '
+	else	popd
+	fi
+}
+
+if not pdp11
+then
+suspend(){
+	case "$-" in
+	*J*)	set +j
+		kill -18 $$
+		set -J
+		;;
+	*)	kill -18 $$	# SIGSTOP
+		;;
+	esac
+}
+
+readonly suspend
+fi
+
+swapd(){
+	DIRSTACK=`pwd`" $DIRSTACK"
+	set $DIRSTACK
+	if [ $# -ge 3 ]
+	then	DIRSTACK="$*"
+		ch $2
+		set $DIRSTACK	# ch clobbered $*
+		DIRSTACK="$1"
+		shift 2
+		DIRSTACK=$DIRSTACK" $*"
+		echo $DIRSTACK
+	else	shift
+		DIRSTACK="$*"
+		echo 'swapd: No previous directory' >&2
+		return 1
+	fi
+}
+
+readonly ch j l popd print pushd swapd

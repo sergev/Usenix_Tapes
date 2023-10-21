@@ -1,0 +1,144 @@
+#!/bin/sh
+#
+#	Note:	 manage notes on program sources
+#
+#			 Copyright (c) Chris Robertson 1985
+#
+#	This script adds lines from standard input to a file called NOTES
+#	in the current directory, or views/edits the file.  It is intended
+#	for keeping notes on software slurped from the net.
+#	The format of NOTES is:
+#	
+#	progname:	[date] comments ...
+#	(1 tab)	more comments
+#	(blank line)
+#
+#	Usage:  note [-e] [-s] [-r [program ...]]
+#
+#	No options:		add a NOTE.
+#	-e:				edit the NOTES file.
+#	-r:				show all notes on the given program(s), or the entire
+#					NOTES file (unsorted) if no program is given.
+#	-s:				show the entire NOTES file, sorted so all notes on a
+#					given program occur together.
+#
+
+PAGER=${PAGER-/usr/local/bin/more}
+case "$PAGER" in
+	"")						# in case it's explicitly set to nothing
+		PAGER=cat
+		;;
+esac
+
+case "$VISUAL" in
+	"")
+		case "$EDITOR" in
+			"")
+				;;
+			*)
+				VISUAL=$EDITOR
+				;;
+		esac
+		;;
+esac
+VISUAL=${VISUAL-/usr/bin/vi}
+case "$VISUAL" in
+	"")						# in case it's explicitly set to nothing
+		VISUAL=/bin/ed
+		;;
+esac
+
+trap "rm -f /tmp/note$$;exit" 0 1 2 3
+
+# find which echo we're using
+
+case "`echo -n foo`" in
+	-n*)
+		c="\c"
+		n=""
+		;;
+	foo)
+		c=""
+		n="-n"
+		;;
+	*)
+		echo "Your echo command is broken!"
+		c=
+		n=
+		;;
+esac
+
+usage="Usage: $0 [-e] [-s] [-r [prog ...]]"
+
+case "$#" in
+	0)
+		;;
+	1)
+		case "$1" in
+			-r)
+				$PAGER NOTES
+				exit 0
+				;;
+			-s)
+				list="`sed -e '/^	/d' -e 's/:.*//' NOTES | sort -u`"
+				for i in $list
+					do
+					note -r $i >> /tmp/note$$
+				done
+				$PAGER /tmp/note$$
+				rm -f /tmp/note$$
+				exit 0
+				;;
+			-e)
+				$VISUAL NOTES
+				exit 0
+				;;
+			*)
+				echo $usage
+				exit 1
+				;;
+		esac
+		;;
+	*)
+		case "$1" in
+			-r)
+				shift
+				for prog in $*
+					do
+					case "$PAGER" in
+						*cat)
+							sed -n -e "/^${prog}:/,/^\$/p" NOTES
+							;;
+						*)
+							sed -n -e "/^${prog}:/,/^\$/p" NOTES | $PAGER
+							;;
+					esac
+				done
+				exit 0
+				;;
+			*)
+				echo $usage
+				exit 1
+				;;
+		esac
+		;;
+esac
+date="`set - \`date\`;echo $2 $3 $6`"
+echo $n "Program name: $c"
+read prog
+echo $n "> $c"
+read line
+echo "${prog}:	[$date] $line" >> NOTES
+line=
+while :
+	do
+	echo $n "> $c"
+	read line
+	case "$line" in
+		.)
+			break
+			;;
+	esac
+	echo "	$line" >> NOTES
+done
+echo "" >> NOTES

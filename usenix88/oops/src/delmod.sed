@@ -1,0 +1,3 @@
+/^Modification History:/,/^\*\//c\
+$Log$\
+*/

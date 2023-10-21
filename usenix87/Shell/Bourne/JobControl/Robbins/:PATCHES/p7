@@ -1,0 +1,1249 @@
+*** ../orig.u/sh.1	Wed May 15 17:23:11 1985
+--- sh.1	Thu Jun  6 09:11:54 1985
+***************
+*** 34,40
+  .SH SYNOPSIS
+  .B sh
+  [
+! .B \-acefhiknrstuvx
+  ] [ args ]
+  .br
+  .B rsh
+
+--- 34,40 -----
+  .SH SYNOPSIS
+  .B sh
+  [
+! .B \-acefhiknqrstuvxEHIJ
+  ] [ args ]
+  .br
+  .B rsh
+***************
+*** 39,45
+  .br
+  .B rsh
+  [
+! .B \-acefhiknrstuvx
+  ] [ args ]
+  .SH DESCRIPTION
+  .I Sh\^
+
+--- 39,45 -----
+  .br
+  .B rsh
+  [
+! .B \-acefhiknqrstuvxEHIJ
+  ] [ args ]
+  .SH DESCRIPTION
+  .I Sh\^
+***************
+*** 72,77
+  .BR ? ,
+  .BR \- ,
+  .BR $ ,
+  and
+  .BR !\\^ .
+  .SS Commands
+
+--- 72,78 -----
+  .BR ? ,
+  .BR \- ,
+  .BR $ ,
++ .BR + ,
+  and
+  .BR !\\^ .
+  .SS Commands
+***************
+*** 446,451
+  .B $
+  The process number of this shell.
+  .TP
+  .B !
+  The process number of the last background command invoked.
+  .PD
+
+--- 447,464 -----
+  .B $
+  The process number of this shell.
+  .TP
++ .B +
++ The process number of the parent of this shell.  In particular,
++ the value of
++ .B $+
++ will track the value of the
++ .IR getppid (2)
++ system calll.  I.e. if
++ .I init
++ should inherit this shell,
++ .B $+
++ will become 1.
++ .TP
+  .B !
+  The process number of the last background command invoked.
+  .PD
+***************
+*** 552,557
+  below) for this name.
+  If it is found and there is an 'r' in the file name part of its value, the
+  shell becomes a restricted shell.
+  .PD
+  .RE
+  .PP
+
+--- 565,576 -----
+  below) for this name.
+  If it is found and there is an 'r' in the file name part of its value, the
+  shell becomes a restricted shell.
++ .TP
++ .B
++ .SM HISTFILE
++ The file where command history is saved across login sessions.
++ The default value is
++ .BR \s-1$HOME\s+1/.history .
+  .PD
+  .RE
+  .PP
+***************
+*** 556,562
+  .RE
+  .PP
+  The shell gives default values to
+! \f3\s-1PATH\s+1\fP, \f3\s-1PS1\s+1\fP, \f3\s-1PS2\s+1\fP, \f3\s-1MAILCHECK\s+1\fP and \f3\s-1IFS\s+1\fP.
+  .SM
+  .B HOME
+  and
+
+--- 575,582 -----
+  .RE
+  .PP
+  The shell gives default values to
+! \f3\s-1HISTFILE\s+1\fP, \f3\s-1PATH\s+1\fP, \f3\s-1PS1\s+1\fP,
+! \f3\s-1PS2\s+1\fP, \f3\s-1MAILCHECK\s+1\fP and \f3\s-1IFS\s+1\fP.
+  .SM
+  .B HOME
+  and
+***************
+*** 564,569
+  .B MAIL
+  are set by
+  .IR login (1).
+  .SS Blank Interpretation
+  After parameter and command substitution,
+  the results of substitution are scanned for internal field separator
+
+--- 584,810 -----
+  .B MAIL
+  are set by
+  .IR login (1).
++ .SS Tilde Substitution
++ An unquoted tilde character
++ .RB ( ~ )
++ will cause the shell to attempt a tilde substituion.  Tilde substitutions
++ are used to automatically determine home directories.  Both the current
++ user's home directory, and the home directory of any other user on
++ the system may be found.
++ .PP
++ A
++ .B ~
++ by itself is equivalent to using
++ .BR \s-1$HOME\s+1 .
++ E.g.
++ .B ~/bin
++ is the same as saying
++ .BR \s-1$HOME\s+1/bin .
++ The notation
++ .B ~person
++ will cause the shell to look up
++ .BR person 's
++ home directory in the
++ .B /etc/passwd
++ file, and substitute it in.  For example, if user
++ .BR arnold 's
++ home directory is
++ .BR /user/arnold ,
++ the shell would replace
++ .BR ~arnold/bin
++ with
++ .BR /user/arnold/bin .
++ .PP
++ Tilde substitutions are recognized at the beginning of words, after
++ equal signs (for shell variable assignment), in the middle of single letter
++ flag arguments to commands (e.g. \fBecho \-t~arnold\fP), and after
++ colons inside the
++ .B
++ .SM PATH
++ and
++ .B
++ .SM CDPATH
++ shell parameters.
++ .PP
++ If
++ .B /etc/passwd
++ cannot be read, or if
++ no user can be found to match the attempted tilde substitution,
++ the text is left unmodified.
++ .SS History Substitution
++ When reading input from an interactive terminal, a
++ .RB `` ! ''
++ character, anywhere on the line,
++ signals the shell that it should attempt
++ to perform a history substitution.
++ A history substitution is a shorthand method which allows the user
++ to recall all or part of a previous command, possibly editing the
++ recalled portion.
++ The recalled (and possibly changed) command line is then placed into
++ the current command line,
++ to be passed on to the rest of the shell for normal processing.
++ A history substitution takes the form:
++ .PP
++ .if t .RS
++ \fB!\fP\^[ \fIstr\fP | \fB?\fIstr\fB?\fR | \fInum\fP ]\c
++ [ \fB\(ga\fInum\fR [ \- [ \fInum\fP ] ]\c
++ { \fB^\fIstr\fB^\fIstr\fB^\fR [\fBg\fP] }
++ .if t .RE
++ .PP
++ A history substitution contains three parts;
++ command selection, argument selection, and editing.
++ .I Command selection
++ chooses what command will be retrieved from the stored
++ history.
++ .I Argument selection
++ chooses which arguments from that command will be extracted.
++ .I Editing
++ allows the user to change spelling or make a substitution.
++ .PP
++ The history substitution is triggered by the
++ .RB `` ! '',
++ and continues until another
++ .RB `` ! ''
++ is encountered, or until
++ something that could not be part of a history substitution is seen.
++ This is so that the
++ history substitution will be properly concatenated with the following text.
++ Whenever a history substitution is encountered and properly performed,
++ the shell echoes the resulting line to the terminal and then executes the
++ command.
++ .PP
++ History substitution occurs inside double quotes and grave accents, but will
++ not occur inside single quotes.  To get a literal
++ .RB `` ! ''
++ character, outside of single quotes, precede it with a
++ .BR \e .
++ The
++ .BR ? ,
++ .BR \(ga ,
++ and
++ .B ^
++ characters are treated specially by the history mechanism only when preceded
++ by a
++ .RB `` ! '',
++ otherwise they have their normal meaning
++ of ``match a single character'',
++ ``enclose a command substitution'',
++ and as a synonym for the \fB\(bv\fP
++ character.
++ .PP
++ The full meaning of the history syntax is as follows:
++ .RS
++ .TP
++ \fB!\fP\^[ \fIstr\fP | \fB?\fIstr\fB?\fR | \fInum\fP ]
++ The first thing in a history substitution is
++ .IR "command selection" .
++ This is used to retrieve a given command line for use, or for further
++ processing.  In a history command selection, \fB!\fIstr\fR
++ will find the most recent command line that started with the
++ characters in
++ .IR str .
++ \fB!?\fIstr\fB?\fR will find the most recent command line that contained
++ .I str
++ anywhere on the line.  It also allows
++ .I str
++ to contain blanks and tabs, whereas the first form does not.
++ \fB!\fInum\fR allows the user to specify the number of a command, according
++ to the output of the
++ .B history
++ command (see the section on special commands, below).
++ .TP
++ \fB\(ga\fInum\fR [ \- [ \fInum\fP ]
++ The next portion of a history substitution is an optional
++ .IR "argument selection" .
++ This chooses which portions of the command are to be kept.
++ History arguments are not exactly the same as the arguments the rest of
++ the shell uses, since history expansion occurs before argument collection.
++ Arguments in this context are blank or tab separated words on the command line.
++ Single or double quoted strings, strings inside grave accents, shell regular
++ expressions, commands in parentheses (which get executed in a subshell),
++ and commands enclosed in braces,
++ are all treated as single arguments for the history mechanism, even though
++ they may have white space in them.
++ .sp
++ Arguments are numbered from zero, starting at the leftmost portion of the
++ line.  In an argument selection, \fB\(ga\fInum\fR specifies that only argument
++ .I num
++ is to be extracted and kept for further processing or use, and the rest
++ of the command line is to be dropped.
++ \fB\(ga\fInum\fB\-\fInum\fR
++ specifies that the arguments from the first
++ .I num
++ to the last
++ .I num
++ are to be kept. In place of any
++ .IR num ,
++ .B $
++ may be specified to obtain the last argument on the line.
++ The form \fB\(ga\-\fInum\fR is a shorthand for \fB\(ga\fP1\fB\-\fInum\fR
++ and
++ \fB\(ga\fInum\fB\-\fR
++ is a short form for
++ \fB\(ga\fInum\fB\-$\fR.
++ Finally, the notation
++ \fB\(ga\-\fP
++ indicates all the arguments.  That is, \fB\(ga\-\fP implies
++ \fB\(ga1\-$\fP.
++ .TP
++ \fB^\fIstr\fB^\fIstr\fB^\fR [\fBg\fP]
++ The last portion of a history substitution is also optional, and is the
++ .I editing
++ phase.  This allows the remaining portions of the retrieved
++ command line to modified, like the substitute command in
++ .IR ed (1),
++ although in a much more limited fashion.
++ In the history mechanism,
++ .I str
++ is not a regular expression, as in
++ .IR ed,
++ but just a simple string.
++ The history mechanism does not recognize
++ either the shell's pattern matching characters or the editor's
++ regular expression characters.
++ Each substitution happens only once on a line, unless a trailing ``g''
++ is appended to the substitution.  In this case, the substitution occurs
++ globally (everywhere) on the line.
++ Substitutions may be strung together,
++ so that more than one can be done at once.
++ The trailing ``g'' may be in either upper or lower case.
++ .RE
++ .PP
++ Some examples of history substitution are given below.
++ Should a history substitution fail, the errant command will
++ .I not
++ be added to the history buffers.
++ .PP
++ The history mechanism recognizes lines that end with unbalanced quotes.
++ When the quotes are balanced on the next line(s), 
++ It will join this line with the one that opened the quotes, keeping the
++ embedded newline(s). So, e.g.,
++ .RS
++ .sp
++ .nf
++ .RB "$ " "echo 'open"
++ .RB "> " "close'"
++ .fi
++ .RE
++ .sp
++ will be saved as one history ``event.''
++ This does
++ .I not
++ extend to other shell constructs, like balancing parentheses across
++ newlines.
++ .PP
++ The history mechanism keeps a maximum of
++ 256
++ stored commands at any one time, and the total text of the
++ stored history may occupy no more than
++ 4096
++ characters.
++ Experience indicates that it is not necessary to store more than this,
++ and the extra history buffers should not make the shell too large for
++ machines with small address spaces (e.g. PDP-11's).
+  .SS Blank Interpretation
+  After history, tilde, parameter and command substitution,
+  the results of substitution are scanned for internal field separator
+***************
+*** 565,571
+  are set by
+  .IR login (1).
+  .SS Blank Interpretation
+! After parameter and command substitution,
+  the results of substitution are scanned for internal field separator
+  characters (those found in
+  .BR \s-1IFS\s+1 )
+
+--- 806,812 -----
+  and the extra history buffers should not make the shell too large for
+  machines with small address spaces (e.g. PDP-11's).
+  .SS Blank Interpretation
+! After history, tilde, parameter and command substitution,
+  the results of substitution are scanned for internal field separator
+  characters (those found in
+  .BR \s-1IFS\s+1 )
+***************
+*** 616,622
+  matches any
+  character lexically between the pair, inclusive.
+  If the first character following the opening 
+! \`\`\*(OK\'\'
+  is a
+  .B "``!''"
+  any character not enclosed is matched.
+
+--- 857,863 -----
+  matches any
+  character lexically between the pair, inclusive.
+  If the first character following the opening 
+! .RB `` \*(OK ''
+  is a
+  .RB `` ! ''
+  any character not enclosed is matched.
+***************
+*** 618,624
+  If the first character following the opening 
+  \`\`\*(OK\'\'
+  is a
+! .B "``!''"
+  any character not enclosed is matched.
+  .PD
+  .RE
+
+--- 859,865 -----
+  If the first character following the opening 
+  .RB `` \*(OK ''
+  is a
+! .RB `` ! ''
+  any character not enclosed is matched.
+  Note that when typing input from the terminal, the
+  .RB `` ! ''
+***************
+*** 620,625
+  is a
+  .B "``!''"
+  any character not enclosed is matched.
+  .PD
+  .RE
+  .SS Quoting
+
+--- 861,871 -----
+  is a
+  .RB `` ! ''
+  any character not enclosed is matched.
++ Note that when typing input from the terminal, the
++ .RB `` ! ''
++ should be preceded by a
++ .BR \e ,
++ so that the shell does not attempt to perform a history substitution.
+  .PD
+  .RE
+  .SS Quoting
+***************
+*** 644,650
+  are quoted.
+  Inside double quote marks
+  (\f3"\^"\fP),
+! parameter and command substitution occurs and
+  .B \e
+  quotes the characters
+  .BR \e ,
+
+--- 890,896 -----
+  are quoted.
+  Inside double quote marks
+  (\f3"\^"\fP),
+! history, parameter and command substitution occurs and
+  .B \e
+  quotes the characters
+  .BR \e ,
+***************
+*** 650,655
+  .BR \e ,
+  .BR \*` ,
+  \f3"\fP,
+  and
+  .BR $ .
+  .B
+
+--- 896,902 -----
+  .BR \e ,
+  .BR \*` ,
+  \f3"\fP,
++ .BR ! ,
+  and
+  .BR $ .
+  .B
+***************
+*** 671,676
+  .SM
+  .B PS1
+  before reading a command.
+  If at any time a new-line is typed and further input is needed
+  to complete a command, the secondary prompt
+  (i.e., the value of
+
+--- 918,934 -----
+  .SM
+  .B PS1
+  before reading a command.
++ If the user is super-user and
++ .SM
++ .B PS1
++ is not set to
++ .RB `` "# \|" ''
++ already, the
++ .SM
++ .B PS1
++ prompt is followed by
++ .RB `` "# \|" ''
++ as a BRL-supplied safety reminder.
+  If at any time a new-line is typed and further input is needed
+  to complete a command, the secondary prompt
+  (i.e., the value of
+***************
+*** 676,681
+  (i.e., the value of
+  .BR \s-1PS2\s+1 )
+  is issued.
+  .SS Input/Output
+  Before a command is executed, its input and output
+  may be redirected using a special notation interpreted by the shell.
+
+--- 934,996 -----
+  (i.e., the value of
+  .BR \s-1PS2\s+1 )
+  is issued.
++ .PP
++ Many people like to have the shell provide them with useful information
++ in their prompt.  To accomadate this, the shell will recognize special
++ sequences of characters in the value of
++ .BR PS1 ,
++ and substitute the appropriate information for them.
++ The special sequences and what they signify are:
++ .RS
++ .TP
++ .B %d
++ Place the current working directory into the prompt.
++ .TP
++ .B %e
++ Place the current event number (as defined by the
++ .B history
++ command) into the prompt.
++ If history evaluation has been turned off (via
++ .BR "set -H" ),
++ no number will be substituted in (i.e. the
++ .B %e
++ will be removed).
++ .TP
++ .B %h
++ Place the machine's host name into the prompt.  The host name is usually
++ the name by which the machine is known to the outside world for electronic
++ mail addressing.
++ .TP
++ .B %l
++ Place the user's login name into the prompt.
++ The login name selected is the first entry in the
++ .B /etc/passwd
++ file whose
++ .I uid
++ matches the value of the
++ .IR getuid (2)
++ system call.
++ This will be a problem on systems where multiple users share the same
++ user-id number.
++ .TP
++ .B %t
++ Place the current time of day, in the form \s-1HH:MM\s+1 into the prompt.
++ The time is on a 24 hour clock, i.e. 1:30 in the afternoon will be 13:30.
++ .TP
++ .BI % x
++ Place the character
++ .I x
++ into the prompt.
++ If the user wishes to put a literal
++ .B %
++ into the prompt, then
++ .B PS1
++ should have
++ .B %%
++ in it.
++ .RE
++ .PP
++ Some of these facilities are of more use than others.
+  .SS Input/Output
+  Before a command is executed, its input and output
+  may be redirected using a special notation interpreted by the shell.
+***************
+*** 741,746
+  all leading tabs are stripped from
+  .I word\^
+  and from the document.
+  .TP
+  .B <\h@-.1m@&digit
+  Use the file associated with file descriptor
+
+--- 1056,1063 -----
+  all leading tabs are stripped from
+  .I word\^
+  and from the document.
++ History substitution is turned off
++ while processing the document.
+  .TP
+  .B <\h@-.1m@&digit
+  Use the file associated with file descriptor
+***************
+*** 753,758
+  The standard input is closed.
+  Similarly for the standard output using
+  .BR >\h@-.1m@&\h@-.1m@\- .
+  .PD
+  .PP
+  If any of the above is preceded by a digit,
+
+--- 1070,1083 -----
+  The standard input is closed.
+  Similarly for the standard output using
+  .BR >\h@-.1m@&\h@-.1m@\- .
++ .TP
++ .B <\&>\&word
++ Use file
++ .I word
++ for standard input (file descriptor 0),
++ but open it for reading
++ .I and
++ writing.
+  .PD
+  .PP
+  If any of the above is preceded by a digit,
+***************
+*** 824,830
+  .BR "set -a" ).
+  A parameter may be removed from the environment
+  with the 
+! .BR unset command.
+  The environment seen by any executed command is thus composed
+  of any unmodified name-value pairs originally inherited by the shell,
+  minus any pairs removed by
+
+--- 1149,1156 -----
+  .BR "set -a" ).
+  A parameter may be removed from the environment
+  with the 
+! .BR unset
+! command.
+  The environment seen by any executed command is thus composed
+  of any unmodified name-value pairs originally inherited by the shell,
+  minus any pairs removed by
+***************
+*** 859,865
+  The following
+  first prints
+  .B "a=b c"
+! and
+  .BR c :
+  .PP
+  .RS
+
+--- 1185,1191 -----
+  The following
+  first prints
+  .B "a=b c"
+! and then
+  .BR c :
+  .PP
+  .RS
+***************
+*** 880,885
+  the
+  .B trap
+  command below).
+  .SS Execution
+  Each time a command is executed, the above substitutions are
+  carried out.
+
+--- 1206,1214 -----
+  the
+  .B trap
+  command below).
++ When job control is enabled,
++ \s-1SIGTSTP\s0
++ causes a foreground command to be stopped.
+  .SS Execution
+  Each time a command is executed, the above substitutions are
+  carried out.
+***************
+*** 945,951
+  .B 
+  .SM PATH
+  variable is changed or the
+! .B hash -r
+  command is executed (see below).
+  .SS Special Commands
+  Input/output redirection is now permitted for these commands.
+
+--- 1274,1280 -----
+  .B 
+  .SM PATH
+  variable is changed or the
+! .B hash \-r
+  command is executed (see below).
+  .SS Special Commands
+  Input/output redirection is now permitted for these commands.
+***************
+*** 1028,1034
+  .br
+  .ne 2.1v
+  .TP
+! \f3echo\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Echo arguments. See
+  .IR echo (1) 
+  for usage and description.
+
+--- 1357,1363 -----
+  .br
+  .ne 2.1v
+  .TP
+! \f3echo\fP \*(OK \f3\-n\fP \*(CK \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Echo arguments. See
+  .IR echo (1) 
+  for usage and description.
+***************
+*** 1032,1037
+  Echo arguments. See
+  .IR echo (1) 
+  for usage and description.
+  .TP
+  \f3eval\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  The arguments are read as input
+
+--- 1361,1375 -----
+  Echo arguments. See
+  .IR echo (1) 
+  for usage and description.
++ The semantics of
++ .BR echo ,
++ except for the BRL addition of the old-fashioned
++ .B \-n
++ ``no newline'' option,
++ are those of the UNIX System V command;
++ in particular,
++ .B \e
++ escape sequences are processed.
+  .TP
+  \f3eval\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  The arguments are read as input
+***************
+*** 1088,1093
+  adjacent to the \f2hits\fR information.
+  \f2Cost\fR will be incremented when the recalculation is done.
+  .TP
+  \f3newgrp\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Equivalent to
+  .BI "exec newgrp" " arg\^"
+
+--- 1426,1474 -----
+  adjacent to the \f2hits\fR information.
+  \f2Cost\fR will be incremented when the recalculation is done.
+  .TP
++ \fBhistory\fP \*(OK \fB\-irs\fP \*(OK \fIfilename\fP \*(CK \*(CK
++ The \fBhistory\fP command, with no arguments, will print all the commands that
++ are currently saved in the shell's history buffers.  As new commands are
++ executed, and space in the buffers runs out, old commands will be deleted.  The
++ .B history
++ commands prints out the stored commands with sequence numbers.  Negative
++ numbered commands, through command number zero, are commands that were
++ retrieved from the saved history file.  Commands starting at one were
++ entered during the current login session.
++ If a saved command contains embedded newlines, these will be printed out
++ as the sequence
++ .BR \en ,
++ so that individual command stay on one line.
++ .sp
++ The \fBhistory\fP command takes two optional arguments.  If the first
++ argument is \fB\-s\fP, the shell will save its current history buffers
++ in the file named as the third argument. If no file is given, it will
++ use the value of
++ .BR \s-1HISTFILE\s+1 .
++ .sp
++ Similarly, if the first argument is \fB\-r\fP, the shell will reset its
++ history buffers from the saved history in the file given as the third argument.
++ Again, if no file name is given,
++ .B \s-1$HISTFILE\s+1
++ will be used.
++ .sp
++ The command
++ .B history -i
++ will cause the shell to reinitialize its history buffers.  In other words,
++ all the shell's saved history will be thrown away, and the shell will
++ start from scratch.
++ .sp
++ The \fBhistory\fP command will have absolutely no effect at all if input
++ is not coming from a terminal.  I.e., inside shell files, the
++ .B history
++ command is effectively a null operation.
++ .sp
++ The
++ .B history
++ command will always have an exit status of 1 inside a shell file.
++ If input is coming from a terminal, then the exit status wil be 0
++ if the command succeeds, 1 otherwise.
++ .TP
+  \f3newgrp\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK
+  Equivalent to
+  .BI "exec newgrp" " arg\^"
+***************
+*** 1135,1141
+  If
+  .I n 
+  is omitted, the return status is that of the last command executed.
+! .bp
+  .TP
+  \f3set\fP \*(OK \f3\-\-aefhkntuvx\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK \*(CK
+  .RS
+
+--- 1516,1522 -----
+  If
+  .I n 
+  is omitted, the return status is that of the last command executed.
+! .\" .bp
+  .TP
+  \f3set\fP \*(OK \f3\-\-aefhkntuvxEHIJ\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK \*(CK
+  .RS
+***************
+*** 1137,1143
+  is omitted, the return status is that of the last command executed.
+  .bp
+  .TP
+! \f3set\fP \*(OK \f3\-\-aefhkntuvx\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK \*(CK
+  .RS
+  .TP
+  .B \-a
+
+--- 1518,1524 -----
+  is omitted, the return status is that of the last command executed.
+  .\" .bp
+  .TP
+! \f3set\fP \*(OK \f3\-\-aefhkntuvxEHIJ\fP \*(OK \f2arg\^\fP .\|.\|. \*(CK \*(CK
+  .RS
+  .TP
+  .B \-a
+***************
+*** 1173,1178
+  .B \-x
+  Print commands and their arguments as they are executed.
+  .TP
+  .B \-\-
+  Do not change any of the flags; useful in setting
+  .B $1
+
+--- 1554,1595 -----
+  .B \-x
+  Print commands and their arguments as they are executed.
+  .TP
++ .B \-E
++ Prevents an EOT
++ .RI ( control-D\^ )
++ from terminating an interactive shell.
++ Added by BRL mostly for use in
++ .IR .profile\^ s
++ to avoid accidental logout.
++ .TP
++ .B \-H
++ Disable history processing.  If the shell is invoked with this option,
++ it will not bother trying to restore its saved history from the
++ contents of
++ .BR \s-1$HISTFILE\s+1 .
++ While this flag is in effect, the shell will not save any commands in
++ its history buffers.
++ The sequence
++ .B %e
++ in the value of
++ .B \s-1PS1\s+1
++ will also have no effect on the generated prompt string.
++ If
++ .B set +H
++ is used to turn history processing back on, the shell will start saving
++ subsequent commands from that point on.
++ .TP
++ .B \-I
++ (BRL addition)
++ Prints a resource usage summary
++ on 4.2BSD
++ (system plus user time, blocks input and output, page reclaims and faults)
++ for each command after it terminates.
++ .TP
++ .B \-J
++ (BRL addition)
++ Enables ``job control'' features (see below).
++ .TP
+  .B \-\-
+  Do not change any of the flags; useful in setting
+  .B $1
+***************
+*** 1292,1298
+  If
+  .I nnn\^
+  is omitted, the current value of the mask is printed.
+! .bp
+  .TP
+  \f3unset\fP \*(OK \f2name\^\fP .\|.\|. \*(CK
+  For each 
+
+--- 1709,1715 -----
+  If
+  .I nnn\^
+  is omitted, the current value of the mask is printed.
+! .\" .bp
+  .TP
+  \f3unset\fP \*(OK \f2name\^\fP .\|.\|. \*(CK
+  For each 
+***************
+*** 1321,1326
+  and from
+  .BR \s-1$HOME\s+1/.profile ,
+  if such files exist.
+  Thereafter, commands are read as described below, which
+  is also the case when the shell is invoked as
+  .BR /bin/sh .
+
+--- 1738,1755 -----
+  and from
+  .BR \s-1$HOME\s+1/.profile ,
+  if such files exist.
++ Next, whether or not the first character of argument zero was a
++ .BR \- ,
++ and no matter how the shell was invoked,
++ the shell will read commands from the file
++ .BR \s-1$HOME\s+1/.shrc ,
++ if it exists.
++ The, if the shell is interactive, is not a forked subshell,
++ and the
++ .B \-H
++ flag is not in effect,
++ it will attempt restore its saved history from
++ .BR \s-1$HISTFILE\s+1 .
+  Thereafter, commands are read as described below, which
+  is also the case when the shell is invoked as
+  .BR /bin/sh .
+***************
+*** 1324,1329
+  Thereafter, commands are read as described below, which
+  is also the case when the shell is invoked as
+  .BR /bin/sh .
+  The flags below are interpreted by the shell on invocation only; Note
+  that unless the 
+  .B \-c
+
+--- 1753,1763 -----
+  Thereafter, commands are read as described below, which
+  is also the case when the shell is invoked as
+  .BR /bin/sh .
++ If any character of argument zero past the last slash (if any) is
++ .BR j ,
++ the
++ .B \-J
++ (job control) flag is automatically set.
+  The flags below are interpreted by the shell on invocation only; Note
+  that unless the 
+  .B \-c
+***************
+*** 1372,1377
+  If the
+  .B \-r
+  flag is present the shell is a restricted shell.
+  .PD
+  .PP
+  The remaining flags and arguments are described under the
+
+--- 1806,1822 -----
+  If the
+  .B \-r
+  flag is present the shell is a restricted shell.
++ .TP
++ .B \-q
++ If the
++ .B \-q
++ flag is present, the shell will do a ``quick'' startup.
++ This means that the shell will
++ .I not
++ read the contents of the
++ .B \s-1$HOME\s+1/.shrc
++ file.
++ The shell will also not try to read this file if it is a restricted shell.
+  .PD
+  .PP
+  The remaining flags and arguments are described under the
+***************
+*** 1439,1445
+  .IR rsh .
+  Some systems also provide a restricted editor
+  .IR red .
+! .bp
+  .SH EXIT STATUS
+  Errors detected by the shell, such as syntax errors,
+  cause the shell
+
+--- 1884,1973 -----
+  .IR rsh .
+  Some systems also provide a restricted editor
+  .IR red .
+! .\" .bp
+! .SS Job Control
+! Job control features are enabled by the
+! .B \-J
+! flag.
+! When job control is enabled,
+! background commands and foreground commands that have been stopped
+! (usually by a \s-1SIGTSTP\s0 signal generated by typing
+! .IR ^Z\^ )
+! are placed into separate individual
+! .IR "process groups"\^ .
+! The following commands are used to manipulate these process groups:
+! .PP
+! .PD 0
+! .TP
+! \f3jobs\fP
+! Display information about the controlled jobs.
+! The job number is given in brackets,
+! followed by a plus sign if it is the ``current job'',
+! then the process group number for the job,
+! then the command.
+! .TP
+! \f3fg\fP \*(OK \f2n\^\fP \*(CK
+! Resume the stopped foreground job in the foreground.
+! If the process group
+! .I n\^
+! is not specified then the ``current job'' is resumed.
+! .TP
+! \f3bg\fP \*(OK \f2n\^\fP \*(CK
+! Resume the stopped foreground job in the background.
+! If the process group
+! .I n\^
+! is not specified then the ``current job'' is resumed.
+! .TP
+! .B suspend
+! Suspend the shell process itself in the background.
+! The shell will complain
+! if it is a login shell, and will not suspend itself.
+! Otherwise, it does not matter whether or not job control is enabled.
+! .PD
+! .PP
+! With job control enabled,
+! there are the following additional substitutable parameters:
+! .PP
+! .PD 0
+! .TP
+! .BR %%
+! If there is a ``current job'',
+! then this expression is replaced by
+! its process group number.
+! .TP
+! .BI % n\^
+! If the specified job number is one of the known jobs,
+! then this expression is replaced by
+! the corresponding process group number.
+! .SS Saving and Restoring History
+! When an interactive shell starts up, if the
+! .B \-H
+! flag is not in effect, it will attempt to read the contents of
+! .B \s-1$HISTFILE\s+1
+! into its history buffers.  This allows the user to recall commands
+! executed during a previous login session.
+! When the shell exits or executes an
+! .B exec
+! (again, if
+! .B \-H
+! is not in effect), it will attempt to write its current history
+! buffers into
+! .BR \s-1$HISTFILE\s+1 ,
+! for use in a future login session.
+! .PP
+! The
+! .B history
+! command allows the user to save the current history buffers into
+! a file of his or her own choosing, or to restore them from a given file.
+! If
+! .B \-H
+! has been set, the
+! .B history
+! command will give a warning that history processing is not
+! available, and will
+! .I not
+! save or restore the shell's history buffers.
+! .PD
+  .SH EXIT STATUS
+  Errors detected by the shell, such as syntax errors,
+  cause the shell
+***************
+*** 1455,1460
+  .br
+  \s-1$HOME\s+1/\f3.\fPprofile
+  .br
+  /tmp/sh\(**
+  .br
+  /dev/null
+
+--- 1983,1990 -----
+  .br
+  \s-1$HOME\s+1/\f3.\fPprofile
+  .br
++ \s-1$HOME\s+1/\f3.\fPshrc
++ .br
+  /tmp/sh\(**
+  .br
+  /dev/null
+***************
+*** 1462,1467
+  acctcom(1),
+  cd(1),
+  echo(1),
+  env(1),
+  login(1),
+  newgrp(1),
+
+--- 1992,1998 -----
+  acctcom(1),
+  cd(1),
+  echo(1),
++ ed(1),
+  env(1),
+  login(1),
+  newgrp(1),
+***************
+*** 1475,1480
+  dup(2),
+  exec(2),
+  fork(2),
+  pipe(2),
+  signal(2),
+  ulimit(2),
+
+--- 2006,2013 -----
+  dup(2),
+  exec(2),
+  fork(2),
++ getppid(2),
++ getuid(2),
+  pipe(2),
+  signal(2),
+  ulimit(2),
+***************
+*** 1502,1504
+  .B cd\^
+  command with a full path name
+  to correct this situation.
+
+--- 2035,2151 -----
+  .B cd\^
+  command with a full path name
+  to correct this situation.
++ .SH PYRAMID SPECIFIC
++ .PP
++ On computers manufactured by the Pyramid Corporation, which support
++ both the University of California at Berkeley 4.2BSD version of \s-1UNIX\s+1,
++ and the AT&T System V version of \s-1UNIX\s+1,
++ the shell has several additional capabilities.
++ .SS Special Commands
++ .PP
++ There are three additional commands built in to the shell. They are:
++ .RS
++ .TP
++ \fBatt\fP \*(OK command \*(CK
++ Switch the current ``universe'' to be ATT System V.
++ If a command is specified, that command will be run in the ``att''
++ universe, without affecting the shell's current universe.
++ The
++ .B \-t
++ option of
++ .B /bin/att
++ is not (yet) supported.
++ .TP
++ \fBucb\fP \*(OK command \*(CK
++ Switch the current ``universe'' to be University of California at
++ Berkeley 4.2BSD.
++ If a command is specified, that command will be run in the ``ucb''
++ universe, without affecting the shell's current universe.
++ The
++ .B \-t
++ option of
++ .B /bin/ucb
++ is not (yet) supported.
++ .TP
++ \fBuniverse\fP \*(OK \fB\-l\fP \*(CK
++ Print the current universe, either ``att'' or ``ucb''. The
++ .B \-l
++ option will print a longer, more explanative name for the current universe.
++ .RE
++ .PP
++ If the shell cannot determine the current universe when it starts up,
++ it will default to
++ .BR ucb .
++ .SS Shell Variables
++ .PP
++ There is an additional pre-defined shell parameter,
++ .BR \s-1UNIVERSE\s+1 .
++ The value of
++ .B \s-1UNIVERSE\s+1
++ .I always
++ tracks that of the current universe.  Using it is equivalent to a
++ \*`universe\` command substitution,
++ except that a new process will not be created.
++ This variable cannot be set by the user (it is \fBreadonly\fP),
++ and any inherited value from the environment will be ignored.
++ .SS Special Sequences for \s-1PS1\s+1
++ .PP
++ Finally, the sequence
++ .B %u
++ in the value of
++ .B \s-1PS1\s-1
++ will cause the shell to subsitute in the name of the current universe,
++ either ``att'' or ``ucb''.
++ .SH HISTORY EXAMPLES
++ Command history provides a powerful method for easily redoing previous
++ commands, or for quicly fixing typing mistakes.
++ Here are some annotated examples.  User input is in
++ .BR boldface .
++ .sp
++ .nf
++ # first, list some files
++ .RB "$ " lf
++ hello.c		echo.c
++ # now, make a typing mistake
++ .RB "$ " "cat hello"
++ hello: No such file or directory
++ # fix it.  The trailing ! ends the history substitution,
++ # in order to correctly concatenate it with the following .c
++ .RB "$ " "!!.c"
++ cat hello.c
++ main () { printf ("hello world\en"); }
++ # now look at echo.c instead
++ .RB "$ " "!^hello^echo"
++ cat echo.c
++ main () { printf ("echo: no arguments\en"); }
++ # do it again, just for fun
++ .RB "$ " "!"
++ cat echo.c
++ main () { printf ("echo: no arguments\en"); }
++ # now we'll rearrange some arguments
++ .RB "$ " "echo 1 2 3 4 5"
++ 1 2 3 4 5
++ # print last argument, first and second arguments, then change 4 to four
++ .RB "$ " "echo !\(ga$ !\(ga1-2 !\(ga4^4^four"
++ echo 5 1 2 four
++ 5 1 2 four
++ # do something with all the previous arguments at once
++ .RB "$ " "echo the previous arguments were !\(ga\-"
++ echo the previous arguments were 5 1 2 four
++ the previous arguments were 5 1 2 four
++ # now do some substitutions.  first get something to work with.
++ .RB "$ " "echo aa bb cc"
++ aa bb cc
++ # change the first 'a' to a 'b', and change all c's to d's
++ .RB "$ " "!^a^b^^c^d^g"
++ echo ba bb dd
++ ba bb dd
++ .fi
++ .PP
++ These few brief examples should provide a general feel for the
++ history mechanism.  The quickest way to learn it is to experiment
++ with it for a while, using the
++ .B echo
++ command, which can do very little damage.
++ While it looks cryptic when being typed, it is very general and
++ orthogonal, and quickly becomes natural.

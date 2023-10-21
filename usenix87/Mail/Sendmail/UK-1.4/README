@@ -1,0 +1,176 @@
+Scenario
+--------
+This configuration file is designed to handle three basic scenarios:
+
+1.   A single-host site
+2.   A multi-host site with one central host, and a number of satellites
+3.   A multi-host site which is fully distributed, i.e. no central host
+
+As an example, consider a site called "ucs", whose domain name is "ucs.ac.uk".
+
+In case 1, the host name is the same as the site name - "ucs".
+
+In case 2, the central host is called "ucs", and its domain name is
+	   "ucs.ac.uk". Satellite hosts will be subdomains of "ucs" so,
+	   for example, a satellite host whose hostname is "vax1" will
+	   have domain name "vax1.ucs.ac.uk"
+	   Mail sent to user@ucs would always be sent to the central machine
+	   (where it may be aliased to be delivered at a satellite).
+
+In case 3, All hosts are like satellites in that they are all subdomains
+	   of "ucs" (there is no host called "ucs").
+	   Mail to user@ucs will be either aliased to a specific host or
+	   delivered locally. (The same alias file can be distributed
+	   to all machines.)
+	   From the outside, all hosts will appear as one host - "ucs".
+
+Mailers
+-------
+The following mailers are supported:
+
+	local		the standard unix local mailer
+	ether		mail over the ethernet
+	luucp		local uucp mail (uses domain addressing)
+	uucp		external uucp mail
+	janet		janet mail, using hhcp
+	bitnet		bitnet mail, using rscs
+
+
+Addresses
+---------
+This configuration file accepts addresses in any of the standard forms:
+
+	RFC822 style:		@domain1,@domain2:user@domain3
+	Percent style:		user%domain3%domain2@domain1
+	UUCP style:		domain1!domain2!domain3!user
+
+(If you define the Janet mailer then JNT style with big-endian domain name
+ ordering is also understood).
+
+Mixed addresses are handled by using the precedence order '@' > '%' > '!'
+e.g.	domc!user%domb@doma => user%domc%domb@doma <=> doma!domb!domc!user
+
+
+Configuration Overview
+----------------------
+These address forms are converted in ruleset 3 to one internal form - which
+is Percent style. The rulesets 5 and 6 are then called which expands
+incomplete domain names and aliases into full domain names.
+
+The routing rule, ruleset 9, called from ruleset 0, converts this domain form
+to an <address>host.network triple from which the appropriate mailer is
+selected in ruleset 0.
+
+Meanwhile the mailer specific rulesets convert the header addresses returned
+by ruleset 3 into the appropriate form for the mailer.
+
+
+Files
+-----
+The configuration file is generated from a set of m4 files:
+Site independent:
+	base.m4		Defines special macros, options and headers etc.
+	version.m4	Gives the version number and history
+	rules.m4	Defines the standard rulesets
+	rules1.m4	Defines rulesets to do address conversions
+	<mailer>m.m4	Mailer specifications - one for each of the above
+			mailers
+
+Site dependent:
+	<site>.dom	Defines the domain tables for the site
+
+Host dependent:
+	<host>.mc	This defines some macros and reads everything else in.
+	<host>.chn	This specifies all the routing information for
+			non-local mail
+
+
+Installation
+------------
+1.  Decide what your host, site and domain names are for this host.
+
+2.  Then run "MAKE".  
+
+    This creates a directory containing all the rules and mailer m4 files
+    required for this configuration and creates the <host>.mc file.
+
+    MAKE will first ask for your host, site and domain names. If the host
+    and site names are the same then MAKE assumes that this is either a
+    single host site (case 1) or the central machine of multi-host site
+    (case 2);  if they are different then MAKE asks if there is a central
+    host for this site (case 2); if there isn't it assumes this a distributed
+    multi-host site (case 3).
+
+    MAKE will then prompt for the mailers to include in the configuration,
+    and then it creates all the files. 
+
+3.  "cd" to directory dom.
+    Here you must setup the domain tables from which the <site>.dom file
+    is generated.
+
+    There is only one of these per site, so if you have already done this
+    on another host, just copy the tables to this host.
+
+    More details are found in the README contained in the "dom" directory.
+
+4.  "cd" to directory chn
+    Here you must setup the channel tables which give all the routing
+    information from which the <host>.chn file is generated.
+
+    More details are found in the README contained in the "chn" directory.
+
+5.  "cd" to the <host> directory.
+    Run "make" to produce the <host>.cf file.
+    This can be tested by using "sendmail -bt -C<host>.cf" - if you haven't
+    used this before then see the sendmail documentation for details.
+
+    Also check that the mailer specification files have the correct
+    pathnames and options to the mailers, particularly the local mailer!
+
+6.  As superuser, run "make install" to install this. If you have a
+    sendmail daemon running (typically: /usr/lib/sendmail -bd -q1h),
+    then kill it and start a new one.
+
+
+Running shared configuration files
+----------------------------------
+In the case where (satellite) hosts have the same routing information
+and mailers to mail to other hosts, they can use the same configuration
+file.  To to this, run "MAKE" for one host, then edit the "DOMAIN"
+definition in the resulting ".mc" file replacing the hostname with "$w".
+e.g.
+	define(`DOMAIN',`$w.usc.ac.uk')
+
+Run make and copy the resulting configuration file to all appropriate hosts.
+
+
+Support programs
+----------------
+The Support directory contains programs that interface with sendmail.
+More details are found in the README in the "Support" directory.
+
+
+Aliases
+-------
+A type 3 site can use a common aliases file on all hosts containing
+a list of users and the host addresses to which they wish their mail
+to be delivered to, e.g.
+
+	jim:	jim@vax1
+	fred:	fred@vax2
+
+Addresses of the form "user", "user@host" and "user@site" are all subject
+to possible aliasing.  In the "usc" example, "jim@vax2" will be sent to vax2.
+If the aliases file on vax2 contains the above entries then the mail will
+be delivered on vax1 (or aliased again).
+
+Aliasing can be overridden by prepending a '~' to the user, so "~jim@vax2"
+will be delivered on vax2.
+
+
+
+--------
+Mail bugs and comments to:  jim@hwcs.uucp  (hwcs!jim)
+	       soon to be:  jim@cs.hw.ac.uk
+
+-Jim Crammond			22.4.85

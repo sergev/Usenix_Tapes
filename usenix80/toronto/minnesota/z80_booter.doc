@@ -1,0 +1,81 @@
+Forming a Pascal System Booter
+------------------------------
+
+
+
+	To create an UCSD Pascal system booter you must have the following:
+
+		1)  A short boot loader that will read in track 0 sectors 2 - 13
+
+		2)  A copy of PINIT.ASM
+
+		3)  A hex version of your current BIOS
+
+		4)  A copy of PGEN.COM
+
+
+	The short boot loader of 1) can be generated from your current system
+boot loader if either a source or listing of it is available.  This trans-
+formation process is simply the reduction of a two track bootstrap into a
+single track one.  Two programs BOOT.ASM and PBOOT.ASM are provided as inspir-
+ation for this proceedure.
+
+
+	NOTE:  PBOOT loads its sectors to location (MSIZE-48)*1024+0BA00H
+	       and then jumps to that same point.
+
+
+	If you have no inkling of how your current system boot either loads or
+works, you will have to prevail on your system supplier for that information.
+
+
+	PINIT.ASM is the source for the code that boots in and starts
+SYSTEM.MICRO, the P-Machine interpreter.  A quick edit of PINIT.ASM is needed
+to modify the MSIZE equate to match the memory size (in kilobytes) of the
+current system BIOS.  Once this has been done each of the modules PBOOT, PINIT
+and BIOS must be assembled to produce the .HEX files which will be overlayed
+into PGEN's data area as follows:
+
+	NOTE:  In the following we assume a 48k system
+
+
+
+A>DDT PGEN.COM			;Read PGEN code into memory
+
+DDT VERS 1.3			;We will be overlaying PBOOT,
+NEXT  PC			;  PINIT, and BIOS into PGEN's
+0300 0100			;  data area, and finally saving
+				;  the memory image.
+-IPBOOT.HEX			;Set 'PBOOT.HEX' as the input file
+-H900 0				;PBOOT starts at location 0,  we want
+0900 0900			;  to compute a bias to read it to loc 900
+-R900				;Using this bias we read PBOOT to PGEN's
+NEXT  PC			;  data area
+0980 0000
+-IPINIT.HEX			;We will now do the same proceedure with
+-H980 BA00			;PINIT.  This object code will go to
+C380 4F80			;  location 980, notice PINIT starts at
+-R4F80				;  BA00 (HEX) in a 48k system.
+NEXT  PC
+0A7D BA00			;The value below NEXT will vary with the release
+-IBIOS.HEX			;Last we read BIOS to location D80
+-HD80 BE00
+C380 4F80			;This should be the same bias value as last time
+-R4F80
+NEXT  PC
+0F76 0000			;The value below NEXT is dependant on BIOS
+-^C				;We now leave ddt to save our work
+
+A>SAVE 16 PGEN48.COM		;Our boot writer will be called PGEN48
+A>PGEN48			;The booter may now be put out to Pascal
+
+PGEN VERSION 1.0		;  system disks by executing PGEN48
+
+GET BOOTER?(Y/N)N		;  as shown
+
+PUT BOOTER?(Y/N)Y
+WRITING BOOTER TO DRIVE A, TYPE RETURN
+AGAIN?(Y/N)N
+
+REBOOTING CP/M, TYPE RETURN
+

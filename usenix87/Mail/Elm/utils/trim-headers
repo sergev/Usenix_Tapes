@@ -1,0 +1,54 @@
+: Use /bin/sh
+
+# This shell script is designed to be used either to trim the 'junk' headers
+# out of an archived/saved mailbox file or to trim the headers off a file 
+# that is being piped to it.  The program considers the following headers
+# to be worth saving - everything else is junked.
+#
+#	From <user> <date>
+#	From: name <address>
+#	Subject:
+#	To: 
+#	Cc:
+#	Date:
+#
+# all others are ignored and trashed.
+#
+# (C) Copyright 1986, Dave Taylor
+
+# first off, let's make the 'awk' script we'll be using...
+
+cat << 'END_OF_AWK_SCRIPT' > /tmp/awk.$$
+BEGIN { in_body = 1 }
+{	if (in_body) {
+	  if ($1 == "From") in_body = 0;
+	  print $0
+	}
+	else if ($1 == "From:" || $1 == "Subject:" || $1 == "To:" || \
+	         $1 == "Cc:" || $1 == "Date:")
+	  print $0
+	else if (length($0) == 0) {
+	  in_body = 1;
+	  print $0
+	}
+}
+END_OF_AWK_SCRIPT
+
+# next let's see if we're being piped to or if we've been handed
+# either a file name or list of file names...
+
+if [ "$1" = "" ]
+then
+  cat - | awk -f /tmp/awk.$$ | uniq
+  rm -f /tmp/awk.$$
+else
+  for filename in $*
+  do
+    echo filtering file $filename
+    cat $filename | awk -f /tmp/awk.$$ | uniq > OUTFILE
+    mv OUTFILE $filename
+  done
+  echo done
+fi
+  
+exit 0 

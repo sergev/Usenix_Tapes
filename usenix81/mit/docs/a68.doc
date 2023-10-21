@@ -1,0 +1,1486 @@
+
+
+
+                        _A_6_8 _A_s_s_e_m_b_l_e_r _R_e_f_e_r_e_n_c_e _M_a_n_u_a_l
+
+
+
+
+
+                                  May, 1981
+
+
+
+
+
+
+
+
+
+
+                    Massachusetts Institute of Technology
+                        Laboratory of Computer Science
+                           Cambridge, Massachusetts
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+         _1_.  _I_N_T_R_O_D_U_C_T_I_O_N
+
+           This  document  describes  the syntax and usage of the _a_6_8
+         assembler for the Motorola 68000 microprocessor.  The  basic
+         format of _a_6_8 is loosely based on the Digital Equipment Corp
+         Macro-11    assembler   described   in   DEC's   publication
+         DEC-11-0MACA-A-D, but also contains elements of the UNIX  _a_s
+         assembler.   The instruction mnemonics and effective address
+         format are derived from a Motorola publication on the 68000,
+         the  _M_A_C_S_S  _M_C_6_8_0_0_0  _D_e_s_i_g_n  _S_p_e_c_i_f_i_c_a_t_i_o_n  _I_n_t_r_u_c_t_i_o_n   _S_e_t
+         _P_r_o_c_e_s_s_o_r dated June 30, 1979.
+
+           Sections 1-3 of this document describe the general form of
+         _a_6_8  programs, section 4 describes the instruction mnemonics
+         and addressing modes, section  5  describes  the  pseudo-ops
+         supported by the assembler and section 6 describes the error
+         codes  generated.    For  instructions on how to operate the
+         assembler from UNIX, readers should  consult  the  UNIX  _m_a_n
+         entry on _a_6_8.
+
+         _2_.  _N_O_T_A_T_I_O_N
+
+           The  notation  used  in  this  document  is a modified BNF
+         similar to that used in the MULTICS  PL/I  Language  Manual.
+         The  operators  of the BNF in order of decreasing precedence
+         are:
+
+             Repetition     x  ...      Denotes   one   or   more
+                            occurrences of x.
+             Juxtaposition  xy     Denotes  an  occurrence  of  x
+                            followed by an occurrence of y
+             Alternation    x|y  Denotes an occurrence of x or  y
+                            but not both.
+
+         Brackets   and   braces   define  the  order  of  expression
+         interpretation.  The subexpression enclosed in  brackets  is
+         optional.  That is,
+
+             [x]       denotes zero or one occurrence of x.
+             {x|y}z    denotes an x or a y, followed by a z.
+
+         Brackets  or  braces  which  appear  in  _a_6_8  syntax will be
+         boldfaced, to distinguish them from the meta-  brackets  and
+         braces.
+
+
+
+
+
+
+
+                                     -1-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+         _3_.  _S_O_U_R_C_E _P_R_O_G_R_A_M _F_O_R_M_A_T
+
+           An _a_6_8 program consists of a series of statements, each of
+         which  occupies  exactly  one  line,  i.e.,  a  sequence  of
+         characters followed by the _n_e_w_l_i_n_e character.    Form  feed,
+         ascii  ^L,  also  serves  as  a  line  terminator.   Neither
+         multiple statements on a single line nor continuation  lines
+         are allowed.
+
+           The format of an _a_6_8 assembly language statement is:
+
+                [_L_a_b_e_l_F_i_e_l_d _:] _o_p_-_c_o_d_e [_O_p_e_r_a_n_d_F_i_e_l_d] [|_c_o_m_m_e_n_t]
+
+         There are three exceptions to this rule:
+
+             1. Blank lines are permitted.
+             2. A  statement  may contain only a _L_a_b_e_l_F_i_e_l_d.  The
+               label defined in this field has the same value  as
+               if  it  were defined in the _L_a_b_e_l_F_i_e_l_d of the next
+               statement in the program.  For  example,  the  two
+               statements
+
+                 _s_e_a_:
+                 _m_o_v_w _d_1_,_d_2
+
+               are equivalent to the single statement
+
+                _s_e_a_: _m_o_v_w _d_1_,_d_2
+
+             3. A line may consist of only the comment field. For
+               example, the two statements below are allowed:
+
+                 _| _T_h_i_s _i_s _a _c_o_m_m_e_n_t _f_i_e_l_d_.
+                 _| _S_o _i_s _t_h_i_s
+
+
+
+           In  general,  blanks  or  tabs  are  allowed anywhere in a
+         statement.  For example, multiple blanks are allowed in  the
+         _O_p_e_r_a_n_d_F_i_e_l_d  to separate symbols from operators. Blanks are
+         meaningful only when they occur in a  character string (e.g.
+         as the operand of an .ascii pseudo-op).  At least one  blank
+         or  tab must appear between the op-code and the _O_p_e_r_a_n_d_F_i_e_l_d
+         of a statement.
+
+
+
+
+
+
+
+                                     -2-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+         _3_._1  _L_a_b_e_l _F_i_e_l_d_s
+
+           A  label  is  a  user-defined symbol which is assigned the
+         value of the current location counter and entered  into  the
+         assembler's  symbol  table.   The  value of the label may be
+         either absolute or relocatable;  in  the  latter  case,  the
+         absolute value of the symbol is assigned when the program is
+         linked via _l_d_6_8.
+
+           A  label  is  a  symbolic means of referring to a specific
+         location within a program. If present, a label _a_l_w_a_y_s occurs
+         first in a statement and _m_u_s_t be terminated by a colon.  The
+         collection of label definitions in a   statement  is  called
+         the  _L_a_b_e_l_F_i_e_l_d.
+
+           The format of a _L_a_b_e_l_F_i_e_l_d is:
+
+                  _s_y_m_b_o_l_: [_s_y_m_b_o_l_:] . . .
+
+
+           Examples:
+
+
+             _s_t_a_r_t_:
+             _s_e_a_: _b_a_r_:      _| _M_u_l_t_i_p_l_e _s_y_m_b_o_l_s
+             _7_$_:            _| _A _l_o_c_a_l _s_y_m_b_o_l_, _d_e_f_i_n_e_d _b_e_l_o_w
+
+
+         _3_._2  _O_p_-_c_o_d_e _F_i_e_l_d_s
+
+           The   _O_p_c_o_d_e_F_i_e_l_d   of   an  assembly  language  statement
+         identifies the statement as either a machine instruction, or
+         an assembler directive.  One or more blanks (or  tabs)  must
+         separate   the   _O_p_c_o_d_e_F_i_e_l_d  from  the  _O_p_e_r_a_n_d_F_i_e_l_d  in  a
+         statement.  No blanks are necessary between _L_a_b_e_l_F_i_e_l_d_s  and
+         _O_p_c_o_d_e_F_i_e_l_d_s,   but   they   are    recommended  to  improve
+         readability of the program.
+
+           A machine  instruction  is  indicated  by  an  instruction
+         mnemonic.   The  assembly  language statement is intended to
+         produce  a  single  executable  machine   instruction.   The
+         operation   of   each   instruction   is  described  in  the
+         manufacturer's user manual.  Some conventions  used  in  _a_6_8
+         for  instruction  mnemonics are described in section 4 and a
+         complete list  of  the  instructions  is  presented  in  the
+         appendix.
+
+
+
+
+
+                                     -3-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+           An   assembler  directive,  or  pseudo-op,  performs  some
+         function during the  assembly process. It does  not  produce
+         any  executable  code,  but it may assign space in a program
+         for data.
+
+         _3_._3  _O_p_e_r_a_n_d _F_i_e_l_d_s
+
+           A distinction is made between _O_p_e_r_a_n_d_F_i_e_l_d and _o_p_e_r_a_n_d  in
+         _a_6_8.   Several machine instructions and assembler directives
+         require two or more arguments, and each of these is referred
+         to as an _o_p_e_r_a_n_d.  In general, an _O_p_e_r_a_n_d_F_i_e_l_d  consists  of
+         zero  or  more  operands,  and    _i_n _a_l_l _c_a_s_e_s_, _o_p_e_r_a_n_d_s _a_r_e
+         _s_e_p_a_r_a_t_e_d _b_y _a _c_o_m_m_a.  In other words,  the  format  for  an
+         _O_p_e_r_a_n_d_F_i_e_l_d is:
+
+                 [_o_p_e_r_a_n_d [_, _o_p_e_r_a_n_d] . . .]
+
+         The  format  of  the  _O_p_e_r_a_n_d_F_i_e_l_d  for  machine instruction
+         statements  is  the  same  for  all  instructions,  and   is
+         described  in section 4.  The format of the _O_p_e_r_a_n_d_F_i_e_l_d for
+         assembler directives depends on the directive itself, and is
+         included in the directive's description in section 5 of this
+         manual.
+
+         _3_._4  _C_o_m_m_e_n_t _F_i_e_l_d
+
+           The comment character in _a_6_8 is the vertical bar, (_|), not
+         the semicolon, (_;).  Use  of  the  semicolon  as  a  comment
+         character will result in an "Invalid Operator" error.
+
+           The  comment  field consists of all characters on a source
+         line following and including the  comment  character.  These
+         characters  are  ignored by the assembler. Any character may
+         appear in the comment field, with the obvious  exception  of
+         the _n_e_w_l_i_n_e character, which starts a new line.
+
+
+         _4_.  _S_Y_M_B_O_L_S _A_N_D _E_X_P_R_E_S_S_I_O_N_S
+
+           This  section  describes  the  various  components  of _a_6_8
+         expressions: symbols, numbers, terms, and expressions.
+
+         _4_._1  _S_y_m_b_o_l_s
+
+           A symbol consists of a sequence of  characters,  with  the
+         following restrictions:
+
+
+
+
+
+                                     -4-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+             1. Valid  characters  include  A-Z, a-z, 0-9, period
+               (.), underscore (_), and dollar sign ($).
+             2. The first character must not be numeric.
+
+
+           All  characters  are  significant  and  are   checked   in
+         comparisons  with  other  symbols. Upper and lower cases are
+         distinct, ("One" and "one" are separate symbols).
+
+           A symbol is declared when the assembler recognizes it as a
+         symbol of the program.  A symbol is defined when a value  is
+         associated  with it.  With the exception of symbols declared
+         by a _._g_l_o_b_l directive, all symbols are defined when they are
+         declared. A label symbol (which represents an address of the
+         program) may not be redefined; all other symbols are allowed
+         to receive a new value.
+
+           There are several ways to declare a symbol:
+
+             1. As the label of a statement (See section 2.1).
+             2. In a _d_i_r_e_c_t _a_s_s_i_g_n_m_e_n_t statement.
+             3. As an _e_x_t_e_r_n_a_l symbol via the .globl directive.
+             4. As a _c_o_m_m_o_n symbol via the .comm directive.
+             5. As a _l_o_c_a_l symbol.
+
+
+         _4_._2  _D_i_r_e_c_t _A_s_s_i_g_n_m_e_n_t _S_t_a_t_e_m_e_n_t_s
+
+           A direct assignment statement  assigns  the  value  of  an
+         arbitrary expression to a specified symbol.  The format of a
+         direct assignment statement is:
+
+             _s_y_m_b_o_l _= _e_x_p_r_e_s_s_i_o_n
+
+
+           Examples of valid direct assignments are:
+
+                  _v_e_c_t___s_i_z_e _= _4
+                  _v_e_c_t_o_r_a _= _0_x_F_F_F_E
+                  _v_e_c_t_o_r_b _= _v_e_c_t_o_r_a _- _v_e_c_t___s_i_z_e
+                  _C_R_L_F _= _0_x_0_D_0_A
+
+
+           Only one symbol may be assigned in a single statement.
+
+           Any  symbol  defined by direct assignment may be redefined
+         later in the program, in which case its value is the  result
+         of  the  last such statement.  A local symbol may be defined
+
+
+
+                                     -5-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+         by  direct  assignment, though this doesn't make much sense.
+         Label or register symbols may not be redefined.
+
+           If the _e_x_p_r_e_s_s_i_o_n is absolute, then  the  symbol  is  also
+         absolute,  and  may  be  treated as a constant in subsequent
+         expressions  (see  section  3.4).   If  the  _e_x_p_r_e_s_s_i_o_n   is
+         relocatable,  however,  then the symbol is also relocatable,
+         and it  is considered to be declared  in  the  same  program
+         section   as   the   expression.  See  section  3.7  for  an
+         explanation of absolute and relocatable expressions.
+
+           If the _e_x_p_r_e_s_s_i_o_n contains an external  symbol,  then  the
+         symbol  defined  by  the = statement will also be considered
+         external. For example:
+
+             _._g_l_o_b_l _x _| _x _i_s _d_e_c_l_a_r_e_d _a_s _e_x_t_e_r_n_a_l _s_y_m_b_o_l
+             _s_u_m _= _x  _| _s_u_m _b_e_c_o_m_e_s _a_n _e_x_t_e_r_n_a_l _s_y_m_b_o_l
+
+         assigns the value of x (zero if it is undefined) to sum  and
+         makes  sum  an  external  symbol.   External  symbols may be
+         defined by direct assignment.
+
+         _4_._3  _R_e_g_i_s_t_e_r _S_y_m_b_o_l_s
+
+           Register symbols are symbols used to  represent  registers
+         in  the machine.  Register symbols are defined in the source
+         descriptor file for  a  machine  in  the  pre-assembly  code
+         portion  of  the  file.   This  portion  consists  of source
+         statements that are assembled before  every  source  program
+         for the machine.
+
+           The following symbols are register symbols.
+
+                d0   d1   d2   d3   d4   d5   d6   d7
+                a0   a1   a2   a3   a4   a5   a6   a7
+                sp   pc   cc   sr   usp
+
+
+         _4_._4  _E_x_t_e_r_n_a_l _S_y_m_b_o_l_s
+
+           A  program  may be assembled in separate modules, and then
+         linked together to form a single  program  (see  _l_d_6_8  (I)).
+         External  symbols  may  be defined in each of these separate
+         modules.  A symbol which is declared (given a value)  in one
+         module may be referenced in another module by declaring  the
+         symbol  to be external in _b_o_t_h modules.  There are two forms
+         of external symbols:  those  defined  with  the  _._g_l_o_b_l  and
+         those defined with the _._c_o_m_m directive.
+
+
+
+                                     -6-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+           External  symbols  are  declared with the _._g_l_o_b_l assembler
+         directive. The format is:
+
+                _._g_l_o_b_l _s_y_m_b_o_l [_, _s_y_m_b_o_l_] _. _. _.
+
+         For example, the  following  statements  declare  the  array
+         TABLE and the routine SRCH to be external symbols:
+
+                 _._g_l_o_b_l _T_A_B_L_E_,_S_R_C_H
+                 _T_A_B_L_E_: _._=_._+_2_0
+                 _S_R_C_H_: _m_o_v_l _#_T_A_B_L_E_,_a_0
+                  _e_t_c _. _. _.
+
+         External   symbols  are  only  _d_e_c_l_a_r_e_d  to  the  assembler.
+         External symbols must be _d_e_f_i_n_e_d (i.e.  given  a  value)  in
+         some  other statement by one of the methods mentioned above.
+         They need not be defined in the  current  program;  in  this
+         case they are flagged as "undefined" in the symbol table. If
+         they  are undefined, they are considered to have a  value of
+         zero in expressions.
+
+           The other form of external  symbol  is  defined  with  the
+         _._c_o_m_m directive.  These statement reserve storage in the _b_s_s
+         section  similar  to FORTRAN common areas. The format of the
+         statement is:
+
+                _._c_o_m_m _n_a_m_e_, _C_o_n_s_t_a_n_t_E_x_p_r_e_s_s_i_o_n
+
+         which causes _a_6_8 to declare the _n_a_m_e as a common symbol with
+         a value equal to the _C_o_n_s_t_a_n_t_E_x_p_r_e_s_s_i_o_n.  For  the  rest  of
+         the assembly this symbol will be treated as though it was an
+         undefined  global.  _a_6_8 does not allocate storage for common
+         symbols; this task is left to the loader.  The  loader  will
+         compute the maximum size of for each common symbol which may
+         appear  in several load modules, allocates storage for it in
+         the final _b_s_s section and resolves linkages.
+
+         _4_._5  _L_o_c_a_l _S_y_m_b_o_l_s
+
+           Local symbols provide a  convenient  means  of  generating
+         labels  for  branch  instructions, etc. Use of local symbols
+         reduces the possibility of  multiply-defined  symbols  in  a
+         program,  and  separates  entry  point  symbols  from  local
+         references, such as the top of a loop. Local symbols  cannot
+         be referenced by other object modules.
+
+
+
+
+
+
+                                     -7-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+           Local  symbols  are of the form _n_$ where _n is any integer.
+         The following are valid local symbols
+
+                      _1_$
+                 _2_7_$
+                 _3_9_4_$
+
+         A local symbol is  defined  and  referenced  only  within  a
+         single "local symbol block" (lsb).  A new local symbol block
+         is entered when:
+
+             1. a label is declared; or,
+             2. a new program section is entered.
+
+         There  is  no  conflict  between local symbols with the same
+         name which appear in different local symbol blocks.
+
+         _4_._6  _A_s_s_e_m_b_l_y _L_o_c_a_t_i_o_n _C_o_u_n_t_e_r
+
+           The assembly location counter  is  the  period  character,
+         '_.'; hence it's  name "dot".  When used in the operand field
+         of  any  statement,  dot represents the address of the first
+         byte of the  statement.  Even  in  assembly  directives,  it
+         represents the address of the start of the directive.  A dot
+         appearing  as  the third argument in a _._b_y_t_e instruction has
+         the value of the address where the first  byte  was  loaded;
+         this address is not updated "during" the pseudo-op.
+
+           For example,
+
+                _R_a_l_p_h_: _m_o_v_l _._,_a_0  _|_l_o_a_d _v_a_l_u_e _o_f _t_h_i_s _i_n_s_t_r_u_c_t_i_o_n
+                _i_n_t_o _a_0
+
+
+           At  the  beginning  of  each  assembly pass, the assembler
+         clears the location counter.  Normally,  consecutive  memory
+         locations  are  assigned  to  each  byte  of  generate code.
+         However, the location  where  the  code  is  stored  may  be
+         changed   by  a  direct  assignment  altering  the  location
+         counter:
+
+                _. _= _e_x_p_r_e_s_s_i_o_n
+
+         This expression must not contain any forward references, and
+         must not change from one pass to another.  Storage area  may
+         also  be  reserved  by  advancing  dot.  For example, if the
+         current  value  of  dot  is  1000,  the  direct   assignment
+         statement:
+
+
+
+                                     -8-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+                _T_a_b_l_e_: _._=_._+_1_0_0
+
+         would  reserve  100  (decimal)  bytes  of  storage, with the
+         address of the first byte as the value of  Table.  The  next
+         instruction would be stored at address 110.
+
+         _4_._7  _P_r_o_g_r_a_m _S_e_c_t_i_o_n_s
+
+           As  in  UNIX,  programs  to  _a_6_8  are  divided  into three
+         sections: _t_e_x_t, _d_a_t_a and _b_s_s.  The normal interpretation  of
+         these sections is: instruction space, initialized data space
+         and  uninitialized  data  space,  respectively   These three
+         sections are equivalent as far as _a_6_8 is concerned with  the
+         exception  that  no  instructions or data will be output for
+         the _b_s_s section although it's size will be computed and it's
+         symbol values will be output.
+
+           In the  first  pass  of  the  assembly,  _a_6_8  maintains  a
+         separate  location  counter  for each section, thus for code
+         like:
+
+                 _._t_e_x_t
+                _s_u_m_: _m_o_v_w _d_1_,_d_2
+                 _._d_a_t_a
+                _h_e_l_l_o_: _._l_o_n_g _2_7
+                 _._t_e_x_t
+                _j_n_k_: _a_d_d_w _d_2_,_d_1
+                 _._d_a_t_a
+                _m_y_s_t_: _._b_y_t_e _4
+
+         in the output, _s_u_m will immediately precede  _j_n_k  and  _h_e_l_l_o
+         will  immediately  precede  _m_y_s_t.    At the end of the first
+         pass, _a_6_8 rearranges all the addresses so that the  sections
+         will  be  output in the following order: _t_e_x_t, _d_a_t_a and _b_s_s.
+         The resulting output file is an executable image  file  with
+         all  addresses  correctly  resolved,  with  the exception of
+         undefined _._g_l_o_b_ls and _._c_o_m_ms.  For more information  on  the
+         format  of  the  output  file, consult the UNIX _m_a_n entry on
+         _b_._o_u_t files.
+
+         _4_._8  _C_o_n_s_t_a_n_t_s
+
+           All constants  are  considered  absolute  quantities  when
+         appearing in an expression.
+
+
+
+
+
+
+
+                                     -9-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+         4.8.1 Numeric Constants
+
+           An  _a_6_8  numeric  constant  is  a sequence of digits.  _A_6_8
+         interprets integers as octal, hex, or decimal  according  to
+         the following conventions.
+
+             octal     octal numbers begin with 0
+             hex       hex numbers begin with 0x or 0X
+             decimal   all other numbers
+
+
+         _4_._9  _O_p_e_r_a_t_o_r_s
+
+         4.9.1 Unary Operators
+
+           There are two unary operators in _a_6_8:
+
+             Operator Function
+             -    unary minus.
+             ~    logical negation.
+
+
+         4.9.2 Binary Operators
+
+           Binary operators in _a_6_8 include:
+
+             Operator Description
+             +    Addition; e.g. "3+4" evaluates to 7.
+             -    Subtraction; e.g.  "3-4"  evaluates  to -1., or
+                  0xFFFFFFFF
+             *    Multiplication; e.g. "4*3" evaluates to 12.
+
+         Each operator is assumed to work on a 32-bit number.
+
+         _4_._1_0  _T_e_r_m_s
+
+           A term is a component of an expression. A term may be  one
+         of the following:
+
+             1. A number.
+             2. A symbol.
+             3. A term preceded by a unary operator. For example,
+               both  "sum"  and  "~sum"  may  be considered to be
+               terms. Mulitple unary operators are allowed;  e.g.
+               " -- A" has the same value as "A".
+
+
+
+
+
+
+                                     -10-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+         _4_._1_1  _E_x_p_r_e_s_s_i_o_n_s
+
+           Expressions  are  combinations of terms joined together by
+         binary operators.  An expression is always  evaluated  to  a
+         32-bit  value.  If  the instruction calls for only one byte,
+         (e.g. _._b_y_t_e), then the low-order byte is used.
+
+           Expressions are evaluated left to right with  no  operator
+         precedence.  Thus  "1+2*3"  evaluates  to  9,  not  7. Unary
+         operators have precedence over binary operators  since  they
+         are  considered  part  of a term, and both terms of a binary
+         operator must be evaluated before the binary operator can be
+         applied.
+
+           A missing expression or term is  interpeted  as  having  a
+         value  of  zero. In this case, an "Invalid expression" error
+         will be generated.  An "Invalid Operator" error means that a
+         valid end-of-line  character  or  binary  operator  was  not
+         detected   after   the   assembler  processed  a  term.   In
+         particular, this error will be generated  if  an  expression
+         contains  a    symbol  with  an  illegal character, or if an
+         incorrect comment character was used.
+
+           Any  expression,  when  evaluated,  is  either   absolute,
+         relocatable, or external:
+
+             a. An  expression is absolute if its value is fixed.
+               An  expression  whose  terms  are  constants,   or
+               symbols  whose  values  are constants via a direct
+               assignment statement, is absolute.  A  relocatable
+               expression  minus  a  relocatable term, where both
+               items belong to the same program section  is  also
+               absolute.
+
+             b. An  expression  is  relocatable  if  its value is
+               fixed relative to a base address, but will have an
+               offset value when it is  linked,  or  loaded  into
+               core.   All   labels   of  a  program  defined  in
+               relocatable sections  are relocatable  terms,  and
+               any  expression  which contains them must only _a_d_d
+               _o_r  _s_u_b_t_r_a_c_t  _c_o_n_s_t_a_n_t_s  _t_o  _t_h_e_i_r   _v_a_l_u_e.    For
+               example,  assume the symbol "sum" was defined in a
+               relocatable  section  of  the  program.  Then  the
+               following  demonstrates  the  use  of  relocatable
+               expressions:
+
+
+
+
+
+
+                                     -11-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+             sum       relocatable
+             sum+5     relocatable
+             sum*2     Not relocatable (error)
+             2-sum     Not   relocatable   (error),   since   the
+                       expression  cannot  be  linked  by  adding
+                       sum's offset to it.
+             sum-jnk   Absolute,  since  the offsets added to sum
+                       and jnk cancel each other out.
+
+
+             c. An expression  is  external  (or  global)  if  it
+               contains  an  external  symbol  not defined in the
+               current  program.   The   same   restrictions   on
+               expressions  containing  relocatable symbols apply
+               to  expressions   containing   external   symbols.
+               Exception: the expression "sum-jnk" where both sum
+               and jnk are external symbols is not allowed.
+
+
+         _5_.  _I_N_S_T_R_U_C_T_I_O_N_S _A_N_D _A_D_D_R_E_S_S_I_N_G _M_O_D_E_S
+
+           This  section  describes  the  conventions  used in _a_6_8 to
+         specify instruction mnemonics and addressing modes.
+
+         _5_._1  _I_n_s_t_r_u_c_t_i_o_n _M_n_e_m_o_n_i_c_s
+
+           The instruction mnemonics used by _a_6_8 are described in the
+         previously mentioned Motorola manual with a few  variations.
+         Most  of  the  68000 instructions can apply to byte, word on
+         long operands, so in _a_6_8 the normal instruction mnemonic  is
+         suffixed  with  _b,  _w, or _l to indicate which length operand
+         was intended.  For example, there are  three  mnemonics  for
+         the  _o_r  instruction:  _o_r_b,  _o_r_w  and  _o_r_l.    Op-codes  for
+         instructions  with  unusual  opcodes  may  have   additional
+         suffixes,  thus  in  addition  to the normal _a_d_d variations,
+         there also exist: _a_d_d_q_b, _a_d_d_q_w and _a_d_d_q_l for the  _a_d_d  _q_u_i_c_k
+         instruction.
+
+           Branch  instructions  come  in two flavors, byte and word.
+         In _a_6_8, the byte  (_i_._e_._,  _s_h_o_r_t)  version  is  specified  by
+         appending  the  suffix _s to the basic mnemonic as in _b_e_q and
+         _b_e_q_s.
+
+           In addition to the instructions which  explicitly  specify
+         the   instruction   length,  _a_6_8  supports  extended  branch
+         instructions,  whose  names  are  generally  constructed  by
+         replacing  the  _b  with  _j.   If the operand of the extended
+         branch instruction  is  a  simple  address  in  the  current
+
+
+
+                                     -12-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+         segment,  and  the  offset  to  that address is sufficiently
+         small, _a_6_8 will  automatically  generate  the  corresponding
+         short  branch instruction.  If the offset is too large for a
+         short branch, but  small  enough  for  a  branch,  then  the
+         corresponding  branch  instruction  is  generated.    If the
+         operand  references an external address or is complex,  then
+         the  extended  branch instruction is implemented either by a
+         _j_m_p or _j_s_r (for _j_r_a or _j_b_s_r), or  by  a  conditional  branch
+         (with  the  sense  of the conditional inverted) around a _j_m_p
+         for the extended conditional branches.  In this  context,  a
+         complex  address  is either an address which specifies other
+         than normal  mode  addressing,  or  relocatable  expressions
+         containing  more  than  one relocatable symbol. _i_._e_. if _a_, _b
+         and  _c  are  symbols  in  the  current  segment,  then   the
+         expression _a_+_b_-_c is relocatable, but not simple.
+
+           Note   that   _a_6_8  is  not  optimal  for  extended  branch
+         instructions whose operand addresses the  next  instruction.
+         The optimal code is no instruction at all, but _a_6_8 currently
+         retains  insufficient information to make this optimization.
+         The difficulty is that if _a_6_8 decides to just eliminate  the
+         instruction, the address of the next instruction will be the
+         same  as  the  address  of the (nonexistent) extended branch
+         instruction.  This instruction will then look like a  branch
+         to  the current location, which would require an instruction
+         to be generated.  The code that _a_6_8 actually  generates  for
+         this  case  is  a  _n_o_p  (recall  that an offset of zero in a
+         branch instruction indicates a long offset).  Although  this
+         problem may arise in compiler code generators, it can easily
+         be handled by a peephole optimizer.
+
+           The  algorithm  used  by _a_6_8 for deciding how to implement
+         extended branch instructions is  described  in  ``Assembling
+         Code  for  Machines  with  Span-Dependent  Instruction,'' by
+         Thomas G. Szymanski in _C_o_m_m_u_n_i_c_a_t_i_o_n_s _o_f _t_h_e _A_C_M, Volume 21,
+         Number 4, pp300-308, April 1978.
+
+           Consult  the  appendix  for  a  complete   list   of   the
+         instruction op-codes.
+
+         _5_._2  _A_d_d_r_e_s_s_i_n_g _M_o_d_e_s
+
+           The   following   table  describes  the  addressing  modes
+         recognized by _a_6_8.  In this table a_n refers  to  an  address
+         register,  d_n refers to a data register, R_i to either a data
+         or an address register, _d to a displacement, which,  in  _a_6_8
+         is  a constant expression, and _x_x_x to a constant expression.
+         Certain instructions, particularly _m_o_v_e accept a variety  of
+
+
+
+                                     -13-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+         special  registers  including sp, the stack pointer which is
+         equivalent to a7, sr, the status register, cc, the condition
+         codes of the status  register,  usp,  the  user  mode  stack
+         pointer, and pc, the program counter.
+
+         _M_o_d_e              _N_o_t_a_t_i_o_n              _E_x_a_m_p_l_e
+         Register          a_n,d_n,sp,pc,cc,sr,usp _m_o_v_w _a_3_,_d_2
+         Register Deferred a_n@                   _m_o_v_w _a_3_@_,_d_2
+         Postincrement     a_n@+                  _m_o_v_w _a_3_@_+_,_d_2
+         Predecrement      a_n@-                  _m_o_v_w _a_3_@_-_,_d_2
+         Displacement      a_n@(_d)                _m_o_v_w _a_3_@_(_2_4_)_,_d_2
+         Word Index        a_n@(_d, R_i:W)          _m_o_v_w _a_3_@_(_1_6_, _d_2_:_W_)_,_d_3
+         Long Index        a_n@(_d, R_i:L)          _m_o_v_w _a_3_@_(_1_6_, _d_2_:_L_)_,_d_3
+         Absolute Short    _x_x_x.W                 _m_o_v_w _1_4_._W_,_d_2
+         Absolute Long     _x_x_x.L                 _m_o_v_w _1_4_._L_,_d_2
+         PC Displacement   pc@(_d)                _m_o_v_w _p_c_@_(_2_0_)_,_d_3
+         PC Word Index     pc@(_d, R_i:W)          _m_o_v_w _p_c_@_(_1_4_, _d_2_:_W_)_,_d_3
+         PC Long Index     pc@(_d, R_i:L)          _m_o_v_w _p_c_@_(_1_4_, _d_2_:_L_)_,_d_3
+         Normal            sun                   _m_o_v_w _s_u_n_,_d_3
+         Immediate         #xxx                  _m_o_v_w _#_2_7_+_3_,_d_3
+
+         Normal  mode  actually  assembles as absolute long, although
+         the value of the constant will be flagged as relocatable  to
+         the  loader.   The notation for these modes derived from the
+         Motorola notation with the exception of the colon  in  index
+         mode rather than period.
+
+           The   Motorola   manual  presents  different  opcodes  for
+         instructions that use the effective address as  data  rather
+         than  the contents of the effective address such as _a_d_d_a for
+         _a_d_d _a_d_d_r_e_s_s.  _a_6_8 does not make this distinction because  it
+         can  determine  the type of the operand from its form.  Thus
+         an instruction of the form:
+
+             _s_u_n_: _._w_o_r_d _0
+                  _._._.
+                  _a_d_d_l _#_s_u_n_,_a_0
+
+         will assemble to the _a_d_d _a_d_d_r_e_s_s instruction because _s_u_n  is
+         known to be an address.
+
+           The  68000  tends  to  be  very  restrictive  in that most
+         instructions accept only a limited  subset  of  the  address
+         modes  above.  For example, the _a_d_d _a_d_d_r_e_s_s instruction does
+         not accept a data register as a destination.  _a_6_8  tries  to
+         check  all  these restrictions and will generate the _i_l_l_e_g_a_l
+         _o_p_e_r_a_n_d error code for instructions that do not satisfy  the
+         address mode restrictions.
+
+
+
+                                     -14-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+         _6_.  _A_S_S_E_M_B_L_E_R _D_I_R_E_C_T_I_V_E_S
+
+           The following pseudo-ops  are available in _a_6_8:
+
+             _._a_s_c_i_i         stores character strings
+             _._a_s_c_i_z            "
+             _._b_y_t_e          stores 8-bit bytes
+             _._w_o_r_d          stores 16-bit words
+             _._l_o_n_g          stores 32-bit longwords
+             _._t_e_x_t          Text csect
+             _._d_a_t_a          Data csect
+             _._b_s_s           Bss csect
+             _._g_l_o_b_l         declares external symbols
+             _._c_o_m_m          declares common symbols
+
+
+         _6_._1  _._a_s_c_i_i _._a_s_c_i_z
+
+           The  _._a_s_c_i_i  directive  translates  character strings into
+         their 7-bit ascii (represented as 8-bit  bytes)  equivalents
+         for  use  in  the  source  program.  The format of the ascii
+         directive is as follows:
+
+             _._a_s_c_i_i   _"_c_h_a_r_a_c_t_e_r _s_t_r_i_n_g_"
+
+         Obviously, a newline must not appear  within  the  character
+         string.
+
+           The _._a_s_c_i_z directive is equivalent ot the _._a_s_c_i_i directive
+         with  a  zero  byte  automatically  inserted  as  the  final
+         character of the string. Thus, when a list or text string is
+         to be printed, a search for the null character can terminate
+         the string.
+
+
+           _6_._2  _._b_y_t_e  _._w_o_r_d _._l_o_n_g
+
+           The _._b_y_t_e, _._w_o_r_d  and _._l_o_n_g directives are used to reserve
+         bytes and words, and to initialize them with certain values.
+
+           The format is:
+
+             [_l_a_b_e_l_:]       _._b_y_t_e [_e_x_p_r_e_s_s_i_o_n] [_,_e_x_p_r_e_s_s_i_o_n] .  .
+                            .
+             [_l_a_b_e_l_:]       _._w_o_r_d [_e_x_p_r_e_s_s_i_o_n]  [_,_e_x_p_r_e_s_s_i_o_n] . .
+                            .
+
+
+
+
+
+                                     -15-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+             [_l_a_b_e_l_:]       _._l_o_n_g [_e_x_p_r_e_s_s_i_o_n]  [_,_e_x_p_r_e_s_s_i_o_n] . .
+                            .
+
+         For example, the first statement reserves one byte for  each
+         expression  in  the operand field, and initializes the value
+         of the byte to be the low-order byte of the    corresponding
+         expression. Note that multiple expressions must be separated
+         by commas. A blank expression is interpreted as zero, and no
+         error is generated.
+
+           The  syntax  and  semantics for _._w_o_r_d is identical, except
+         that 16-bit words are reserved and initialized,  of  course,
+         and _._l_o_n_g uses 32-bit quantities.
+
+         _6_._3  _._t_e_x_t  _._d_a_t_a   _._b_s_s
+
+           These   statements  change  the  "program  section"  where
+         assembled code will be loaded.
+
+         _6_._4  _._g_l_o_b_l _._c_o_m_m
+
+           See section 4.4.
+
+         _6_._5  _._e_v_e_n
+
+           This directive  advances  the  location  counter  if  it's
+         current  value  is  odd.  This is useful for forcing storage
+         allocation like _._w_o_r_d directives to be on word boundries.
+
+
+         _7_.  _E_R_R_O_R _C_O_D_E_S
+
+           If an error is detected during assembly, a message of  the
+         form:
+
+                  _l_i_n_e___n_o _._e_r_r_o_r___c_o_d_e
+
+         is output to the standard error stream.
+
+           The  following  _._e_r_r_o_r  codes,  and  their probable cause,
+         appear below:
+
+             2    Invalid Character.
+                  An invalid character for a  character  constant
+                  or character string was encountered.
+
+
+
+
+
+
+                                     -16-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+             3    Multiply defined symbol.
+                  A  symbol  appears  twice  as  a  label,  or an
+                  attempt  to  redefine  a  label  using   an   =
+                  statement.
+             4    Symbol storage exceeded.
+                  No  more  room  is  left  in  the symbol table.
+                  Assemble portions of  the  program  separately,
+                  then bind them together.
+             6    Symbol length exceeded.
+                  A   symbol  of  more  than  31  characters  was
+                  encountered.
+             7    Undefined symbol.
+                  A symbol not declared by  one  of  the  methods
+                  mentioned  above  in 'Symbols' was encountered.
+                  This  happens  when  an   invalid   instruction
+                  mnemonic  is  used.   This  also occurs when an
+                  invalid or non-printing character occurs in the
+                  statement.
+             8    Invalid Constant.
+                  An invalid digit was encountered in a number.
+             9    Invalid Term.
+                  The expression evaluator could not find a valid
+                  term: symbol, constant  or  [_e_x_p_r_e_s_s_i_o_n].    An
+                  invalid prefix to a number or a bad symbol name
+                  in an operand will generate this.
+             10   Invalid Operator.
+                  Check the operand field for a bad operator.
+             11   Non-relocatable expression.
+                  If  an expression contains a relocatable symbol
+                  (e.g. label) then the only operations that  can
+                  be  applied  to it are the addition of absolute
+                  expressions  or  the  subtraction  of   another
+                  relocatable  symbol (which produces an absolute
+                  result).
+             12   Invalid operand type.
+                  The _t_y_p_e field of  an  operand  is  either  not
+                  defined  for  the  machine,  or  represents  an
+                  addressing mode incompatible with  the  current
+                  instruction.
+             13   Invalid operand.
+                  This is a catch-all _._e_r_r_o_r.  It appears notably
+                  when  an attempt is made to assign an undefined
+                  value to dot during pass 1.
+             14   Invalid symbol.
+                  If the first token on the source line is not  a
+                  valid  symbol  (or the beginning of a comment),
+                  this is generated. Might happen if you try  and
+                  implied _._w_o_r_d.
+
+
+
+                                     -17-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+             15   Invalid assignment.
+                  An attempt was made to redefine a label with an
+                  = statement.
+             16   Too many labels.
+                  More  than 10 labels and/or _s_y_m_b_o_l= 's appeared
+                  on a single statement.
+             17   Invalid op-code.
+                  An op-code mnemonic was not recognized  by  the
+                  assembler.
+             18   Invalid entry point.
+                  The entry point of the program (declared on the
+                  .end statement) must be a defined label.
+             19   Invalid string.
+                  An  invalid  string  for  _._p_r_i_n_t  or .print was
+                  encountered.  Make sure string is  enclosed  in
+                  double quotes.
+             20   Bad filename or too many levels.
+                  An  invalid  filename  was  given to _._i_n_s_r_t, or
+                  there  were  more  than  10  levels  of  nested
+                  "_._i_n_s_r_t"s.
+             22   _._e_r_r_o_r statement.
+                  A  _._e_r_r_o_r statement was encountered during pass
+                  2.
+             25   Wrong number of operands.
+                  This  is   usually   a   warning.   Check   the
+                  manufacturer's  assembly manual for the correct
+                  number of operands for the current instruction.
+             26   Line too long.
+                  A  statement  with  more  that  132  characters
+                  before the newline was encountered.
+             27   Invalid register expression.
+
+
+           Any  expression  inside parentheses should be absolute and
+         have the value of a register code (_r_e_g_i_s_t_e_r _s_y_m_b_o_l_s).   This
+         may occur if you use parentheses for anything other than the
+         _r_e_g_i_s_t_e_r portion of an operand.
+
+         _8_.  _A_P_P_E_N_D_I_X _- _A_6_8 _O_P_C_O_D_E_S
+
+             Double Operand Instructions
+             addb      add
+             addw      "
+             addl      "
+             andb      and
+
+
+
+
+
+
+                                     -18-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+             andw      "
+             andl      "
+             cmpb      compare
+             cmpw      "
+             cmpl      "
+             eorb      exclusive or
+             eorw      "
+             eorl      "
+             movb      move
+             movw      "
+             movl      "
+             orb       inclusive or
+             orw       "
+             orl       "
+             subb      subtract
+             subw      "
+             subl      "
+
+
+             Single Operand Instructions
+             clrb      clear an operand
+             clrw      "
+             clrl      "
+             nbcd      negate decimal with extend
+             negb      negate binary
+             negw      "
+             negl      "
+             negxb     negate binary with extend
+             negxw     "
+             negxl     "
+             notb      logical compliment
+             notw      "
+             notl      "
+             st        set all ones
+             sf        set all zeros
+             shi       set high
+             sls       set lower or same
+             scc       set carry clear
+             scs       set carry set
+             sne       set not equal
+             seq       set equal
+             svc       set no overflow
+             svs       set on overflow
+             spl       set plus
+             smi       set minus
+
+
+
+
+
+
+                                     -19-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+             sge       set greater or equal
+             slt       set less than
+             sgt       set greater than
+             sle       set less than or equal
+             tas       test operand then set
+             tstb      test operand
+             tstw      "
+             tstl      "
+
+
+             Branch Instructions
+             bcc       branch carry clear
+             bccs      "
+             bcs       branch on carry
+             bscs      "
+             beq       branch on equal
+             beqs      "
+             bge       branch greater or equal
+             bges      "
+             bgt       branch greater than
+             bgts      "
+             bhi       branch higher
+             bhis      "
+             ble       branch less than or equal
+             bles      "
+             bls       branch lower or same
+             blss      "
+             blt       branch less than
+             blts      "
+             bmi       branch minus
+             bmis      "
+             bne       branch not equal
+             bnes      "
+             bpl       branch positive
+             bpls      "
+             bra       branch
+             bras      "
+             bsr       subroutine branch
+             bsrs      "
+             bvc       branch no overflow
+             bvcs      "
+             bvs       branch on overflow
+             bvss      "
+
+
+
+
+
+
+
+
+                                     -20-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+             Extended Branch Instructions
+             jcc       jump/branch carry clear
+             j         jump/branch on carry
+             jeq       jump/branch on equal
+             jge       jump/branch greater or equal
+             jgt       jump/branch greater than
+             jhi       jump/branch higher
+             jle       jump/branch less than or equal
+             jls       jump/branch lower or same
+             jlt       jump/branch less than
+             jmi       jump/branch minus
+             jne       jump/branch not equal
+             jpl       jump/branch positive
+             jra       jump/branch
+             jbsr      jump/branch to subroutine
+             jvc       jump/branch no overflow
+             jvs       jump/branch on overflow
+
+
+             Shift Instructions
+             aslb      arithmetic shift left
+             aslw      "
+             asll      "
+
+
+             asrb      arithmetic shift right
+             asrw
+             asrl
+             lslb      logical shift left
+             lslw
+             lsll
+             lsrb      logical shift right
+             lsrw
+             lsrl
+             rolb      rotate left
+             rolw
+             roll
+             rorb      rotate right
+             rorw
+             rorl
+             roxlb     rotate left with extend
+             roxlw
+             roxll
+             roxrb     rotate right with extend
+             roxrw
+
+
+
+
+
+
+                                     -21-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+             roxrl
+
+
+             Miscellneous Classes
+             abcd      add decimal with extend
+             addqb     add quick
+             addqw
+             addql
+             addxb     add extended
+             addxw
+             addxl
+             bchg      test a bit and change
+             bclr      test a bit and clear
+             bset      test a bit and set
+             btst      test a bit
+             cmpmb     compare memory
+             cmpmw
+             cmpml
+             chk       check register against bounds
+             dcnt      decrement count and branch nz
+             divs      signed divide
+             divu      unsigned divide
+             exg       exchange registers
+             extw      sign extend
+             extl
+             jmp       jump
+             jsr       jump to subroutine
+             lea       load effective address
+             link      link
+             moveml    move multiple registers
+             movemw
+             movepl    move peripheral
+             movepw
+             moveq     move quick
+             muls      signed multiply
+             mulu      unsigned multiply
+             nop       no operation
+             pea       push effective address
+             reset     reset machine
+             rte       return from exception
+             rtr       return and restore codes
+             rts       return from subroutine
+             sbcd      subtract decimal with extend
+             stop      halt machine
+             subqb     subtract quick
+
+
+
+
+
+
+                                     -22-
+         A68 Assembler Reference Manual                   11 May 1981
+
+
+             subqw
+             subql
+             subxb     subtract extended
+             subxw
+             subxl
+             swap      swap register halves
+             trap      trap
+             trapv     trap on overflow
+             unlk      unlink
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     -23-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     -24-
+
+
+
+
+
+
+                                   _C_O_N_T_E_N_T_S
+
+
+
+         _1_.  _I_N_T_R_O_D_U_C_T_I_O_N _._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._. _1
+
+         _2_.  _N_O_T_A_T_I_O_N _._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._. _1
+
+         _3_.  _S_O_U_R_C_E _P_R_O_G_R_A_M _F_O_R_M_A_T _._._._._._._._._._._._._._._._._._._._._._._._._._._. _2
+
+                 3.1  Label Fields ........................... 3
+                 3.2  Op-code Fields ......................... 3
+                 3.3  Operand Fields ......................... 4
+                 3.4  Comment Field .......................... 4
+
+         _4_.  _S_Y_M_B_O_L_S _A_N_D _E_X_P_R_E_S_S_I_O_N_S _._._._._._._._._._._._._._._._._._._._._._._._._. _4
+
+                 4.1  Symbols ................................ 4
+                 4.2  Direct Assignment Statements ........... 5
+                 4.3  Register Symbols ....................... 6
+                 4.4  External Symbols ....................... 6
+                 4.5  Local Symbols .......................... 7
+                 4.6  Assembly Location Counter .............. 8
+                 4.7  Program Sections ....................... 9
+                 4.8  Constants .............................. 9
+                     4.8.1  Numeric Constants ............... 10
+                 4.9  Operators ............................. 10
+                     4.9.1  Unary Operators ................. 10
+                     4.9.2  Binary Operators ................ 10
+                 4.10  Terms ................................ 10
+                 4.11  Expressions .......................... 11
+
+         _5_.  _I_N_S_T_R_U_C_T_I_O_N_S _A_N_D _A_D_D_R_E_S_S_I_N_G _M_O_D_E_S _._._._._._._._._._._._._._. _1_2
+
+                 5.1  Instruction Mnemonics ................. 12
+                 5.2  Addressing Modes ...................... 13
+
+         _6_.  _A_S_S_E_M_B_L_E_R _D_I_R_E_C_T_I_V_E_S _._._._._._._._._._._._._._._._._._._._._._._._._._._. _1_5
+
+                 6.1  .ascii .asciz ......................... 15
+                 6.2  _._b_y_t_e  _._w_o_r_d _._l_o_n_g .................... 15
+                 6.3  _._t_e_x_t  _._d_a_t_a   _._b_s_s ................... 16
+                 6.4  _._g_l_o_b_l _._c_o_m_m .......................... 16
+                 6.5  _._e_v_e_n ................................. 16
+
+
+
+
+                                     -1-
+         11 May 1981                   A68 Assembler Reference Manual
+
+
+         _7_.  _E_R_R_O_R _C_O_D_E_S _._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._._. _1_6
+
+         _8_.  _A_P_P_E_N_D_I_X _- _A_6_8 _O_P_C_O_D_E_S _._._._._._._._._._._._._._._._._._._._._._._._._. _1_8
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                     -2-
+

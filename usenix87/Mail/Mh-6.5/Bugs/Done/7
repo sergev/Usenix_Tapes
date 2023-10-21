@@ -1,0 +1,70 @@
+Received: from wucs by plus5.uucp (UIUC-5.31/03Jun86-09:31:46) with UUCP
+	id AA13652; Fri, 6 Jun 86 12:17:00 EDT
+Received: from seismo by wucs.UUCP with UUCP; Fri, 6 Jun 86 07:12:06 CDT
+Received: by seismo.CSS.GOV; Fri, 6 Jun 86 05:07:58 EDT
+Received: from bboards by ICS.UCI.EDU id a026659; 6 Jun 86 1:44 PDT
+Received: from hplabs.arpa by ICS.UCI.EDU id a026629; 6 Jun 86 1:40 PDT
+Received: by hplabs.ARPA ; Thu, 5 Jun 86 23:40:40 pdt
+From: seismo!hplabs.arpa!hpda!hpdsd!hpsemc!bd
+Received: from hpdsd.UUCP by hpda.UUCP (4.30/3.5)
+	id AA11054; Thu, 5 Jun 86 23:18:28 pdt
+Received: by hpdsd.UUCP (4.30/3.5)
+	id AA08531; Thu, 5 Jun 86 23:19:43 pdt
+Date: Thu, 5 Jun 86 23:19:43 pdt
+Message-Id: <8606060619.AA08531@hpdsd.UUCP>
+To: ICS.UCI.EDU!mh-workers
+Subject: mh-6.5 fix 1 of N, for small values of N: the less program
+
+Here's the first of a few fixes to mh-6.5 to make it run better on
+HP-UX.  Well, actually, the first fix is to the less program, which is
+distributed in miscellany/less/*. 
+
+PROBLEM:
+The less program doesn't successfully sweep the standout-mode dirt left
+by its prompt on HP terminals, which leads to misleading screens.
+
+REPEAT-BY:
+Run less on a terminal that has the termcap "xs" glitch (standout mode
+isn't erased by writing over it).  Grab any HP terminal, for example. 
+Get a couple of screensful down into the file.  Type the `u' command,
+then type a space.  Notice that where the prompt used to be is still in
+standout mode, which means some of your file's text is now in standout
+mode.  Rather annoying.
+
+FIX:
+Run the following lines, or all of this message, through the following
+[k]sh commands, customizing the first line as necessary:
+
+	$ MH_SOURCE_DIR=/usr/local/src/mh-6.5	# or wherever
+	$ patch -p -d $MH_SOURCE_DIR < this-file-here
+
+*** /tmp/,RCSt1a02850	Thu Jun  5 22:35:41 1986
+--- miscellany/less/screen.c	Thu Jun  5 22:32:29 1986
+***************
+*** 220,226
+  	if (sc_deinit == NULL)
+  		sc_deinit = "";
+  
+! 	sc_eol_clear = (dumb) ? NULL : tgetstr("ce", &sp);
+  	if (hard || sc_eol_clear == NULL || *sc_eol_clear == '\0')
+  	{
+  		cannot("clear to end of line");
+
+--- 220,235 -----
+  	if (sc_deinit == NULL)
+  		sc_deinit = "";
+  
+! 	/*
+! 	 * If standout mode isn't erased by writing over it, alter the
+! 	 * "clear-to-end-of-line" string so that it clears the entire
+! 	 * display (which *will* erase standout mode).  This makes the
+! 	 * screen look better if you do a `u' command on an HP terminal.
+! 	 */
+! 	if (tgetflag("xs"))	/* standout mode not erased */
+! 		sc_eol_clear = (dumb) ? NULL : tgetstr("cd", &sp);
+! 	else			/* standout mode is erased */
+! 		sc_eol_clear = (dumb) ? NULL : tgetstr("ce", &sp);
+  	if (hard || sc_eol_clear == NULL || *sc_eol_clear == '\0')
+  	{
+  		cannot("clear to end of line");
+

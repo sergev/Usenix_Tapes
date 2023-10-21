@@ -1,0 +1,257 @@
+sendnews.c
+*** ka/sendnews.c	Tue Mar 27 09:22:47 1984
+--- spaf/sendnews.c	Sun Feb  3 15:38:15 1985
+***************
+*** 1,7
+  #define DEBUG
+  #include "common.h"
+  
+! #define ASKIP 3
+  
+  struct arglist uuargs ;
+  char *directory ;
+
+--- 1,7 -----
+  #define DEBUG
+  #include "common.h"
+  
+! #define ASKIP 4
+  
+  struct arglist {
+        int nargs ;
+***************
+*** 3,8
+  
+  #define ASKIP 3
+  
+  struct arglist uuargs ;
+  char *directory ;
+  char **firstarg ;
+
+--- 3,14 -----
+  
+  #define ASKIP 4
+  
++ struct arglist {
++       int nargs ;
++       char **first ;
++       char *arg[MAXARGS] ;
++ } ;
++ 
+  struct arglist uuargs ;
+  char *directory ;
+  int errflag ;
+***************
+*** 5,11
+  
+  struct arglist uuargs ;
+  char *directory ;
+- char **firstarg ;
+  int errflag ;
+  char resentflag[] = "resentflag" ;
+  char lastack[] = "lastack" ;
+
+--- 11,16 -----
+  
+  struct arglist uuargs ;
+  char *directory ;
+  int errflag ;
+  char resentflag[] = "resentflag" ;
+  char lastack[] = "lastack" ;
+***************
+*** 10,15
+  char resentflag[] = "resentflag" ;
+  char lastack[] = "lastack" ;
+  char ackfile[] = "ackfile" ;
+  
+  
+  
+
+--- 15,23 -----
+  char resentflag[] = "resentflag" ;
+  char lastack[] = "lastack" ;
+  char ackfile[] = "ackfile" ;
++ #ifndef NOTGATECH
++ int cflag ;
++ #endif
+  
+  
+  
+***************
+*** 28,33
+        while ((p = *ap++) != NULL && *p == '-') {
+              if (strcmp(p, "-r") == 0)
+                    rflag++ ;
+              else
+  usage:            fatal("usage: sendnews [ -r ] from to") ;
+        }
+
+--- 36,45 -----
+        while ((p = *ap++) != NULL && *p == '-') {
+              if (strcmp(p, "-r") == 0)
+                    rflag++ ;
++ #ifndef NOTGATECH
++ 	    else if (strcmp(p, "-c") == 0)
++ 		  cflag++ ;
++ #endif
+              else
+  usage:            fatal("usage: sendnews [ -r ] from to") ;
+        }
+***************
+*** 36,42
+        directory = p ;
+        if (chdir(p) < 0)
+              fatal("no directory") ;
+!       firstarg = &uuargs.arg[ASKIP] ;
+        uuargs.nargs = ASKIP ;
+        if (unlink(resentflag) < 0) {
+              sendnews(1) ;
+
+--- 48,54 -----
+        directory = p ;
+        if (chdir(p) < 0)
+              fatal("no directory") ;
+!       uuargs.first = &uuargs.arg[ASKIP] ;
+        uuargs.nargs = ASKIP ;
+        if (unlink(resentflag) < 0) {
+              sendnews(1) ;
+***************
+*** 63,69
+                    msg("can't unlink ackfile") ;
+                    goto uu ;
+              }
+!             insarg(buf + 5) ;
+        }
+  uu:
+        uucp(*ap, rflag) ;
+
+--- 75,81 -----
+                    msg("can't unlink ackfile") ;
+                    goto uu ;
+              }
+!             insarg(buf + 5, &uuargs) ;
+        }
+  uu:
+        uucp(*ap, rflag) ;
+***************
+*** 141,147
+  uucp(to, rflag)
+        char *to ;
+        {
+!       if (firstarg == uuargs.arg + uuargs.nargs)
+              return ;
+        if (chdir("sent") < 0)
+              fatal("no sent dir") ;
+
+--- 153,159 -----
+  uucp(to, rflag)
+        char *to ;
+        {
+!       if (uuargs.first == uuargs.arg + uuargs.nargs)
+              return ;
+        if (chdir("sent") < 0)
+              fatal("no sent dir") ;
+***************
+*** 148,156
+        qsort((char *)(uuargs.arg + ASKIP), uuargs.nargs - ASKIP, sizeof(char *), comp) ;
+        addarg(to, &uuargs) ;
+        addarg(NULL, &uuargs) ;
+!       if (rflag)  insarg("-r") ;
+!       insarg(UUCP) ;
+!       if (run(firstarg, 0, 0) != 0)
+              fatal("uucp failed") ;
+        if (chdir("..") < 0)
+              fatal("no ..") ;
+
+--- 160,171 -----
+        qsort((char *)(uuargs.arg + ASKIP), uuargs.nargs - ASKIP, sizeof(char *), comp) ;
+        addarg(to, &uuargs) ;
+        addarg(NULL, &uuargs) ;
+!       if (rflag)  insarg("-r", &uuargs) ;
+! #ifndef NOTGATECH
+!       if (cflag)  insarg("-c", &uuargs) ;
+! #endif
+!       insarg(UUCP, &uuargs) ;
+!       if (run(uuargs.first, 0, 0) != 0)
+              fatal("uucp failed") ;
+        if (chdir("..") < 0)
+              fatal("no ..") ;
+***************
+*** 214,220
+  }
+  
+  
+! insarg(fname)
+        char *fname ;
+        {
+        char *p ;
+
+--- 229,236 -----
+  }
+  
+  
+! insarg(fname, argl)
+!       struct arglist *argl ;
+        char *fname ;
+        {
+        char *p ;
+***************
+*** 219,225
+        {
+        char *p ;
+  
+!       if (firstarg <= uuargs.arg)
+              fatal("insarg failed") ;
+        if (fname == NULL)
+              p = NULL ;
+
+--- 235,241 -----
+        {
+        char *p ;
+  
+!       if (argl->first <= argl->arg)
+              fatal("insarg failed") ;
+        if (fname == NULL)
+              p = NULL ;
+***************
+*** 228,234
+                    fatal("out of space") ;
+              strcpy(p, fname) ;
+        }
+!       *--firstarg = p ;
+  }
+  
+  
+
+--- 244,250 -----
+                    fatal("out of space") ;
+              strcpy(p, fname) ;
+        }
+!       *--(argl->first) = p ;
+  }
+  
+  
+***************
+*** 251,256
+        if ((pid = fork()) == -1)
+              fatal("Cannot fork") ;
+        if (pid == 0) {
+              execv(args[0], args) ;
+              msg("exec failed") ;
+              exit(127) ;
+
+--- 267,280 -----
+        if ((pid = fork()) == -1)
+              fatal("Cannot fork") ;
+        if (pid == 0) {
++             if (flags & SETIN) {
++                   close(0) ;
++                   if (dup(fd) != 0) {
++                         msg("Cannot redirect input") ;
++                         exit(127) ;
++                   }
++                   close(fd) ;
++             }
+              execv(args[0], args) ;
+              msg("exec failed") ;
+              exit(127) ;

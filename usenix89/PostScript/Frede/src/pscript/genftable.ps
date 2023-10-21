@@ -1,0 +1,560 @@
+%!
+% genftable - Postcript program to produce font tables for ditroff.
+%	      Tables are output on the standard output file - which
+%	      needs to be captured by the host computer.
+%
+%	      Note the routine "commondefs" which outputs local
+%	      defined (hand built) characters.
+%
+% Michael Rourke, University of N.S.W., Australia
+%
+
+/t 30 string def
+
+/ps
+% string ->
+{
+	print
+} def
+
+/pr
+% any -->
+{
+	t cvs ps
+} def
+
+/prsp
+{
+	(\t) ps
+} def
+
+/prnl
+{
+	(\n) ps
+} def
+
+/pro
+% int -->
+{
+	dup 0 eq
+	{ pr }
+	{ dup 8 idiv pro 8 mod pr }
+	ifelse
+} def
+
+/charsize
+% string --> bot top
+{
+	gsave
+	newpath 0 0 moveto false charpath flattenpath pathbbox
+	exch pop 3 -1 roll pop
+	grestore
+} def
+
+/strwidth
+% string --> width
+{
+	stringwidth pop round cvi
+} def
+
+/prsize
+% string -->
+{
+	dup strwidth pr prsp
+	dup charsize
+	top gt { 2 } { 0 } ifelse
+	exch bot lt { 1 or } if
+	pr prsp
+	0 get pro 
+} def
+
+/fontinfo
+% fontname troffinternal troffname
+{
+	(\ncat <<"!" > ) ps dup pr prnl
+	(# ) ps 2 index pr prnl
+	(name ) ps pr prnl
+	(internalname ) ps pr prnl
+	dup findfont 100 scalefont setfont
+	/fixedwidth false def
+	/Symbol eq
+	{
+		/actions symbol-encoding def
+		(special\n) ps
+	}
+	{
+		/actions standard-encoding def
+		currentfont /FontInfo get /isFixedPitch get
+		{
+			(# fixed width\n) ps
+			/fixedwidth true def
+		}
+		{
+			(ligatures fi fl ff ffi ffl 0\n) ps
+		}
+		ifelse
+	}
+	ifelse
+	% use "o" to get top and bottom on a normal char
+	(o) charsize /top exch def /bot exch def
+	% some non ascending chars slightly higher than "o"
+	% and some lower so adjust slightly
+	/top top 2 add def
+	/bot bot 4 sub def
+	/encoding currentfont /Encoding get def
+	/s 1 string def
+	0 1 255
+	{
+		s 0 2 index put
+		encoding exch get dup /.notdef ne
+		{
+			s 1 index actions exch get
+			% charname charstr
+			exec
+			flush
+		}
+		{
+			pop
+		}		
+		ifelse
+	} for
+	actions standard-encoding eq { commondefs } if
+	(!\n) ps flush
+} def
+
+/commondefs
+{
+	/fracsize (0) strwidth (\244) strwidth add def		% \244 = '/'
+	/Fisize (f) strwidth (\256) strwidth add 5 sub def	% \256 = 'fi'
+	/ffsize (f) strwidth 2 mul 5 sub def
+	/fl { flush } def
+	fixedwidth not
+	{
+		(ff) ps prsp ffsize pr (\t2\t0100\tff ligature - faked\n) ps fl
+		(Fi) ps prsp Fisize pr (\t2\t0100\tffi ligature - faked\n) ps fl
+		(Fl) ps prsp Fisize pr (\t2\t0100\tffl ligature - faked\n) ps fl
+	} if
+	(12) ps prsp fracsize pr (\t2\t0100\t1/2 - faked\n) ps fl
+	(13) ps prsp fracsize pr (\t2\t0100\t1/3 - faked\n) ps fl
+	(14) ps prsp fracsize pr (\t2\t0100\t1/4 - faked\n) ps fl
+	(18) ps prsp fracsize pr (\t2\t0100\t1/8 - faked\n) ps fl
+	(23) ps prsp fracsize pr (\t2\t0100\t2/3 - faked\n) ps fl
+	(34) ps prsp fracsize pr (\t2\t0100\t3/4 - faked\n) ps fl
+	(38) ps prsp fracsize pr (\t2\t0100\t3/8 - faked\n) ps fl
+	(58) ps prsp fracsize pr (\t2\t0100\t5/8 - faked\n) ps fl
+	(78) ps prsp fracsize pr (\t2\t0100\t7/8 - faked\n) ps fl
+	(sq\t100\t3\t0100\tsquare box - faked\n) ps fl
+} def
+
+/space
+% charname charstr -->
+{
+	(spacewidth ) ps
+	strwidth pr pop prnl
+	(charset\n) ps
+} def
+
+/norm
+% charname charstr -->
+{
+	dup pr prsp prsize pop prnl
+} def
+
+/normdup
+% charname charstr dupname -->
+{
+	3 1 roll norm
+	pr prsp (") ps prnl
+} def
+
+/gnorm
+% charname charstr -->
+{
+	(*) ps norm
+} def
+
+/map
+% charname charstr mapname -->
+{
+	pr prsp prsize prsp pr prnl
+} def
+
+/mapdup
+% charname charstr mapname dupname -->
+{
+	4 1 roll map
+	pr prsp (") ps prnl
+} def
+
+/mapdupdup
+% charname charstr mapname dupname dupname -->
+{
+	5 1 roll mapdup
+	pr prsp (") ps prnl
+} def
+
+/cmap
+% charname charstr mapname -->
+{
+	fixedwidth { 3 { pop } repeat } { map } ifelse
+} def
+
+/standard-encoding 149 dict def
+standard-encoding begin
+	/space		{ space }		def
+	/exclam		{ norm }		def
+	/quotedbl	{ norm }		def
+	/numbersign	{ norm }		def
+	/dollar		{ norm }		def
+	/percent	{ norm }		def
+	/ampersand	{ norm }		def
+	/quoteright	{ norm }		def
+	/parenleft	{ norm }		def
+	/parenright	{ norm }		def
+	/asterisk	{ norm }		def
+	/plus		{ norm }		def
+	/comma		{ norm }		def
+	/hyphen		{ (hy) normdup }	def
+	/period		{ norm }		def
+	/slash		{ (sl) dup }		def
+	/zero		{ norm }		def
+	/one		{ norm }		def
+	/two		{ norm }		def
+	/three		{ norm }		def
+	/four		{ norm }		def
+	/five		{ norm }		def
+	/six		{ norm }		def
+	/seven		{ norm }		def
+	/eight		{ norm }		def
+	/nine		{ norm }		def
+	/colon		{ norm }		def
+	/semicolon	{ norm }		def
+	/less		{ norm }		def
+	/equal		{ norm }		def
+	/greater	{ norm }		def
+	/question	{ norm }		def
+	/at		{ norm }		def
+	/A		{ norm }		def
+	/B		{ norm }		def
+	/C		{ norm }		def
+	/D		{ norm }		def
+	/E		{ norm }		def
+	/F		{ norm }		def
+	/G		{ norm }		def
+	/H		{ norm }		def
+	/I		{ norm }		def
+	/J		{ norm }		def
+	/K		{ norm }		def
+	/L		{ norm }		def
+	/M		{ norm }		def
+	/N		{ norm }		def
+	/O		{ norm }		def
+	/P		{ norm }		def
+	/Q		{ norm }		def
+	/R		{ norm }		def
+	/S		{ norm }		def
+	/T		{ norm }		def
+	/U		{ norm }		def
+	/V		{ norm }		def
+	/W		{ norm }		def
+	/X		{ norm }		def
+	/Y		{ norm }		def
+	/Z		{ norm }		def
+	/bracketleft	{ norm }		def
+	/backslash	{ norm }		def
+	/bracketright	{ norm }		def
+	/asciicircum	{ (a^) map }		def
+	/underscore	{ (ru) normdup }	def
+	/quoteleft	{ norm }		def
+	/a		{ norm }		def
+	/b		{ norm }		def
+	/c		{ norm }		def
+	/d		{ norm }		def
+	/e		{ norm }		def
+	/f		{ norm }		def
+	/g		{ norm }		def
+	/h		{ norm }		def
+	/i		{ norm }		def
+	/j		{ norm }		def
+	/k		{ norm }		def
+	/l		{ norm }		def
+	/m		{ norm }		def
+	/n		{ norm }		def
+	/o		{ norm }		def
+	/p		{ norm }		def
+	/q		{ norm }		def
+	/r		{ norm }		def
+	/s		{ norm }		def
+	/t		{ norm }		def
+	/u		{ norm }		def
+	/v		{ norm }		def
+	/w		{ norm }		def
+	/x		{ norm }		def
+	/y		{ norm }		def
+	/z		{ norm }		def
+	/braceleft	{ norm }		def
+	/bar		{ norm }		def
+	/braceright	{ norm }		def
+	/asciitilde	{ (a~) map }		def
+	/exclamdown	{ (I!) map }		def
+	/cent		{ (ct) map }		def
+	/sterling	{ (po) map }		def
+	/fraction	{ }			def
+	/yen		{ ($J) map }		def
+	/florin		{ }			def
+	/section	{ (sc) map }		def
+	/currency	{ }			def
+	/quotesingle	{ (fm) (n') mapdup }	def
+	/quotedblleft	{ (lq) map }		def
+	/guillemotleft	{ (d<) map }		def
+	/guilsinglleft	{ (l<) map }		def
+	/guilsinglright	{ (r>) map }		def
+	/fi		{ (fi) cmap }		def
+	/fl		{ (fl) cmap }		def
+	/endash		{ (\\-) map }		def
+	/dagger		{ (dg) map }		def
+	/daggerdbl	{ (dd) map }		def
+	/periodcentered	{ }			def
+	/paragraph	{ (pp) map }		def
+	/bullet		{ (bu) map }		def
+	/quotesinglbase	{ } 			def
+	/quotedblbase	{ }			def
+	/quotedblright	{ (rq) map }		def
+	/guillemotright	{ (d>) map }		def
+	/ellipsis	{ }			def
+	/perthousand	{ (pm) cmap }		def
+	/questiondown	{ (I?) map }		def
+	/grave		{ (ga) (\\`) mapdup }	def
+	/acute		{ (aa) (\\') mapdup }	def
+	/circumflex	{ (^) map }		def
+	/tilde		{ (~) map }		def
+	/macron		{ (ma) map }		def
+	/breve		{ (be) map }		def
+	/dotaccent	{ (dt) map }		def
+	/dieresis	{ (..) (um) mapdup }	def
+	/ring		{ (ri) map }		def
+	/cedilla	{ (cd) map }		def
+	/hungarumlaut	{ ('') map }		def
+	/ogonek		{ (og) map }		def
+	/caron		{ (hc) map }		def
+	/emdash		{ (em) map }		def
+	/AE		{ (AE) cmap }		def
+	/ordfeminine	{ }			def
+	/Lslash		{ (PL) map }		def
+	/Oslash		{ (O/) map }		def
+	/OE		{ (OE) cmap }		def
+	/ordmasculine	{ }			def
+	/ae		{ (ae) cmap }		def
+	/dotlessi	{ (ui) map }		def
+	/lslash		{ (Pl) map }		def
+	/oslash		{ (o/) map }		def
+	/oe		{ (oe) cmap }		def
+	/germandbls	{ (ss) map }		def
+end
+
+/symbol-encoding 189 dict def
+symbol-encoding begin
+	/space		{ space }		def
+	/exclam		{ norm }		def
+	/universal	{ (fa) map }		def
+	/numbersign	{ norm }		def
+	/existential	{ (te) map }		def
+	/percent	{ norm }		def
+	/ampersand	{ norm }		def
+	/suchthat	{ (cm) map }		def
+	/parenleft	{ norm }		def
+	/parenright	{ norm }		def
+	/asteriskmath	{ (**) map }		def
+	/plus		{ (pl) map }		def
+	/comma		{ norm }		def
+	/minus		{ (mi) normdup }	def
+	/period		{ norm }		def
+	/slash		{ (sl) map }		def
+	/zero		{ norm }		def
+	/one		{ norm }		def
+	/two		{ norm }		def
+	/three		{ norm }		def
+	/four		{ norm }		def
+	/five		{ norm }		def
+	/six		{ norm }		def
+	/seven		{ norm }		def
+	/eight		{ norm }		def
+	/nine		{ norm }		def
+	/colon		{ norm }		def
+	/semicolon	{ norm }		def
+	/less		{ norm }		def
+	/equal		{ (eq) normdup }	def
+	/greater	{ norm }		def
+	/question	{ norm }		def
+	/congruent	{ (=~) map }		def
+	/Alpha		{ gnorm }		def
+	/Beta		{ gnorm }		def
+	/Chi		{ (*X) map }		def
+	/Delta		{ gnorm }		def
+	/Epsilon	{ gnorm }		def
+	/Phi		{ gnorm }		def
+	/Gamma		{ gnorm }		def
+	/Eta		{ (*Y) map }		def
+	/Iota		{ gnorm }		def
+	/theta1		{ }			def
+	/Kappa		{ gnorm }		def
+	/Lambda		{ gnorm }		def
+	/Mu		{ gnorm }		def
+	/Nu		{ gnorm }		def
+	/Omicron	{ gnorm }		def
+	/Pi		{ gnorm }		def
+	/Theta		{ (*H) map }		def
+	/Rho		{ gnorm }		def
+	/Sigma		{ gnorm }		def
+	/Tau		{ gnorm }		def
+	/Upsilon	{ gnorm }		def
+	/sigma1		{ (ts) map }		def
+	/Omega		{ (*W) map }		def
+	/Xi		{ (*C) map }		def
+	/Psi		{ (*Q) map }		def
+	/Zeta		{ gnorm }		def
+	/bracketleft	{ norm }		def
+	/therefore	{ (tf) map }		def
+	/bracketright	{ norm }		def
+	/perpendicular	{ (bt) map }		def
+	/underscore	{ (ul) map }		def
+	/radicalex	{ }			def
+	/alpha		{ gnorm }		def
+	/beta		{ gnorm }		def
+	/chi		{ (*x) map }		def
+	/delta		{ gnorm }		def
+	/epsilon	{ gnorm }		def
+	/phi		{ gnorm }		def
+	/gamma		{ gnorm }		def
+	/eta		{ (*y) map }		def
+	/iota		{ gnorm }		def
+	/phi1		{ }			def
+	/kappa		{ gnorm }		def
+	/lambda		{ gnorm }		def
+	/mu		{ gnorm }		def
+	/nu		{ gnorm }		def
+	/omicron	{ gnorm }		def
+	/pi		{ gnorm }		def
+	/theta		{ (*h) map }		def
+	/rho		{ gnorm }		def
+	/sigma		{ gnorm }		def
+	/tau		{ gnorm }		def
+	/upsilon	{ gnorm }		def
+	/omega1		{ }			def
+	/omega		{ (*w) map }		def
+	/xi		{ (*c) map }		def
+	/psi		{ (*q) map }		def
+	/zeta		{ gnorm }		def
+	/braceleft	{ norm }		def
+	/bar		{ (or) normdup }	def
+	/braceright	{ norm }		def
+	/similar	{ (ap) map }		def
+	/Upsilon1	{ }			def
+	/minute		{ (mt) map }		def
+	/lessequal	{ (<=) map }		def
+	/fraction	{ (/) map }		def
+	/infinity	{ (if) map }		def
+	/florin		{ }			def
+	/club		{ (Cc) map }		def
+	/diamond	{ (Cd) map }		def
+	/heart		{ (Ch) map }		def
+	/spade		{ (Cs) map }		def
+	/arrowboth	{ (<>) map }		def
+	/arrowleft	{ (<-) map }		def
+	/arrowup	{ (ua) map }		def
+	/arrowright	{ (->) map }		def
+	/arrowdown	{ (da) map }		def
+	/degree		{ (de) map }		def
+	/plusminus	{ (+-) map }		def
+	/second		{ (sd) map }		def
+	/greaterequal	{ (>=) map }		def
+	/multiply	{ (mu) map }		def
+	/proportional	{ (pt) map }		def
+	/partialdiff	{ (pd) map }		def
+	/bullet		{ }			def
+	/divide		{ (di) map }		def
+	/notequal	{ (!=) map }		def
+	/equivalence	{ (==) map }		def
+	/approxequal	{ (~=) map }		def
+	/ellipsis	{ }			def
+	/arrowvertex	{ }			def
+	/arrowhorizex	{ }			def
+	/carriagereturn	{ (cr) map }		def
+	/aleph		{ (al) map }		def
+	/Ifraktur	{ }			def
+	/Rfraktur	{ }			def
+	/weierstrass	{ }			def
+	/circlemultiply	{ (ax) map }		def
+	/circleplus	{ (a+) map }		def
+	/emptyset	{ (es) map }		def
+	/intersection	{ (ca) map }		def
+	/union		{ (cu) map }		def
+	/propersuperset	{ (sp) map }		def
+	/reflexsuperset	{ (ip) map }		def
+	/notsubset	{ (!s) map }		def
+	/propersubset	{ (sb) map }		def
+	/reflexsubset	{ (ib) map }		def
+	/element	{ (mo) map }		def
+	/notelement	{ (!m) (nm) mapdup }	def
+	/angle		{ (ag) map }		def
+	/gradient	{ (gr) map }		def
+	/registerserif	{ }			def
+	/copyrightserif	{ }			def
+	/trademarkserif	{ }			def
+	/product	{ }			def
+	/radical	{ (sr) map }		def
+	/dotmath	{ (m.) map }		def
+	/logicalnot	{ (no) map }		def
+	/logicaland	{ (an) (la) mapdup }	def
+	/logicalor	{ (lo) map }		def
+	/arrowdblboth	{ (io) map }		def
+	/arrowdblleft	{ (<:) (lh) mapdup }	def
+	/arrowdblup	{ (u=) map }		def
+	/arrowdblright	{ (:>) (rh) (im) mapdupdup } def
+	/arrowdbldown	{ (d=) map }		def
+	/lozenge	{ (dm) map }		def
+	/angleleft	{ (L<) map }		def
+	/registersans	{ (rg) map }		def
+	/copyrightsans	{ (co) map }		def
+	/trademarksans	{ (tm) map }		def
+	/summation	{ }			def
+	/parenlefttp	{ }			def
+	/parenleftex	{ }			def
+	/parenleftbt	{ }			def
+	/bracketlefttp	{ }			def
+	/bracketleftex	{ }			def
+	/bracketleftbt	{ }			def
+	/bracelefttp	{ }			def
+	/braceleftmid	{ }			def
+	/braceleftbt	{ }			def
+	/braceex	{ }			def
+	/apple		{ (AL) map }		def
+	/angleright	{ (R>) map }		def
+	/integral	{ (is) map }		def
+	/integraltp	{ }			def
+	/integralex	{ }			def
+	/integralbt	{ }			def
+	/parenrighttp	{ }			def
+	/parenrightex	{ }			def
+	/parenrightbt	{ }			def
+	/bracketrighttp	{ }			def
+	/bracketrightex	{ }			def
+	/bracketrightbt	{ }			def
+	/bracerighttp	{ }			def
+	/bracerightmid	{ }			def
+	/bracerightbt	{ }			def
+end
+
+/Times-Roman		/Roman		/R	fontinfo
+/Helvetica		/Helvetica	/H	fontinfo
+/Courier		/Courier	/C	fontinfo
+/Symbol			/Symbol		/S	fontinfo
+/Times-Italic		/Italic		/I	fontinfo
+/Times-Bold		/Bold		/B	fontinfo
+/Times-BoldItalic	/BoldI		/BI	fontinfo
+/Helvetica-Bold		/HelveticaB	/HB	fontinfo
+/Helvetica-Oblique	/HelveticaO	/HO	fontinfo
+/Helvetica-BoldOblique	/HelveticaBO	/HX	fontinfo
+/Courier-Bold		/CourierB	/CB	fontinfo
+/Courier-Oblique	/CourierO	/CO	fontinfo
+/Courier-BoldOblique	/CourierBO	/CX	fontinfo

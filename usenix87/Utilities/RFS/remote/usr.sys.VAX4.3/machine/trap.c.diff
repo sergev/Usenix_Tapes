@@ -1,0 +1,119 @@
+These changes enable syscall() to start up a remote version of a system
+call if the normal system call fails with error == EISREMOTE.
+***************
+*** 23,28
+  #ifdef SYSCALLTRACE
+  #include "../sys/syscalls.c"
+  #endif
+  
+  #include "mtpr.h"
+  
+
+--- 23,35 -----
+  #ifdef SYSCALLTRACE
+  #include "../sys/syscalls.c"
+  #endif
++ #ifdef REMOTEFS
++ #include "../remote/remotefs.h"
++ /*
++  * needed only if EISREMOTE isn't in /usr/include/errno.h
++  */
++ #include "../h/errno.h"
++ #endif REMOTEFS
+  
+  #include "mtpr.h"
+  
+***************
+*** 191,196
+  	register struct proc *p;
+  	int opc;
+  	struct timeval syst;
+  
+  	syst = u.u_ru.ru_stime;
+  	if (!USERMODE(locr0[PS]))
+
+--- 198,212 -----
+  	register struct proc *p;
+  	int opc;
+  	struct timeval syst;
++ #ifdef REMOTEFS
++ 	/*
++ 	 * It is imperative that these declarations come after other register
++ 	 * declarations, because the (standard) code below depends upon the
++ 	 * order of allocation.
++ 	 */
++ 	extern u_char remote_sysmap[];
++ 	register long rmt_syscall, runremote, rmt_called, rmt_cnt;
++ #endif REMOTEFS
+  
+  	syst = u.u_ru.ru_stime;
+  	if (!USERMODE(locr0[PS]))
+***************
+*** 223,228
+  		if (u.u_error == 0 && u.u_eosys != RESTARTSYS)
+  			u.u_error = EINTR;
+  	} else {
+  		u.u_eosys = NORMALRETURN;
+  #ifdef SYSCALLTRACE
+  		if (syscalltrace) {
+
+--- 239,248 -----
+  		if (u.u_error == 0 && u.u_eosys != RESTARTSYS)
+  			u.u_error = EINTR;
+  	} else {
++ #ifdef REMOTEFS
++ 		rmt_syscall = remote_sysmap[ code ];
++ 		rmt_called = FALSE;
++ 		rmt_cnt = 0;
+  		u.u_eosys = NORMALRETURN;
+  		while (! rmt_called) {
+  			runremote = (rmt_syscall != RSYS_nosys
+***************
+*** 224,229
+  			u.u_error = EINTR;
+  	} else {
+  		u.u_eosys = NORMALRETURN;
+  #ifdef SYSCALLTRACE
+  		if (syscalltrace) {
+  			register int i;
+
+--- 244,265 -----
+  		rmt_called = FALSE;
+  		rmt_cnt = 0;
+  		u.u_eosys = NORMALRETURN;
++ 		while (! rmt_called) {
++ 			runremote = (rmt_syscall != RSYS_nosys
++ 				    && u.u_procp->p_flag & SREMOTE);
++ 			if (runremote)
++ 				rmt_called = remote_startup(rmt_cnt,
++ 					rmt_syscall);
++ 			if (! rmt_called) {
++ 				(*callp->sy_call)();
++ 				if (u.u_error != EISREMOTE)
++ 					rmt_called = TRUE;
++ 				else
++ 					rmt_cnt++;
++ 			}
++ 		}
++ #else REMOTEFS
++ 		u.u_eosys = NORMALRETURN;
+  #ifdef SYSCALLTRACE
+  		if (syscalltrace) {
+  			register int i;
+***************
+*** 244,249
+  		}
+  #endif
+  		(*(callp->sy_call))();
+  	}
+  	if (u.u_eosys == NORMALRETURN) {
+  		if (u.u_error) {
+
+--- 280,286 -----
+  		}
+  #endif
+  		(*(callp->sy_call))();
++ #endif REMOTEFS
+  	}
+  	if (u.u_eosys == NORMALRETURN) {
+  		if (u.u_error) {

@@ -1,0 +1,1672 @@
+c  adventures
+	subroutine main
+c
+c modified by kent blackett
+c             engineering systems group
+c             digital equipment corp.
+c             15-jul-77
+c modified by	bob supnik
+c		disk engineering
+c		21-oct-77
+c original version was for decsystem-10
+c next version was for fortran iv-plus under
+c the ias operating system on the pdp-11/70
+c this version is for fortran iv (v01c or later)
+c under rt-11 on *any* pdp-11
+c
+c
+c  current limits:
+c	750 travel options (travel, trvsiz).
+c	300 vocabulary words (ktab, atab, tabsiz).
+c	150 locations (ltext, stext, key, cond, abb, atloc, locsiz).
+c	100 objects (plac, place, fixd, fixed, link (twice), ptext, prop).
+c	 35 "action" verbs (actspk, vrbsiz).
+c	205 random messages (rtext, rtxsiz).
+c	 12 different player classifications (ctext, cval, clsmax).
+c	 20 hints, less 3 (hintlc, hinted, hints, hntsiz).
+c	[magic messages have been decommitted]
+c	 35 magic messages (mtext, magsiz).
+c  there are also limits which cannot be exceeded due to the structure of
+c  the database.  (e.g., the vocabulary uses n/1000 to determine word type,
+c  so there can't be more than 1000 words.)  these upper limits are:
+c	1000 non-synonymous vocabulary words
+c	300 locations
+c	100 objects
+c
+	implicit integer (a-z)
+	logical*1 blklin,noinpt
+	logical dseen,hinted,yes
+	logical toting,here,at,bitset,dark,wzdark,lmwarn,closng,panic,
+	1       closed,gaveup,scorng,yea
+c
+	common /txtcom/ rtext,lines,ascvar
+	common /blkcom/ blklin,noinpt
+	common /alphas/ blank,eof,cye,cy,cno,cn,cpo,cur,cwe,cst,
+	1	cen,cte
+	common /voccom/ ktab,atab,a2tab,tabsiz
+	common /placom/ atloc,link,place,fixed,holdng
+c	common /mtxcom/ mtext
+	common /ptxcom/ ptext
+	common /abbcom/ abb
+	common /miscom/ linuse,trvs,clsses,oldloc,loc,cval,tk,newloc,
+	1key,plac,fixd,actspk,cond,hints,hntmax,prop,tally,tally2,
+	2hintlc,chloc,chloc2,dseen,dflag,dloc,daltlc,keys,lamp,grate,
+	3cage,rod,rod2,steps,bird,door,pillow,snake,fissur,tablet,
+	4clam,oyster,magzin,dwarf,knife,food,bottle,water,oil,plant,
+	5plant2,axe,mirror,dragon,chasm,troll,troll2,bear,messag,vend,
+	6batter,nugget,coins,chest,eggs,tridnt,vase,emrald,pyram,
+	7pearl,rug,chain,back,look,cave,null,entrnc,dprssn,say,lock,
+	8throw,find,invent,turns,lmwarn,knfloc,detail,abbnum,
+	9numdie,maxdie,dkill,foobar,bonus,clock1,clock2,
+	1closng,panic,closed,gaveup,scorng,odloc,stream
+	common /misc2/ i,rtxsiz,clsmax,magsiz,locsiz,ctext,stext,ltext,
+	1sect,travel,trvcon,trvloc,trvsiz,tabndx,obj,j,k,verb,hntsiz,
+	2maxtrs,hinted,hntloc,kk
+c
+	dimension lines(36)
+	dimension travel(750),trvcon(750),trvloc(750)
+	dimension ktab(300),atab(300),a2tab(300)
+	dimension ltext(150),stext(150),key(150),cond(150),abb(150),
+	1	atloc(150)
+	dimension plac(100),place(100),fixd(100),fixed(100),link(200),
+	1	ptext(100),prop(100)
+	dimension actspk(35)
+	dimension rtext(205)
+	dimension ctext(12),cval(12)
+	dimension hintlc(20),hinted(20),hints(20,4)
+c	dimension mtext(35)
+	dimension tk(20),dseen(6),dloc(6),odloc(6)
+c
+c  statement functions
+c
+c
+c  toting(obj)	= true if the obj is being carried
+c  here(obj)	= true if the obj is at "loc" (or is being carried)
+c  at(obj)	= true if on either side of two-placed object
+c  liq(dummy)	= object number of liquid in bottle
+c  liqloc(loc)	= object number of liquid (if any) at loc
+c  bitset(l,n)	= true if cond(l) has bit n set (bit 0 is units bit)
+c  forced(loc)	= true if loc moves without asking for input (cond=2)
+c  dark(dummy)	= true if location "loc" is dark
+c  pct(n)       = true n% of the time (n integer from 0 to 100)
+c
+c  wzdark says whether the loc he's leaving was dark
+c  lmwarn says whether he's been warned about lamp going dim
+c  closng says whether its closing time yet
+c  panic says whether he's found out he's trapped in the cave
+c  closed says whether we're all the way closed
+c  gaveup says whether he exited via "quit"
+c  scorng indicates to the score routine whether we're doing a "score" command
+c  demo is true if this is a prime-time demonstration game
+c  yea is random yes/no reply
+c
+c
+	toting(obj)=place(obj).eq.-1
+	here(obj)=place(obj).eq.loc.or.toting(obj)
+	at(obj)=place(obj).eq.loc.or.fixed(obj).eq.loc
+	liq2(pbotl)=(1-pbotl)*water+(pbotl/2)*(water+oil)
+	liq(dummy)=liq2(max0(prop(bottle),-1-prop(bottle)))
+	liqloc(loc)=liq2((mod(cond(loc)/2*2,8)-5)*mod(cond(loc)/4,2)+1)
+	bitset(l,n)=(cond(l).and.ishft(1,n)).ne.0
+	forced(loc)=cond(loc).eq.2
+	dark(dummy)=mod(cond(loc),2).eq.0.and.(prop(lamp).eq.0.or.
+	1	.not.here(lamp))
+	pct(n)=rnd(100).lt.n
+c  description of the database format
+c
+c
+c  the data file contains several sections.  each begins with a line containing
+c  a number identifying the section, and ends with a line containing "-1".
+c
+c  section 1: long form descriptions.  each line contains a location number,
+c	a comma, and a line of text.  the set of (necessarily adjacent) lines
+c	whose numbers are x form the long description of location x.
+c  section 2: short form descriptions.  same format as long form.  not all
+c	places have short descriptions.
+c  section 3: travel table.  each line contains a location number (x), a second
+c	location number (y), and a list of motion numbers (see section 4).
+c	each motion represents a verb which will go to y if currently at x.
+c	y, in turn, is interpreted as follows.  let m=y/1000, n=y mod 1000.
+c		if n<=300	it is the location to go to.
+c		if 300<n<=500	n-300 is used in a computed goto to
+c					a section of special code.
+c		if n>500	message n-500 from section 6 is printed,
+c					and he stays wherever he is.
+c	meanwhile, m specifies the conditions on the motion.
+c		if m=0		it's unconditional.
+c		if 0<m<100	it is done with m% probability.
+c		if m=100	unconditional, but forbidden to dwarves.
+c		if 100<m<=200	he must be carrying object m-100.
+c		if 200<m<=300	must be carrying or in same room as m-200.
+c		if 300<m<=400	prop(m mod 100) must *not* be 0.
+c		if 400<m<=500	prop(m mod 100) must *not* be 1.
+c		if 500<m<=600	prop(m mod 100) must *not* be 2, etc.
+c	if the condition (if any) is not met, then the next *different*
+c	"destination" value is used (unless it fails to meet *its* conditions,
+c	in which case the next is found, etc.).  typically, the next dest will
+c	be for one of the same verbs, so that its only use is as the alternate
+c	destination for those verbs.  for instance:
+c		15	110022	29	31	34	35	23	43
+c		15	14	29
+c	this says that, from loc 15, any of the verbs 29, 31, etc., will take
+c	him to 22 if he's carrying object 10, and otherwise will go to 14.
+c		11	303008	49
+c		11	9	50
+c	this says that, from 11, 49 takes him to 8 unless prop(3)=0, in which
+c	case he goes to 9.  verb 50 takes him to 9 regardless of prop(3).
+c  section 4: vocabulary.  each line contains a number (n), a tab, and a
+c	five-letter word.  call m=n/1000.  if m=0, then the word is a motion
+c	verb for use in travelling (see section 3).  else, if m=1, the word is
+c	an object.  else, if m=2, the word is an action verb (such as "carry"
+c	or "attack").  else, if m=3, the word is a special case verb (such as
+c	"dig") and n mod 1000 is an index into section 6.  objects from 50 to
+c	(currently, anyway) 79 are considered treasures (for pirate, closeout).
+c  section 5: object descriptions.  each line contains a number (n), a tab,
+c	and a message.  if n is from 1 to 100, the message is the "inventory"
+c	message for object n.  otherwise, n should be 000, 100, 200, etc., and
+c	the message should be the description of the preceding object when its
+c	prop value is n/100.  the n/100 is used only to distinguish multiple
+c	messages from multi-line messages; the prop info actually requires all
+c	messages for an object to be present and consecutive.  properties which
+c	produce no message should be given the message ">$<".
+c  section 6: arbitrary messages.  same format as sections 1, 2, and 5, except
+c	the numbers bear no relation to anything (except for special verbs
+c	in section 4).
+c  section 7: object locations.  each line contains an object number and its
+c	initial location (zero (or omitted) if none).  if the object is
+c	immovable, the location is followed by a "-1".  if it has two locations
+c	(e.g. the grate) the first location is followed with the second, and
+c	the object is assumed to be immovable.
+c  section 8: action defaults.  each line contains an "action-verb" number and
+c	the index (in section 6) of the default message for the verb.
+c  section 9: liquid assets, etc.  each line contains a number (n) and up to 20
+c	location numbers.  bit n (where 0 is the units bit) is set in cond(loc)
+c	for each loc given.  the cond bits currently assigned are:
+c		0	light
+c		1	if bit 2 is on: on for oil, off for water
+c		2	liquid asset, see bit 1
+c		3	pirate doesn't go here unless following player
+c	other bits are used to indicate areas of interest to "hint" routines:
+c		4	trying to get into cave
+c		5	trying to catch bird
+c		6	trying to deal with snake
+c		7	lost in maze
+c		8	pondering dark room
+c		9	at witt's end
+c	cond(loc) is set to 2, overriding all other bits, if loc has forced
+c	motion.
+c  section 10: class messages.  each line contains a number (n), a tab, and a
+c	message describing a classification of player.  the scoring section
+c	selects the appropriate message, where each message is considered to
+c	apply to players whose scores are higher than the previous n but not
+c	higher than this n.  note that these scores probably change with every
+c	modification (and particularly expansion) of the program.
+c  section 11: hints.  each line contains a hint number (corresponding to a
+c	cond bit, see section 9), the number of turns he must be at the right
+c	loc(s) before triggering the hint, the points deducted for taking the
+c	hint, the message number (section 6) of the question, and the message
+c	number of the hint.  these values are stashed in the "hints" array.
+c	hntmax is set to the max hint number (<= hntsiz).  numbers 1-3 are
+c	unusable since cond bits are otherwise assigned, so 2 is used to
+c	remember if he's read the clue in the repository, and 3 is used to
+c	remember whether he asked for instructions (gets more turns, but loses
+c	points).
+c  section 12: magic messages. identical to section 6 except put in a separate
+c	section for easier reference.  magic messages are used by the startup,
+c	maintenance mode, and related routines.
+c  section 0: end of database.
+c  start-up, dwarf stuff
+c
+1	i=rnd(1)
+	hinted(3)=yes(65,1,0)
+	newloc=1
+	loc = newloc
+	limit=330
+	if(hinted(3))limit=1000
+c
+c  can't leave cave once it's closing (except by main office).
+c
+2	if(newloc.ge.9.or.newloc.eq.0.or..not.closng)goto 71
+	call rspeak(130)
+	newloc=loc
+	if(.not.panic)clock2=15
+	panic=.true.
+c
+c  see if a dwarf has seen him and has come from where he wants to go.  if so,
+c  the dwarf's blocking his way.  if coming from place forbidden to pirate
+c  (dwarves rooted in place) let him get out (and attacked).
+c
+71	if(newloc.eq.loc.or.forced(loc).or.bitset(loc,3))goto 74
+	do 73 i=1,5
+	if(odloc(i).ne.newloc.or..not.dseen(i))goto 73
+	newloc=loc
+	call rspeak(2)
+	goto 74
+73	continue
+74	loc=newloc
+c
+c  dwarf stuff.  see earlier comments for description of variables.  remember
+c  sixth dwarf is pirate and is thus very different except for motion rules.
+c
+c  first off, don't let the dwarves follow him into a pit or a wall.  activate
+c  the whole mess the first time he gets as far as the hall of mists (loc 15).
+c  if newloc is forbidden to pirate (in particular, if it's beyond the troll
+c  bridge), bypass dwarf stuff.  that way pirate can't steal return toll, and
+c  dwarves can't meet the bear.  also means dwarves won't follow him into dead
+c  end in maze, but c'est la vie.  they'll wait for him outside the dead end.
+c
+	if(loc.eq.0.or.forced(loc).or.bitset(newloc,3))goto 2000
+	if(dflag.ne.0)goto 6000
+	if(loc.ge.15)dflag=1
+	goto 2000
+c
+c  when we encounter the first dwarf, we kill 0, 1, or 2 of the 5 dwarves.  if
+c  any of the survivors is at loc, replace him with the alternate.
+c
+6000	if(dflag.ne.1)goto 6010
+	if(loc.lt.15.or.pct(95))goto 2000
+	dflag=2
+	do 6001 i=1,2
+	j=1+rnd(5)
+6001	if(pct(50))dloc(j)=0
+	do 6002 i=1,5
+	if(dloc(i).eq.loc)dloc(i)=daltlc
+6002	odloc(i)=dloc(i)
+	call rspeak(3)
+	call drop(axe,loc)
+	goto 2000
+c
+c  things are in full swing.  move each dwarf at random, except if he's seen us
+c  he sticks with us.  dwarves never go to locs <15.  if wandering at random,
+c  they don't back up unless there's no alternative.  if they don't have to
+c  move, they attack.  and, of course, dead dwarves don't do much of anything.
+c
+6010	dtotal=0
+	attack=0
+	stick=0
+	do 6030 i=1,6
+	if(dloc(i).eq.0)goto 6030
+	j=1
+	kk=dloc(i)
+	kk=key(kk)
+	if(kk.eq.0)goto 6016
+6012	newloc=trvloc(kk)
+	if(newloc.gt.300.or.newloc.lt.15.or.newloc.eq.odloc(i)
+	1	.or.(j.gt.1.and.newloc.eq.tk(j-1)).or.j.ge.20
+	2	.or.newloc.eq.dloc(i).or.forced(newloc)
+	3	.or.(i.eq.6.and.bitset(newloc,3))
+	4	.or.trvcon(kk).eq.100)goto 6014
+	tk(j)=newloc
+	j=j+1
+6014	kk=kk+1
+	if(travel(kk-1).ge.0)goto 6012
+6016	tk(j)=odloc(i)
+	if(j.ge.2)j=j-1
+	j=1+rnd(j)
+	odloc(i)=dloc(i)
+	dloc(i)=tk(j)
+	dseen(i)=(dseen(i).and.loc.ge.15)
+	1	.or.(dloc(i).eq.loc.or.odloc(i).eq.loc)
+	if(.not.dseen(i))goto 6030
+	dloc(i)=loc
+	if(i.ne.6)goto 6027
+c
+c  the pirate's spotted him.  he leaves him alone once we've found chest.
+c  k counts if a treasure is here.  if not, and tally=tally2 plus one for
+c  an unseen chest, let the pirate be spotted.
+c
+	if(loc.eq.chloc.or.prop(chest).ge.0)goto 6030
+	k=0
+	do 6020 j=50,maxtrs
+c  pirate won't take pyramid from plover room or dark room (too easy!).
+	if(j.eq.pyram.and.(loc.eq.plac(pyram)
+	1	.or.loc.eq.plac(emrald)))goto 6020
+	if(toting(j))goto 6022
+6020	if(here(j))k=1
+	if(tally.eq.tally2+1.and.k.eq.0.and.place(chest).eq.0
+	1	.and.here(lamp).and.prop(lamp).eq.1)goto 6025
+	if(odloc(6).ne.dloc(6).and.pct(20))call rspeak(127)
+	goto 6030
+c
+6022	call rspeak(128)
+c  don't steal chest back from troll!
+	if(place(messag).eq.0)call move(chest,chloc)
+	call move(messag,chloc2)
+	do 6023 j=50,maxtrs
+	if(j.eq.pyram.and.(loc.eq.plac(pyram)
+	1	.or.loc.eq.plac(emrald)))goto 6023
+	if(at(j).and.fixed(j).eq.0)call carry(j,loc)
+	if(toting(j))call drop(j,chloc)
+6023	continue
+6024	dloc(6)=chloc
+	odloc(6)=chloc
+	dseen(6)=.false.
+	goto 6030
+c
+6025	call rspeak(186)
+	call move(chest,chloc)
+	call move(messag,chloc2)
+	goto 6024
+c
+c  this threatening little dwarf is in the room with him!
+c
+6027	dtotal=dtotal+1
+	if(odloc(i).ne.dloc(i))goto 6030
+	attack=attack+1
+	if(knfloc.ge.0)knfloc=loc
+	if(rnd(1000).lt.95*(dflag-2))stick=stick+1
+6030	continue
+c
+c  now we know what's happening.  let's tell the poor sucker about it.
+c
+	if(dtotal.eq.0)goto 2000
+	if(dtotal.eq.1)goto 75
+	type 67,dtotal
+67	format(/' there are ',i1,' threatening little dwarves in the'
+	1	,' room with you.')
+	goto 77
+75	call rspeak(4)
+77	if(attack.eq.0)goto 2000
+	if(dflag.eq.2)dflag=3
+	if(attack.eq.1)goto 79
+	type 78,attack
+78	format(/' ',i1,' of them throw knives at you!')
+	k=6
+82	if(stick.gt.1)goto 83
+	call rspeak(k+stick)
+	if(stick.eq.0)goto 2000
+	goto 84
+83	type 68,stick
+68	format(/' ',i1,' of them get you!')
+84	oldlc2=loc
+	goto 99
+c
+79	call rspeak(5)
+	k=52
+	goto 82
+c  describe the current location and (maybe) get next command.
+c
+c  print text for current loc.
+c
+2000	if(loc.eq.0)goto 99
+	kk=stext(loc)
+	kent=0
+	if (abbnum.ne.0) kent=mod(abb(loc),abbnum)
+	if (kent.eq.0.or.kk.eq.0) kk=ltext(loc)
+	if(forced(loc).or..not.dark(0))goto 2001
+	if(wzdark.and.pct(35))goto 90
+	kk=rtext(16)
+2001	if(toting(bear))call rspeak(141)
+	call speak(kk)
+	k=1
+	if(forced(loc))goto 8
+	if(loc.eq.33.and.pct(25).and..not.closng)call rspeak(8)
+c
+c  print out descriptions of objects at this location.  if not closing and
+c  property value is negative, tally off another treasure.  rug is special
+c  case; once seen, its prop is 1 (dragon on it) till dragon is killed.
+c  similarly for chain; prop is initially 1 (locked to bear).  these hacks
+c  are because prop=0 is needed to get full score.
+c
+	if(dark(0))goto 2012
+	abb(loc)=abb(loc)+1
+	i=atloc(loc)
+2004	if(i.eq.0)goto 2012
+	obj=i
+	if(obj.gt.100)obj=obj-100
+	if(obj.eq.steps.and.toting(nugget))goto 2008
+	if(prop(obj).ge.0)goto 2006
+	if(closed)goto 2008
+	prop(obj)=0
+	if(obj.eq.rug.or.obj.eq.chain)prop(obj)=1
+	tally=tally-1
+c  if remaining treasures too elusive, zap his lamp.
+	if(tally.eq.tally2.and.tally.ne.0)limit=min0(35,limit)
+2006	kk=prop(obj)
+	if(obj.eq.steps.and.loc.eq.fixed(steps))kk=1
+	call pspeak(obj,kk)
+2008	i=link(i)
+	goto 2004
+c
+2009	k=54
+2010	spk=k
+2011	call rspeak(spk)
+c
+2012	verb=0
+	obj=0
+c
+c  check if this loc is eligible for any hints.  if been here long enough,
+c  branch to help section (on later page).  hints all come back here eventually
+c  to finish the loop.  ignore "hints" < 4 (special stuff, see database notes).
+c
+2600	do 2602 hint=4,hntmax
+	if(hinted(hint))goto 2602
+	if(.not.bitset(loc,hint))hintlc(hint)=-1
+	hintlc(hint)=hintlc(hint)+1
+	if(hintlc(hint).ge.hints(hint,1))goto 40000
+2602	continue
+c
+c  kick the random number generator just to add variety to the chase.  also,
+c  if closing time, check for any objects being toted with prop < 0 and set
+c  the prop to -1-prop.  this way objects won't be described until they've
+c  been picked up and put down separate from their respective piles.  don't
+c  tick clock1 unless well into cave (and not at y2).
+c
+	if(.not.closed)goto 2605
+	if(prop(oyster).lt.0.and.toting(oyster))
+	1	call pspeak(oyster,1)
+	do 2604 i=1,100
+2604	if(toting(i).and.prop(i).lt.0)prop(i)=-1-prop(i)
+2605	wzdark=dark(0)
+	if(knfloc.gt.0.and.knfloc.ne.loc)knfloc=0
+	i=rnd(1)
+	call getin(wd1,wd1a,wd1x,wd2,wd2a,wd2x)
+c
+c  every input, check "foobar" flag.  if zero, nothing's going on.  if pos,
+c  make neg.  if neg, he skipped a word, so make it zero.
+c
+2608	foobar=min0(0,-foobar)
+	turns=turns+1
+c	if(verb.eq.say.and.wd2.ne.0)verb=0
+c	if(verb.eq.say)goto 4090
+	if(tally.eq.0.and.loc.ge.15.and.loc.ne.33)clock1=clock1-1
+	if(clock1.eq.0)goto 10000
+	if(clock1.lt.0)clock2=clock2-1
+	if(clock2.eq.0)goto 11000
+	if(prop(lamp).eq.1)limit=limit-1
+	if(limit.le.30.and.here(batter).and.prop(batter).eq.0
+	1	.and.here(lamp))goto 12000
+	if(limit.eq.0)goto 12400
+	if(limit.lt.0.and.loc.le.8)goto 12600
+	if(limit.le.30)goto 12200
+19999	k=43
+	if(liqloc(loc).eq.water)k=70
+c
+c  do preliminary analysis of sentence to find certain special
+c  cases, viz,
+c
+c  enter <water,stream>
+c  enter <location>
+c  <water,oil> <plant,door>
+c
+	call vocab(wd1,wd1a,-1,i)
+	call vocab(wd2,wd2a,-1,j)
+	if(wd1.ne.cen .or. wd1a.ne.cte) go to 2609
+	if(j .eq. (water+1000)
+	1	.or. j .eq. stream) go to 2010
+	if(wd2 .ne. 0) go to 2800
+2609	if((i .ne. (water+1000) .and. i .ne. (oil+1000))
+	1	.or. (j .ne. (plant+1000) .and. j .ne. (door+1000)))
+	2	go to 2610
+	wd2=cpo
+	wd2a=cur
+2610	if(wd1 .eq. cwe .and. wd1a .eq. cst .and. pct(10))
+	1	call rspeak(17)
+2630	call vocab(wd1,wd1a,-1,i)
+	if(i.eq.-1)goto 3000
+	k=mod(i,1000)
+	kq=i/1000+1
+	goto (8,5000,4000,2010)kq
+	call bug(22)
+c
+c  get second word for analysis.
+c
+2800	wd1=wd2
+	wd1a=wd2a
+	wd1x=wd2x
+	wd2=0
+	goto 2610
+c
+c  gee, i don't understand.
+c
+3000	spk=60
+	if(pct(20))spk=61
+	if(pct(20))spk=13
+	call rspeak(spk)
+	goto 2600
+c
+c  analyse a verb.  remember what it was, go back for object if second word
+c  unless verb is "say", which snarfs arbitrary second word.
+c
+4000	verb=k
+	spk=actspk(verb)
+	if(wd2.ne.0.and.verb.ne.say)goto 2800
+	if(verb.eq.say)obj=wd2
+	if(obj.ne.0)goto 4090
+c
+c  analyse an intransitive verb (ie, no object given yet).
+c
+4080	goto(8010,8000,8000,8040,2009,8040,9070,9080,8000,8000,
+	1    2011,9120,9130,8140,9150,8000,8000,8180,8000,8200,
+	2    8000,9220,9230,8240,8250,8260,8270,8000,8000,8300,
+	3    8310)verb
+c	     take drop  say open noth lock   on  off wave calm
+c	     walk kill pour  eat drnk  rub toss quit find invn
+c	     feed fill blst scor  foo  brf read brek wake susp
+c	     hour
+	call bug(23)
+c
+c  analyse a transitive verb.
+c
+4090	goto(9010,9020,9030,9040,2009,9040,9070,9080,9090,2011,
+	1    2011,9120,9130,9140,9150,9160,9170,2011,9190,9190,
+	2    9210,9220,9230,2011,2011,2011,9270,9280,9290,2011,
+	3    2011)verb
+c	     take drop  say open noth lock   on  off wave calm
+c	     walk kill pour  eat drnk  rub toss quit find invn
+c	     feed fill blst scor  foo  brf read brek wake susp
+c	     hour
+	call bug(24)
+c
+c  analyse an object word.  see if the thing is here, whether we've got a verb
+c  yet, and so on.  object must be here unless verb is "find" or "invent(ory)"
+c  (and no new verb yet to be analysed).  water and oil are also funny, since
+c  they are never actually dropped at any location, but might be here inside
+c  the bottle or as a feature of the location.
+c
+5000	obj=k
+	if(fixed(k).ne.loc.and..not.here(k))goto 5100
+5010	if(wd2.ne.0)goto 2800
+	if(verb.ne.0)goto 4090
+	type 5015
+5015	format(' what do you want to do with the ',$)
+	call a5toa1(wd1,wd1a,wd1x,'?')
+	goto 2600
+c
+5100	if(k.ne.grate)goto 5110
+	if(loc.eq.1.or.loc.eq.4.or.loc.eq.7)k=dprssn
+	if(loc.gt.9.and.loc.lt.15)k=entrnc
+	if(k.ne.grate)goto 8
+5110	if(k.ne.dwarf)goto 5120
+	do 5112 i=1,5
+	if(dloc(i).eq.loc.and.dflag.ge.2)goto 5010
+5112	continue
+5120	if((liq(0).eq.k.and.here(bottle)).or.k.eq.liqloc(loc))goto 5010
+	if(obj.ne.plant.or..not.at(plant2).or.prop(plant2).eq.0)goto 5130
+	obj=plant2
+	goto 5010
+5130	if(obj.ne.knife.or.knfloc.ne.loc)goto 5140
+	knfloc=-1
+	spk=116
+	goto 2011
+5140	if(obj.ne.rod.or..not.here(rod2))goto 5190
+	obj=rod2
+	goto 5010
+5190	if((verb.eq.find.or.verb.eq.invent).and.wd2.eq.0)goto 5010
+	type 5199
+5199	format(' i don''t see any ',$)
+	call a5toa1(wd1,wd1a,wd1x,'.')
+	goto 2012
+c  figure out the new location
+c
+c  given the current location in "loc", and a motion verb number in "k", put
+c  the new location in "newloc".  the current loc is saved in "oldloc" in case
+c  he wants to retreat.  the current oldloc is saved in oldlc2, in case he
+c  dies.  (if he does, newloc will be limbo, and oldloc will be what killed
+c  him, so we need oldlc2, which is the last place he was safe.)
+c
+8	kk=key(loc)
+	newloc=loc
+	if(kk.eq.0)call bug(26)
+	if(k.eq.null)goto 2
+	if(k.eq.back)goto 20
+	if(k.eq.look)goto 30
+	if(k.eq.cave)goto 40
+	oldlc2=oldloc
+	oldloc=loc
+c
+9	ll=iabs(travel(kk))
+	if(ll.eq.1 .or. ll.eq.k)goto 10
+	if(travel(kk).lt.0)goto 50
+	kk=kk+1
+	goto 9
+c
+10	newloc=trvcon(kk)
+	k=mod(newloc,100)
+	if(newloc.le.300)goto 13
+	if(prop(k).ne.newloc/100-3)goto 16
+12	if(travel(kk).lt.0)call bug(25)
+	kk=kk+1
+	go to 10
+c
+13	if(newloc.le.100)goto 14
+	if(toting(k).or.(newloc.gt.200.and.at(k)))goto 16
+	goto 12
+c
+14	if(newloc.ne.0.and..not.pct(newloc))goto 12
+16	newloc=trvloc(kk)
+	if(newloc.le.300)goto 2
+	if(newloc.le.500)goto 30000
+	call rspeak(newloc-500)
+	newloc=loc
+	goto 2
+c
+c  special motions come here.  labelling convention: statement numbers nnnxx
+c  (xx=00-99) are used for special case number nnn (nnn=301-500).
+c
+30000	newloc=newloc-300
+	goto (30100,30200,30300)newloc
+	call bug(20)
+c
+c  travel 301.  plover-alcove passage.  can carry only emerald.  note: travel
+c  table must include "useless" entries going through passage, which can never
+c  be used for actual motion, but can be spotted by "go back".
+c
+30100	newloc=99+100-loc
+	if(holdng.eq.0.or.(holdng.eq.1.and.toting(emrald)))goto 2
+	newloc=loc
+	call rspeak(117)
+	goto 2
+c
+c  travel 302.  plover transport.  drop the emerald (only use special travel if
+c  toting it), so he's forced to use the plover-passage to get it out.  having
+c  dropped it, go back and pretend he wasn't carrying it after all.
+c
+30200	call drop(emrald,loc)
+	goto 12
+c
+c  travel 303.  troll bridge.  must be done only as special motion so that
+c  dwarves won't wander across and encounter the bear.  (they won't follow the
+c  player there because that region is forbidden to the pirate.)  if
+c  prop(troll)=1, he's crossed since paying, so step out and block him.
+c  (standard travel entries check for prop(troll)=0.)  special stuff for bear.
+c
+30300	if(prop(troll).ne.1)goto 30310
+	call pspeak(troll,1)
+	prop(troll)=0
+	call move(troll2,0)
+	call move(troll2+100,0)
+	call move(troll,plac(troll))
+	call move(troll+100,fixd(troll))
+	call juggle(chasm)
+	newloc=loc
+	goto 2
+c
+30310	newloc=plac(troll)+fixd(troll)-loc
+	if(prop(troll).eq.0)prop(troll)=1
+	if(.not.toting(bear))goto 2
+	call rspeak(162)
+	prop(chasm)=1
+	prop(troll)=2
+	call drop(bear,newloc)
+	fixed(bear)=-1
+	prop(bear)=3
+	if(prop(spices).lt.0)tally2=tally2+1
+	oldlc2=newloc
+	goto 99
+c
+c  end of specials.
+c
+c  handle "go back".  look for verb which goes from loc to oldloc, or to oldlc2
+c  if oldloc has forced-motion.  k2 saves entry -> forced loc -> previous loc.
+c
+20	k=oldloc
+	if(forced(k))k=oldlc2
+	oldlc2=oldloc
+	oldloc=loc
+	k2=0
+	if(k.ne.loc)goto 21
+	call rspeak(91)
+	goto 2
+c
+21	ll=trvloc(kk)
+	if(ll.eq.k)goto 25
+	if(ll.gt.300)goto 22
+	j=key(ll)
+	if(forced(ll).and.trvloc(kk).eq.k)k2=kk
+22	if(travel(kk).lt.0)goto 23
+	kk=kk+1
+	goto 21
+c
+23	kk=k2
+	if(kk.ne.0)goto 25
+	call rspeak(140)
+	goto 2
+c
+25	k=iabs(travel(kk))
+	kk=key(loc)
+	goto 9
+c
+c  look.  can't give more detail.  pretend it wasn't dark (though it may "now"
+c  be dark) so he won't fall into a pit while staring into the gloom.
+c
+30	if(detail.lt.3)call rspeak(15)
+	detail=detail+1
+	wzdark=.false.
+	abb(loc)=0
+	goto 2
+c
+c  cave.  different messages depending on whether above ground.
+c
+40	if(loc.lt.8)call rspeak(57)
+	if(loc.ge.8)call rspeak(58)
+	goto 2
+c
+c  non-applicable motion.  various messages depending on word given.
+c
+50	spk=12
+	if(k.ge.43.and.k.le.50)spk=9
+	if(k.eq.29.or.k.eq.30)spk=9
+	if(k.eq.7.or.k.eq.36.or.k.eq.37)spk=10
+	if(k.eq.11.or.k.eq.19)spk=11
+	if(verb.eq.find.or.verb.eq.invent)spk=59
+	if(k.eq.62.or.k.eq.65)spk=42
+	if(k.eq.17)spk=80
+	call rspeak(spk)
+	goto 2
+c  "you're dead, jim."
+c
+c  if the current loc is zero, it means the clown got himself killed.  we'll
+c  allow this maxdie times.  maxdie is automatically set based on the number of
+c  snide messages available.  each death results in a message (81, 83, etc.)
+c  which offers reincarnation; if accepted, this results in message 82, 84,
+c  etc.  the last time, if he wants another chance, he gets a snide remark as
+c  we exit.  when reincarnated, all objects being carried get dropped at oldlc2
+c  (presumably the last place prior to being killed) without change of props.
+c  the loop runs backwards to assure that the bird is dropped before the cage.
+c  (this kluge could be changed once we're sure all references to bird and cage
+c  are done by keywords.)  the lamp is a special case (it wouldn't do to leave
+c  it in the cave).  it is turned off and left outside the building (only if he
+c  was carrying it, of course).  he himself is left inside the building (and
+c  heaven help him if he tries to xyzzy back into the cave without the lamp!).
+c  oldloc is zapped so he can't just "retreat".
+c
+c  the easiest way to get killed is to fall into a pit in pitch darkness.
+c
+90	call rspeak(23)
+	oldlc2=loc
+c
+c  okay, he's dead.  let's get on with it.
+c
+99	if(closng)goto 95
+	yea=yes(81+numdie*2,82+numdie*2,54)
+	numdie=numdie+1
+	if(numdie.eq.maxdie.or..not.yea)goto 20000
+	place(water)=0
+	place(oil)=0
+	if(toting(lamp))prop(lamp)=0
+	do 98 j=1,100
+	i=101-j
+	if(.not.toting(i))goto 98
+	k=oldlc2
+	if(i.eq.lamp)k=1
+	call drop(i,k)
+98	continue
+	loc=3
+	oldloc=loc
+	goto 2000
+c
+c  he died during closing time.  no resurrection.  tally up a death and exit.
+c
+95	call rspeak(131)
+	numdie=numdie+1
+	goto 20000
+c  routines for performing the various action verbs
+c
+c  statement numbers in this section are 8000 for intransitive verbs, 9000 for
+c  transitive, plus ten times the verb number.  many intransitive verbs use the
+c  transitive code, and some verbs use code for other verbs, as noted below.
+c
+c  random intransitive verbs come here.  clear obj just in case (see "attack").
+c
+8000	type 8002
+8002	format(' i don''t understand "',$)
+	call a5toa1(wd1,wd1a,wd1x,'".')
+	obj=0
+	goto 2600
+c
+c  carry, no object given yet.  ok if only one object present.
+c
+8010	if(atloc(loc).eq.0.or.link(atloc(loc)).ne.0)goto 8000
+	do 8012 i=1,5
+	if(dloc(i).eq.loc.and.dflag.ge.2)goto 8000
+8012	continue
+	obj=atloc(loc)
+c
+c  carry an object.  special cases for bird and cage (if bird in cage, can't
+c  take one without the other.  liquids also special, since they depend on
+c  status of bottle.  also various side effects, etc.
+c
+9010	if(toting(obj))goto 2011
+	spk=25
+	if(obj.eq.plant.and.prop(plant).le.0)spk=115
+	if(obj.eq.bear.and.prop(bear).eq.1)spk=169
+	if(obj.eq.chain.and.prop(bear).ne.0)spk=170
+	if(fixed(obj).ne.0)goto 2011
+	if(obj.ne.water.and.obj.ne.oil)goto 9017
+	if(here(bottle).and.liq(0).eq.obj)goto 9018
+	obj=bottle
+	if(toting(bottle).and.prop(bottle).eq.1)goto 9220
+	if(prop(bottle).ne.1)spk=105
+	if(.not.toting(bottle))spk=104
+	goto 2011
+9018	obj=bottle
+9017	if(holdng.lt.7)goto 9016
+	call rspeak(92)
+	goto 2012
+9016	if(obj.ne.bird)goto 9014
+	if(prop(bird).ne.0)goto 9014
+	if(.not.toting(rod))goto 9013
+	call rspeak(26)
+	goto 2012
+9013	if(toting(cage))goto 9015
+	call rspeak(27)
+	goto 2012
+9015	prop(bird)=1
+9014	if((obj.eq.bird.or.obj.eq.cage).and.prop(bird).ne.0)
+	1	call carry(bird+cage-obj,loc)
+	call carry(obj,loc)
+	k=liq(0)
+	if(obj.eq.bottle.and.k.ne.0)place(k)=-1
+	goto 2009
+c
+c  discard object.  "throw" also comes here for most objects.  special cases for
+c  bird (might attack snake or dragon) and cage (might contain bird) and vase.
+c  drop coins at vending machine for extra batteries.
+c
+9020	if(toting(rod2).and.obj.eq.rod.and..not.toting(rod))obj=rod2
+	if(.not.toting(obj))goto 2011
+	if(obj.ne.bird.or..not.here(snake))goto 9024
+	call rspeak(30)
+	if(closed)goto 19000
+	call dstroy(snake)
+c  set prop for use by travel options
+	prop(snake)=1
+9021	k=liq(0)
+	if(k.eq.obj)obj=bottle
+	if(obj.eq.bottle.and.k.ne.0)place(k)=0
+	if(obj.eq.cage.and.prop(bird).ne.0)call drop(bird,loc)
+	if(obj.eq.bird)prop(bird)=0
+	call drop(obj,loc)
+	goto 2012
+c
+9024	if(obj.ne.coins.or..not.here(vend))goto 9025
+	call dstroy(coins)
+	call drop(batter,loc)
+	call pspeak(batter,0)
+	goto 2012
+c
+9025	if(obj.ne.bird.or..not.at(dragon).or.prop(dragon).ne.0)goto 9026
+	call rspeak(154)
+	call dstroy(bird)
+	prop(bird)=0
+	if(place(snake).eq.plac(snake))tally2=tally2+1
+	goto 2012
+c
+9026	if(obj.ne.bear.or..not.at(troll))goto 9027
+	call rspeak(163)
+	call move(troll,0)
+	call move(troll+100,0)
+	call move(troll2,plac(troll))
+	call move(troll2+100,fixd(troll))
+	call juggle(chasm)
+	prop(troll)=2
+	goto 9021
+c
+9027	if(obj.eq.vase.and.loc.ne.plac(pillow))goto 9028
+	call rspeak(54)
+	goto 9021
+c
+9028	prop(vase)=2
+	if(at(pillow))prop(vase)=0
+	call pspeak(vase,prop(vase)+1)
+	if(prop(vase).ne.0)fixed(vase)=-1
+	goto 9021
+c
+c  say.  echo wd2 (or wd1 if no wd2 (say what?, etc.).)  magic words override.
+c
+9030	if(wd2.eq.0)goto 9031
+	wd1=wd2
+	wd1a=wd2a
+	wd1x=wd2x
+9031	call vocab(wd1,wd1a,-1,i)
+	if(i.eq.62.or.i.eq.65.or.i.eq.71.or.i.eq.2025)goto 9035
+	type 9032
+9032	format(' okay, "',$)
+	call a5toa1(wd1,wd1a,wd1x,'".')
+	goto 2012
+c
+9035	wd2=0
+	obj=0
+	goto 2630
+c
+c  lock, unlock, no object given.  assume various things if present.
+c
+8040	spk=28
+	if(here(clam))obj=clam
+	if(here(oyster))obj=oyster
+	if(at(door))obj=door
+	if(at(grate))obj=grate
+	if(obj.ne.0.and.here(chain))goto 8000
+	if(here(chain))obj=chain
+	if(obj.eq.0)goto 2011
+c
+c  lock, unlock object.  special stuff for opening clam/oyster and for chain.
+c
+9040	if(obj.eq.clam.or.obj.eq.oyster)goto 9046
+	if(obj.eq.door)spk=111
+	if(obj.eq.door.and.prop(door).eq.1)spk=54
+	if(obj.eq.cage)spk=32
+	if(obj.eq.keys)spk=55
+	if(obj.eq.grate.or.obj.eq.chain)spk=31
+	if(spk.ne.31.or..not.here(keys))goto 2011
+	if(obj.eq.chain)goto 9048
+	if(.not.closng)goto 9043
+	k=130
+	if(.not.panic)clock2=15
+	panic=.true.
+	goto 2010
+c
+9043	k=34+prop(grate)
+	prop(grate)=1
+	if(verb.eq.lock)prop(grate)=0
+	k=k+2*prop(grate)
+	goto 2010
+c
+c  clam/oyster.
+9046	k=0
+	if(obj.eq.oyster)k=1
+	spk=124+k
+	if(toting(obj))spk=120+k
+	if(.not.toting(tridnt))spk=122+k
+	if(verb.eq.lock)spk=61
+	if(spk.ne.124)goto 2011
+	call dstroy(clam)
+	call drop(oyster,loc)
+	call drop(pearl,105)
+	goto 2011
+c
+c  chain.
+9048	if(verb.eq.lock)goto 9049
+	spk=171
+	if(prop(bear).eq.0)spk=41
+	if(prop(chain).eq.0)spk=37
+	if(spk.ne.171)goto 2011
+	prop(chain)=0
+	fixed(chain)=0
+	if(prop(bear).ne.3)prop(bear)=2
+	fixed(bear)=2-prop(bear)
+	goto 2011
+c
+9049	spk=172
+	if(prop(chain).ne.0)spk=34
+	if(loc.ne.plac(chain))spk=173
+	if(spk.ne.172)goto 2011
+	prop(chain)=2
+	if(toting(chain))call drop(chain,loc)
+	fixed(chain)=-1
+	goto 2011
+c
+c  light lamp
+c
+9070	if(.not.here(lamp))goto 2011
+	spk=184
+	if(limit.lt.0)goto 2011
+	prop(lamp)=1
+	call rspeak(39)
+	if(wzdark)goto 2000
+	goto 2012
+c
+c  lamp off
+c
+9080	if(.not.here(lamp))goto 2011
+	prop(lamp)=0
+	call rspeak(40)
+	if(dark(0))call rspeak(16)
+	goto 2012
+c
+c  wave.  no effect unless waving rod at fissure.
+c
+9090	if((.not.toting(obj)).and.(obj.ne.rod.or..not.toting(rod2)))
+	1	spk=29
+	if(obj.ne.rod.or..not.at(fissur).or..not.toting(obj)
+	1	.or.closng)goto 2011
+	prop(fissur)=1-prop(fissur)
+	call pspeak(fissur,2-prop(fissur))
+	goto 2012
+c
+c  attack.  assume target if unambiguous.  "throw" also links here.  attackable
+c  objects fall into two categories: enemies (snake, dwarf, etc.)  and others
+c  (bird, clam).  ambiguous if two enemies, or if no enemies but two others.
+c
+9120	do 9121 i=1,5
+	if(dloc(i).eq.loc.and.dflag.ge.2)goto 9122
+9121	continue
+	i=0
+9122	if(obj.ne.0)goto 9124
+	if(i.ne.0)obj=dwarf
+	if(here(snake))obj=obj*100+snake
+	if(at(dragon).and.prop(dragon).eq.0)obj=obj*100+dragon
+	if(at(troll))obj=obj*100+troll
+	if(here(bear).and.prop(bear).eq.0)obj=obj*100+bear
+	if(obj.gt.100)goto 8000
+	if(obj.ne.0)goto 9124
+c  can't attack bird by throwing axe.
+	if(here(bird).and.verb.ne.throw)obj=bird
+c  clam and oyster both treated as clam for intransitive case; no harm done.
+	if(here(clam).or.here(oyster))obj=100*obj+clam
+	if(obj.gt.100)goto 8000
+9124	if(obj.ne.bird)goto 9125
+	spk=137
+	if(closed)goto 2011
+	call dstroy(bird)
+	prop(bird)=0
+	if(place(snake).eq.plac(snake))tally2=tally2+1
+	spk=45
+9125	if(obj.eq.0)spk=44
+	if(obj.eq.clam.or.obj.eq.oyster)spk=150
+	if(obj.eq.snake)spk=46
+	if(obj.eq.dwarf)spk=49
+	if(obj.eq.dwarf.and.closed)goto 19000
+	if(obj.eq.dragon)spk=167
+	if(obj.eq.troll)spk=157
+	if(obj.eq.bear)spk=165+(prop(bear)+1)/2
+	if(obj.ne.dragon.or.prop(dragon).ne.0)goto 2011
+c  fun stuff for dragon.  if he insists on attacking it, win!  set prop to dead,
+c  move dragon to central loc (still fixed), move rug there (not fixed), and
+c  move him there, too.  then do a null motion to get new description.
+	call rspeak(49)
+	verb=0
+	obj=0
+	call getin(wd1,wd1a,wd1x,wd2,wd2a,wd2x)
+	if(wd1.ne.cye.and.wd1.ne.cy)goto 2608
+	call pspeak(dragon,1)
+	prop(dragon)=2
+	prop(rug)=0
+	k=(plac(dragon)+fixd(dragon))/2
+	call move(dragon+100,-1)
+	call move(rug+100,0)
+	call move(dragon,k)
+	call move(rug,k)
+	do 9126 obj=1,100
+	if(place(obj).eq.plac(dragon).or.place(obj).eq.fixd(dragon))
+	1	call move(obj,k)
+9126	continue
+	loc=k
+	k=null
+	goto 8
+c
+c  pour.  if no object, or object is bottle, assume contents of bottle.
+c  special tests for pouring water or oil on plant or rusty door.
+c
+9130	if(obj.eq.bottle.or.obj.eq.0)obj=liq(0)
+	if(obj.eq.0)goto 8000
+	if(.not.toting(obj))goto 2011
+	spk=78
+	if(obj.ne.oil.and.obj.ne.water)goto 2011
+	prop(bottle)=1
+	place(obj)=0
+	spk=77
+	if(.not.(at(plant).or.at(door)))goto 2011
+c
+	if(at(door))goto 9132
+	spk=112
+	if(obj.ne.water)goto 2011
+	call pspeak(plant,prop(plant)+1)
+	prop(plant)=mod(prop(plant)+2,6)
+	prop(plant2)=prop(plant)/2
+	k=null
+	goto 8
+c
+9132	prop(door)=0
+	if(obj.eq.oil)prop(door)=1
+	spk=113+prop(door)
+	goto 2011
+c
+c  eat.  intransitive: assume food if present, else ask what.  transitive: food
+c  ok, some things lose appetite, rest are ridiculous.
+c
+8140	if(.not.here(food))goto 8000
+8142	call dstroy(food)
+	spk=72
+	goto 2011
+c
+9140	if(obj.eq.food)goto 8142
+	if(obj.eq.bird.or.obj.eq.snake.or.obj.eq.clam.or.obj.eq.oyster
+	1	.or.obj.eq.dwarf.or.obj.eq.dragon.or.obj.eq.troll
+	2	.or.obj.eq.bear)spk=71
+	goto 2011
+c
+c  drink.  if no object, assume water and look for it here.  if water is in
+c  the bottle, drink that, else must be at a water loc, so drink stream.
+c
+9150	if(obj.eq.0.and.liqloc(loc).ne.water.and.(liq(0).ne.water
+	1	.or..not.here(bottle)))goto 8000
+	if(obj.ne.0.and.obj.ne.water)spk=110
+	if(spk.eq.110.or.liq(0).ne.water.or..not.here(bottle))goto 2011
+	prop(bottle)=1
+	place(water)=0
+	spk=74
+	goto 2011
+c
+c  rub.  yields various snide remarks.
+c
+9160	if(obj.ne.lamp)spk=76
+	goto 2011
+c
+c  throw.  same as discard unless axe.  then same as attack except ignore bird,
+c  and if dwarf is present then one might be killed.  (only way to do so!)
+c  axe also special for dragon, bear, and troll.  treasures special for troll.
+c
+9170	if(toting(rod2).and.obj.eq.rod.and..not.toting(rod))obj=rod2
+	if(.not.toting(obj))goto 2011
+	if(obj.ge.50.and.obj.le.maxtrs.and.at(troll))goto 9178
+	if(obj.eq.food.and.here(bear))goto 9177
+	if(obj.ne.axe)goto 9020
+	do 9171 i=1,5
+c  needn't check dflag if axe is here.
+	if(dloc(i).eq.loc)goto 9172
+9171	continue
+	spk=152
+	if(at(dragon).and.prop(dragon).eq.0)goto 9175
+	spk=158
+	if(at(troll))goto 9175
+	if(here(bear).and.prop(bear).eq.0)goto 9176
+	obj=0
+	goto 9120
+c
+9172	spk=48
+	if(rnd(3).eq.0)goto 9175
+	dseen(i)=.false.
+	dloc(i)=0
+	spk=47
+	dkill=dkill+1
+	if(dkill.eq.1)spk=149
+9175	call rspeak(spk)
+	call drop(axe,loc)
+	k=null
+	goto 8
+c
+c  this'll teach him to throw the axe at the bear!
+9176	spk=164
+	call drop(axe,loc)
+	fixed(axe)=-1
+	prop(axe)=1
+	call juggle(bear)
+	goto 2011
+c
+c  but throwing food is another story.
+9177	obj=bear
+	goto 9210
+c
+9178	spk=159
+c  snarf a treasure for the troll.
+	call drop(obj,0)
+	call move(troll,0)
+	call move(troll+100,0)
+	call drop(troll2,plac(troll))
+	call drop(troll2+100,fixd(troll))
+	call juggle(chasm)
+	goto 2011
+c
+c  quit.  intransitive only.  verify intent and exit if that's what he wants.
+c
+8180	gaveup=yes(22,54,54)
+8185	if(gaveup)goto 20000
+	goto 2012
+c
+c  find.  might be carrying it, or it might be here.  else give caveat.
+c
+9190	if(at(obj).or.(liq(0).eq.obj.and.at(bottle))
+	1	.or.k.eq.liqloc(loc))spk=94
+	do 9192 i=1,5
+9192	if(dloc(i).eq.loc.and.dflag.ge.2.and.obj.eq.dwarf)spk=94
+	if(closed)spk=138
+	if(toting(obj))spk=24
+	goto 2011
+c
+c  inventory.  if object, treat same as find.  else report on current burden.
+c
+8200	spk=98
+	do 8201 i=1,100
+	if(i.eq.bear.or..not.toting(i))goto 8201
+	if(spk.eq.98)call rspeak(99)
+	blklin=.false.
+	call pspeak(i,-1)
+	blklin=.true.
+	spk=0
+8201	continue
+	if(toting(bear))spk=141
+	goto 2011
+c
+c  feed.  if bird, no seed.  snake, dragon, troll: quip.  if dwarf, make him
+c  mad.  bear, special.
+c
+9210	if(obj.ne.bird)goto 9212
+	spk=100
+	goto 2011
+c
+9212	if(obj.ne.snake.and.obj.ne.dragon.and.obj.ne.troll)goto 9213
+	spk=102
+	if(obj.eq.dragon.and.prop(dragon).ne.0)spk=110
+	if(obj.eq.troll)spk=182
+	if(obj.ne.snake.or.closed.or..not.here(bird))goto 2011
+	spk=101
+	call dstroy(bird)
+	prop(bird)=0
+	tally2=tally2+1
+	goto 2011
+c
+9213	if(obj.ne.dwarf)goto 9214
+	if(.not.here(food))goto 2011
+	spk=103
+	dflag=dflag+1
+	goto 2011
+c
+9214	if(obj.ne.bear)goto 9215
+	if(prop(bear).eq.0)spk=102
+	if(prop(bear).eq.3)spk=110
+	if(.not.here(food))goto 2011
+	call dstroy(food)
+	prop(bear)=1
+	fixed(axe)=0
+	prop(axe)=0
+	spk=168
+	goto 2011
+c
+9215	spk=14
+	goto 2011
+c
+c  fill.  bottle must be empty, and some liquid available.  (vase is nasty.)
+c
+9220	if(obj.eq.vase)goto 9222
+	if(obj.ne.0.and.obj.ne.bottle)goto 2011
+	if(obj.eq.0.and..not.here(bottle))goto 8000
+	spk=107
+	if(liqloc(loc).eq.0)spk=106
+	if(liq(0).ne.0)spk=105
+	if(spk.ne.107)goto 2011
+	prop(bottle)=mod(cond(loc),4)/2*2
+	k=liq(0)
+	if(toting(bottle))place(k)=-1
+	if(k.eq.oil)spk=108
+	goto 2011
+c
+9222	spk=29
+	if(liqloc(loc).eq.0)spk=144
+	if(liqloc(loc).eq.0.or..not.toting(vase))goto 2011
+	call rspeak(145)
+	prop(vase)=2
+	fixed(vase)=-1
+	goto 9024
+c
+c  blast.  no effect unless you've got dynamite, which is a neat trick!
+c
+9230	if(prop(rod2).lt.0.or..not.closed)goto 2011
+	bonus=133
+	if(loc.eq.115)bonus=134
+	if(here(rod2))bonus=135
+	call rspeak(bonus)
+	goto 20000
+c
+c  score.  go to scoring section, which will return to 8241 if scorng is true.
+c
+8240	scorng=.true.
+	goto 20000
+c
+8241	scorng=.false.
+	type 8243,score,mxscor
+8243	format(' if you were to quit now, you would score',i4
+	1	,' out of a possible',i4,'.')
+	gaveup=yes(143,54,54)
+	goto 8185
+c
+c  fee fie foe foo (and fum).  advance to next state if given in proper order.
+c  look up wd1 in section 3 of vocab to determine which word we've got.  last
+c  word zips the eggs back to the giant room (unless already there).
+c
+8250	call vocab(wd1,wd1a,3,k)
+	spk=42
+	if(foobar.eq.1-k)goto 8252
+	if(foobar.ne.0)spk=151
+	goto 2011
+c
+8252	foobar=k
+	if(k.ne.4)goto 2009
+	foobar=0
+	if(place(eggs).eq.plac(eggs)
+	1	.or.(toting(eggs).and.loc.eq.plac(eggs)))goto 2011
+c  bring back troll if we steal the eggs back from him before crossing.
+	if(place(eggs).eq.0.and.place(troll).eq.0.and.prop(troll).eq.0)
+	1	prop(troll)=1
+	k=2
+	if(here(eggs))k=1
+	if(loc.eq.plac(eggs))k=0
+	call move(eggs,plac(eggs))
+	call pspeak(eggs,k)
+	goto 2012
+c
+c  brief.  intransitive only.  suppress long descriptions after first time.
+c
+8260	spk=156
+	abbnum=10000
+	detail=3
+	goto 2011
+c
+c  read.  magazines in dwarvish, message we've seen, and . . . oyster?
+c
+8270	if(here(magzin))obj=magzin
+	if(here(tablet))obj=obj*100+tablet
+	if(here(messag))obj=obj*100+messag
+	if(closed.and.toting(oyster))obj=oyster
+	if(obj.gt.100.or.obj.eq.0.or.dark(0))goto 8000
+c
+9270	if(dark(0))goto 5190
+	if(obj.eq.magzin)spk=190
+	if(obj.eq.tablet)spk=196
+	if(obj.eq.messag)spk=191
+	if(obj.eq.oyster.and.hinted(2).and.toting(oyster))spk=194
+	if(obj.ne.oyster.or.hinted(2).or..not.toting(oyster)
+	1	.or..not.closed)goto 2011
+	hinted(2)=yes(192,193,54)
+	goto 2012
+c
+c  break.  only works for mirror in repository and, of course, the vase.
+c
+9280	if(obj.eq.mirror)spk=148
+	if(obj.eq.vase.and.prop(vase).eq.0)goto 9282
+	if(obj.ne.mirror.or..not.closed)goto 2011
+	call rspeak(197)
+	goto 19000
+c
+9282	spk=198
+	if(toting(vase))call drop(vase,loc)
+	prop(vase)=2
+	fixed(vase)=-1
+	goto 2011
+c
+c  wake.  only use is to disturb the dwarves.
+c
+9290	if(obj.ne.dwarf.or..not.closed)goto 2011
+	call rspeak(199)
+	goto 19000
+c
+c suspend.  cant in this version.
+c
+8300	call rspeak(201)
+	go to 2012
+c
+c hours.  none in this version
+c
+8310	call rspeak(202)
+	go to 2012
+c  hints
+c
+c  come here if he's been long enough at required loc(s) for some unused hint.
+c  hint number is in variable "hint".  branch to quick test for additional
+c  conditions, then come back to do neat stuff.  goto 40010 if conditions are
+c  met and we want to offer the hint.  goto 40020 to clear hintlc back to zero,
+c  40030 to take no action yet.
+c
+40000	goto (40400,40500,40600,40700,40800,40900)(hint-3)
+c	      cave  bird  snake maze  dark  witt
+	call bug(27)
+c
+40010	hintlc(hint)=0
+	if(.not.yes(hints(hint,3),0,54))goto 2602
+	type 40012,hints(hint,2)
+40012	format(/' i am prepared to give you a hint, but it will cost you',
+	1	i2,' points.')
+	hinted(hint)=yes(175,hints(hint,4),54)
+	if(hinted(hint).and.limit.gt.30)limit=limit+30*hints(hint,2)
+40020	hintlc(hint)=0
+40030	goto 2602
+c
+c  now for the quick tests.  see database description for one-line notes.
+c
+40400	if(prop(grate).eq.0.and..not.here(keys))goto 40010
+	goto 40020
+c
+40500	if(here(bird).and.toting(rod).and.obj.eq.bird)goto 40010
+	goto 40030
+c
+40600	if(here(snake).and..not.here(bird))goto 40010
+	goto 40020
+c
+40700	if(atloc(loc).eq.0.and.atloc(oldloc).eq.0
+	1	.and.atloc(oldlc2).eq.0.and.holdng.gt.1)goto 40010
+	goto 40020
+c
+40800	if(prop(emrald).ne.-1.and.prop(pyram).eq.-1)goto 40010
+	goto 40020
+c
+40900	goto 40010
+c  cave closing and scoring
+c
+c
+c  these sections handle the closing of the cave.  the cave closes "clock1"
+c  turns after the last treasure has been located (including the pirate's
+c  chest, which may of course never show up).  note that the treasures need not
+c  have been taken yet, just located.  hence clock1 must be large enough to get
+c  out of the cave (it only ticks while inside the cave).  when it hits zero,
+c  we branch to 10000 to start closing the cave, and then sit back and wait for
+c  him to try to get out.  if he doesn't within clock2 turns, we close the
+c  cave; if he does try, we assume he panics, and give him a few additional
+c  turns to get frantic before we close.  when clock2 hits zero, we branch to
+c  11000 to transport him into the final puzzle.  note that the puzzle depends
+c  upon all sorts of random things.  for instance, there must be no water or
+c  oil, since there are beanstalks which we don't want to be able to water,
+c  since the code can't handle it.  also, we can have no keys, since there is a
+c  grate (having moved the fixed object!) there separating him from all the
+c  treasures.  most of these problems arise from the use of negative prop
+c  numbers to suppress the object descriptions until he's actually moved the
+c  objects.
+c
+c  when the first warning comes, we lock the grate, destroy the bridge, kill
+c  all the dwarves (and the pirate), remove the troll and bear (unless dead),
+c  and set "closng" to true.  leave the dragon; too much trouble to move it.
+c  from now until clock2 runs out, he cannot unlock the grate, move to any
+c  location outside the cave (loc<9), or create the bridge.  nor can he be
+c  resurrected if he dies.  note that the snake is already gone, since he got
+c  to the treasure accessible only via the hall of the mt. king.  also, he's
+c  been in giant room (to get eggs), so we can refer to it.  also also, he's
+c  gotten the pearl, so we know the bivalve is an oyster.  *and*, the dwarves
+c  must have been activated, since we've found chest.
+c
+10000	prop(grate)=0
+	prop(fissur)=0
+	do 10010 i=1,6
+	dseen(i)=.false.
+10010	dloc(i)=0
+	call move(troll,0)
+	call move(troll+100,0)
+	call move(troll2,plac(troll))
+	call move(troll2+100,fixd(troll))
+	call juggle(chasm)
+	if(prop(bear).ne.3)call dstroy(bear)
+	prop(chain)=0
+	fixed(chain)=0
+	prop(axe)=0
+	fixed(axe)=0
+	call rspeak(129)
+	clock1=-1
+	closng=.true.
+	goto 19999
+c
+c  once he's panicked, and clock2 has run out, we come here to set up the
+c  storage room.  the room has two locs, hardwired as 115 (ne) and 116 (sw).
+c  at the ne end, we place empty bottles, a nursery of plants, a bed of
+c  oysters, a pile of lamps, rods with stars, sleeping dwarves, and him.  and
+c  the sw end we place grate over treasures, snake pit, covey of caged birds,
+c  more rods, and pillows.  a mirror stretches across one wall.  many of the
+c  objects come from known locations and/or states (e.g. the snake is known to
+c  have been destroyed and needn't be carried away from its old "place"),
+c  making the various objects be handled differently.  we also drop all other
+c  objects he might be carrying (lest he have some which could cause trouble,
+c  such as the keys).  we describe the flash of light and trundle back.
+c
+11000	prop(bottle)=put(bottle,115,1)
+	prop(plant)=put(plant,115,0)
+	prop(oyster)=put(oyster,115,0)
+	prop(lamp)=put(lamp,115,0)
+	prop(rod)=put(rod,115,0)
+	prop(dwarf)=put(dwarf,115,0)
+	loc=115
+	oldloc=115
+	newloc=115
+c
+c  leave the grate with normal (non-negative property).
+c
+	i=put(grate,116,0)
+	prop(snake)=put(snake,116,1)
+	prop(bird)=put(bird,116,1)
+	prop(cage)=put(cage,116,0)
+	prop(rod2)=put(rod2,116,0)
+	prop(pillow)=put(pillow,116,0)
+c
+	prop(mirror)=put(mirror,115,0)
+	fixed(mirror)=116
+c
+	do 11010 i=1,100
+11010	if(toting(i))call dstroy(i)
+c
+	call rspeak(132)
+	closed=.true.
+	goto 2
+c
+c  another way we can force an end to things is by having the lamp give out.
+c  when it gets close, we come here to warn him.  we go to 12000 if the lamp
+c  and fresh batteries are here, in which case we replace the batteries and
+c  continue.  12200 is for other cases of lamp dying.  12400 is when it goes
+c  out, and 12600 is if he's wandered outside and the lamp is used up, in which
+c  case we force him to give up.
+c
+12000	call rspeak(188)
+	prop(batter)=1
+	if(toting(batter))call drop(batter,loc)
+	limit=limit+2500
+	lmwarn=.false.
+	goto 19999
+c
+12200	if(lmwarn.or..not.here(lamp))goto 19999
+	lmwarn=.true.
+	spk=187
+	if(place(batter).eq.0)spk=183
+	if(prop(batter).eq.1)spk=189
+	call rspeak(spk)
+	goto 19999
+c
+12400	limit=-1
+	prop(lamp)=0
+	if(here(lamp))call rspeak(184)
+	goto 19999
+c
+12600	call rspeak(185)
+	gaveup=.true.
+	goto 20000
+c
+c
+c  oh dear, he's disturbed the dwarves.
+c
+19000	call rspeak(136)
+c
+c  exit code.  will eventually include scoring.  for now, however, ...
+c
+c  the present scoring algorithm is as follows:
+c     objective:          points:        present total possible:
+c  getting well into cave   25                    25
+c  each treasure < chest    12                    60
+c  treasure chest itself    14                    14
+c  each treasure > chest    16                   144
+c  surviving             (max-num)*10             30
+c  not quitting              4                     4
+c  reaching "closng"        25                    25
+c  "closed": quit/killed    10
+c            klutzed        25
+c            wrong way      30
+c            success        45                    45
+c  came to witt's end        1                     1
+c  round out the total       2                     2
+c                                       total:   350
+c  (points can also be deducted for using hints.)
+c
+20000	score=0
+	mxscor=0
+c
+c  first tally up the treasures.  must be in building and not broken.
+c  give the poor guy 2 points just for finding each treasure.
+c
+	do 20010 i=50,maxtrs
+	if(ptext(i).eq.0)goto 20010
+	k=12
+	if(i.eq.chest)k=14
+	if(i.gt.chest)k=16
+	if(prop(i).ge.0)score=score+2
+	if(place(i).eq.3.and.prop(i).eq.0)score=score+k-2
+	mxscor=mxscor+k
+20010	continue
+c
+c  now look at how he finished and how far he got.  maxdie and numdie tell us
+c  how well he survived.  gaveup says whether he exited via quit.  dflag will
+c  tell us if he ever got suitably deep into the cave.  closng still indicates
+c  whether he reached the endgame.  and if he got as far as "cave closed"
+c  (indicated by "closed"), then bonus is zero for mundane exits or 133, 134,
+c  135 if he blew it (so to speak).
+c
+	score=score+(maxdie-numdie)*10
+	mxscor=mxscor+maxdie*10
+	if(.not.(scorng.or.gaveup))score=score+4
+	mxscor=mxscor+4
+	if(dflag.ne.0)score=score+25
+	mxscor=mxscor+25
+	if(closng)score=score+25
+	mxscor=mxscor+25
+	if(.not.closed)goto 20020
+	if(bonus.eq.0)score=score+10
+	if(bonus.eq.135)score=score+25
+	if(bonus.eq.134)score=score+30
+	if(bonus.eq.133)score=score+45
+20020	mxscor=mxscor+45
+c
+c  did he come to witt's end as he should?
+c
+	if(place(magzin).eq.108)score=score+1
+	mxscor=mxscor+1
+c
+c  round it off.
+c
+	score=score+2
+	mxscor=mxscor+2
+c
+c  deduct points for hints.  hints < 4 are special; see database description.
+c
+	do 20030 i=1,hntmax
+20030	if(hinted(i))score=score-hints(i,2)
+c
+c  return to score command if that's where we came from.
+c
+	if(scorng)goto 8241
+c
+c  that should be good enough.  let's tell him all about it.
+c
+	type 20100,score,mxscor,turns
+20100	format(/' you scored',i4,' out of a possible',i4,
+	1	', using',i5,' turns.')
+c
+	do 20200 i=1,clsses
+	if(cval(i).ge.score)goto 20210
+20200	continue
+	type 20202
+20202	format(/' you just went off my scale!!'/)
+	goto 25000
+c
+20210	call speak(ctext(i))
+	if(i.eq.clsses-1)goto 20220
+	k=cval(i)+1-score
+	type 20212,k
+20212	format(/' to achieve the next higher rating, you need',i3,
+	1	' more point',$)
+	if(k.eq.1) type 20213
+	if(k.ne.1) type 20214
+20213   format(' .'/)
+20214   format(' s.'/)
+	goto 25000
+c
+20220	type 20222
+20222	format(/' to achieve the next higher rating ',
+	1	'would be a neat trick!'//' congratulations!!'/)
+c
+25000	return
+c
+c
+	end

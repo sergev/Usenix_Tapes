@@ -1,0 +1,290 @@
+.TH ANSITAPE 5  "8 August 1986"
+.SH NAME
+ansitape - ANSI standard magtape labels
+.SH DESCRIPTION
+.PP
+An ANSI-labelled tape starts with a volume header.
+This header specifies the volume name and protection,
+the owner of the volume, and the ANSI label standard level
+that the tape conforms to.
+.PP
+Every file on the tape has a header, some data blocks, and
+a trailer.  A tape mark follows each of these elements.
+At the end of the tape, two tape marks follow the trailer,
+to indicate logical end-of-tape.
+.PP
+If a file is too large to be copied onto one tape, it may
+be continued on another tape by modifying the trailer section.
+.sp
+.SH "VOLUME HEADER"
+.TS
+expand allbox;
+c c c c
+l n c l .
+Field	Width	Example	Use
+VOL1	4	VOL1	T{
+Indicates this is a volume header.
+T}
+Label	6	VAX1	T{
+The name of the volume.
+T}
+Access	1	space	T{
+Volume protection.  Space means unprotected.
+T}
+IGN1	20		<< ignored >>
+IGN2	6		<< ignored >>
+Owner	14	Joe User	T{
+The name of the user.
+T}
+IGN3	28		<< ignored >>
+Level	1	3	ANSI standard level.
+.TE
+.sp
+.TP 10
+Owner
+The owner field is 14 characters in ANSI labels.
+IBM labels cut the owner field to 10 characters.
+The IGN2 field is 10 characters on IBM-format tapes.
+.bp
+.SH "FILE HEADERS"
+.LP
+.TS
+expand allbox;
+c c c c
+l n c l .
+Field	Width	Example	Use
+HDR1	4	HDR1	T{
+Identifies first file header.
+T}
+Name	17	FILE.DAT	T{
+Leftmost 17 characters of filename.
+T}
+Set	6	VAX1	T{
+Name of volume set this file is part of.
+T}
+Vol Num	4	0001	T{
+Number of this volume within volume set.
+T}
+File Num	4	0001	T{
+Number of file on this tape.
+T}
+Generation	4	0001	T{
+Like a major release number.
+T}
+Gen Version	2	00	T{
+Version of a file within a release.
+T}
+Created	6	b86001	T{
+The date of file creation.
+T}
+Expires	6	b86365	T{
+Date file expires.
+T}
+Access	1	space	T{
+File protection.  Space means unprotected.
+T}
+Blockcount	6	000000	T{
+Number of blocks in the file.
+T}
+System	13	OS360	T{
+The name of the software system
+that created the tape.
+T}
+IGN	7		<< ignored >>
+.TE
+.sp
+.TP 1i
+Name
+The filename may be up to 17 characters in IBM labels,
+and ANSI labels before standard level 3.
+On ANSI level 3 and after, the HDR4 record provides
+overflow storage for up to 63 more characters of filename.
+.TP
+Set Name
+On multi-reel tape sets, a name identifying the set as a whole.
+Normally, this is just the volume name of the first reel in the set.
+.TP
+Generation
+Like a major release number.  The version field is a version
+within a generation.  On VAX/VMS systems, these two fields are
+mathematically related to the (single) version number of disk files.
+.TP
+Created
+The date the file was created.  This is a six character field,
+where the first character is always a space.
+The next two are the year.  The final 3 are the day within
+the year, counting January 1st as day 1.
+.TP
+Blocks
+The number of blocks in the file.  In HDR1 records, this is
+always zero.  The corresponding EOF1 or EOV1 contains the
+number of tape blocks written in the file on the current reel.
+.bp
+.LP
+.TS
+expand allbox;
+c c c c
+l n c l .
+Field	Width	Example	Use
+HDR2	4	HDR2	T{
+Second file header.
+T}
+Rec Format	1	D	Record format.
+Blk Length	5	02048	Tape block size.
+Rec Length	5	00080	Record size.
+Density	1	3	Recording density code.
+Vol Switch	1	0	T{
+1 if this is a continuation of a file from a previous reel.
+T}
+Job	17	user/program	See following notes.
+Recording	2	space	Unused in 9-track tapes.
+Car Control	1	space	See following notes.
+Blocking	1	B	See following notes.
+IGN	11		<< ignored >>
+Offset	2	00	T{
+Bytes to skip at front of each block.
+T}
+.TE
+.TP
+Rec Format
+A single character indicating what type of records are
+provided.  The codes are
+.sp
+.TS
+center allbox;
+c c
+c l .
+Code	Meaning
+F	Fixed-length
+D	Variable up to rec length
+V	IBM code for variable
+U	Unknown
+.TE
+.TP
+Job
+The name of the job (username in Unix) right-padded
+to 8 characters, a slash (/), and the job step
+(program name in Unix) right-padded to 8 characters.
+This identifies where the JCL was when this file
+was created.
+.TP
+Carriage Control
+Normally a space, indicating that the records do not
+contain carriage control information.  When printed,
+each record is placed on a separate line.
+If an 'A' is used, the first character of each record
+is presumed to be a Fortran carriage-control character.
+VAX/VMS also uses 'M' to indicate that carriage-control
+is embedded as part of the data.  This is usually used
+in the case of binary files.
+.TP
+Blocking
+The B indicates that as many records as will fit are
+placed in a physical tape block.  Records do not cross
+block boundaries.  A space indicates only one record
+per physical tape block.
+.bp
+.LP
+The HDR3 and HDR4 labels are not written on IBM tapes.
+ANSI allows, but does not require, these labels.
+.sp
+.TS
+expand allbox;
+c c c c
+l n c l .
+Field	Width	Example	Use
+HDR3	4	HDR3	Third file header.
+OS	76		Operating-system dependent.
+.TE
+.TP
+OS
+This field is reserved for the use of the operating system
+that created the file.  Other operating systems are supposed
+to disregard HDR3 records.  On VAX/VMS, this record contains
+the RMS file description.
+.sp
+.LP
+.TS
+expand allbox;
+c c c c
+l n c l .
+Field	Width	Example	Use
+HDR4	4	HDR4	Fourth file header.
+Name 2	63		Name continuation from HDR1.
+Unknown	2	00	Unknown, fill with 00.
+IGN	11		<< ignored >>
+.TE
+.TP
+Name 2
+On ANSI tapes, if the filename is longer than
+17 characters, the first 17 are placed in the HDR1
+record.  The next 63 are put in HDR4.  Filenames
+longer than 80 characters are truncated.  Note
+that it is not required to have a HDR3 record
+in order to have a HDR4.
+.sp
+.SH "FILE TRAILING LABELS"
+.PP
+These labels are written after a tape file.
+For every label written at the head of the file,
+there will be a corresponding label at the tail.
+Except for the 
+.I "block count"
+field in HDR1, the only difference is in the name
+of the label.
+If we have reached the logical end of the file,
+the characters 
+.I HDR
+in the headers are replaced by the characters
+.I EOF
+in the trailing labels.
+If we are not at the logical end of the file, but
+are merely pausing at the physical end of tape before
+continuing on another reel, the
+.I HDR
+characters are replaced by
+.I EOV
+(end-of-volume).
+.PP
+The
+.I "block count"
+field of HDR1 was initially recorded as 000000.  When
+the trailers are written, the block count is changed
+to indicate the number of tape data blocks written.
+A file that is continued over several volumes maintains
+separate counts for each reel.
+.SH "RECORD FORMATS"
+.PP
+The two basic record formats are fixed and variable.
+.PP
+Fixed format uses records that are all constant length.  This
+is the case with VAX/VMS executable images (record length = 512).
+It is also used by IBM systems for text files, with a record length
+of 80 (card images).  The record size field of HDR2 tells how long each
+record is.
+.PP
+With fixed-length records, the blocksize is usually selected to
+be some multiple of the recordsize.  As many records as will
+fit are placed in each block.  Since records do not (normally)
+span physical tape blocks, extra space at the end of a block is wasted.
+.PP
+Variable-length records are used by VAX/VMS for text files.
+The Unix program 
+.I ansitape(1)
+also turns Unix text files into variable-length tape files.
+With this format, the record length specified in HDR2 is an
+upper limit.
+.PP
+Each record is preceeded by a 4-digit (zero-filled) byte count.
+The count included the digits themselves, so the minimum valid
+number is 0004.  These four digits specify how long the record
+is.  The data follows the digits, and is in turn followed by
+the digits for the next record.
+.PP
+When writing, 
+.I ansitape
+checks to make sure that there is enough room in the tape block
+for the next record.  If the record (including its length digits)
+won't fit, the current block is sent to the tape, and a new
+block is started.  Unused space at the end of the tape block is
+filled with circumflex (^) characters.

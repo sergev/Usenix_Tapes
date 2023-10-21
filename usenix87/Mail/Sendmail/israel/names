@@ -1,0 +1,47 @@
+#! /bin/csh -f
+#
+# names - generate a list of aliases on the current host for addresses
+#	that are on the local network but NOT on the current host.
+#	these will be used by the mail system so that any addresses on
+#	the local network appear to be addresses local to the current
+#	host.
+#
+#	method: all addresses on the local net are processed thru
+#	  getting their aliases and passwd files.
+#	  aliases on any machine take priority over accounts anywhere.
+#	  current machine takes priority over other machines.
+#
+# temp files:	uniq - unique names in list (for eliminating repeats)
+#		list - generated list
+#		tmp1,2 - intermediate processing files
+#
+# set the machines on the local network here (in order of priority).
+set locals = (mimsy tove gymble gyre brilig)
+#
+set uniq = /tmp/names.u.$$ list = /tmp/names.l.$$
+set tmp1 = /tmp/names.1.$$ tmp2 = /tmp/names.2.$$
+cp /dev/null $list
+cp /dev/null $uniq
+foreach file ( /usr/lib/aliases /etc/passwd )
+# process current host addresses from $file first
+	awk -F: '{print $1}' < $file | grep -v "#" | grep -v '^$' | \
+	    sort | uniq> $tmp1
+# put current host addresses into uniq file ONLY.  That way they won't be
+# generated from another machine, and the mail system will get them itself
+# from local files.
+	cat $tmp1 $uniq | sort -o $uniq
+	foreach host ( $locals )
+	    set work = tmp/$host.$file:t
+	    rcp ${host}:${file} $work
+# get name from file, ignoring comments and blank lines
+	    awk -F: '{print $1}' <$work | grep -v "#" | \
+		grep -v '^$' | sort | uniq > $tmp1
+# get only names that haven't already been used (i.e. $tmp1 - $uniq)
+	    comm -13 $uniq $tmp1 > $tmp2
+# add new names to list with host, and to unique names list
+	    awk '{print $1 " " $1 "@'$host'" }' < $tmp2 >> $list
+	    cat $tmp2 $uniq | sort -o $uniq
+	end
+end
+sort $list
+rm -f $uniq $list $tmp1 $tmp2

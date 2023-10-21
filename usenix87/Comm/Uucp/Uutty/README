@@ -1,0 +1,113 @@
+	The uutty package is John Chambers' very own person login
+	daemon, to replace such things as getty(1) and login(1).
+	
+	There are several motives for doing this.  You might have
+	a modem which you wish to use for both incoming and outgoing
+	calls.  You might have a direct ("null modem") link which
+	you would like to use from either end.  You might have an
+	overly-intelligent modem which is crashing your system by
+	engaging getty in a conversation.  All of these can be
+	handled by uutty.  
+	
+	Also, uutty will make an audit trail for you in the file
+	of your choice.  Note:  at debug level -d2 and above,
+	uutty is a "Trojan horse", since the audit trail will
+	contain unencrypted login ids and passwords.  This is
+	very useful on occasion; it is also an extreme security
+	risk.  Think carefully before you try this on a regular
+	basis.
+	
+	To create the program, first edit the *.h files and the
+	Makefile.  There isn't much that needs to be changed,
+	but you probably want to modify the -DSYS5 and -DCadmus
+	parameters to specify your variety of Unix and your 
+	manufacturer's name.  You might also try:
+		grep SYS5 *.c
+		grep Cadmus *.c
+	and check out all these pieces of code to see if they
+	look correct for your system.
+	
+	If you make any interesting changes to port it to your
+	system, you might share them with the author:
+		...!cdx39!jc (John Chambers)
+	This will help towards producing a truly portable version
+	of this logger.
+	
+	When you've convinced yourself that the system dependencies
+	are OK, just type "make", and uutty will be compiled.  To
+	install it and the manual entry , type "install"; you'll 
+	have to be a super-user to do this.
+	
+	To run it, you need to explain to init about it.  Here 
+	are some typical entries from our /etc/inittab file:
+
+t11:23 :respawn:modem /dev/tty11 -B12				# Modem for uucp.
+t30:234:respawn:uutty /dev/tty30 -B96 -e 2>>/user/aud/tty30	# Ordinary terminal port.
+t40:34:off    : uutty /dev/tty40 -B96 2>>/user/aud/tty40 -l -d2	# Direct link.
+t41:34:respawn: uutty /dev/tty41 -B96 2>>/user/aud/tty41 -l -d2	# Direct link.
+t42:34:respawn: uutty /dev/tty42 -B96 2>>/user/aud/tty42 -l -d2	# Direct link.
+t43:34:respawn: uutty /dev/tty43 -B96 2>>/user/aud/tty43 -l -d2	# Direct link.
+
+	What we are doing here is using uutty on four inter-machine
+	direct links (null-modem or cross-over cables), on the
+	tty4? ports.  The tty30 port is attached to a terminal
+	(well, actually to our LAN); uutty is being run there
+	just to show that it works with the -e option.  The tty11 
+	port is attached to an overly-intelligent ACU-type modem.  
+	The 'modem' program is a shell script, which looks like:
+	
+>	:
+>	MODEM=tty11
+>	/usr/lib/uucp/modem_init $1
+>	cd /etc
+>	PATH=.:$PATH
+>	exec uutty /dev/$MODEM -B12 -L -d2 -i\\rqOG0\\rXXXT\\rqOG0 2>>/user/aud/$MODEM 
+>	:
+>	: We normally won't reach this:
+>	sleep 30
+>	/usr/lib/uucp/modem_init $1
+	
+	The purpose of this is to run a special script, modem_init,
+	to beat on the modem and try to put it into a quiescent state.
+	When this is done, we run uutty at 1200 baud, with locking
+	enabled, at debug level 2 (tracing of all input and output),
+	and with a bizarre-looking initialization string which turns
+	out to be what this particular modem requires to force it to
+	hang up and re-initialize itself.  The final sleep and call
+	on modem_init are to handle cases where init somehow can't
+	find uutty, or it dies instantaneously.  This may look like
+	overkill; it turns out to have been useful on occasion.
+	
+	Note that the audit trail grows without bound.  Once a day,
+	we handle it by having cron start up /etc/cleanup, a script
+	that moves a select list of files to a backup copy.  This
+	generally suffices to keep the audit trail to a reasonable
+	size.
+	
+	When you first run uutty, you should probably try it with
+	-d5 or -d8, to have it explain what it's doing.  It will
+	likely get into a conversation with your modem; you'll
+	have to figure out if there's a possible initialization
+	string that will prevent it.  Hint:  Try to tell your
+	modem not to echo anything.
+	
+	A more useful first test is to run uutty on one end of
+	a null-modem cable, which could be to another computer,
+	or to two ports on the same computer.  Use cu(1) to
+	connect to it, and have either getty or uutty running
+	on the other end.  After at most two RETURNs, you should
+	get a login prompt, and uutty's audit trail should show
+	that there is a lockfile.  When you tell cu to disconnect,
+	the lockfile will go away, and uutty will wake up in
+	half a minute or so.  If you are still logged in at 
+	the other end, uutty may discover this, and log you
+	out; on the other hand, it may not.  (It's supposed
+	to, if you have a Unix prompt ending with '$' or '%'.)
+	
+	Enjoy!
+	
+	John M Chambers 
+Phone: 617/364-2000x7304
+Email: ...{cthulhu,inmet,harvax,mit-eddie,mot[bos],rclex}!cdx39!{jc,news,root,usenet,uucp}
+Smail: Codex Corporation; Mailstop C1-30; 20 Cabot Blvd; Mansfield MA 02048-1193
+Telex: 922-443 CODEX A MNSF

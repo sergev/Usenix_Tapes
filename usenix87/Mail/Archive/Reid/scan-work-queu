@@ -1,0 +1,137 @@
+#! /bin/sh
+#
+# This program is run periodically from crontab to process the archive-server
+# work queue in arrival sequence.
+#
+PATH=#PATH#
+export PATH
+WORKDIR=#WRKQ#
+TMPFILEA=#TMP#/rec-arc.$$
+authority=#NOTIFY#
+LOGFILE2=#REQQ#/out.log
+LIMIT1=${1-200}
+LIMIT2=${2-400}
+
+trap "rm -f #TMP#/*.$$" 0 1 2 3 15
+
+cd $WORKDIR
+for WORKFILE in `ls -tr in.*`
+do
+    while true
+    do
+	LOAD1MIN=`uptime | sed -e 's/.*average: \([^ ]*\),.*$/\1/' -e 's/\.//g'`
+	if [ $LOAD1MIN -gt $LIMIT2 ]
+	then
+	    exit
+	else
+	    if [ $LOAD1MIN -gt $LIMIT1 ]
+	    then
+		echo Waiting for load factor to drop from $LOAD1MIN
+		sleep 30
+		continue
+	    else
+		break
+	    fi
+	fi
+    done
+    echo Processing `sed 1q < $WORKFILE`
+    NEWNAME=`cat $WORKDIR/seq`
+    NEWNAME=`expr 1 + $NEWNAME`
+    echo $NEWNAME > $WORKDIR/seq
+    NEWNAME="done.$NEWNAME"
+    tr 'A-Z' 'a-z' < $WORKFILE | \
+    awk '/^subject: / {SUBL=substr($0,9);
+			while (substr(SUBL,0,1)==" ") 
+			{SUBL=substr(SUBL,2);}
+			if (substr(SUBL,0,4)=="re: ") SUBL="";
+			next}
+       /^$/ {print; print SUBL; SUBL=""; next}
+       {print}' | \
+    awk 'BEGIN {InHeader=1; OFS=" "; Arguments=""; First = 1;
+	    BadFrom[0]="daemon"; BadFrom[3]="mailer-daemon"; BadFrom[6]="system";
+	    BadFrom[1]="root";
+    }
+    First == 1 {First = 0; Sender=$2; }
+    /^reply-to: / {if (!InHeader) next;
+		   ReplyTo=$2; for(i=3;i<=NF;i++) ReplyTo = ReplyTo " " $i;}
+    /^from: / {if (!InHeader) next;
+    	       From=$2; for(i=3;i<=NF;i++) From = From " " $i;
+	    for (i in BadFrom) {
+		if (index($0,BadFrom[i])) {Verb="abort";exit} }
+    }
+    /^$/ {InHeader=0; next}
+    InHeader==1 {next}
+    / *path/ {ReplyTo=$2; next}
+    /^ *send/ {if (Verb == "help" || Verb == "index") next;
+	      Verb="send";
+	      if ($2 == "help") {Verb="help"; next}
+	      else if ($2 == "index") {Verb="index";
+		 if (NF<3) Arguments = Arguments " .";
+		 }
+	      for(i=2;i<=NF;i++) {
+		if ($i != "to" && $i != "from" && $i != "for" && $i != "of" && $i != "the")
+		    Arguments = Arguments " " $i;
+	      }
+	      next
+	    }
+    /help/ {Verb="help"; Arguments=$0; next}
+    /^ *index/ {if (Verb == "send" || Verb=="help") next;
+	       Verb="index";
+	       if (NF<2) Arguments=Arguments " ."
+		  else {
+		  for(i=1;i<=NF;i++) {
+		    if ($i != "to" && $i != "from" && $i != "for" && $i != "of" && $i != "the")
+			Arguments = Arguments " " $i;
+		  }
+	      }
+	      next}
+    {if (Verb == "") {Verb="reject"; Arguments=""; next}}
+    END {print "REQUEST",'$$';
+    print "DATE", "'"`date`"'"
+# To exclude specific people, put the test here:
+    if (Sender=="on-the-shitlist") Verb="ignore";
+    if (ReplyTo != "")
+	    BestPath=ReplyTo
+      else {
+	    if (index(Sender,"!") > 0 && index(Sender,"@") == 0)
+		 BestPath=Sender
+	    else 
+		if (From == "") BestPath=Sender
+		    else BestPath=From
+	}
+    
+    if (substr(BestPath,length(BestPath)-4,5) == ".uucp") {
+	UUhost = substr(BestPath,1,length(BestPath)-5)
+	print | "echo PATH `#MAILPATH# " UUhost "`";
+    } else print "PATH",BestPath
+    if (From != "") print "FROM",From
+     else print "FROM",Sender;
+    print "ARGS",Arguments
+    if ((Verb!="abort") && (Verb!="send") && (Verb!="help") && (Verb!="index") && (Verb!="find") && (Verb != "ignore")) 
+	    Verb="reject";
+    print "VERB",Verb}' > $TMPFILEA
+    
+    if egrep -s '^VERB ignore' $TMPFILEA
+    then
+	echo "`date`" ignore >> $LOGFILE2
+	mv $WORKFILE $NEWNAME
+	exit 0
+    fi
+    
+    if egrep -s '^VERB abort' $TMPFILEA
+    then
+	cat $TMPFILEA $WORKFILE | Mail -s "this looks like trouble" $authority
+	rm -f $WORKFILE
+	exit 
+    fi
+    
+    # if it's anything but a "send" command, process immediately
+    if egrep -s '^VERB help|^VERB reject|^VERB index' $TMPFILEA
+    then
+	#BIN#/AQgetentry < $TMPFILEA;
+    #    rm -f $TMPFILEA
+    else
+	AQenqueue < $TMPFILEA
+    fi
+    mv $WORKFILE $NEWNAME
+done

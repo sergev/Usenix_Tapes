@@ -1,0 +1,121 @@
+.TH BATCHD 8 UofW
+.SH NAME
+batchd \- Run the batch daemon
+.SH SYNOPSIS
+.B /usr/lib/batchd
+.SH DESCRIPTION
+The batch daemon can run several independent queues of batch jobs.
+Each subdirectory under its spool directory defines one queue,
+with the name of the subdirectory being the name of the queue.
+Each such directory must contain a file named
+\fIprofile\fP which contains information pertaining to the execution
+of that queue.
+.PP
+Each directory is periodically searched for files beginning with the
+letters ``cf''.
+Characters following the cf are used for priority, jobs which compare
+lower in the ascii collating sequence are executed first.
+This file must be a directly executable file.
+The owner and group of this file are set from the submitter of the job;
+uid and gid are both set from this prior to execution of the file.
+The standard input of the shell file is from /dev/null; the standard
+output and error output default to being mailed back to the owner.
+Files with the letters ``of'' are output files corresponding to ``cf''
+files.  When the daemon starts any ``of'' files were assumed to have
+been running at the time of a crash; action is taken per the restart
+parameter.
+.PP
+The \fIprofile\fP contains lines of options, each line has keyword value,
+separated by whitespace.
+The following keywords are recognized:
+.IP exec
+If the option \fIoff\fP is given this queue is not examined.
+If the \fIoff\fP option is set while job(s)s are running the current job(s)
+is/are aborted immediately.
+If \fIdrain\fP is specified the current job(s) is permitted to terminate
+normally before stopping the queue.
+.IP maxexec
+A number indicating the maximum number of simultaneous jobs to run follows.
+.IP supervisor
+The name of a person to be send mail about this queue.
+If this starts with a slash, it is assumed to be a filename to append to.
+.IP mail
+A combination of the letters \fIsec\fP follow; mail is sent to the
+owner of a job at the start, end, or restart after crash of a job.
+.IP mailsupervisor
+As for the \fImail\fP keyword, only mail is sent to the controller of this
+queue as specified in the \fIsupervisor\fP keyword.
+This may be used for a console log if the supervisor is a filename.
+Note that both mail and mailsupervisor default to \fIec\fP.
+If user mail is turned off the output of the job is still always mailed back to the owner
+if there is any, or the status of the job is non-zero.
+.IP loadsched
+If the system 15 minute load average goes over the integer value specified
+then no new jobs will be scheduled until it goes under again.
+.IP loadstop
+If the system 5 minute load average goes over the integer value specified
+then all jobs in the queue will be sent stop signals until it again
+goes below this value whereupon it will be restarted.
+.IP nice
+A number indicating the nice to run jobs at.
+.IP restart
+If this keyword is given then if the system crashes while running a job
+it will be restarted.  If not only an error will be sent to the user.
+.IP time
+Followed by hh:[mm] hh[:mm] will cause the queue to be active only between
+those hours.  There may be multiple entries of this keyword.
+(Not yet implemented.)
+.IP day
+Followed by a day of the week will cause the queue to be active only on
+that day.  There may be multiple entries of this keyword.
+(Not yet implemented.)
+.SH "RESOURCE LIMITS"
+.PP
+The following words take both one and two numbers.
+If one number is given, only the current resource limit is set.
+If two numbers are given, the current and maximum limits are set.
+As explained in
+.IR setrlimit (2),
+a process is free to raise its current limit to the maximum limit.
+.IP rlimitcpu
+Current and maximum cpu, in seconds.
+.I Cpulimit
+is also a synonym for this keyword.
+.IP rlimitfsize
+Current and maximum file size, in bytes.
+.IP rlimitdata
+Current and maximum size of the data area, in bytes.
+.IP rlimitstack
+Current and maximum size of the stack, in bytes.
+.IP rlimitcore
+Current and maximum size of a core dump file, in bytes.
+.IP rlimitrss
+Current and maximum size of the virtual memory working set, in bytes.
+.SH "QUEUE MANAGEMENT"
+.PP
+When a batch job is submitted via
+.IR batch (1),
+a SIGALRM signal is sent to the daemon.
+The daemon will check
+queues which are eligible to run more jobs.
+It also checks for changed queue profile files.
+In the absence of any batch activity, this checking is done
+every 15 minutes.
+To wake up the daemon early, send it a SIGALRM signal.
+.PP
+If a directory disappears all jobs are aborted.
+If something strange happens to a particular queue that queue will be
+drained. (For example, the profile file is changed and has a syntax error.)
+.PP
+This programme is assumed to have been started by the /etc/rc and have no
+controlling tty; hence all errors are mailed to userid ``batch''.
+.SH "SEE ALSO"
+batch(1).
+.SH FILES
+.nf
+/usr/spool/batch	spool directory
+/usr/lib/batchd	batch daemon executable
+/usr/bin/batch	batch job submitter executable
+/usr/spool/batch/.cleanup	Cleanup script run by cron
+/usr/spool/pid/batchd	Process ID of batchd
+.fi

@@ -1,0 +1,1263 @@
+/***************************************************************/
+displayuniverse.c
+/***************************************************************/
+#include <exec/types.h>
+#include <exec/nodes.h>
+#include <exec/lists.h>
+#include <exec/memory.h>
+#include <hardware/blit.h>
+#include <hardware/custom.h>
+#include <graphics/gfx.h>
+#include <graphics/clip.h>
+#include <graphics/rastport.h>
+#include <graphics/view.h>
+#include <graphics/text.h>
+#include <graphics/gfxmacros.h>
+
+#include <graphics/layers.h>
+#include <intuition/intuition.h>
+#include <libraries/dos.h>
+#include "threed.h"
+
+#define FIXEDILLUMINATION
+
+extern UBYTE title[] ;
+
+extern struct Custom custom;
+ 
+extern struct TmpRas tmpras;
+
+extern struct BitMap bitmap0;
+extern struct BitMap bitmap1;
+
+extern struct RastPort r[2];
+extern struct RastPort *rp[2];
+
+extern struct RasInfo ri[2];
+extern struct RasInfo *rip[2];
+
+extern struct RasInfo *irip;
+
+extern WORD pcount ;
+extern WORD vcount ;
+
+extern UWORD frametoggle ;
+
+extern BPTR objectsegment ;
+
+extern struct Object *Amiga ;
+
+extern long GfxBase;
+extern long DosBase;
+
+extern int (*subroutines[])();
+
+/******************************************************************************/
+
+displayuniverse(view,screen,window,cameraobjectinfo,objectinfo)
+struct View *view;
+struct Screen *screen;
+struct Window *window;
+struct Objectinfo *cameraobjectinfo;
+struct Objectinfo *objectinfo;
+{
+    int argc = 0;
+    char *argv[MAXNUMARGS];
+    struct Objectinfo *thisobjectinfo; 
+
+/* set up parameter passing information for this display */
+
+    argv[0] = &thisobjectinfo;
+    argv[1] = subroutines;
+
+    argc = 2;
+
+/* PROCESS ALL THE OBJECTS IN THE LIST POINTED TO BY OBJECTINFO */
+
+    thisobjectinfo = objectinfo;
+
+    while(thisobjectinfo)
+    {
+   int thisobjecterror = FALSE;
+
+   /* process this object */
+
+   if(thisobjectinfo->objectprocedure)
+   {
+       int (*function)();
+
+       /* call the object's procedure */
+
+#ifdef ODEBUG
+       printf("do3d: object(%lx) procedure = %lx\n",thisobjectinfo,thisobjectinfo->objectprocedure);
+#endif
+       function = (thisobjectinfo->objectprocedure);
+       thisobjecterror = (*function)(argc,argv);
+    
+   }
+
+   /* begin - rotate the object matrix - temporary */
+
+   /* yaw(thisobjectinfo->objectmatrix,SINB,COSB); */
+
+   /* pitch(thisobjectinfo->objectmatrix,SINB,COSB); */
+
+   /* roll(thisobjectinfo->objectmatrix,SINB,COSB); */
+
+   /* end - rotate the object matrix - temporary */
+
+
+   /* this objects's universal reference display matrix is trivial */
+   
+   *thisobjectinfo->displaymatrix = *thisobjectinfo->objectmatrix;
+
+   /* this objects's universal reference position is trivial */
+   
+   *thisobjectinfo->displayposition = *thisobjectinfo->objectposition;
+
+   /* process any subobjects dependent on this object before diplaying it */
+
+   {
+       struct Objectinfo *thisubobjectinfo;
+
+       thisubobjectinfo = thisobjectinfo->subobjectinfo;
+
+       while(thisubobjectinfo)
+       {
+      /* display each subobject */
+
+      subdisplayuniverse(view,screen,window,cameraobjectinfo,thisobjectinfo,thisubobjectinfo);
+
+      thisubobjectinfo = thisubobjectinfo->nextobjectinfo;
+
+       }
+
+   }
+
+   {
+       struct Coordinate centerpoint;
+
+       /* concatenate this object's matrix with the camera matrix for display through camera viewpoint */
+
+       {
+      struct UV uv;
+        
+      uv = *thisobjectinfo->objectmatrix; /* copy matrix */
+           
+
+      cat(thisobjectinfo->displaymatrix,&uv,cameraobjectinfo->objectmatrix);
+
+       }
+      
+       subvect(cameraobjectinfo->objectposition,thisobjectinfo->displayposition,&centerpoint);
+
+       matrix(&centerpoint,&centerpoint,cameraobjectinfo->objectmatrix);
+       if ( (centerpoint.z > 0)
+          &&
+          (( (centerpoint.z) - ( (centerpoint.x < 0) ? -centerpoint.x : centerpoint.x )) > 0)
+          &&
+          (( (centerpoint.z) - ( (centerpoint.y < 0) ? -centerpoint.y : centerpoint.y )) > 0) )
+       {
+
+      /* rotate the 3d normals*/
+
+#ifdef DEBUG
+      printf("do3d: rotate the 3d normals\n");
+#endif
+
+      rotate(thisobjectinfo->displaymatrix,thisobjectinfo->objectnumnormals,thisobjectinfo->objectnormals,thisobjectinfo->objectbufnormals);
+
+      /* rotate, translate, and perspect the 3d points */
+
+      dopoints(thisobjectinfo->displaymatrix,&centerpoint,thisobjectinfo->objectnumpoints,thisobjectinfo->objectpoints,thisobjectinfo->objectbufpoints);
+
+       }
+       else
+       {
+           /* this object out of 45 degree frustrum */
+
+           thisobjectinfo = thisobjectinfo->nextobjectinfo;
+
+                /* so process the next object */
+
+           continue;
+            }
+
+   }
+        
+    /* draw the polygons by traversing the polygon list */
+
+    {
+   WORD polycount = 0;
+   WORD *nextcolor;
+   struct Coordinate **nextn;
+   struct Coordinate **nextp;
+   struct Coordinate *lastn = 0;
+   WORD endflag = FALSE;
+
+   /* intialize buffer pointers */
+
+   nextcolor = thisobjectinfo->colorbuf;
+   nextn = thisobjectinfo->nptrbuf;
+   nextp = thisobjectinfo->pptrbuf;
+
+   for(polycount = 0; polycount < thisobjectinfo->objectnumpolys; polycount++)
+   {
+       struct Polygon **np;
+       WORD vc;
+       struct Coordinate **v;
+       struct Coordinate *n;
+       struct Coordinate *c0;
+       struct Coordinate *c1;
+       struct Coordinate *c2;
+       WORD bright;
+       WORD firstx, firsty;
+
+#ifdef DEBUG
+       printf("poly %lx: \n",polycount);
+#endif
+       np = (thisobjectinfo->objectpolys+polycount);
+
+#ifdef DEBUG
+       printf("np = %lx\n",np);
+#endif
+
+#ifdef DEBUG
+       printf("vertexcount = %lx\n",(*np)->vertexcount);
+#endif
+
+#ifdef DRAWDEBUG
+       printf("poly %lx: color = %lx\n",polycount,*nextcolor);
+#endif
+
+       /* backface removal */
+
+       /* first, simple clip */
+       if (((*nextn)->z) > 0) 
+       {
+      nextcolor++;
+      nextn++;
+      nextp = (nextp+((*np)->vertexcount));
+      continue;
+       }
+       
+       /* now, test z component of dynamically computed polygon normal */
+       
+       c0 = (struct Coordinate *)(*(nextp));
+       c1 = (struct Coordinate *)(*(nextp+1));
+       c2 = (struct Coordinate *)(*(nextp+2));
+
+       /* if polygon's normal faces away from the screen, or is perpendicular, ignore it */
+
+#ifdef DRAWDEBUG
+       printf("c0->x = %lx c0->y = %lx\n",c0->x,c0->y); 
+       printf("c1->x = %lx c1->y = %lx\n",c1->x,c1->y); 
+       printf("c2->x = %lx c2->y = %lx\n",c2->x,c2->y); 
+#endif
+
+       /* fine clipping */
+
+       if (((smuls(((c1->x)-(c0->x)),((c2->y)-(c1->y))))-(smuls(((c2->x)-(c1->x)),((c1->y)-(c0->y))))) >= 0)
+       {
+      nextcolor++;
+      nextn++;
+      nextp = (nextp+((*np)->vertexcount));
+      continue;
+       }
+
+       /* illumination */
+
+#ifndef FIXEDILLUMINATION
+
+       bright = (((-(((*nextn)->x+(*nextn)->y))>>1)+(0x4000))>>11);
+#else
+
+       bright = (WORD)*nextcolor;
+#endif
+       /* ceiling */
+
+       bright = (bright > 0xF)?0xF:bright;
+
+#ifdef DRAWDEBUG
+       printf("poly %lx: bright = %lx\n",polycount,bright);
+#endif
+
+            for(vc = 0; vc < (*np)->vertexcount; vc++)
+       {
+      WORD x,y;
+#ifdef DRAWDEBUG
+      printf("vertex %lx : (thisobjectinfo->objectbufpoints+poff) = %lx\n",vc,*nextp);
+#endif
+
+#ifdef DRAWDEBUG
+      printf("(thisobjectinfo->objectbufpoints+poff)->x = %lx\n",(*nextp)->x);
+      printf("(thisobjectinfo->objectbufpoints+poff)->y = %lx\n",(*nextp)->y);
+      printf("(thisobjectinfo->objectbufpoints+poff)->z = %lx\n",(*nextp)->z);
+#endif
+
+      /* draw stuff in */
+
+#ifdef DRAWDEBUG
+      printf("SetAPen = bright\n");
+#endif
+      SetAPen(rp[frametoggle ^ 0x0001],bright);
+
+      if(vc == 0)
+      {
+
+          /* open this polygon */
+#ifdef DRAWDEBUG
+          printf("call areamove...\n");
+#endif
+          x = (((*nextp)->x)+(TMPWIDTH>>1));
+          y = (((*nextp)->y)+(TMPHEIGHT>>1));
+
+          if (x<0) x = 0;
+          if (y<0) y = 0;
+          if (x>TMPWIDTH-1) x = TMPWIDTH-1;
+          if (y>TMPHEIGHT-1) y = TMPHEIGHT-1;
+
+          x -= ( ( TMPWIDTH  - (window->RPort->BitMap->BytesPerRow<<3) ) >> 1 );
+          y -= ( ( TMPHEIGHT - (window->RPort->BitMap->Rows) ) >> 1 );
+
+          firstx = x;
+          firsty = y;
+
+          /* move into the raster that we're NOT displaying */
+
+#ifndef FIXEDILLUMINATION
+          if( (lastn != *nextn) && (endflag) )
+          {
+              AreaEnd(rp[frametoggle ^ 0x0001]);
+         endflag = FALSE;
+          }
+#endif
+
+          AreaMove(rp[frametoggle ^ 0x0001],x,y);
+
+      }
+      else
+      {
+
+          /* continue this polygon */
+#ifdef DRAWDEBUG
+          printf("call areadraw...\n");
+#endif
+          x = (((*nextp)->x)+(TMPWIDTH>>1));
+          y = (((*nextp)->y)+(TMPHEIGHT>>1));
+
+          if (x<0) x = 0;
+          if (y<0) y = 0;
+          if (x>TMPWIDTH-1) x = TMPWIDTH-1;
+          if (y>TMPHEIGHT-1) y = TMPHEIGHT-1;
+
+          x -= ( ( TMPWIDTH  - (window->RPort->BitMap->BytesPerRow<<3) ) >> 1 );
+          y -= ( ( TMPHEIGHT - (window->RPort->BitMap->Rows) ) >> 1 );
+
+          /* draw into the raster that we're NOT displaying */
+
+          AreaDraw(rp[frametoggle ^ 0x0001],x,y);
+
+      }
+
+      /* increment the nextp pointer */
+
+      nextp++;
+
+        }
+
+       /* close this polygon */
+
+#ifdef DRAWDEBUG
+       printf("call areaend...\n");
+#endif
+       /* end raster that we're NOT displaying (or continue collecting polygons) */
+
+       /* last polygon displayed is this one */
+
+       lastn = *nextn;
+
+#ifndef FIXEDILLUMINATION
+       if(lastn  == *(nextn+1))
+       {
+      /* last polygon displayed has same normal as next polygon to be displayed */
+
+#ifdef DRAWDEBUG
+      printf("last poly displayed has same normal as next polygon to be displayed...draw\n");
+#endif
+      /* draw, but do not terminate this polygon in this sequence */
+
+      /* note : need graphics 28.5 or greater to do following trick ! */
+
+      AreaDraw(rp[frametoggle ^ 0x0001],firstx,firsty);
+      endflag = TRUE;
+
+      /* if graphics 28.4 or less  do this standard thing */
+
+      /* AreaEnd(rp[frametoggle ^ 0x0001]); */
+      /* endflag = FALSE; */
+       }
+       else
+       {
+      /* last polygon displayed has different normal from next polygon to be displayed */
+
+#ifdef DRAWDEBUG
+      printf("last poly displayed has deffernt normal from next polygon to be displayed...end\n");
+#endif
+      /* terminate this polygon sequence */
+
+      AreaEnd(rp[frametoggle ^ 0x0001]);
+      endflag = FALSE;
+
+       }
+#else
+       {
+      /* terminate this polygon sequence */
+
+      AreaEnd(rp[frametoggle ^ 0x0001]);
+      endflag = FALSE;
+
+       }
+#endif
+
+       /* increment nextcolor, nextn pointers */
+
+       nextcolor++;
+       nextn++;
+       
+   }
+
+   if(endflag)
+   {
+       /* terminate series of "same normal" polygons after polyloop exit */
+
+#ifdef DRAWDEBUG
+       printf("close last polygon in series...\n");
+#endif
+       AreaEnd(rp[frametoggle ^ 0x0001]);
+   }
+   
+    }
+
+    thisobjectinfo = thisobjectinfo->nextobjectinfo;
+
+    } /* end while (thisobject) */
+
+}
+/* END OF PROCESSING ALL THE OBJECTS */
+/***************************************************************/
+init.c
+/***************************************************************/
+#include <exec/types.h>
+#include <exec/nodes.h>
+#include <exec/lists.h>
+#include <exec/memory.h>
+#include <hardware/blit.h>
+#include <hardware/custom.h>
+#include <graphics/gfx.h>
+#include <graphics/clip.h>
+#include <graphics/rastport.h>
+#include <graphics/view.h>
+#include <graphics/text.h>
+#include <graphics/gfxmacros.h>
+
+#include <graphics/layers.h>
+#include <intuition/intuition.h>
+#include "threed.h"
+
+/* #define DEBUG */
+/* #define ODEBUG */
+/* #define DEBUGDRAW */
+/* #define TICKDEBUG */
+/* #define TICKPRINT */
+#define FIXEDILLUMINATION
+#define CYCLECOLORS
+
+#ifndef FIXEDILLUMINATION
+
+extern UWORD colorpalette[];
+
+#else
+
+extern UWORD colorpalette[];
+
+#endif
+
+extern UBYTE title[];
+
+extern struct Custom custom;
+ 
+extern struct TmpRas tmpras;
+
+extern struct BitMap bitmap0;
+extern struct BitMap bitmap1;
+
+extern struct RastPort r[];
+extern struct RastPort *rp[];
+
+extern struct RasInfo ri[];
+extern struct RasInfo *rip[];
+
+extern struct RasInfo *irip;
+
+extern BOOL initobject;
+
+extern WORD pcount;
+extern WORD vcount;
+
+extern UWORD frametoggle;
+
+extern long GfxBase;
+
+/******************************************************************************/
+
+positioninit(c)
+struct Coordinate *c;
+{
+    c->x = 0;
+    c->y = 0;
+    c->z = 0;
+}
+
+matrixinit(um)
+struct UV *um;
+{
+    um->uv11 = 0x4000;
+    um->uv12 = 0;
+    um->uv13 = 0;
+    um->uv21 = 0;
+    um->uv22 = 0x4000;
+    um->uv23 = 0;
+    um->uv31 = 0;
+    um->uv32 = 0;
+    um->uv33 = 0x4000;
+}
+
+objectinit(view,screen,window,objectinfo,object)
+struct View *view;
+struct Screen *screen;
+struct Window *window;
+struct Objectinfo *objectinfo;
+struct Object *object;
+{
+   WORD *nextcolor;
+   struct Coordinate **nextn;
+   struct Coordinate **nextp;
+   int error = FALSE;
+
+   /* initialize */
+
+   objectinfo->subobjectinfo = NULL;
+   objectinfo->objectmatrix = object->umatrix;
+   objectinfo->objectposition = object->position;
+   objectinfo->objectnumpoints = object->pointcount;
+   objectinfo->objectpoints = object->pointstart;
+   objectinfo->objectnumnormals = object->normalcount;
+   objectinfo->objectnormals = object->normalstart;
+   objectinfo->objectnumpolys = object->polycount;
+   objectinfo->objectpolys = object->polystart;
+   objectinfo->objectprocedure = object->procedure;
+
+    if ((objectinfo->displaymatrix= (struct UV *)AllocMem(sizeof(struct UV), MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUG
+       printf("initobject: can't allocate objectinfo->displaymatrix...\n");
+#endif
+       return(FALSE);
+   }
+
+    if ((objectinfo->displayposition= (struct UV *)AllocMem(sizeof(struct Coordinate), MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUG
+       printf("initobject: can't allocate objectinfo->displayposition...\n");
+#endif
+       return(FALSE);
+   }
+
+   if (objectinfo->objectnumpoints)
+
+   if ((objectinfo->objectbufpoints = (struct Coordinate *)AllocMem(objectinfo->objectnumpoints * sizeof(struct Coordinate), MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUG
+       printf("initobject: can't allocate objectinfo->objectbufpoints...\n");
+#endif
+       objectinfo->objectbufpointsize = 0;
+       return(FALSE);
+   }
+   else
+   {
+       objectinfo->objectbufpointsize = objectinfo->objectnumpoints * sizeof(struct Coordinate);
+   }
+
+   if (objectinfo->objectnumnormals)
+
+   if ((objectinfo->objectbufnormals = (struct Coordinate *)AllocMem(objectinfo->objectnumnormals * sizeof(struct Coordinate), MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUG
+       printf("initobject: can't allocate objectinfo->objectbufnormals ...\n");
+#endif
+       objectinfo->objectbufnormalsize = 0;
+       return(FALSE);
+   }
+   else
+   {
+       objectinfo->objectbufnormalsize = objectinfo->objectnumnormals * sizeof(struct Coordinate);
+   }
+
+   /* traverse the polygon list and initialize buffers for color, poff lists */
+
+   for(pcount = 0; pcount < objectinfo->objectnumpolys; pcount++)
+   {
+       struct Polygon **np;
+
+       np = (objectinfo->objectpolys+pcount);
+
+       vcount += (*np)->vertexcount;
+   }
+
+   if( (objectinfo->pptrbuf = (APTR)AllocMem((sizeof(APTR)*(vcount+1)),MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUGDRAW
+       printf("draw: can't allocate objectinfo->pptrbuf...\n");
+#endif
+         objectinfo->pptrbufsize = 0;
+       return(FALSE);
+   }
+   else
+   {
+         objectinfo->pptrbufsize = sizeof(APTR)*(vcount+1);
+   }
+
+   if( (objectinfo->nptrbuf = (APTR)AllocMem((sizeof(APTR)*(objectinfo->objectnumpolys+1)),MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUGDRAW
+       printf("draw: can't allocate objectinfo->nptrbuf...\n");
+#endif
+         objectinfo->nptrbufsize = 0;
+       return(FALSE);
+   }
+   else
+   {
+         objectinfo->nptrbufsize = sizeof(APTR)*(objectinfo->objectnumpolys+1);
+   }
+
+   if( (objectinfo->colorbuf = (APTR)AllocMem((sizeof(WORD)*(objectinfo->objectnumpolys+1)),MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+   {
+#ifdef DEBUGDRAW
+       printf("draw: can't allocate objectinfo->colorbuf...\n");
+#endif
+         objectinfo->colorbufsize = 0;
+       return(FALSE);
+   }
+   else
+   {
+         objectinfo->colorbufsize = sizeof(WORD)*(objectinfo->objectnumpolys+1);
+   }
+
+
+   /* intialize buffer pointers */
+
+   nextcolor = objectinfo->colorbuf;
+   nextn = objectinfo->nptrbuf;
+   nextp = objectinfo->pptrbuf;
+
+   for(pcount = 0; pcount < objectinfo->objectnumpolys; pcount++)
+   {
+       struct Polygon **np;
+       WORD vc;
+       struct Coordinate **v;
+       struct Coordinate *n;
+       long noff;
+       WORD color;
+
+#ifdef DEBUG
+       printf("poly %lx: \n",pcount);
+#endif
+       np = (objectinfo->objectpolys+pcount);
+
+#ifdef DEBUG
+       printf("np = %lx\n",np);
+#endif
+       v = (*np)->vertexstart;
+       n = (*np)->normalvector;
+       noff = n - (*(objectinfo->objectnormals));
+       color = (*np)->polycolor;
+
+#ifdef DEBUG
+       printf("v = %lx\n", v);
+       printf("vertexcount = %lx\n",(*np)->vertexcount);
+       printf("n = %lx\n", n);
+#endif
+
+       *nextcolor++ = color;
+       *nextn++ = (struct Coordinate *)(objectinfo->objectbufnormals+noff);
+
+#ifdef DEBUGDRAW
+       printf("poly %lx: color = %lx\n",pcount,color);
+#endif
+
+#ifdef DEBUGDRAW
+       printf("(objectinfo->objectbufnormals+noff)->x = %lx\n",(objectinfo->objectbufnormals+color)->x);
+       printf("(objectinfo->objectbufnormals+noff)->y = %lx\n",(objectinfo->objectbufnormals+color)->y);
+       printf("(objectinfo->objectbufnormals+noff)->z = %lx\n",(objectinfo->objectbufnormals+color)->z);
+#endif
+
+            for(vc = 0; vc < (*np)->vertexcount; vc++)
+       {
+      long poff;
+#ifdef DEBUG
+      printf("v = %lx\n", v);
+      printf("vc = %lx\n",vc);
+      printf("v+vc = %lx\n",v+vc);
+      printf("(*(v+vc)) = %lx\n",(*(v+vc)));
+#endif
+      poff = (*(v+vc)) - (*(objectinfo->objectpoints));
+      /* poff = (long)(*(v+vc)); */
+      *nextp++ = (struct Coordinate *)(objectinfo->objectbufpoints+poff);
+
+#ifdef DEBUGDRAW
+      printf("vertex %lx : poff = %lx\n",vc,poff);
+#endif
+
+#ifdef DEBUGDRAW
+      printf("(objectinfo->objectbufpoints+poff)->x = %lx\n",(objectinfo->objectbufpoints+poff)->x);
+      printf("(objectinfo->objectbufpoints+poff)->y = %lx\n",(objectinfo->objectbufpoints+poff)->y);
+      printf("(objectinfo->objectbufpoints+poff)->z = %lx\n",(objectinfo->objectbufpoints+poff)->z);
+#endif
+       }
+
+   }
+
+   /* terminate pointer buffer arrays with a null pointer */
+
+   *nextcolor = 0;   
+   *nextn = 0;   
+   *nextp = 0;   
+
+   /* allocate subobjectinfo structures dependent on this object */
+
+   {
+       struct Object *ob;
+
+       /* for all the objects in this objectsegment */
+
+       for (ob = object->subobject ; ob; ob = ob->nextobject)
+       {
+      struct Objectinfo *thisubobjectinfo;
+
+#ifdef ODEBUG
+      printf("objectinit: allocate objectinfo for subobject(%lx) ",ob);
+#endif
+
+      /* allocate an objectinfo structure for the current object */
+
+      if ((thisubobjectinfo = (struct Objectinfo *)AllocMem(sizeof(struct Objectinfo),MEMF_PUBLIC|MEMF_CLEAR)) == NULL) 
+      {
+          return(error); 
+      }
+
+#ifdef ODEBUG
+      printf("= %lx\n",thisubobjectinfo);
+#endif
+      /* initialize the buffers for the current 3d subobject */
+
+      if(!objectinit(view,screen,window,thisubobjectinfo,ob))
+      {
+         return(error);
+      }
+
+      /* make this objectinfo last on the subobjectinfo list */
+      {
+          struct Objectinfo **soipp;
+
+          soipp =  &objectinfo->subobjectinfo;
+          while (*soipp)
+          {
+         soipp = &((*soipp)->nextobjectinfo);
+          }
+          *soipp = thisubobjectinfo;
+           thisubobjectinfo->nextobjectinfo = NULL;
+      }
+
+       }
+
+   }
+
+#ifdef ODEBUG
+    printf("objectinit: &objectinfo->subobjectinfo = %lx\n",&objectinfo->subobjectinfo );
+    {
+   struct Objectinfo *soip;
+
+   printf("    SUBOBJECTINFO LIST     \n");
+   printf("_________________________\n");
+
+   for (soip = objectinfo->subobjectinfo; soip; soip = soip->nextobjectinfo)
+          printf("    subobjectinfo(%lx)\n",soip);
+
+   printf("_________________________\n");
+    }
+#endif
+
+        return(TRUE);
+}
+/***************************************************************/
+joystick.c
+/***************************************************************/
+#include <exec/types.h>
+#include <exec/memory.h>
+#include <graphics/gfx.h>
+#include <devices/gameport.h>
+#include <devices/inputevent.h>
+#include <intuition/intuition.h>
+#include <intuition/intuitionbase.h>
+#include "joystick.h"
+
+/*#define DEBUG*/
+/*#define DEBUGSTATE*/
+
+#define MAXNUMEVENTS 2
+
+extern LONG IntuitionBase;
+
+struct IntuiText ErrorText= {   /* text for error-requester */
+    0, 1, JAM1,   /* FrontPen, BackPen, DrawMode */
+    10, 10,      /* LeftEdge, TopEdge */
+    NULL,      /* ITextFont */
+    "3D:   Software Error:", /* IText */
+    NULL       /* NextText */
+};
+
+struct IntuiText AbortMessage= {   /* more text for error-message requester */
+    0, 1, JAM1,   /* FrontPen, BackPen, DrawMode */
+    11, 45,      /* LeftEdge, TopEdge */
+    NULL,      /* ITextFont */
+    "Select ABORT to exit", /* IText */
+    NULL      /* NextText */
+};
+
+struct IntuiText ResumeMessage= {   /* more text for error-message requester */
+    0, 1, JAM1,   /* FrontPen, BackPen, DrawMode */
+    11, 45,      /* LeftEdge, TopEdge */
+    NULL,      /* ITextFont */
+    "Select RESUME to continue", /* IText */
+    NULL      /* NextText */
+};
+
+struct IntuiText AbortText= {   /* more text for error-requester */
+    0, 1, JAM1,   /* FrontPen, BackPen, DrawMode */
+    6, 4,      /* LeftEdge, TopEdge */
+    NULL,      /* ITextFont */
+    "ABORT",      /* IText */
+    NULL      /* NextText */ 
+};
+
+struct IntuiText ResumeText= {   /* more text for error-requester */
+    0, 1, JAM1,   /* FrontPen, BackPen, DrawMode */
+    6, 4,      /* LeftEdge, TopEdge */
+    NULL,      /* ITextFont */
+    "RESUME",      /* IText */
+    NULL      /* NextText */ 
+};
+
+extern struct MsgPort *CreatePort();
+extern DeletePort();
+extern struct IOStdReq *CreateStdIO();      
+extern DeleteStdIO();      
+
+/******************************************************************************/
+
+ULONG set_flags(joystick_data,flags)      
+struct InputEvent *joystick_data;
+ULONG flags;
+{
+   SHORT xmove, ymove;
+
+   xmove = joystick_data->ie_X;
+   ymove = joystick_data->ie_Y;
+
+   switch(ymove)
+   {
+       case(-1):   flags |=  BUTTON_FORWARD;
+             flags &= ~BUTTON_BACK;
+         break;
+       case( 0):   flags &= ~BUTTON_FORWARD;
+             flags &= ~BUTTON_BACK;
+         break;
+       case( 1):   flags &= ~BUTTON_FORWARD;
+             flags |=  BUTTON_BACK;
+         break;
+       default:   break;
+   }
+
+   switch(xmove)
+   {
+       case(-1):   flags |=  BUTTON_LEFT;
+             flags &= ~BUTTON_RIGHT;
+         break;
+       case( 0):   flags &= ~BUTTON_LEFT;
+             flags &= ~BUTTON_RIGHT;
+         break;
+       case( 1):   flags &= ~BUTTON_LEFT;
+             flags |=  BUTTON_RIGHT;
+         break;
+       default:   break;
+   }
+
+   if(joystick_data->ie_Code != IECODE_NOBUTTON)
+   {
+       if(joystick_data->ie_Code == IECODE_LBUTTON) 
+       {
+      if (!(flags & ACTION))
+      {
+          flags |=  BUTTON_DOWN;
+          flags &= ~NO_BUTTON;
+      }
+       }
+       if(joystick_data->ie_Code == (IECODE_LBUTTON + IECODE_UP_PREFIX))
+       {
+      if (!(flags & BUTTON_DOWN))
+      {
+          flags |=  BUTTON_UP;
+          flags &= ~NO_BUTTON; 
+      }
+      else
+      {
+          if (!(flags & ACTION))
+          {
+         flags |=  ACTION;
+         flags |=  BUTTON_UP; 
+         flags &= ~NO_BUTTON;
+          }
+          else
+          {
+         flags |=  BUTTON_UP;
+         flags &= ~NO_BUTTON; 
+          }
+      }
+       }
+   }
+   else
+   {
+       if (!(flags & ACTION))
+       {
+      if (!(flags & (BUTTON_DOWN | BUTTON_UP)))
+      {
+          flags |=  NO_BUTTON;
+      }
+       }
+   }
+
+   if (flags & ACTION)
+   {
+       UBYTE actioncount;
+
+       actioncount = ((flags & 0xFF00) >> 8 );
+       actioncount += 1;
+       flags = ( (flags & 0xFFFF00FF) | (actioncount<<8) );
+       flags &= ~BUTTON_DOWN;
+       flags &= ~BUTTON_UP;
+       flags &= ~ACTION;
+   }
+
+#ifdef DEBUG
+   switch(ymove) 
+   {
+       case (-1):  switch(xmove)
+         {
+             case(-1):   
+#ifdef DEBUG
+               printf("NW");
+#endif
+               break;
+             case( 0):   
+#ifdef DEBUG
+               printf("N ");
+#endif
+               break;
+             case( 1):   
+#ifdef DEBUG
+               printf("NE");
+#endif
+               break;
+             default:   break;
+         }
+         break;
+       case ( 0):  switch(xmove)
+         {
+             case(-1):   
+#ifdef DEBUG
+               printf(" W");
+#endif
+               break;
+             case( 0):   
+#ifdef DEBUG
+               printf("  ");
+#endif
+               break;
+             case( 1):   
+#ifdef DEBUG
+               printf(" E");
+#endif
+               break;
+             default:   break;
+         }
+         break;
+       case ( 1):  switch(xmove)
+         {
+             case(-1):   
+#ifdef DEBUG
+                   printf("SW");
+#endif
+               break;
+             case( 0):   
+#ifdef DEBUG
+               printf("S ");
+#endif
+               break;
+             case( 1):   
+#ifdef DEBUG
+               printf("SE");
+#endif
+               break;
+             default:   break;
+         }
+         break;
+       default:   break;
+   }
+#endif
+
+#ifdef DEBUG
+   if(joystick_data->ie_Code != IECODE_NOBUTTON)
+   {
+       if(joystick_data->ie_Code == IECODE_LBUTTON) 
+#ifdef DEBUG
+       printf("!");
+#endif
+       if(joystick_data->ie_Code == (IECODE_LBUTTON + IECODE_UP_PREFIX))
+#ifdef DEBUG
+       printf("#");
+#endif
+   }
+   else
+   {
+#ifdef DEBUG
+       /* printf(" "); */
+#endif
+   }
+#endif
+
+   return(flags);
+}
+
+struct IOStdReq *open_joystick()
+{
+    struct MsgPort *joystick_msg_port;
+    struct IOStdReq *joystick_io_request;
+    BYTE *joystick_eventbuf;
+    struct Message *message;
+    LONG error = FALSE;
+
+#ifdef DEBUG
+    printf("joystick...entering\n");
+#endif
+
+    if ( (IntuitionBase = OpenLibrary("intuition.library", 31)) == NULL)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   exit(0);
+    }
+
+    /* allocate memory for the joystick event buffer */
+
+    if ( (joystick_eventbuf = (BYTE *)AllocMem(sizeof(struct InputEvent)*MAXNUMEVENTS,MEMF_PUBLIC|MEMF_CLEAR)) == NULL)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   exit(0);
+    }
+
+    /* provide a port for the IO request/response */
+
+    joystick_msg_port = CreatePort("joystickport",0);   
+
+    if(joystick_msg_port == 0)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   exit(-1);
+    }
+
+    /* make an io request block for communicating with the joystick device */
+
+    joystick_io_request = CreateStdIO(joystick_msg_port);     
+
+    if(joystick_io_request == 0)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   DeletePort(joystick_msg_port);
+   exit(-2);
+    }
+
+    /* open the gameport device for access, unit 1 is right port */
+
+    if(OpenDevice("gameport.device",1,joystick_io_request,0))
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   FreeMem(joystick_eventbuf,sizeof(struct InputEvent) * MAXNUMEVENTS);
+   DeleteStdIO(joystick_io_request);
+   DeletePort(joystick_msg_port);
+   exit(-4);
+    }
+
+    /* set the device type to absolute joystick */
+
+    if (set_controller_type(joystick_io_request,GPCT_ABSJOYSTICK) != 0)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   FreeMem(joystick_eventbuf,sizeof(struct InputEvent) * MAXNUMEVENTS);
+   DeleteStdIO(joystick_io_request);
+   DeletePort(joystick_msg_port);
+   exit(-4);
+    }
+
+    /* trigger on button-down, button-up, front, back, left, right, center  */
+
+    if (set_controller_trigger(joystick_io_request,GPTF_UPKEYS+GPTF_DOWNKEYS,1,1,1) != 0)
+    {
+   ErrorText.NextText = &AbortMessage;
+   AutoRequest(NULL, &ErrorText, NULL, &AbortText, 0, 0, 330, 75);
+   FreeMem(joystick_eventbuf,sizeof(struct InputEvent) * MAXNUMEVENTS);
+   DeleteStdIO(joystick_io_request);
+   DeletePort(joystick_msg_port);
+   exit(-4);
+    }
+
+    /* SETUP THE IO MESSAGE BLOCK FOR THE ACTUAL DATA READ */
+
+    /* gameport.device replies to this task */
+    joystick_io_request->io_Message.mn_ReplyPort = joystick_msg_port;
+
+    /* from now on, just read input events */
+    joystick_io_request->io_Command = GPD_READEVENT;   
+    
+    /* into the input buffer, one at a time. */
+    joystick_io_request->io_Data = joystick_eventbuf;      
+
+    /* read num events each time we go back to the joystickport */
+    joystick_io_request->io_Length = sizeof(struct InputEvent)* MAXNUMEVENTS;   
+
+    return(joystick_io_request);
+
+}
+
+
+ULONG test_joystick(joystick_io_request,state)
+struct IOStdReq *joystick_io_request;
+ULONG state;
+{
+    ULONG flags;
+    struct InputEvent *joystick_data;
+
+    /* test the joystick */
+   
+    if (DoIO(joystick_io_request)) return(state);
+
+    flags = state;
+
+    for (joystick_data = joystick_io_request->io_Data; joystick_data; joystick_data = joystick_data->ie_NextEvent)
+    {
+   flags = set_flags(joystick_data,flags);   
+    }
+    state = flags;
+
+#ifdef DEBUGSTATE
+    printf("\nstate: %4lx",state);
+#endif
+
+    return(state);
+
+}
+
+
+close_joystick(joystick_io_request)
+struct IOStdReq *joystick_io_request;
+{
+
+    /* close up joystick device */
+    
+    CloseDevice(joystick_io_request);
+
+    /* clean up */
+
+    FreeMem(joystick_io_request->io_Data,sizeof(struct InputEvent) * MAXNUMEVENTS);
+    
+    DeletePort(joystick_io_request->io_Message.mn_ReplyPort);
+
+    DeleteStdIO(joystick_io_request);
+
+
+}
+
+
+int set_controller_type(ior,type)
+struct IOStdReq *ior;
+BYTE type;
+{
+   ior->io_Command = GPD_SETCTYPE;   
+   ior->io_Length = 1;
+
+   /* set type of controller to "type" */
+   ior->io_Data = &type;
+
+#ifdef DEBUG
+   printf("joystick:set_controller_type\n");
+#endif
+   return(DoIO(ior));
+}
+
+int set_controller_trigger(ior,keys,timeout,xdelta,ydelta)
+struct IOStdReq *ior;
+UWORD keys,timeout,xdelta,ydelta;
+{
+   struct GamePortTrigger gpt;
+
+   ior->io_Command = GPD_SETTRIGGER;   
+   ior->io_Length = sizeof(gpt);
+   ior->io_Data = &gpt;
+   gpt.gpt_Keys = keys;
+   gpt.gpt_Timeout = timeout;
+   gpt.gpt_XDelta = xdelta;
+   gpt.gpt_YDelta = ydelta;
+
+#ifdef DEBUG
+   printf("joystick:set_controller_trigger\n");
+#endif
+   return(DoIO(ior));
+}
+
+/*
+main()
+{
+    ULONG state = 0;
+    struct IOStdReq *ior;
+
+    if ((ior = open_joystick()) == NULL)
+    {
+   exit(-1);
+    }
+    else
+    {
+       while ( ( (state & 0xFF00) >> 8 ) != 0xF )
+       {
+       state = test_joystick(ior,state);      
+       }
+       close_joystick(ior);
+    }
+    exit(0);
+}
+*/
+/***************************************************************/

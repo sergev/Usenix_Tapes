@@ -1,0 +1,312 @@
+Path: plus5!wucs1!wucs2!sw1e!pyuxww!sabre!faline!ulysses!cbosgd!mirror!sources-request
+From: sources-request@mirror.TMC.COM
+Newsgroups: mod.sources
+Subject: v07i094:  Two CSH patches
+Message-ID: <1275@mirror.TMC.COM>
+Date: 19 Jan 87 14:13:18 GMT
+Sender: rs@mirror.TMC.COM
+Lines: 301
+Approved: mirror!rs
+Posted: Mon Jan 19 09:13:18 1987
+
+Submitted by: Arnold D. Robbins <emoryu1!arnold>
+Mod.sources: Volume 7, Issue 94
+Archive-name: csh.patch
+
+[  These changes slip right into the 4.2 CSH also.  --r$  ]
+
+Here are context diffs for changes I have made to the 4.3 csh. There are two
+changes. 1) If it is a login shell, the csh will read the file /etc/login
+before reading either ~/.chsrc or ~/.login. This allows the system administrator
+to do global stuff in one file. It is very useful in my environment.
+
+The second change is a new csh variable, 'autologout', which, if set, is the
+number of minutes the csh will wait when prompting, before timing out. We use
+it to keep idle users from tieing up our ports.
+
+Enjoy,
+
+Arnold Robbins
+CSNET:	arnold@emory	BITNET:	arnold@emoryu1
+ARPA:	arnold%emory.csnet@csnet-relay.arpa
+UUCP:	{ akgua, decvax, gatech, sb1, sb6, sunatl }!emory!arnold
+One of these days:	arnold@EMORY.EDU
+---- copy the csh man page to /usr/src/bin/csh, cut here, feed to patch ------
+RCS file: RCS/csh.1,v
+retrieving revision 1.1
+diff -c -r1.1 csh.1
+*** /tmp/,RCSt1006418	Wed Oct 22 17:10:28 1986
+--- csh.1	Wed Oct 22 17:07:53 1986
+***************
+*** 1,7 ****
+  .\"
+! .\" $Header: csh.1,v 1.1 86/10/22 16:55:48 root Exp $
+  .\" 
+  .\" $Log:	csh.1,v $
+  .\" Revision 1.1  86/10/22  16:55:48  root
+  .\" Initial revision
+  .\" 
+--- 1,10 ----
+  .\"
+! .\" $Header: csh.1,v 1.2 86/10/22 16:57:22 root Locked $
+  .\" 
+  .\" $Log:	csh.1,v $
++ .\" Revision 1.2  86/10/22  16:57:22  root
++ .\" Documented /etc/login and autologout variable. ADR.
++ .\" 
+  .\" Revision 1.1  86/10/22  16:55:48  root
+  .\" Initial revision
+  .\" 
+***************
+*** 66,71 ****
+--- 69,88 ----
+  .IR tset (1)
+  there.
+  .PP
++ .B NOTE:
++ The
++ .I csh
++ has been modified locally to read the file
++ .B /etc/login
++ as the very first file it reads, if it is a login shell.
++ This happens
++ .I before
++ reading the user's `.cshrc' and `.login' files.
++ After
++ .B /etc/login
++ has been read, the other `dot' files are processed as described
++ in the previous paragraph.
++ .PP
+  In the normal case, the shell will then begin reading commands from the
+  terminal, prompting with `% '.
+  Processing of arguments and the use of the shell to process files
+***************
+*** 1890,1895 ****
+--- 1907,1924 ----
+  positional parameters are substituted, i.e. `$1' is replaced by
+  `$argv[1]', etc.
+  .TP 15
++ .B autologout
++ \c
++ If set by the user, contains the number of
++ .I minutes
++ that the shell should wait for input, when it is prompting.
++ If that number of minutes passes without any input being read, the shell
++ will timeout and exit.
++ (This is most conveniently set in
++ .B /etc/login
++ by the system administrator to prevent idle users from tieing up
++ scarce terminal lines.)
++ .TP 15
+  .B cdpath
+  \c
+  Gives a list of alternate directories searched to find subdirectories
+***************
+*** 2249,2254 ****
+--- 2278,2284 ----
+  .SH FILES
+  .ta 1.75i
+  .nf
++ /etc/login	Read at beginning of execution by login shell, before `.cshrc'.
+  ~/.cshrc	Read at beginning of execution by each shell.
+  ~/.login	Read by login shell, after `.cshrc' at login.
+  ~/.logout	Read by login shell, at logout.
+RCS file: RCS/sh.c,v
+retrieving revision 1.1
+diff -c -r1.1 sh.c
+*** /tmp/,RCSt1006913	Wed Oct 22 17:56:12 1986
+--- sh.c	Wed Oct 22 17:53:41 1986
+***************
+*** 1,9 ****
+  #ifndef lint
+! static char *RCSid = "$Header: sh.c,v 1.1 86/08/11 12:10:26 root Exp $";
+  #endif
+  
+  /*
+   * $Log:	sh.c,v $
+   * Revision 1.1  86/08/11  12:10:26  root
+   * Initial revision
+   * 
+--- 1,12 ----
+  #ifndef lint
+! static char *RCSid = "$Header: sh.c,v 1.2 86/09/22 15:05:12 root Locked $";
+  #endif
+  
+  /*
+   * $Log:	sh.c,v $
++  * Revision 1.2  86/09/22  15:05:12  root
++  * Changes to support /etc/login reading upon startup. ADR.
++  * 
+   * Revision 1.1  86/08/11  12:10:26  root
+   * Initial revision
+   * 
+***************
+*** 34,39 ****
+--- 37,43 ----
+  char	*pathlist[] =	{ ".", "/usr/ucb", "/bin", "/usr/bin", 0 };
+  char	*dumphist[] =	{ "history", "-h", 0, 0 };
+  char	*loadhist[] =	{ "source", "-h", "~/.history", 0 };
++ char	*etclogin[] =	{ "source", "/etc/login", 0 };
+  char	HIST = '!';
+  char	HISTSUB = '^';
+  bool	nofile;
+***************
+*** 332,337 ****
+--- 336,343 ----
+  	haderr = 0;		/* In case second time through */
+  	if (!fast && reenter == 0) {
+  		reenter++;
++ 		if (loginsh)
++ 			dosource(etclogin);	/* ADR */
+  		/* Will have value("home") here because set fast if don't */
+  		srccat(value("home"), "/.cshrc");
+  		if (!fast && !arginp && !onelflg && !havhash)
+===================================================================
+RCS file: RCS/sh.lex.c,v
+retrieving revision 1.1
+diff -c -r1.1 sh.lex.c
+*** /tmp/,RCSt1006913	Wed Oct 22 17:56:19 1986
+--- sh.lex.c	Wed Oct 22 17:53:40 1986
+***************
+*** 1,9 ****
+  #ifndef lint
+! static char *RCSid = "$Header: sh.lex.c,v 1.1 86/09/22 13:54:31 root Exp $";
+  #endif
+  
+  /*
+   * $Log:	sh.lex.c,v $
+   * Revision 1.1  86/09/22  13:54:31  root
+   * Initial revision
+   * 
+--- 1,12 ----
+  #ifndef lint
+! static char *RCSid = "$Header: sh.lex.c,v 1.2 86/09/22 15:05:44 root Locked $";
+  #endif
+  
+  /*
+   * $Log:	sh.lex.c,v $
++  * Revision 1.2  86/09/22  15:05:44  root
++  * Changes to support autologout. ADR.
++  * 
+   * Revision 1.1  86/09/22  13:54:31  root
+   * Initial revision
+   * 
+***************
+*** 21,27 ****
+--- 24,34 ----
+  
+  #include "sh.h"
+  #include <sgtty.h>
++ #include <signal.h>
+  
++ #define ON	1	/* for autlogoff code -- ADR */
++ #define OFF	0
++ 
+  /*
+   * C shell
+   */
+***************
+*** 1228,1239 ****
+--- 1235,1250 ----
+  		off = (int) feobp % BUFSIZ;
+  #ifndef FILEC
+  		for (;;) {
++ 			autologoff (ON);
+  			c = read(SHIN, fbuf[buf] + off, BUFSIZ - off);
++ 			autologoff (OFF);
+  #else
+  		roomleft = BUFSIZ - off;
+  		for (;;) {
++ 			autologoff (ON);
+  			if (filec && intty) {
+  				c = numleft ? numleft : tenex(ttyline, BUFSIZ);
++ 				autologoff (OFF);
+  				if (c > roomleft) {
+  					/* start with fresh buffer */
+  					feobp = fseekp = fblocks * BUFSIZ;
+***************
+*** 1245,1250 ****
+--- 1256,1262 ----
+  				numleft = 0;
+  			} else
+  				c = read(SHIN, fbuf[buf] + off, roomleft);
++ 			autologoff (OFF);
+  #endif
+  			if (c >= 0)
+  				break;
+***************
+*** 1346,1348 ****
+--- 1358,1389 ----
+  	cantell = 1;
+  }
+  #endif
++ 
++ static bombout ()
++ {
++ 	exiterr = 1;		/* kludge to force exit in error() */
++ 	error ("shell timeout");
++ }
++ 
++ static autologoff (whichway)
++ int whichway;
++ {
++ 	char *cp = value ("autologout");
++ 	int minutes = 0;
++ 	static int first = 1;
++ 
++ 	if (whichway == OFF) {
++ 		alarm (0);
++ 		return;
++ 	}
++ 
++ 	if (cp && *cp && (minutes = atoi (cp))) {
++ 		if (first) {
++ 			signal (SIGALRM, bombout);
++ 			first = 0;
++ 		}
++ 
++ 		if (whichway == ON)
++ 			alarm (minutes * 60);
++ 	}
++ }
+===================================================================
+RCS file: RCS/sh.set.c,v
+retrieving revision 1.1
+diff -c -r1.1 sh.set.c
+*** /tmp/,RCSt1006913	Wed Oct 22 17:56:28 1986
+--- sh.set.c	Wed Oct 22 17:53:38 1986
+***************
+*** 1,9 ****
+  #ifndef lint
+! static char *RCSid = "$Header: sh.set.c,v 1.1 86/09/22 14:28:54 root Exp $";
+  #endif
+  
+  /*
+   * $Log:	sh.set.c,v $
+   * Revision 1.1  86/09/22  14:28:54  root
+   * Initial revision
+   * 
+--- 1,12 ----
+  #ifndef lint
+! static char *RCSid = "$Header: sh.set.c,v 1.2 86/09/22 15:06:29 root Locked $";
+  #endif
+  
+  /*
+   * $Log:	sh.set.c,v $
++  * Revision 1.2  86/09/22  15:06:29  root
++  * Changes to support autologout. ADR.
++  * 
+   * Revision 1.1  86/09/22  14:28:54  root
+   * Initial revision
+   * 
+***************
+*** 446,451 ****
+--- 449,456 ----
+  		HIST = '!';
+  		HISTSUB = '^';
+  	}
++ 	if (adrof("autologout") == 0)
++ 		alarm (0);
+  #ifdef FILEC
+  	if (adrof("filec") == 0)
+  		filec = 0;

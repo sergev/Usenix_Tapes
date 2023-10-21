@@ -1,0 +1,129 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA11107; Thu, 9 Apr 87 02:36:07 CDT
+Path: plus5!wucs1!mcdchg!clyde!rutgers!mit-eddie!genrad!decvax!decwrl!pyramid!oliveb!felix!fritz!bytebug
+From: felix.UUCP!bytebug (Roger L. Long)
+Newsgroups: news.software.b
+Subject: Re: Patch #6 for news 2.11 source (includes fix!)
+Message-Id: <4040@fritz.felix.UUCP>
+Date: 30 Mar 87 10:41:23 GMT
+References: <43222@beno.seismo.CSS.GOV> <281@mcdchg.UUCP>
+Reply-To: bytebug@fritz.UUCP (Roger L. Long)
+Organization: FileNet Corp., Costa Mesa, CA
+Lines: 115
+Apparently-To: hokey
+
+In article <281@mcdchg.UUCP> heiby@mcdchg.UUCP (Ron Heiby) writes:
+>I just installed patch #6 here.  I didn't notice any problems until
+>I posted some articles to mod.newprod and/or mod.os.unix (as the
+>moderator, not a submitter).  I run with SPOOLNEWS.  The articles
+>look fine in the .rnews directory, but when "rnews -U" is run,
+>the "From:" line gets replaced with that of the runner of the
+>"rnews -U" and the article gets that user's "Organization:" header
+>line if the article doesn't already have one.  This has been reported
+>to Rick Adams, already.  This article is just to warn moderators.
+
+Yep, this bit me, and I found a fix.  This also cures a problem that's
+been around for awhile:  If you run with SPOOLNEWS, the unspooler has
+been adding a Sender line with it's id for quite some time.  If you
+look at any of the articles I've posted to mod.mac.binaries, you'll
+notice that they've been sent by root@felix.UUCP much of the time.
+
+Here's the fix; some discussion follows:
+--------------------------------------------------------------------------------
+*** inews.c	Wed Mar 25 17:54:47 1987
+--- inews.X.c	Fri Mar 27 18:13:36 1987
+***************
+*** 351,356
+  			header.path[0] = '\0';
+  			(void) hread(&header, infp, FALSE);
+  			/* there are certain fields we won't let him specify. */
+  			if (header.from[0]) {
+  				if (Sflag) {
+  					register char *p;
+
+--- 351,358 -----
+  			header.path[0] = '\0';
+  			(void) hread(&header, infp, FALSE);
+  			/* there are certain fields we won't let him specify. */
++ 			if (!header.approved[0])
++ 				Mflag = FALSE;
+  			if (header.from[0]) {
+  				if (!Sflag && !Mflag) {
+  					register char *p;
+***************
+*** 352,358
+  			(void) hread(&header, infp, FALSE);
+  			/* there are certain fields we won't let him specify. */
+  			if (header.from[0]) {
+! 				if (Sflag) {
+  					register char *p;
+  					strcpy(bfr, header.from);
+  					p  = strpbrk(bfr, "@ !");
+
+--- 354,360 -----
+  			if (!header.approved[0])
+  				Mflag = FALSE;
+  			if (header.from[0]) {
+! 				if (!Sflag && !Mflag) {
+  					register char *p;
+  					strcpy(bfr, header.from);
+  					p  = strpbrk(bfr, "@ !");
+***************
+*** 368,376
+  					header.from[0] = '\0';
+  				}
+  			}
+! 			if (!header.approved[0])
+! 				Mflag = FALSE;
+! 			header.sender[0] = '\0';
+  			if (header.subdate[0] && cgtdate(header.subdate) < 0)
+  				header.subdate[0] = '\0';
+  		}
+
+--- 370,377 -----
+  					header.from[0] = '\0';
+  				}
+  			}
+! 			if (!Sflag)
+! 				header.sender[0] = '\0';
+  			if (header.subdate[0] && cgtdate(header.subdate) < 0)
+  				header.subdate[0] = '\0';
+  		}
+***************
+*** 395,402
+  			else
+  				(void) strncpy(header.from, forgedname, BUFLEN);
+  
+! 			(void) sprintf(header.sender, "%s@%s",
+! 				username, FROMSYSNAME);
+  		} else {
+  			gensender(&header, username);
+  		}
+
+--- 396,404 -----
+  			else
+  				(void) strncpy(header.from, forgedname, BUFLEN);
+  
+! 			if (!Sflag)
+! 				(void) sprintf(header.sender, "%s@%s",
+! 					username, FROMSYSNAME);
+  		} else {
+  			gensender(&header, username);
+  		}
+--------------------------------------------------------------------------------
+First, I move the lines which look for the Approved lines, because I use Mflag
+in the test that follows.  In that test, I assume that if we are looking at
+an article for the first time (when someone submits it, i.e. !Sflag), I
+shouldn't do anything if it's moderated (i.e. !Mflag).  The test before had
+the sender lookup stuff on the unspool leg, and thus when I submitted a 
+moderated article, it got changed to being sent by the runner of the "rnews -U".
+
+The third and fourth changes deal with the Sender header line.  Before, when
+you spooled an article, the Sender field got ignored when you unspooled it
+(setting it to null).  Later, it was filled in using the id of whoever is
+doing the unspool.  I just make sure that Sflag indicates that we're not
+unspooling before I mess with the Sender header line.
+-- 
+	Roger L. Long
+	FileNet Corp
+	{hplabs,trwrb}!felix!bytebug

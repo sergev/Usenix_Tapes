@@ -1,0 +1,4736 @@
+Path: plus5!wucs1!cuae2!ihnp4!ptsfa!amdahl!bnrmtv!rfisk
+From: rfisk@bnrmtv.UUCP (Rick Fisk)
+Newsgroups: net.sources.games
+Subject: rogue source sequel
+Message-ID: <1477@bnrmtv.UUCP>
+Date: 28 Feb 87 19:11:51 GMT
+Organization: Bell Northern Research, Mtn. View, CA
+Lines: 4727
+
+Heres part 2
+#!/bin/sh-----cut here-----cut here-----cut here-----cut here-----
+# shar:	Shell Archiver
+#	Run the following text with /bin/sh to create:
+#	object.c #	object.h #	pack.c #	play.c #	use.c 
+echo shar: extracting object.c
+cat - << \SHAR_EOF > object.c
+/*
+ * object.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "object.h"
+#include "monster.h"
+#include "room.h"
+
+object level_objects;
+unsigned short dungeon[DROWS][DCOLS];
+short foods = 0;
+short party_counter;
+object *free_list = (object *) 0;
+char *fruit = "slime-mold ";
+
+fighter rogue = {
+	0, 0,		/* armor, weapon */
+	0, 0,		/* rings */
+	INIT_HP,	/* Hp current */
+	INIT_HP,	/* Hp max */
+	16, 16,		/* Str */
+	{0},		/* pack */
+	0,			/* gold */
+	1, 0,		/* exp, exp_points */
+	0, 0,		/* row, col */
+	'@',		/* char */
+	1250		/* moves */
+};
+
+struct identify id_potions[POTIONS] = {
+{100, "blue \0                           ", "of increase strength ", 0},
+{250, "red \0                            ", "of restore strength ", 0},
+{100, "green \0                          ", "of healing ", 0},
+{200, "grey \0                           ", "of extra healing ", 0},
+ {10, "brown \0                          ", "of poison ", 0},
+{300, "clear \0                          ", "of raise level ", 0},
+ {10, "pink \0                           ", "of blindness ", 0},
+ {25, "white \0                          ", "of hallucination ", 0},
+{100, "purple \0                         ", "of detect monster ", 0},
+{100, "black \0                          ", "of detect things ", 0},
+ {10, "yellow \0                         ", "of confusion ", 0},
+ {80, "plaid \0                          ", "of levitation ", 0},
+{150, "burgundy \0                       ", "of haste self ", 0},
+{145, "beige \0                          ", "of see invisible ", 0}
+};
+
+struct identify id_scrolls[SCROLLS] = {
+{505, "                                   ", "of protect armor ", 0},
+{200, "                                   ", "of hold monster ", 0},
+{235, "                                   ", "of enchant weapon ", 0},
+{235, "                                   ", "of enchant armor ", 0},
+{175, "                                   ", "of identify ", 0},
+{190, "                                   ", "of teleportation ", 0},
+ {25, "                                   ", "of sleep ", 0},
+{610, "                                   ", "of scare monster ", 0},
+{210, "                                   ", "of remove curse ", 0},
+{100, "                                   ", "of create monster ",0},
+ {25, "                                   ", "of aggravate monster ",0},
+{180, "                                   ", "of magic mapping ",0}
+};
+
+struct identify id_weapons[WEAPONS] = {
+	{150, "short bow ", "", 0},
+	  {8, "darts ", "", 0},
+	 {15, "arrows ", "", 0},
+	 {27, "daggers ", "", 0},
+	 {35, "shurikens ", "", 0},
+	{360, "mace ", "", 0},
+	{470, "long sword ", "", 0},
+	{580, "two-handed sword ", "", 0}
+};
+
+struct identify id_armors[ARMORS] = {
+	{300, "leather armor ", "", (UNIDENTIFIED)},
+	{300, "ring mail ", "", (UNIDENTIFIED)},
+	{400, "scale mail ", "", (UNIDENTIFIED)},
+	{500, "chain mail ", "", (UNIDENTIFIED)},
+	{600, "banded mail ", "", (UNIDENTIFIED)},
+	{600, "splint mail ", "", (UNIDENTIFIED)},
+	{700, "plate mail ", "", (UNIDENTIFIED)}
+};
+
+struct identify id_wands[WANDS] = {
+	 {25, "                                 ", "of teleport away ",0},
+	 {50, "                                 ", "of slow monster ", 0},
+	 {45, "                                 ", "of confuse monster ",0},
+	  {8, "                                 ", "of invisibility ",0},
+	 {55, "                                 ", "of polymorph ",0},
+	  {2, "                                 ", "of haste monster ",0},
+	 {25, "                                 ", "of sleep ",0},
+	 {20, "                                 ", "of magic missile ",0},
+	 {20, "                                 ", "of cancellation ",0},
+	  {0, "                                 ", "of do nothing ",0}
+};
+
+struct identify id_rings[RINGS] = {
+	 {250, "                                 ", "of stealth ",0},
+	 {100, "                                 ", "of teleportation ", 0},
+	 {255, "                                 ", "of regeneration ",0},
+	 {295, "                                 ", "of slow digestion ",0},
+	 {200, "                                 ", "of add strength ",0},
+	 {250, "                                 ", "of sustain strength ",0},
+	 {250, "                                 ", "of dexterity ",0},
+	  {25, "                                 ", "of adornment ",0},
+	 {300, "                                 ", "of see invisible ",0},
+	 {290, "                                 ", "of maintain armor ",0},
+	 {270, "                                 ", "of searching ",0},
+};
+
+extern short current_level, max_level;
+extern short party_room;
+extern char *error_file;
+extern boolean is_wood[];
+
+put_objects()
+{
+	short i, n;
+	object *obj, *get_rand_object();
+
+	if (current_level < max_level) {
+		return;
+	}
+	n = coin_toss() ? get_rand(2, 4) : get_rand(3, 5);
+	while (rand_percent(33)) {
+		n++;
+	}
+	if (current_level == party_counter) {
+		make_party();
+		party_counter = next_party();
+	}
+	for (i = 0; i < n; i++) {
+		obj = get_rand_object();
+		put_object_rand_location(obj);
+	}
+	put_gold();
+}
+
+put_gold()
+{
+	short i, j;
+	short row,col;
+	unsigned short is_maze, is_room;
+
+	for (i = 0; i < MAXROOMS; i++) {
+		is_maze = (rooms[i].is_room & R_MAZE);
+		is_room = (rooms[i].is_room & R_ROOM);
+
+		if (!(is_room || is_maze)) {
+			continue;
+		}
+		if (is_maze || rand_percent(GOLD_PERCENT)) {
+			for (j = 0; j < 50; j++) {
+				row = get_rand(rooms[i].top_row+1,
+				rooms[i].bottom_row-1);
+				col = get_rand(rooms[i].left_col+1,
+				rooms[i].right_col-1);
+				if ((dungeon[row][col] == FLOOR) ||
+					(dungeon[row][col] == TUNNEL)) {
+					put_gold_at(row, col, is_maze);
+					break;
+				}
+			}
+		}
+	}
+}
+
+put_gold_at(row, col, is_maze)
+short row, col;
+boolean is_maze;
+{
+	object *obj;
+	object *alloc_object(), *add_to_pack();
+
+	obj = alloc_object();
+	obj->row = row; obj->col = col;
+	obj->what_is = GOLD;
+	obj->quantity = get_rand((2 * current_level), (16 * current_level));
+	if (is_maze) {
+		obj->quantity += obj->quantity / 2;
+	}
+	dungeon[row][col] |= OBJECT;
+	add_to_pack(obj, &level_objects, 0);
+}
+
+put_object_at(obj, row, col)
+object *obj;
+{
+	object *add_to_pack();
+
+	obj->row = row;
+	obj->col = col;
+	dungeon[row][col] |= OBJECT;
+	add_to_pack(obj, &level_objects, 0);
+}
+
+object *
+object_at(pack, row, col)
+register object *pack;
+short row, col;
+{
+	object *obj;
+
+	obj = pack->next_object;
+
+	while (obj && ((obj->row != row) || (obj->col != col))) {
+		obj = obj->next_object;
+	}
+	return(obj);
+}
+
+object *
+get_letter_object(ch)
+{
+	object *obj;
+
+	obj = rogue.pack.next_object;
+
+	while (obj && (obj->ichar != ch)) {
+		obj = obj->next_object;
+	}
+	return(obj);
+}
+
+free_stuff(objlist)
+object *objlist;
+{
+	object *obj;
+
+	while (objlist->next_object) {
+		obj = objlist->next_object;
+		objlist->next_object =
+			objlist->next_object->next_object;
+		free_object(obj);
+	}
+}
+
+free_free_list()
+{
+	object *obj;
+
+	while (free_list) {
+		obj = free_list;
+		free_list = free_list->next_object;
+		free_object(obj);
+	}
+}
+
+char *
+name_of(obj)
+object *obj;
+{
+	char *retstring;
+
+	switch(obj->what_is) {
+	case SCROLL:
+		retstring = obj->quantity > 1 ? "scrolls " : "scroll ";
+		break;
+	case POTION:
+		retstring = obj->quantity > 1 ? "potions " : "potion ";
+		break;
+	case FOOD:
+		if (obj->which_kind == RATION) {
+			retstring = "food ";
+		} else {
+			retstring = fruit;
+		}
+		break;
+	case WAND:
+		retstring = is_wood[obj->which_kind] ? "staff " : "wand ";
+		break;
+	case WEAPON:
+		switch(obj->which_kind) {
+		case DART:
+			retstring=obj->quantity > 1 ? "darts " : "dart ";
+			break;
+		case ARROW:
+			retstring=obj->quantity > 1 ? "arrows " : "arrow ";
+			break;
+		case DAGGER:
+			retstring=obj->quantity > 1 ? "daggers " : "dagger ";
+			break;
+		case SHURIKEN:
+			retstring=obj->quantity > 1?"shurikens ":"shuriken ";
+			break;
+		default:
+			retstring = id_weapons[obj->which_kind].title;
+		}
+		break;
+	case ARMOR:
+		retstring = "armor ";
+		break;
+	case RING:
+			retstring = "ring ";
+		break;
+	case AMULET:
+		retstring = "amulet ";
+		break;
+	default:
+		retstring = "unknown ";
+		break;
+	}
+	return(retstring);
+}
+
+object *
+get_rand_object()
+{
+	object *obj, *alloc_object();
+	unsigned short get_rand_what_is();
+
+	obj = alloc_object();
+
+	if (foods < (current_level / 3)) {
+		obj->what_is = FOOD;
+		foods++;
+	} else {
+		obj->what_is = get_rand_what_is();
+	}
+	switch(obj->what_is) {
+	case SCROLL:
+		get_rand_scroll(obj);
+		break;
+	case POTION:
+		get_rand_potion(obj);
+		break;
+	case WEAPON:
+		get_rand_weapon(obj, 1);
+		break;
+	case ARMOR:
+		get_rand_armor(obj);
+		break;
+	case WAND:
+		get_rand_wand(obj);
+		break;
+	case FOOD:
+		get_food(obj, 0);
+		break;
+	case RING:
+		get_rand_ring(obj, 1);
+		break;
+	}
+	return(obj);
+}
+
+unsigned short
+get_rand_what_is()
+{
+	short percent;
+	unsigned short what_is;
+
+	percent = get_rand(1, 91);
+
+	if (percent <= 30) {
+		what_is = SCROLL;
+	} else if (percent <= 60) {
+		what_is = POTION;
+	} else if (percent <= 64) {
+		what_is = WAND;
+	} else if (percent <= 74) {
+		what_is = WEAPON;
+	} else if (percent <= 83) {
+		what_is = ARMOR;
+	} else if (percent <= 88) {
+		what_is = FOOD;
+	} else {
+		what_is = RING;
+	}
+	return(what_is);
+}
+
+get_rand_scroll(obj)
+object *obj;
+{
+	short percent;
+
+	percent = get_rand(0, 85);
+
+	obj->what_is = SCROLL;
+
+	if (percent <= 5) {
+		obj->which_kind = PROTECT_ARMOR;
+	} else if (percent <= 11) {
+		obj->which_kind = HOLD_MONSTER;
+	} else if (percent <= 20) {
+		obj->which_kind = CREATE_MONSTER;
+	} else if (percent <= 35) {
+		obj->which_kind = IDENTIFY;
+	} else if (percent <= 43) {
+		obj->which_kind = TELEPORT;
+	} else if (percent <= 50) {
+		obj->which_kind = SLEEP;
+	} else if (percent <= 55) {
+		obj->which_kind = SCARE_MONSTER;
+	} else if (percent <= 64) {
+		obj->which_kind = REMOVE_CURSE;
+	} else if (percent <= 69) {
+		obj->which_kind = ENCHANT_ARMOR;
+	} else if (percent <= 74) {
+		obj->which_kind = ENCHANT_WEAPON;
+	} else if (percent <= 80) {
+		obj->which_kind = AGGRAVATE_MONSTER;
+	} else {
+		obj->which_kind = MAGIC_MAPPING;
+	}
+}
+
+get_rand_potion(obj)
+object *obj;
+{
+	short percent;
+
+	percent = get_rand(1, 118);
+
+	obj->what_is = POTION;
+
+	if (percent <= 5) {
+		obj->which_kind = RAISE_LEVEL;
+	} else if (percent <= 15) {
+		obj->which_kind = DETECT_OBJECTS;
+	} else if (percent <= 25) {
+		obj->which_kind = DETECT_MONSTER;
+	} else if (percent <= 35) {
+		obj->which_kind = INCREASE_STRENGTH;
+	} else if (percent <= 45) {
+		obj->which_kind = RESTORE_STRENGTH;
+	} else if (percent <= 55) {
+		obj->which_kind = HEALING;
+	} else if (percent <= 65) {
+		obj->which_kind = EXTRA_HEALING;
+	} else if (percent <= 75) {
+		obj->which_kind = BLINDNESS;
+	} else if (percent <= 85) {
+		obj->which_kind = HALLUCINATION;
+	} else if (percent <= 95) {
+		obj->which_kind = CONFUSION;
+	} else if (percent <= 105) {
+		obj->which_kind = POISON;
+	} else if (percent <= 110) {
+		obj->which_kind = LEVITATION;
+	} else if (percent <= 114) {
+		obj->which_kind = HASTE_SELF;
+	} else {
+		obj->which_kind = SEE_INVISIBLE;
+	}
+}
+
+get_rand_weapon(obj, assign_wk)
+object *obj;
+int assign_wk;
+{
+	short percent;
+	short i;
+	short blessing, increment;
+
+	obj->what_is = WEAPON;
+	if (assign_wk) {
+		obj->which_kind = get_rand(0, (WEAPONS - 1));
+	}
+	if ((obj->which_kind == ARROW) || (obj->which_kind == DAGGER) ||
+		(obj->which_kind == SHURIKEN) | (obj->which_kind == DART)) {
+		obj->quantity = get_rand(3, 15);
+		obj->quiver = get_rand(0, 126);
+	} else {
+		obj->quantity = 1;
+	}
+	obj->to_hit_enchantment = obj->damage_enchantment = 0;
+
+	percent = get_rand(1, 96);
+	blessing = get_rand(1, 3);
+
+	if (percent <= 16) {
+		increment = 1;
+	} else if (percent <= 32) {
+		increment = -1;
+		obj->is_cursed = 1;
+	}
+	if (percent <= 32) {
+		for (i = 0; i < blessing; i++) {
+			if (coin_toss()) {
+				obj->to_hit_enchantment += increment;
+			} else {
+				obj->damage_enchantment += increment;
+			}
+		}
+	}
+	switch(obj->which_kind) {
+	case BOW:
+	case DART:
+		obj->damage = "1d1";
+		break;
+	case ARROW:
+		obj->damage = "1d2";
+		break;
+	case DAGGER:
+		obj->damage = "1d3";
+		break;
+	case SHURIKEN:
+		obj->damage = "1d4";
+		break;
+	case MACE:
+		obj->damage = "2d3";
+		break;
+	case LONG_SWORD:
+		obj->damage = "3d4";
+		break;
+	case TWO_HANDED_SWORD:
+		obj->damage = "4d5";
+		break;
+	}
+}
+
+get_rand_armor(obj)
+object *obj;
+{
+	short percent;
+	short blessing;
+
+	obj->what_is = ARMOR;
+	obj->which_kind = get_rand(0, (ARMORS - 1));
+	obj->class = obj->which_kind + 2;
+	if ((obj->which_kind == PLATE) || (obj->which_kind == SPLINT)) {
+		obj->class--;
+	}
+	obj->is_protected = 0;
+	obj->damage_enchantment = 0;
+
+	percent = get_rand(1, 100);
+	blessing = get_rand(1, 3);
+
+	if (percent <= 16) {
+		obj->is_cursed = 1;
+		obj->damage_enchantment -= blessing;
+	} else if (percent <= 33) {
+		obj->damage_enchantment += blessing;
+	}
+}
+
+get_rand_wand(obj)
+object *obj;
+{
+	obj->what_is = WAND;
+	obj->which_kind = get_rand(0, (WANDS - 1));
+	if (obj->which_kind == MAGIC_MISSILE) {
+		obj->class = get_rand(6, 12);
+	} else if (obj->which_kind == CANCELLATION) {
+		obj->class = get_rand(5, 9);
+	} else {
+		obj->class = get_rand(3, 6);
+	}
+}
+
+get_food(obj, force_ration)
+object *obj;
+boolean force_ration;
+{
+	obj->what_is = FOOD;
+
+	if (force_ration || rand_percent(80)) {
+		obj->which_kind = RATION;
+	} else {
+		obj->which_kind = FRUIT;
+	}
+}
+
+put_stairs()
+{
+	short row, col;
+
+	get_rand_row_col(&row, &col, (FLOOR | TUNNEL));
+	dungeon[row][col] |= STAIRS;
+}
+
+get_armor_class(obj)
+object *obj;
+{
+	if (obj) {
+		return(obj->class + obj->damage_enchantment);
+	}
+	return(0);
+}
+
+object *
+alloc_object()
+{
+	object *obj;
+	char *malloc();
+
+	if (free_list) {
+		obj = free_list;
+		free_list = free_list->next_object;
+	} else if (!(obj = (object *) malloc(sizeof(object)))) {
+			free_free_list();
+			message("cannot allocate object, saving game", 0);
+			save_into_file(error_file);
+	}
+	obj->quantity = 1;
+	obj->ichar = 'L';
+	obj->picked_up = obj->is_cursed = 0;
+	obj->in_use_flags = NOT_USED;
+	obj->identified = UNIDENTIFIED;
+	obj->damage = "1d1";
+	return(obj);
+}
+
+free_object(obj)
+object *obj;
+{
+	obj->next_object = free_list;
+	free_list = obj;
+}
+
+make_party()
+{
+	short n;
+
+	party_room = get_rand_room();
+	n = rand_percent(99) ? fill_party_room_with_objects(party_room) : 11;
+	if (rand_percent(99)) {
+		fill_party_room_with_monsters(party_room, n);
+	}
+}
+
+show_objects()
+{
+	object *obj;
+	short mc, rc, row, col;
+	object *monster, *object_at();
+
+	obj = level_objects.next_object;
+
+	while (obj) {
+		row = obj->row;
+		col = obj->col;
+
+		rc = get_mask_char(obj->what_is);
+
+		if (dungeon[row][col] & MONSTER) {
+			if (monster = object_at(&level_monsters, row, col)) {
+				monster->trail_char = rc;
+			}
+		}
+		mc = mvinch(row, col);
+		if (((mc < 'A') || (mc > 'Z')) &&
+			((row != rogue.row) || (col != rogue.col))) {
+			mvaddch(row, col, rc);
+		}
+		obj = obj->next_object;
+	}
+
+	monster = level_monsters.next_object;
+
+	while (monster) {
+		if (monster->m_flags & IMITATES) {
+			mvaddch(monster->row, monster->col, monster->disguise);
+		}
+		monster = monster->next_monster;
+	}
+}
+
+put_amulet()
+{
+	object *obj, *alloc_object();
+
+	obj = alloc_object();
+	obj->what_is = AMULET;
+	put_object_rand_location(obj);
+}
+
+put_object_rand_location(obj)
+object *obj;
+{
+	short row, col;
+
+	get_rand_row_col(&row, &col, (FLOOR | TUNNEL));
+	put_object_at(obj, row, col);
+
+}
+
+create_object_for_wizard()
+{
+	short ch, max, wk;
+	object *obj, *alloc_object(), *add_to_pack();
+	char buf[80];
+
+	if (get_pack_count(0) >= MAX_PACK_COUNT) {
+		message("pack full", 0);
+		return;
+	}
+	message("type of object?", 0);
+
+	while (!index("!?:)]=/,\033", (ch = rgetchar()))) {
+		sound_bell();
+	}
+	check_message();
+
+	if (ch == '\033') {
+		return;
+	}
+	obj = alloc_object();
+
+	switch(ch) {
+	case '!':
+		obj->what_is = POTION;
+		max = POTIONS - 1;
+		break;
+	case '?':
+		obj->what_is = SCROLL;
+		max = SCROLLS - 1;
+		break;
+	case ',':
+		obj->what_is = AMULET;
+		break;
+	case ':':
+		get_food(obj, 0);
+		break;
+	case ')':
+		get_rand_weapon(obj, 0);
+		max = WEAPONS - 1;
+		break;
+	case ']':
+		get_rand_armor(obj);
+		max = ARMORS - 1;
+		break;
+	case '/':
+		get_rand_wand(obj);
+		max = WANDS - 1;
+		break;
+	case '=':
+		max = RINGS - 1;
+		obj->what_is = RING;
+		break;
+	}
+	if ((ch != ',') && (ch != ':')) {
+GIL:
+		if (get_input_line("which kind?", "", buf, "", 0, 1)) {
+			wk = get_number(buf);
+			if ((wk >= 0) && (wk <= max)) {
+				obj->which_kind = (unsigned char) wk;
+				if (obj->what_is == RING) {
+					get_rand_ring(obj, 0);
+				}
+			} else {
+				sound_bell();
+				goto GIL;
+			}
+		} else {
+			free_object(obj);
+			return;
+		}
+	}
+	get_description(obj, buf);
+	message(buf, 0);
+	add_to_pack(obj, &rogue.pack, 1);
+}
+
+next_party()
+{
+	int n;
+
+	n = current_level;
+	while (n % PARTY_TIME) {
+		n++;
+	}
+	return(get_rand((n + 1), (n + PARTY_TIME)));
+}
+SHAR_EOF
+echo shar: extracting object.h
+cat - << \SHAR_EOF > object.h
+/*
+ * object.h
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#define boolean char
+
+#define NOTHING		((unsigned short)     0)
+#define OBJECT		((unsigned short)    01)
+#define MONSTER		((unsigned short)    02)
+#define STAIRS		((unsigned short)    04)
+#define HORWALL		((unsigned short)   010)
+#define VERTWALL	((unsigned short)   020)
+#define DOOR		((unsigned short)   040)
+#define FLOOR		((unsigned short)  0100)
+#define TUNNEL		((unsigned short)  0200)
+#define TRAP		((unsigned short)  0400)
+#define HIDDEN		((unsigned short) 01000)
+
+#define ARMOR		((unsigned short)   01)
+#define WEAPON		((unsigned short)   02)
+#define SCROLL		((unsigned short)   04)
+#define POTION		((unsigned short)  010)
+#define GOLD		((unsigned short)  020)
+#define FOOD		((unsigned short)  040)
+#define WAND		((unsigned short) 0100)
+#define RING		((unsigned short) 0200)
+#define AMULET		((unsigned short) 0400)
+#define ALL_OBJECTS	((unsigned short) 0777)
+
+#define LEATHER 0
+#define RINGMAIL 1
+#define SCALE 2
+#define CHAIN 3
+#define BANDED 4
+#define SPLINT 5
+#define PLATE 6
+#define ARMORS 7
+
+#define BOW 0
+#define DART 1
+#define ARROW 2
+#define DAGGER 3
+#define SHURIKEN 4
+#define MACE 5
+#define LONG_SWORD 6
+#define TWO_HANDED_SWORD 7
+#define WEAPONS 8
+
+#define MAX_PACK_COUNT 24
+
+#define PROTECT_ARMOR 0
+#define HOLD_MONSTER 1
+#define ENCHANT_WEAPON 2
+#define ENCHANT_ARMOR 3
+#define IDENTIFY 4
+#define TELEPORT 5
+#define SLEEP 6
+#define SCARE_MONSTER 7
+#define REMOVE_CURSE 8
+#define CREATE_MONSTER 9
+#define AGGRAVATE_MONSTER 10
+#define MAGIC_MAPPING 11
+#define SCROLLS 12
+
+#define INCREASE_STRENGTH 0
+#define RESTORE_STRENGTH 1
+#define HEALING 2
+#define EXTRA_HEALING 3
+#define POISON 4
+#define RAISE_LEVEL 5
+#define BLINDNESS 6
+#define HALLUCINATION 7
+#define DETECT_MONSTER 8
+#define DETECT_OBJECTS 9
+#define CONFUSION 10
+#define LEVITATION 11
+#define HASTE_SELF 12
+#define SEE_INVISIBLE 13
+#define POTIONS 14
+
+#define TELEPORT_AWAY 0
+#define SLOW_MONSTER 1
+#define CONFUSE_MONSTER 2
+#define INVISIBILITY 3
+#define POLYMORPH 4
+#define HASTE_MONSTER 5
+#define PUT_TO_SLEEP 6
+#define MAGIC_MISSILE 7
+#define CANCELLATION 8
+#define DO_NOTHING 9
+#define WANDS 10
+
+#define STEALTH 0
+#define R_TELEPORT 1
+#define REGENERATION 2
+#define SLOW_DIGEST 3
+#define ADD_STRENGTH 4
+#define SUSTAIN_STRENGTH 5
+#define DEXTERITY 6
+#define ADORNMENT 7
+#define R_SEE_INVISIBLE 8
+#define MAINTAIN_ARMOR 9
+#define SEARCHING 10
+#define RINGS 11
+
+#define RATION 0
+#define FRUIT 1
+
+#define NOT_USED		((unsigned short)   0)
+#define BEING_WIELDED	((unsigned short)  01)
+#define BEING_WORN		((unsigned short)  02)
+#define ON_LEFT_HAND	((unsigned short)  04)
+#define ON_RIGHT_HAND	((unsigned short) 010)
+#define ON_EITHER_HAND	((unsigned short) 014)
+#define BEING_USED		((unsigned short) 017)
+
+#define NO_TRAP -1
+#define TRAP_DOOR 0
+#define BEAR_TRAP 1
+#define TELEPORT_TRAP 2
+#define POISON_DART_TRAP 3
+#define SLEEPING_GAS_TRAP 4
+#define RUST_TRAP 5
+#define TRAPS 6
+
+#define STEALTH_FACTOR 3
+#define R_TELEPORT_PERCENT 8
+
+#define UNIDENTIFIED ((unsigned char) 00)	/* MUST BE ZERO! */
+#define IDENTIFIED ((unsigned char) 01)
+#define CALLED ((unsigned char) 02)
+
+#define DROWS 24
+#define DCOLS 80
+#define MAX_TITLE_LENGTH 30
+#define MORE "-more-"
+#define MAXSYLLABLES 40
+#define MAX_METAL 14
+#define WAND_MATERIALS 30
+#define GEMS 14
+
+#define GOLD_PERCENT 46
+
+struct identify {
+	short value;
+	char *title;
+	char *real;
+	unsigned char id_status;
+};
+
+/*
+ The following #defines provide more meaningful names for some of the
+ struct object fields that are used for monsters.  This, since each monster
+ and object (scrolls, potions, etc) are represented by a struct object.
+*/
+
+#define m_damage damage
+#define hp_to_kill quantity
+#define m_char ichar
+#define first_level is_protected
+#define last_level is_cursed
+#define m_hit_chance class
+#define stationary_damage identified
+#define drop_percent which_kind
+#define trail_char damage_enchantment
+#define slowed_toggle quiver
+#define moves_confused to_hit_enchantment
+#define nap_length picked_up
+#define disguise what_is
+#define next_monster next_object
+
+struct object {				/* comment is monster meaning */
+	unsigned long m_flags;	/* monster flags */
+	char *damage;			/* damage it does */
+	short quantity;			/* hit points to kill */
+	char ichar;				/* 'A' is for aquatar */
+	short kill_exp;			/* exp for killing it */
+	boolean is_protected;	/* level starts */
+	boolean is_cursed;		/* level ends */
+	char class;				/* chance of hitting you */
+	short identified;		/* 'F' damage, 1,2,3... */
+	unsigned char which_kind; /* item carry/drop % */
+	char o_row, o_col, o;	/* o is how many times stuck at o_row, o_col */
+	char row, col;			/* current row, col */
+	char damage_enchantment;/* room char when detect_monster */
+	char quiver;			/* monster slowed toggle */
+	char trow, tcol;		/* target row, col */
+	char to_hit_enchantment;/* how many moves is confused */
+	unsigned short what_is;	/* imitator's charactor (?!%: */
+	boolean picked_up;		/* sleep from wand of sleep */
+	unsigned short in_use_flags;
+	struct object *next_object;	/* next monster */
+};
+
+typedef struct object object;
+
+#define INIT_HP 12
+
+struct fighter {
+	object *armor;
+	object *weapon;
+	object *left_ring, *right_ring;
+	short hp_current;
+	short hp_max;
+	char strength_current;
+	char strength_max;
+	object pack;
+	int gold;
+	char exp;
+	long exp_points;
+	short row, col;
+	char fchar;
+	short moves_left;
+};
+
+typedef struct fighter fighter;
+
+struct door {
+	char other_room;
+	char other_row,
+	     other_col;
+	char door_row,
+		 door_col;
+};
+
+typedef struct door door;
+
+struct room {
+	char bottom_row, right_col, left_col, top_row;
+	door doors[4];
+	unsigned short is_room;
+};
+
+typedef struct room room;
+
+struct trap {
+	short trap_type;
+	short trap_row, trap_col;
+};
+
+typedef struct trap trap;
+
+extern fighter rogue;
+extern room rooms[];
+extern trap traps[];
+extern unsigned short dungeon[DROWS][DCOLS];
+extern object level_objects;
+
+extern struct identify id_scrolls[];
+extern struct identify id_potions[];
+extern struct identify id_wands[];
+extern struct identify id_rings[];
+extern struct identify id_weapons[];
+extern struct identify id_armors[];
+
+extern object monster_tab[];
+extern object level_monsters;
+SHAR_EOF
+echo shar: extracting pack.c
+cat - << \SHAR_EOF > pack.c
+/*
+ * pack.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include "curses.h"
+#include "move.h"
+#include "object.h"
+#include "room.h"
+
+char *curse_message = "you can't, it appears to be cursed";
+
+object *
+add_to_pack(obj, pack, condense)
+object *obj, *pack;
+{
+	object *op, *check_duplicate();
+
+	if (condense) {
+		if (op = check_duplicate(obj, pack)) {
+			free_object(obj);
+			return(op);
+		} else {
+			obj->ichar = next_avail_ichar();
+		}
+	}
+	if (pack->next_object == 0) {
+		pack->next_object = obj;
+	} else {
+		op = pack->next_object;
+
+		while (op->next_object) {
+			op = op->next_object;
+		}
+		op->next_object = obj;
+	}
+	obj->next_object = 0;
+	return(obj);
+}
+
+remove_from_pack(obj, pack)
+object *obj, *pack;
+{
+	while (pack->next_object != obj) {
+		pack = pack->next_object;
+	}
+	pack->next_object = pack->next_object->next_object;
+}
+
+object *
+pick_up(row, col, status)
+short *status;
+{
+	object *obj, *object_at(), *add_to_pack();
+
+	obj = object_at(&level_objects, row, col);
+	*status = 1;
+
+	if ((obj->what_is == SCROLL) && (obj->which_kind == SCARE_MONSTER) &&
+		obj->picked_up) {
+		message("the scroll turns to dust as you pick it up", 0);
+		dungeon[row][col] &= (~OBJECT);
+		vanish(obj, 0, &level_objects);
+		*status = 0;
+		if (id_scrolls[SCARE_MONSTER].id_status == UNIDENTIFIED) {
+			id_scrolls[SCARE_MONSTER].id_status = IDENTIFIED;
+		}
+		return(0);
+	}
+	if (obj->what_is == GOLD) {
+		rogue.gold += obj->quantity;
+		dungeon[row][col] &= ~(OBJECT);
+		remove_from_pack(obj, &level_objects);
+		print_stats(STAT_GOLD);
+		return(obj);	/* obj will be free_object()ed in single_move() */
+	}
+	if (get_pack_count(obj) >= MAX_PACK_COUNT) {
+		message("pack too full", 1);
+		return(0);
+	}
+	dungeon[row][col] &= ~(OBJECT);
+	remove_from_pack(obj, &level_objects);
+	obj = add_to_pack(obj, &rogue.pack, 1);
+	obj->picked_up = 1;
+	return(obj);
+}
+
+drop()
+{
+	object *obj, *get_letter_object(), *new;
+	short ch;
+	object *alloc_object();
+	char description[DCOLS];
+
+	if (dungeon[rogue.row][rogue.col] & (OBJECT | STAIRS | TRAP)) {
+		message("there's already something there", 0);
+		return;
+	}
+	if (!rogue.pack.next_object) {
+		message("you have nothing to drop", 0);
+		return;
+	}
+	if ((ch = get_pack_letter("drop what?", ALL_OBJECTS)) == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (obj->in_use_flags & BEING_WIELDED) {
+		if (obj->is_cursed) {
+			message(curse_message, 0);
+			return;
+		}
+		unwield(rogue.weapon);
+	} else if (obj->in_use_flags & BEING_WORN) {
+		if (obj->is_cursed) {
+			message(curse_message, 0);
+			return;
+		}
+		mv_aquatars();
+		unwear(rogue.armor);
+		print_stats(STAT_ARMOR);
+	} else if (obj->in_use_flags & ON_EITHER_HAND) {
+		if (obj->is_cursed) {
+			message(curse_message, 0);
+			return;
+		}
+		un_put_on(obj);
+	}
+	obj->row = rogue.row;
+	obj->col = rogue.col;
+
+	if ((obj->quantity > 1) && (obj->what_is != WEAPON)) {
+		obj->quantity--;
+		new = alloc_object();
+		*new = *obj;
+		new->quantity = 1;
+		obj = new;
+	} else {
+		obj->ichar = 'L';
+		remove_from_pack(obj, &rogue.pack);
+	}
+	put_object_at(obj, rogue.row, rogue.col);
+	strcpy(description, "dropped ");
+	get_description(obj, description+8);
+	message(description, 0);
+	register_move();
+}
+
+object *
+check_duplicate(obj, pack)
+object *obj, *pack;
+{
+	object *op;
+
+	if (!(obj->what_is & (WEAPON | FOOD | SCROLL | POTION))) {
+		return(0);
+	}
+	if ((obj->what_is == FOOD) && (obj->which_kind == FRUIT)) {
+		return(0);
+	}
+	op = pack->next_object;
+
+	while (op) {
+		if ((op->what_is == obj->what_is) && 
+			(op->which_kind == obj->which_kind)) {
+
+			if ((obj->what_is != WEAPON) ||
+			((obj->what_is == WEAPON) &&
+			((obj->which_kind == ARROW) ||
+			(obj->which_kind == DAGGER) ||
+			(obj->which_kind == DART) ||
+			(obj->which_kind == SHURIKEN)) &&
+			(obj->quiver == op->quiver))) {
+				op->quantity += obj->quantity;
+				return(op);
+			}
+		}
+		op = op->next_object;
+	}
+	return(0);
+}
+
+next_avail_ichar()
+{
+	register object *obj;
+	register i;
+	boolean ichars[26];
+
+	for (i = 0; i < 26; i++) {
+		ichars[i] = 0;
+	}
+	obj = rogue.pack.next_object;
+	while (obj) {
+		ichars[(obj->ichar - 'a')] = 1;
+		obj = obj->next_object;
+	}
+	for (i = 0; i < 26; i++) {
+		if (!ichars[i]) {
+			return(i + 'a');
+		}
+	}
+	return('?');
+}
+
+wait_for_ack(prompt)
+{
+	if (prompt) {
+		printf("%s ", MORE);
+		fflush(stdout);
+	}
+	while (rgetchar() != ' ') ;
+}
+
+get_pack_letter(prompt, mask)
+char *prompt;
+unsigned short mask;
+{
+	short ch;
+	unsigned short tmask = mask;
+
+	if (!mask_in_pack(&rogue.pack, mask)) {
+		message("nothing appropriate", 0);
+		return(CANCEL);
+	}
+	for (;;) {
+
+		message(prompt, 0);
+
+		for (;;) {
+			ch = rgetchar();
+			if (!is_pack_letter(&ch, &mask)) {
+				sound_bell();
+			} else {
+				break;
+			}
+		}
+
+		if (ch == LIST) {
+			check_message();
+			inventory(&rogue.pack, mask);
+		} else {
+			break;
+		}
+		mask = tmask;
+	}
+	check_message();
+	return(ch);
+}
+
+take_off()
+{
+	char description[DCOLS];
+	object *obj;
+
+	if (rogue.armor) {
+		if (rogue.armor->is_cursed) {
+			message(curse_message, 0);
+		} else {
+			mv_aquatars();
+			obj = rogue.armor;
+			unwear(rogue.armor);
+			strcpy(description, "was wearing ");
+			get_description(obj, description+12);
+			message(description, 0);
+			print_stats(STAT_ARMOR);
+			register_move();
+		}
+	} else {
+		message("not wearing any", 0);
+	}
+}
+
+wear()
+{
+	short ch;
+	register object *obj;
+	char description[DCOLS];
+
+	if (rogue.armor) {
+		message("your already wearing some", 0);
+		return;
+	}
+	ch = get_pack_letter("wear what?", ARMOR);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (obj->what_is != ARMOR) {
+		message("you can't wear that", 0);
+		return;
+	}
+	obj->identified = 1;
+	strcpy(description, "wearing ");
+	get_description(obj, description + 8);
+	message(description, 0);
+	do_wear(obj);
+	print_stats(STAT_ARMOR);
+	register_move();
+}
+
+unwear(obj)
+object *obj;
+{
+	if (obj) {
+		obj->in_use_flags &= (~BEING_WORN);
+	}
+	rogue.armor = (object *) 0;
+}
+
+do_wear(obj)
+object *obj;
+{
+	rogue.armor = obj;
+	obj->in_use_flags |= BEING_WORN;
+	obj->identified = 1;
+}
+
+wield()
+{
+	short ch;
+	register object *obj;
+	char description[DCOLS];
+
+	if (rogue.weapon && rogue.weapon->is_cursed) {
+		message(curse_message, 0);
+		return;
+	}
+	ch = get_pack_letter("wield what?", WEAPON);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("No such item.", 0);
+		return;
+	}
+	if (obj->what_is & (ARMOR | RING)) {
+		sprintf(description, "you can't wield %s",
+			((obj->what_is == ARMOR) ? "armor" : "rings"));
+		message(description, 0);
+		return;
+	}
+	if (obj->in_use_flags & BEING_WIELDED) {
+		message("in use", 0);
+	} else {
+		unwield(rogue.weapon);
+		strcpy(description, "wielding ");
+		get_description(obj, description + 9);
+		message(description, 0);
+		do_wield(obj);
+		register_move();
+	}
+}
+
+do_wield(obj)
+object *obj;
+{
+	rogue.weapon = obj;
+	obj->in_use_flags |= BEING_WIELDED;
+}
+
+unwield(obj)
+object *obj;
+{
+	if (obj) {
+		obj->in_use_flags &= (~BEING_WIELDED);
+	}
+	rogue.weapon = (object *) 0;
+}
+
+call_it()
+{
+	short ch;
+	register object *obj;
+	struct identify *id_table, *get_id_table();
+	char buf[MAX_TITLE_LENGTH+2];
+
+	ch = get_pack_letter("call what?", (SCROLL | POTION | WAND | RING));
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (!(obj->what_is & (SCROLL | POTION | WAND | RING))) {
+		message("surely you already know what that's called", 0);
+		return;
+	}
+	id_table = get_id_table(obj);
+
+	if (get_input_line("call it:","",buf,id_table[obj->which_kind].title,1,1)) {
+		id_table[obj->which_kind].id_status = CALLED;
+		strcpy(id_table[obj->which_kind].title, buf);
+	}
+}
+
+get_pack_count(new_obj)
+object *new_obj;
+{
+	object *obj;
+	short count = 0;
+
+	obj = rogue.pack.next_object;
+
+	while (obj) {
+		if (obj->what_is != WEAPON) {
+			count += obj->quantity;
+		} else if (!new_obj) {
+			count++;
+		} else if ((new_obj->what_is != WEAPON) ||
+			((obj->which_kind != ARROW) &&
+			(obj->which_kind != DAGGER) &&
+			(obj->which_kind != DART) &&
+			(obj->which_kind != SHURIKEN)) ||
+			(new_obj->which_kind != obj->which_kind) ||
+			(obj->quiver != new_obj->quiver)) {
+			count++;
+		}
+		obj = obj->next_object;
+	}
+	return(count);
+}
+
+mask_in_pack(pack, mask)
+object *pack;
+unsigned short mask;
+{
+	while (pack->next_object) {
+		pack = pack->next_object;
+		if (pack->what_is & mask) {
+			return(1);
+		}
+	}
+	return(0);
+}
+
+is_pack_letter(c, mask)
+short *c;
+unsigned short *mask;
+{
+	if (((*c == '?') || (*c == '!') || (*c == ':') || (*c == '=') ||
+		(*c == ')') || (*c == ']') || (*c == '/') || (*c == ','))) {
+		switch(*c) {
+		case '?':
+			*mask = SCROLL;
+			break;
+		case '!':
+			*mask = POTION;
+			break;
+		case ':':
+			*mask = FOOD;
+			break;
+		case ')':
+			*mask = WEAPON;
+			break;
+		case ']':
+			*mask = ARMOR;
+			break;
+		case '/':
+			*mask = WAND;
+			break;
+		case '=':
+			*mask = RING;
+			break;
+		case ',':
+			*mask = AMULET;
+			break;
+		}
+		*c = LIST;
+		return(1);
+	}
+	return(((*c >= 'a') && (*c <= 'z')) || (*c == CANCEL) || (*c == LIST));
+}
+
+has_amulet()
+{
+	return(mask_in_pack(&rogue.pack, AMULET));
+}
+SHAR_EOF
+echo shar: extracting play.c
+cat - << \SHAR_EOF > play.c
+/*
+ * play.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "object.h"
+#include "move.h"
+
+boolean interrupted = 0;
+char *unknown_command = "unknown command";
+
+extern short party_room, bear_trap;
+extern char hit_message[];
+extern boolean wizard, trap_door;
+
+play_level()
+{
+	short ch;
+	int count;
+
+	for (;;) {
+		interrupted = 0;
+		if (hit_message[0]) {
+			message(hit_message, 1);
+			hit_message[0] = 0;
+		}
+		if (trap_door) {
+			trap_door = 0;
+			return;
+		}
+		move(rogue.row, rogue.col);
+		refresh();
+
+		ch = rgetchar();
+		check_message();
+		count = 0;
+CH:
+		switch(ch) {
+		case '.':
+			rest((count > 0) ? count : 1);
+			break;
+		case 's':
+			search(((count > 0) ? count : 1), 0);
+			break;
+		case 'i':
+			inventory(&rogue.pack, ALL_OBJECTS);
+			break;
+		case 'f':
+			fight(0);
+			break;
+		case 'F':
+			fight(1);
+			break;
+		case 'h':
+		case 'j':
+		case 'k':
+		case 'l':
+		case 'y':
+		case 'u':
+		case 'n':
+		case 'b':
+			single_move_rogue(ch, 1);
+			break;
+		case 'H':
+		case 'J':
+		case 'K':
+		case 'L':
+		case 'B':
+		case 'Y':
+		case 'U':
+		case 'N':
+		case '\010':
+		case '\012':
+		case '\013':
+		case '\014':
+		case '\031':
+		case '\025':
+		case '\016':
+		case '\002':
+			multiple_move_rogue(ch);
+			break;
+		case 'e':
+			eat();
+			break;
+		case 'q':
+			quaff();
+			break;
+		case 'r':
+			read_scroll();
+			break;
+		case 'm':
+			move_onto();
+			break;
+		case 'd':
+			drop();
+			break;
+		case 'P':
+			put_on_ring();
+			break;
+		case 'R':
+			remove_ring();
+			break;
+		case '\020':
+			remessage();
+			break;
+		case '\027':
+			wizardize();
+			break;
+		case '>':
+			if (check_down()) {
+				return;
+			}
+			break;
+		case '<':
+			if (check_up()) {
+				return;
+			}
+			break;
+		case ')':
+		case ']':
+			inventory_armor_weapon(ch == ')');
+			break;
+		case '=':
+			inventory_rings();
+			break;
+		case '^':
+			identify_trap();
+			break;
+		case 'I':
+			single_inventory(0);
+			break;
+		case 'T':
+			take_off();
+			break;
+		case 'W':
+			wear();
+			break;
+		case 'w':
+			wield();
+			break;
+		case 'c':
+			call_it();
+			break;
+		case 'z':
+			zapp();
+			break;
+		case 't':
+			throw();
+			break;
+		case '!':
+			shell();
+			break;
+		case 'v':
+			message("rogue-clone: Version II. (Tim Stoehr was here), tektronix!zeus!tims", 0);
+			break;
+		case 'Q':
+			quit(0);
+		case '0':
+		case '1':
+		case '2':
+		case '3':
+		case '4':
+		case '5':
+		case '6':
+		case '7':
+		case '8':
+		case '9':
+			move(rogue.row, rogue.col);
+			refresh();
+			do {
+				if (count < 100) {
+					count = (10 * count) + (ch - '0');
+				}
+				ch = rgetchar();
+			} while ((ch >= '0') && (ch <= '9'));
+			if (ch != CANCEL) {
+				goto CH;
+			}
+			break;
+		case ' ':
+			break;
+		case '\011':
+			if (wizard) {
+				inventory(&level_objects, ALL_OBJECTS);
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case '\023':
+			if (wizard) {
+				draw_magic_map();
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case '\024':
+			if (wizard) {
+				show_traps();
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case '\017':
+			if (wizard) {
+				show_objects();
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case '\001':
+			show_average_hp();
+			break;
+		case '\003':
+			if (wizard) {
+				create_object_for_wizard();
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case '\015':
+			if (wizard) {
+				show_monsters();
+			} else {
+				message(unknown_command, 0);
+			}
+			break;
+		case 'S':
+			save_game();
+			break;
+		default:
+			message(unknown_command, 0);
+			break;
+		}
+	}
+}
+SHAR_EOF
+echo shar: extracting use.c
+cat - << \SHAR_EOF > use.c
+/*
+ * use.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "object.h"
+#include "move.h"
+#include "monster.h"
+#include "room.h"
+
+short halluc = 0;
+short blind = 0;
+short confused = 0;
+short levitate = 0;
+short haste_self = 0;
+boolean see_invisible = 0;
+short extra_hp = 0;
+boolean detect_monster = 0;
+char *strange_feeling = "you have a strange feeling for a moment, then it passes";
+
+extern short bear_trap;
+extern char hunger_str[];
+extern short current_room;
+extern long level_points[];
+extern boolean being_held;
+extern char *fruit, *you_can_move_again;
+extern boolean sustain_strength;
+
+quaff()
+{
+	short ch;
+	char buf[80];
+	object *obj, *get_letter_object();
+
+	ch = get_pack_letter("quaff what?", POTION);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (obj->what_is != POTION) {
+		message("you can't drink that", 0);
+		return;
+	}
+	switch(obj->which_kind) {
+		case INCREASE_STRENGTH:
+			message("you feel stronger now, what bulging muscles!",
+			0);
+			rogue.strength_current++;
+			if (rogue.strength_current > rogue.strength_max) {
+				rogue.strength_max = rogue.strength_current;
+			}
+			break;
+		case RESTORE_STRENGTH:
+			rogue.strength_current = rogue.strength_max;
+			message("this tastes great, you feel warm all over", 0);
+			break;
+		case HEALING:
+			message("you begin to feel better", 0);
+			potion_heal(0);
+			break;
+		case EXTRA_HEALING:
+			message("you begin to feel much better", 0);
+			potion_heal(1);
+			break;
+		case POISON:
+			if (!sustain_strength) {
+				rogue.strength_current -= get_rand(1, 3);
+				if (rogue.strength_current < 1) {
+					rogue.strength_current = 1;
+				}
+			}
+			message("you feel very sick now", 0);
+			if (halluc) {
+				unhallucinate();
+			}
+			break;
+		case RAISE_LEVEL:
+			rogue.exp_points = level_points[rogue.exp - 1];
+			add_exp(1, 1);
+			break;
+		case BLINDNESS:
+			go_blind();
+			break;
+		case HALLUCINATION:
+			message("oh wow, everything seems so cosmic", 0);
+			halluc += get_rand(500, 800);
+			break;
+		case DETECT_MONSTER:
+			show_monsters();
+			if (!(level_monsters.next_monster)) {
+				message(strange_feeling, 0);
+			}
+			break;
+		case DETECT_OBJECTS:
+			if (level_objects.next_object) {
+				if (!blind) {
+					show_objects();
+				}
+			} else {
+				message(strange_feeling, 0);
+			}
+			break;
+		case CONFUSION:
+			message((halluc ? "what a trippy feeling" :
+			"you feel confused"), 0);
+			confuse();
+			break;
+		case LEVITATION:
+			message("you start to float in the air", 0);
+			levitate += get_rand(15, 30);
+			being_held = bear_trap = 0;
+			break;
+		case HASTE_SELF:
+			message("you feel yourself moving much faster", 0);
+			haste_self += get_rand(11, 21);
+			if (!(haste_self % 2)) {
+				haste_self++;
+			}
+			break;
+		case SEE_INVISIBLE:
+			sprintf(buf, "hmm, this potion tastes like %sjuice", fruit);
+			message(buf, 0);
+			if (blind) {
+				unblind();
+			}
+			see_invisible = 1;
+			relight();
+			break;
+	}
+	print_stats((STAT_STRENGTH | STAT_HP));
+	if (id_potions[obj->which_kind].id_status != CALLED) {
+		id_potions[obj->which_kind].id_status = IDENTIFIED;
+	}
+	vanish(obj, 1, &rogue.pack);
+}
+
+read_scroll()
+{
+	short ch;
+	object *obj, *get_letter_object();
+	char msg[DCOLS];
+	char *get_ench_color(), *name_of();
+
+	ch = get_pack_letter("read what?", SCROLL);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (obj->what_is != SCROLL) {
+		message("you can't read that", 0);
+		return;
+	}
+	switch(obj->which_kind) {
+		case SCARE_MONSTER:
+			message("you hear a maniacal laughter in the distance",
+			0);
+			break;
+		case HOLD_MONSTER:
+			hold_monster();
+			break;
+		case ENCHANT_WEAPON:
+			if (rogue.weapon) {
+				if (rogue.weapon->what_is == WEAPON) {
+					sprintf(msg, "your %sglow%s %sfor a moment",
+					name_of(rogue.weapon),
+					((rogue.weapon->quantity <= 1) ? "s" : ""),
+					get_ench_color());
+					message(msg, 0);
+					if (coin_toss()) {
+						rogue.weapon->to_hit_enchantment++;
+					} else {
+						rogue.weapon->damage_enchantment++;
+					}
+				}
+				rogue.weapon->is_cursed = 0;
+			} else {
+				message("your hands tingle", 0);
+			}
+			break;
+		case ENCHANT_ARMOR:
+			if (rogue.armor) {
+				sprintf(msg, "your armor glows %sfor a moment",
+				get_ench_color());
+				message(msg, 0);
+				rogue.armor->damage_enchantment++;
+				rogue.armor->is_cursed = 0;
+				print_stats(STAT_ARMOR);
+			} else {
+				message("your skin crawls", 0);
+			}
+			break;
+		case IDENTIFY:
+			message("this is a scroll of identify", 0);
+			obj->identified = 1;
+			id_scrolls[obj->which_kind].id_status = IDENTIFIED;
+			identify();
+			break;
+		case TELEPORT:
+			teleport();
+			break;
+		case SLEEP:
+			message("you fall asleep", 0);
+			take_a_nap();
+			break;
+		case PROTECT_ARMOR:
+			if (rogue.armor) {
+				message( "your armor is covered by a shimmering gold shield",0);
+				rogue.armor->is_protected = 1;
+				rogue.armor->is_cursed = 0;
+			} else {
+				message("your acne seems to have disappeared",
+				0);
+			}
+			break;
+		case REMOVE_CURSE:
+				message((!halluc) ?
+					"you feel as though someone is watching over you" :
+					"you feel in touch with the universal oneness", 0);
+			uncurse_all();
+			break;
+		case CREATE_MONSTER:
+			create_monster();
+			break;
+		case AGGRAVATE_MONSTER:
+			aggravate();
+			break;
+		case MAGIC_MAPPING:
+			message("this scroll seems to have a map on it", 0);
+			draw_magic_map();
+			break;
+	}
+	if (id_scrolls[obj->which_kind].id_status != CALLED) {
+		id_scrolls[obj->which_kind].id_status = IDENTIFIED;
+	}
+	vanish(obj, (obj->which_kind != SLEEP), &rogue.pack);
+}
+
+/* vanish() does NOT handle a quiver of weapons with more than one
+   arrow (or whatever) in the quiver.  It will only decrement the count.
+*/
+
+vanish(obj, rm, pack)
+object *obj;
+short rm;
+object *pack;
+{
+	if (obj->quantity > 1) {
+		obj->quantity--;
+	} else {
+		if (obj->in_use_flags & BEING_WIELDED) {
+			unwield(obj);
+		} else if (obj->in_use_flags & BEING_WORN) {
+			unwear(obj);
+		} else if (obj->in_use_flags & ON_EITHER_HAND) {
+			un_put_on(obj);
+		}
+		remove_from_pack(obj, pack);
+		free_object(obj);
+	}
+	if (rm) {
+		register_move();
+	}
+}
+
+potion_heal(extra)
+{
+	float ratio;
+	short add;
+
+	rogue.hp_current += rogue.exp;
+
+	ratio = ((float)rogue.hp_current) / rogue.hp_max;
+
+	if (ratio >= 1.00) {
+		rogue.hp_max += (extra ? 2 : 1);
+		extra_hp += (extra ? 2 : 1);
+		rogue.hp_current = rogue.hp_max;
+	} else if (ratio >= 0.90) {
+		rogue.hp_max += (extra ? 1 : 0);
+		extra_hp += (extra ? 1 : 0);
+		rogue.hp_current = rogue.hp_max;
+	} else {
+		if (ratio < 0.33) {
+			ratio = 0.33;
+		}
+		if (extra) {
+			ratio += ratio;
+		}
+		add = (short)(ratio * ((float)rogue.hp_max - rogue.hp_current));
+		rogue.hp_current += add;
+		if (rogue.hp_current > rogue.hp_max) {
+			rogue.hp_current = rogue.hp_max;
+		}
+	}
+	if (blind) {
+		unblind();
+	}
+	if (confused && extra) {
+			unconfuse();
+	} else if (confused) {
+		confused = (confused / 2) + 1;
+	}
+	if (halluc && extra) {
+		unhallucinate();
+	} else if (halluc) {
+		halluc = (halluc / 2) + 1;
+	}
+}
+
+identify()
+{
+	short ch;
+	object *obj, *get_letter_object();
+	struct identify *id_table, *get_id_table();
+	char description[DCOLS];
+AGAIN:
+	ch = get_pack_letter("what would you like to identify?", ALL_OBJECTS);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item, try again", 0);
+		message("", 0);
+		check_message();
+		goto AGAIN;
+	}
+	obj->identified = 1;
+	if (obj->what_is & (SCROLL | POTION | WEAPON | ARMOR | WAND | RING)) {
+		id_table = get_id_table(obj);
+		id_table[obj->which_kind].id_status = IDENTIFIED;
+	}
+	get_description(obj, description);
+	message(description, 0);
+}
+
+eat()
+{
+	short ch;
+	short moves;
+	object *obj, *get_letter_object();
+	char buf[70];
+
+	ch = get_pack_letter("eat what?", FOOD);
+
+	if (ch == CANCEL) {
+		return;
+	}
+	if (!(obj = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (obj->what_is != FOOD) {
+		message("you can't eat that", 0);
+		return;
+	}
+	if ((obj->which_kind == FRUIT) || rand_percent(60)) {
+		moves = get_rand(900, 1100);
+		if (obj->which_kind == RATION) {
+			message("yum, that tasted good", 0);
+		} else {
+			sprintf(buf, "my, that was a yummy %s", fruit);
+			message(buf, 0);
+		}
+	} else {
+		moves = get_rand(700, 900);
+		message("yuk, that food tasted awful", 0);
+		add_exp(2, 1);
+	}
+	rogue.moves_left /= 3;
+	rogue.moves_left += moves;
+	hunger_str[0] = 0;
+	print_stats(STAT_HUNGER);
+
+	vanish(obj, 1, &rogue.pack);
+}
+
+hold_monster()
+{
+	short i, j;
+	short mcount = 0;
+	object *monster, *object_at();
+	short row, col;
+
+	for (i = -2; i <= 2; i++) {
+		for (j = -2; j <= 2; j++) {
+			row = rogue.row + i;
+			col = rogue.col + j;
+			if ((row < MIN_ROW) || (row > (DROWS-2)) || (col < 0) ||
+				 (col > (DCOLS-1))) {
+				continue;
+			}
+			if (dungeon[row][col] & MONSTER) {
+				monster = object_at(&level_monsters, row, col);
+				monster->m_flags |= ASLEEP;
+				monster->m_flags &= (~WAKENS);
+				mcount++;
+			}
+		}
+	}
+	if (mcount == 0) {
+		message("you feel a strange sense of loss", 0);
+	} else if (mcount == 1) {
+		message("the monster freezes", 0);
+	} else {
+		message("the monsters around you freeze", 0);
+	}
+}
+
+teleport()
+{
+	mvaddch(rogue.row, rogue.col, get_dungeon_char(rogue.row, rogue.col));
+
+	if (current_room >= 0) {
+		darken_room(current_room);
+	}
+	put_player(get_room_number(rogue.row, rogue.col));
+	being_held = bear_trap = 0;
+}
+
+hallucinate()
+{
+	object *obj, *monster;
+	short ch;
+
+	if (blind) return;
+
+	obj = level_objects.next_object;
+
+	while (obj) {
+		ch = mvinch(obj->row, obj->col);
+		if (((ch < 'A') || (ch > 'Z')) &&
+			((obj->row != rogue.row) || (obj->col != rogue.col)))
+		if ((ch != ' ')&&(ch != '.')&&(ch != '#')&&(ch != '+')) {
+			addch(get_rand_obj_char());
+		}
+		obj = obj->next_object;
+	}
+	monster = level_monsters.next_monster;
+
+	while (monster) {
+		ch = mvinch(monster->row, monster->col);
+		if ((ch >= 'A') && (ch <= 'Z')) {
+			addch(get_rand('A', 'Z'));
+		}
+		monster = monster->next_monster;
+	}
+}
+
+unhallucinate()
+{
+	halluc = 0;
+	relight();
+	message("everything looks SO boring now", 1);
+}
+
+unblind()
+{
+	blind = 0;
+	message("the veil of darkness lifts", 1);
+	relight();
+	if (halluc) {
+		hallucinate();
+	}
+	if (detect_monster) {
+		show_monsters();
+	}
+}
+
+relight()
+{
+	if (current_room == PASSAGE) {
+		light_passage(rogue.row, rogue.col);
+	} else {
+		light_up_room();
+	}
+	mvaddch(rogue.row, rogue.col, rogue.fchar);
+}
+
+take_a_nap()
+{
+	short i;
+
+	i = get_rand(2, 5);
+	sleep(1);
+
+	while (i--) {
+		move_monsters();
+	}
+	sleep(1);
+	message(you_can_move_again, 0);
+}
+
+go_blind()
+{
+	short i, j;
+
+	if (!blind) {
+		message("a cloak of darkness falls around you", 0);
+	}
+	blind += get_rand(500, 800);
+
+	if (detect_monster) {
+		object *monster;
+
+		monster = level_monsters.next_monster;
+
+		while (monster) {
+			mvaddch(monster->row, monster->col, monster->trail_char);
+			monster = monster->next_monster;
+		}
+	}
+	if (current_room >= 0) {
+		for (i = rooms[current_room].top_row + 1;
+			 i < rooms[current_room].bottom_row; i++) {
+			for (j = rooms[current_room].left_col + 1;
+				 j < rooms[current_room].right_col; j++) {
+				mvaddch(i, j, ' ');
+			}
+		}
+	}
+	mvaddch(rogue.row, rogue.col, rogue.fchar);
+}
+
+char *get_ench_color()
+{
+	if (halluc) {
+		return(id_potions[get_rand(0, POTIONS-1)].title);
+	}
+	return("blue ");
+}
+
+confuse()
+{
+	confused += get_rand(12, 22);
+}
+
+unconfuse()
+{
+	char msg[80];
+
+	confused = 0;
+	sprintf(msg, "you feel less %s now", (halluc ? "trippy" : "confused"));
+	message(msg, 1);
+}
+
+uncurse_all()
+{
+	object *obj;
+
+	obj = rogue.pack.next_object;
+
+	while (obj) {
+		obj->is_cursed = 0;
+		obj = obj->next_object;
+	}
+}
+SHAR_EOF
+
+
+
+#!/bin/sh-----cut here-----cut here-----cut here-----cut here-----
+# shar:	Shell Archiver
+#	Run the following text with /bin/sh to create:
+#	random.c #	ring.c #	room.c #	save.c #	score.c #	throw.c #	trap.c 
+echo shar: extracting random.c
+cat - << \SHAR_EOF > random.c
+#include <stdio.h>
+
+static int dgrs[5] = {0, 7, 15, 31, 63};
+static int seps[5] = {0, 3, 1, 3, 1};
+
+static long rntb[32] = {
+	         3, 0x9a319039, 0x32d9c024, 0x9b663182, 0x5da1f342, 
+	0xde3b81e0, 0xdf0a6fb5, 0xf103bc02, 0x48f340fb, 0x7449e56b,
+	0xbeb1dbb0, 0xab5c5918, 0x946554fd, 0x8c2e680f, 0xeb3d799f,
+	0xb11ee0b7, 0x2d436b86, 0xda672e2a, 0x1588ca88, 0xe369735d,
+	0x904f35f7, 0xd7158fd6, 0x6fa6f051, 0x616e6b96, 0xac94efdc, 
+	0x36413f93, 0xc622c298, 0xf5a42ab8, 0x8a88d77b, 0xf5ad9d0e,
+	0x8999220b, 0x27fb47b9 };
+
+static long *fptr = &rntb[4];
+static long *rptr = &rntb[1];
+static long *state = &rntb[1];
+static int rand_type = 3;
+static int rand_deg = 31;
+static int rand_sep = 3;
+static long *end_ptr = &rntb[32];
+
+srandom(x)
+unsigned x;
+{
+	register int i, j;
+
+	if (rand_type == 0) {
+		state[0] = x;
+	} else {
+		j = 1;
+		state[0] = x;
+		for (i = 1; i < rand_deg; i++) {
+			state[i] = 1103515245*state[i - 1] + 12345;
+		}
+		fptr = &state[rand_sep];
+		rptr = &state[0];
+		for (i = 0; i < 10*rand_deg; i++) {
+			random();
+		}
+	}
+}
+
+char *
+initstate(seed, arg_state, n)
+unsigned seed;
+char *arg_state;
+int n;
+{
+	register char *ostate = (char *)(&state[-1]);
+
+	if (rand_type == 0) {
+		state[-1] = rand_type;
+	} else {
+		state[-1] = 5 * (rptr - state) + rand_type;
+	}
+	if (n < 32) {
+		rand_type = 0;
+		rand_deg = 0;
+		rand_sep = 0;
+	} else {
+		if (n < 64) {
+			rand_type = 1;
+			rand_deg = 7;
+			rand_sep = 3;
+		} else {
+			if (n < 128) {
+				rand_type = 2;
+				rand_deg = 15;
+				rand_sep = 1;
+			} else {
+				if (n < 256) {
+					rand_type = 3;
+					rand_deg = 31;
+					rand_sep = 3;
+				} else {
+					rand_type = 4;
+					rand_deg = 63;
+					rand_sep = 1;
+				}
+			}
+		}
+	}
+	state = &(((long *)arg_state)[1]);
+	end_ptr = &state[rand_deg];
+	srandom(seed);
+	if (rand_type == 0) {
+		state[-1] = rand_type;
+	} else {
+		state[-1] = 5 * (rptr - state) + rand_type;
+	}
+	return(ostate);
+}
+
+char *
+setstate(arg_state)
+char *arg_state;
+{
+	register long *new_state = (long *) arg_state;
+	register int type = new_state[0] % 5;
+	register int rear = new_state[0] / 5;
+	char *ostate = (char *)(&state[-1]);
+
+	if (rand_type == 0) {
+		state[-1] = rand_type;
+	} else {
+		state[-1] = 5 * (rptr - state) + rand_type;
+	}
+	switch(type) {
+	case 0:
+	case 1:
+	case 2:
+	case 3:
+	case 4:
+		rand_type = type;
+		rand_deg = dgrs[type];
+		rand_sep = seps[type];
+		break;
+
+	}
+	state = &new_state[1];
+	if (rand_type != 0) {
+		rptr = &state[rear];
+		fptr = &state[(rear + rand_sep)%rand_deg];
+	}
+	end_ptr = &state[rand_deg];
+	return(ostate);
+}
+
+long
+random()
+{
+	long i;
+	
+	if (rand_type == 0) {
+		i = state[0] = (state[0]*1103515245 + 12345) & 0x7fffffff;
+	} else {
+		*fptr += *rptr;
+		i = (*fptr >> 1) & 0x7fffffff;
+		if (++fptr >= end_ptr) {
+			fptr = state;
+			++rptr;
+		} else {
+			if (++rptr >= end_ptr) {
+				rptr = state;
+			}
+		}
+	}
+	return(i);
+}
+
+get_rand(x, y)
+register int x, y;
+{
+	long random();
+	register int r, t;
+
+	if (x > y) {
+		y = t;
+		y = x;
+		x = t;
+	}
+	r = (int) random();
+	r = (r % ((y-x)+1)) + x;
+	return(r);
+}
+
+rand_percent(percentage)
+register int percentage;
+{
+	return(get_rand(1, 100) <= percentage);
+}
+
+coin_toss()
+{
+	long random();
+
+	return(((random() & 01) ? 1 : 0));
+}
+SHAR_EOF
+echo shar: extracting ring.c
+cat - << \SHAR_EOF > ring.c
+/*
+ * ring.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include "object.h"
+#include "move.h"
+#include "room.h"
+
+char *left_or_right = "left or right hand?";
+char *no_ring = "there's no ring on that hand";
+short stealthy, r_rings, add_strength, e_rings, regeneration, ring_exp;
+short auto_search;
+boolean r_teleport, r_see_invisible, sustain_strength, maintain_armor;
+
+extern char *curse_message;
+extern boolean wizard;
+
+put_on_ring()
+{
+	short ch;
+	char description[DCOLS];
+	object *ring, *get_letter_object();
+
+	if (r_rings == 2) {
+		message("wearing two rings already", 0);
+		return;
+	}
+	if ((ch = get_pack_letter("put on what?", RING)) == CANCEL) {
+		return;
+	}
+	if (!(ring = get_letter_object(ch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if (!(ring->what_is & RING)) {
+		message("that's not a ring", 0);
+		return;
+	}
+	if (ring->in_use_flags & (ON_LEFT_HAND | ON_RIGHT_HAND)) {
+		message("that ring is already being worn", 0);
+		return;
+	}
+	if (r_rings == 1) {
+		ch = (rogue.left_ring ? 'r' : 'l');
+	} else {
+		message(left_or_right, 0);
+		do {
+			ch = rgetchar();
+		} while ((ch != CANCEL) && (ch != 'l') && (ch != 'r') && (ch != '\n') &&
+			 	(ch != '\r'));
+	}
+	if ((ch != 'l') && (ch != 'r')) {
+		check_message();
+		return;
+	}
+	if (((ch == 'l') && rogue.left_ring)||((ch == 'r') && rogue.right_ring)) {
+		check_message();
+		message("there's already a ring on that hand", 0);
+		return;
+	}
+	if (ch == 'l') {
+		do_put_on(ring, 1);
+	} else {
+		do_put_on(ring, 0);
+	}
+	ring_stats(1);
+	check_message();
+	get_description(ring, description);
+	message(description, 0);
+	register_move();
+}
+
+/*
+ * Do not call ring_stats() from within do_put_on().  It will cause
+ * serious problems when do_put_on() is called from read_pack() in restore().
+ */
+
+do_put_on(ring, on_left)
+object *ring;
+boolean on_left;
+{
+	if (on_left) {
+		ring->in_use_flags |= ON_LEFT_HAND;
+		rogue.left_ring = ring;
+	} else {
+		ring->in_use_flags |= ON_RIGHT_HAND;
+		rogue.right_ring = ring;
+	}
+}
+
+remove_ring()
+{
+	boolean left = 0, right = 0;
+	short ch;
+	char buf[DCOLS];
+	object *ring;
+
+	if (r_rings == 0) {
+		inventory_rings();
+	} else if (rogue.left_ring && !rogue.right_ring) {
+		left = 1;
+	} else if (!rogue.left_ring && rogue.right_ring) {
+		right = 1;
+	} else {
+		message(left_or_right, 0);
+		do {
+			ch = rgetchar();
+		} while ((ch != CANCEL) && (ch != 'l') && (ch != 'r') &&
+			(ch != '\n') && (ch != '\r'));
+		left = (ch == 'l');
+		right = (ch == 'r');
+		check_message();
+	}
+	if (left || right) {
+		if (left) {
+			if (rogue.left_ring) {
+				ring = rogue.left_ring;
+			} else {
+				message(no_ring, 0);
+			}
+		} else {
+			if (rogue.right_ring) {
+				ring = rogue.right_ring;
+			} else {
+				message(no_ring, 0);
+			}
+		}
+		if (ring->is_cursed) {
+			message(curse_message, 0);
+		} else {
+			un_put_on(ring);
+			strcpy(buf, "removed ");
+			get_description(ring, buf + 8);
+			message(buf, 0);
+			register_move();
+		}
+	}
+}
+
+un_put_on(ring)
+object *ring;
+{
+	if (ring && (ring->in_use_flags & ON_LEFT_HAND)) {
+		ring->in_use_flags &= (~ON_LEFT_HAND);
+		rogue.left_ring = 0;
+	} else if (ring && (ring->in_use_flags & ON_RIGHT_HAND)) {
+		ring->in_use_flags &= (~ON_RIGHT_HAND);
+		rogue.right_ring = 0;
+	}
+	ring_stats(1);
+}
+
+get_rand_ring(ring, assign_wk)
+object *ring;
+boolean assign_wk;
+{
+	ring->what_is = RING;
+	if (assign_wk) {
+		ring->which_kind = get_rand(0, (RINGS - 1));
+	}
+	ring->class = 0;
+
+	switch(ring->which_kind) {
+	/*
+	case STEALTH:
+		break;
+	case SLOW_DIGEST:
+		break;
+	case REGENERATION:
+		break;
+	case R_SEE_INVISIBLE:
+		break;
+	case SUSTAIN_STRENGTH:
+		break;
+	case R_MAINTAIN_ARMOR:
+		break;
+	case SEARCHING:
+		break;
+	*/
+	case R_TELEPORT:
+		ring->is_cursed = 1;
+		break;
+	case ADD_STRENGTH:
+	case DEXTERITY:
+		while ((ring->class = (get_rand(0, 4) - 2)) == 0) ;
+		ring->is_cursed = (ring->class < 0);
+		break;
+	case ADORNMENT:
+		ring->is_cursed = coin_toss();
+		break;
+	}
+}
+
+inventory_rings()
+{
+	char buf[DCOLS];
+
+	if (r_rings == 0) {
+		message("not wearing any rings", 0);
+	} else {
+		if (rogue.left_ring) {
+			get_description(rogue.left_ring, buf);
+			message(buf, 0);
+		}
+		if (rogue.right_ring) {
+			get_description(rogue.right_ring, buf);
+			message(buf, 0);
+		}
+	}
+	if (wizard) {
+		sprintf(buf, "ste %d, r_r %d, e_r %d, r_t %d, s_s %d, a_s %d, reg %d, r_e %d, s_i %d, m_a %d, aus %d",
+			stealthy, r_rings, e_rings, r_teleport, sustain_strength,
+			add_strength, regeneration, ring_exp, r_see_invisible,
+			maintain_armor, auto_search);
+		message(buf, 0);
+	}
+}
+
+ring_stats(pr)
+boolean pr;
+{
+	short i;
+	object *ring;
+
+	stealthy = 0;
+	r_rings = 0;
+	e_rings = 0;
+	r_teleport = 0;
+	sustain_strength = 0;
+	add_strength = 0;
+	regeneration = 0;
+	ring_exp = 0;
+	r_see_invisible = 0;
+	maintain_armor = 0;
+	auto_search = 0;
+
+	for (i = 0; i < 2; i++) {
+		if (!(ring = ((i == 0) ? rogue.left_ring : rogue.right_ring))) {
+			continue;
+		}
+		r_rings++;
+		e_rings++;
+		switch(ring->which_kind) {
+		case STEALTH:
+			stealthy++;
+			break;
+		case R_TELEPORT:
+			r_teleport = 1;
+			break;
+		case REGENERATION:
+			regeneration++;
+			break;
+		case SLOW_DIGEST:
+			e_rings -= 2;
+			break;
+		case ADD_STRENGTH:
+			add_strength += ring->class;
+			break;
+		case SUSTAIN_STRENGTH:
+			sustain_strength = 1;
+			break;
+		case DEXTERITY:
+			ring_exp += ring->class;
+			break;
+		case ADORNMENT:
+			break;
+		case R_SEE_INVISIBLE:
+			r_see_invisible = 1;
+			break;
+		case MAINTAIN_ARMOR:
+			maintain_armor = 1;
+			break;
+		case SEARCHING:
+			auto_search += 2;
+			break;
+		}
+	}
+	if (pr) {
+		print_stats(STAT_STRENGTH);
+		relight();
+	}
+}
+SHAR_EOF
+echo shar: extracting room.c
+cat - << \SHAR_EOF > room.c
+/*
+ * room.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "room.h"
+#include "object.h"
+#include "move.h"
+#include "monster.h"
+
+short current_room;
+room rooms[MAXROOMS];
+boolean rooms_visited[MAXROOMS];
+
+extern short blind;
+extern boolean detect_monster;
+
+light_up_room()
+{
+	short i, j;
+
+	if (!blind) {
+		for (i = rooms[current_room].top_row;
+			i <= rooms[current_room].bottom_row; i++) {
+			for (j = rooms[current_room].left_col;
+				j <= rooms[current_room].right_col; j++) {
+				if (dungeon[i][j] & MONSTER) {
+					object *monster, *object_at();
+
+					if (monster = object_at(&level_monsters, i, j)) {
+						dungeon[monster->row][monster->col] &= (~MONSTER);
+						monster->trail_char =
+							get_dungeon_char(monster->row, monster->col);
+						dungeon[monster->row][monster->col] |= MONSTER;
+					}
+				}
+				mvaddch(i, j, get_dungeon_char(i, j));
+			}
+		}
+		mvaddch(rogue.row, rogue.col, rogue.fchar);
+	}
+}
+
+light_passage(row, col)
+{
+	short i, j, i_end, j_end;
+
+	if (blind) {
+		return;
+	}
+	i_end = (row < (DROWS-2)) ? 1 : 0;
+	j_end = (col < (DCOLS-1)) ? 1 : 0;
+
+	for (i = ((row > MIN_ROW) ? -1 : 0); i <= i_end; i++) {
+		for (j = ((col > 0) ? -1 : 0); j <= j_end; j++) {
+			if (can_move(row, col, row+i, col+j)) {
+				mvaddch(row+i, col+j, get_dungeon_char(row+i, col+j));
+			}
+		}
+	}
+}
+
+darken_room(rn)
+short rn;
+{
+	short i, j;
+
+	for (i = rooms[rn].top_row + 1; i < rooms[rn].bottom_row; i++) {
+		for (j = rooms[rn].left_col + 1; j < rooms[rn].right_col; j++) {
+			if (blind) {
+				mvaddch(i, j, ' ');
+			} else {
+				if (!(dungeon[i][j] & (OBJECT | STAIRS)) &&
+					!(detect_monster && (dungeon[i][j] & MONSTER))) {
+					if (!imitating(i, j)) {
+						mvaddch(i, j, ' ');
+					}
+					if ((dungeon[i][j] & TRAP) && (!(dungeon[i][j] & HIDDEN))) {
+						mvaddch(i, j, '^');
+					}
+				}
+			}
+		}
+	}
+}
+
+get_dungeon_char(row, col)
+register row, col;
+{
+	register unsigned short mask = dungeon[row][col];
+
+	if (mask & MONSTER) {
+		return(get_monster_char_row_col(row, col));
+	}
+	if (mask & OBJECT) {
+		object *obj, *object_at();
+
+		obj = object_at(&level_objects, row, col);
+		return(get_mask_char(obj->what_is));
+	}
+	if (mask & (TUNNEL | STAIRS | HORWALL | VERTWALL | FLOOR | DOOR)) {
+		if ((mask & (TUNNEL| STAIRS)) && (!(mask & HIDDEN))) {
+			return(((mask & STAIRS) ? '%' : '#'));
+		}
+		if (mask & HORWALL) {
+			return('-');
+		}
+		if (mask & VERTWALL) {
+			return('|');
+		}
+		if (mask & FLOOR) {
+			if (mask & TRAP) {
+				if (!(dungeon[row][col] & HIDDEN)) {
+					return('^');
+				}
+			}
+			return('.');
+		}
+		if (mask & DOOR) {
+			if (mask & HIDDEN) {
+				if (((col > 0) && (dungeon[row][col-1] & HORWALL)) ||
+					((col < (DCOLS-1)) && (dungeon[row][col+1] & HORWALL))) {
+					return('-');
+				} else {
+					return('|');
+				}
+			} else {
+				return('+');
+			}
+		}
+	}
+	return(' ');
+}
+
+get_mask_char(mask)
+register unsigned short mask;
+{
+		switch(mask) {
+		case SCROLL:
+			return('?');
+		case POTION:
+			return('!');
+		case GOLD:
+			return('*');
+		case FOOD:
+			return(':');
+		case WAND:
+			return('/');
+		case ARMOR:
+			return(']');
+		case WEAPON:
+			return(')');
+		case RING:
+			return('=');
+		case AMULET:
+			return(',');
+		default:
+			return('~');	/* unknown, something is wrong */
+		}
+}
+
+get_rand_row_col(row, col, mask)
+short *row, *col;
+unsigned short mask;
+{
+	short rn;
+
+	do {
+		*row = get_rand(MIN_ROW, DROWS-2);
+		*col = get_rand(0, DCOLS-1);
+		rn = get_room_number(*row, *col);
+	} while ((rn == NO_ROOM) ||
+		(!(dungeon[*row][*col] & mask)) ||
+		(dungeon[*row][*col] & (~mask)) ||
+		(!(rooms[rn].is_room & (R_ROOM | R_MAZE))));
+}
+
+get_rand_room()
+{
+	short i;
+
+	do {
+		i = get_rand(0, MAXROOMS-1);
+	} while (!(rooms[i].is_room & (R_ROOM | R_MAZE)));
+
+	return(i);
+}
+
+fill_party_room_with_objects(rn)
+{
+	short i, j, nf = 0;
+	object *obj, *get_rand_object();
+	short n, N, row, col;
+	boolean found;
+
+	N = ((rooms[rn].bottom_row - rooms[rn].top_row) - 1) *
+		((rooms[rn].right_col - rooms[rn].left_col) - 1);
+	n =  get_rand(5, 10);
+	if (n > N) {
+		n = N - 2;
+	}
+	for (i = 0; i < n; i++) {
+		for (j = found = 0; ((!found) && (j < 250)); j++) {
+			row = get_rand(rooms[rn].top_row+1,
+					   rooms[rn].bottom_row-1);
+			col = get_rand(rooms[rn].left_col+1,
+					   rooms[rn].right_col-1);
+			if ((dungeon[row][col] == FLOOR) || (dungeon[row][col] == TUNNEL)) {
+				found = 1;
+			}
+		}
+		if (found) {
+			obj = get_rand_object();
+			put_object_at(obj, row, col);
+			nf++;
+		}
+	}
+	return(nf);
+}
+
+get_room_number(row, col)
+register row, col;
+{
+	short i;
+
+	for (i = 0; i < MAXROOMS; i++) {
+		if ((row >= rooms[i].top_row) && (row <= rooms[i].bottom_row) &&
+			(col >= rooms[i].left_col) && (col <= rooms[i].right_col)) {
+			return(i);
+		}
+	}
+	return(NO_ROOM);
+}
+
+shell()
+{
+	char *getenv(), *rindex();
+	char *sh;
+	int status;
+
+	move(DROWS-1, 0);
+	refresh();
+	stop_window();
+	putchar('\n');
+
+	if (!(sh = getenv("SHELL"))) {
+		sh = "/bin/sh";
+	}
+
+	if (!fork()) {
+		if (setreuid(-1, getuid()) < 0) exit(1);
+		execl(sh, rindex(sh, '/') + 1, 0);
+		exit(0);
+	}
+	wait(&status);
+	start_window();
+	wrefresh(curscr);
+}
+
+is_all_connected()
+{
+	short i, starting_room;
+
+	for (i = 0; i < MAXROOMS; i++) {
+		rooms_visited[i] = 0;
+		if (rooms[i].is_room & (R_ROOM | R_MAZE)) {
+			starting_room = i;
+		}
+	}
+
+	visit_rooms(starting_room);
+
+	for (i = 0; i < MAXROOMS; i++) {
+		if ((rooms[i].is_room & (R_ROOM | R_MAZE)) && (!rooms_visited[i])) {
+			return(0);
+		}
+	}
+	return(1);
+}
+
+visit_rooms(rn)
+int rn;
+{
+	short i;
+	short other_rn;
+
+	rooms_visited[rn] = 1;
+
+	for (i = 0; i < 4; i++) {
+		other_rn = rooms[rn].doors[i].other_room;
+		if ((other_rn >= 0) && (!rooms_visited[other_rn])) {
+			visit_rooms(other_rn);
+		}
+	}
+}
+
+draw_magic_map()
+{
+	short i, j, ch, och;
+	unsigned short mask = (HORWALL | VERTWALL | DOOR | TUNNEL | TRAP | STAIRS |
+			MONSTER);
+	unsigned short s;
+
+	for (i = 0; i < DROWS; i++) {
+		for (j = 0; j < DCOLS; j++) {
+			s = dungeon[i][j];
+			if (s & mask) {
+				if (((ch = mvinch(i, j)) == ' ') ||
+					((ch >= 'A') && (ch <= 'Z')) || (s & (TRAP | HIDDEN))) {
+					och = ch;
+					dungeon[i][j] &= (~HIDDEN);
+					if (s & HORWALL) {
+						ch = '-';
+					} else if (s & VERTWALL) {
+						ch = '|';
+					} else if (s & DOOR) {
+						ch = '+';
+					} else if (s & TRAP) {
+						ch = '^';
+					} else if (s & STAIRS) {
+						ch = '%';
+					} else if (s & TUNNEL) {
+						ch = '#';
+					} else {
+						continue;
+					}
+					if ((!(s & MONSTER)) || (och == ' ')) {
+						addch(ch);
+					}
+					if (s & MONSTER) {
+						object *monster, *object_at();
+
+						if (monster = object_at(&level_monsters, i, j)) {
+							monster->trail_char = ch;
+						}
+					}
+				}
+			}
+		}
+	}
+}
+
+door_course(monster, entering, row, col)
+object *monster;
+short entering, row, col;
+{
+	short i, j, k, rn;
+	short r, rr;
+
+	monster->row = row;
+	monster->col = col;
+
+	if (monster_can_see(monster, rogue.row, rogue.col)) {
+		monster->trow = NO_ROOM;
+		return;
+	}
+	rn = get_room_number(row, col);
+
+	if (entering) {		/* entering room */
+		/* look for door to some other room */
+		r = get_rand(0, MAXROOMS-1);
+		for (i = 0; i < MAXROOMS; i++) {
+			rr = (r + i) % MAXROOMS;
+			if ((!(rooms[rr].is_room & (R_ROOM | R_MAZE))) || (rr == rn)) {
+				continue;
+			}
+			for (k = 0; k < 4; k++) {
+				if (rooms[rr].doors[k].other_room == rn) {
+					monster->trow = rooms[rr].doors[k].other_row;
+					monster->tcol = rooms[rr].doors[k].other_col;
+					if ((monster->trow == row) &&
+						(monster->tcol == col)) {
+						continue;
+					}
+					return;
+				}
+			}
+		}
+		/* look for door to dead end */
+		for (i = rooms[rn].top_row; i <= rooms[rn].bottom_row; i++) {
+			for (j = rooms[rn].left_col; j <= rooms[rn].right_col; j++) {
+				if ((i != monster->row) && (j != monster->col) &&
+					(dungeon[i][j] & DOOR)) {
+					monster->trow = i;
+					monster->tcol = j;
+					return;
+				}
+			}
+		}
+		/* return monster to room that he came from */
+		for (i = 0; i < MAXROOMS; i++) {
+			for (j = 0; j < 4; j++) {
+				if (rooms[i].doors[j].other_room == rn) {
+					for (k = 0; k < 4; k++) {
+						if (rooms[rn].doors[k].other_room == i) {
+							monster->trow = rooms[rn].doors[k].other_row;
+							monster->tcol = rooms[rn].doors[k].other_col;
+							return;
+						}
+					}
+				}
+			}
+		}
+		/* no place to send monster */
+		monster->trow = -1;
+	} else {		/* exiting room */
+		if (!get_other_room(rn, &row, &col)) {
+			monster->trow = NO_ROOM;
+		} else {
+			monster->trow = row;
+			monster->tcol = col;
+		}
+	}
+}
+
+get_other_room(rn, row, col)
+short rn, *row, *col;
+{
+	short d = -1;
+
+	if (*row == rooms[rn].top_row) {
+		d = UP/2;
+	} else if (*row == rooms[rn].bottom_row) {
+		d = DOWN/2;
+	} else if (*col == rooms[rn].left_col) {
+		d = LEFT/2;
+	} else if (*col == rooms[rn].right_col) {
+		d = RIGHT/2;
+	}
+	if ((d != -1) && (rooms[rn].doors[d].other_room >= 0)) {
+		*row = rooms[rn].doors[d].other_row;
+		*col = rooms[rn].doors[d].other_col;
+		return(1);
+	}
+	return(0);
+}
+SHAR_EOF
+echo shar: extracting save.c
+cat - << \SHAR_EOF > save.c
+/*
+ * save.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include <sys/file.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#include "object.h"
+#include "room.h"
+
+short write_failed = 0;
+char *save_file = "";
+
+extern boolean detect_monster;
+extern short current_level, max_level;
+extern char hunger_str[];
+extern char login_name[];
+extern short party_room;
+extern short party_counter;
+extern short foods;
+extern boolean is_wood[];
+extern short current_room;
+extern boolean being_held;
+extern short bear_trap;
+extern short halluc;
+extern short blind;
+extern short confused;
+extern short levitate;
+extern short haste_self;
+extern boolean see_invisible;
+extern boolean detect_monster;
+extern boolean wizard;
+extern boolean score_only;
+extern short m_moves;
+
+extern boolean message_cleared;
+
+save_game()
+{
+	char fname[64];
+
+	if (!get_input_line("file name?", save_file, fname, "game not saved",
+		0, 1)) {
+		return;
+	}
+	check_message();
+	message(fname, 0);
+	save_into_file(fname);
+}
+
+save_into_file(save_file)
+char *save_file;
+{
+	FILE *fp;
+	int i;
+	struct stat sbuf;
+	struct timeval tv;
+	struct timezone tzp;
+	char name_buffer[80];
+	char *getenv(), *hptr;
+
+	if (save_file[0] == '~') {
+		if (hptr = getenv("HOME")) {
+			strcpy(name_buffer, hptr);
+			strcat(name_buffer, save_file+1);
+			save_file = name_buffer;
+		}
+	}
+	if (((fp = fopen(save_file, "w")) == NULL) || stat(save_file, &sbuf)) {
+		message("problem accessing the save file", 0);
+		return;
+	}
+	ignore_signals();
+	write_failed = 0;
+	xxx(1);
+	r_write(fp, &detect_monster, sizeof(detect_monster));
+	r_write(fp, &current_level, sizeof(current_level));
+	r_write(fp, &max_level, sizeof(max_level));
+	write_string(hunger_str, fp);
+	write_string(login_name, fp);
+	r_write(fp, &party_room, sizeof(party_room));
+	r_write(fp, &party_counter, sizeof(party_counter));
+	write_pack(&level_monsters, fp);
+	write_pack(&level_objects, fp);
+	r_write(fp, &sbuf.st_ino, sizeof(ino_t));
+	rw_dungeon(fp, 1);
+	r_write(fp, &foods, sizeof(foods));
+	r_write(fp, &rogue, sizeof(struct fighter));
+	write_pack(&rogue.pack, fp);
+	rw_id(id_potions, fp, POTIONS, 1);
+	rw_id(id_scrolls, fp, SCROLLS, 1);
+	rw_id(id_wands, fp, WANDS, 1);
+	rw_id(id_rings, fp, RINGS, 1);
+	r_write(fp, traps, (MAX_TRAPS * sizeof(trap)));
+	r_write(fp, is_wood, (WANDS * sizeof(boolean)));
+	r_write(fp, &current_room, sizeof(current_room));
+	rw_rooms(fp, 1);
+	r_write(fp, &being_held, sizeof(being_held));
+	r_write(fp, &bear_trap, sizeof(bear_trap));
+	r_write(fp, &halluc, sizeof(halluc));
+	r_write(fp, &blind, sizeof(blind));
+	r_write(fp, &confused, sizeof(confused));
+	r_write(fp, &levitate, sizeof(levitate));
+	r_write(fp, &haste_self, sizeof(haste_self));
+	r_write(fp, &see_invisible, sizeof(see_invisible));
+	r_write(fp, &detect_monster, sizeof(detect_monster));
+	r_write(fp, &wizard, sizeof(wizard));
+	r_write(fp, &score_only, sizeof(score_only));
+	r_write(fp, &m_moves, sizeof(m_moves));
+	gettimeofday(&tv, &tzp); tv.tv_sec += 10;
+	r_write(fp, &tv.tv_sec, sizeof(long));
+	fclose(fp);
+
+	if (write_failed) {
+		unlink(save_file);
+	} else {
+		clean_up("");
+	}
+}
+
+restore(fname)
+char *fname;
+{
+	FILE *fp;
+	short i;
+	struct stat sbuf;
+	ino_t inode;
+	long seconds;
+	char buf[4];
+
+	if (stat(fname, &sbuf) || ((fp = fopen(fname, "r")) == NULL)) {
+		clean_up("cannot open file", 0);
+	}
+	if (sbuf.st_nlink > 1) {
+		clean_up("file has link");
+	}
+	xxx(1);
+	r_read(fp, &detect_monster, sizeof(detect_monster));
+	r_read(fp, &current_level, sizeof(current_level));
+	r_read(fp, &max_level, sizeof(max_level));
+	read_string(hunger_str, fp);
+	{
+		char buf[40];
+
+		strcpy(buf, login_name);
+		read_string(login_name, fp);
+		if (strcmp(buf, login_name)) {
+			clean_up("you're not the original player");
+		}
+	}
+	r_read(fp, &party_room, sizeof(party_room));
+	r_read(fp, &party_counter, sizeof(party_counter));
+	read_pack(&level_monsters, fp, 0);
+	read_pack(&level_objects, fp, 0);
+	r_read(fp, &inode, sizeof(ino_t));
+	if (sbuf.st_ino != inode) {
+		clean_up("sorry, saved game is not in the same file");
+	}
+	rw_dungeon(fp, 0);
+	r_read(fp, &foods, sizeof(foods));
+	r_read(fp, &rogue, sizeof(struct fighter));
+	read_pack(&rogue.pack, fp, 1);
+	rw_id(id_potions, fp, POTIONS, 0);
+	rw_id(id_scrolls, fp, SCROLLS, 0);
+	rw_id(id_wands, fp, WANDS, 0);
+	rw_id(id_rings, fp, RINGS, 0);
+	r_read(fp, traps, (MAX_TRAPS * sizeof(trap)));
+	r_read(fp, is_wood, (WANDS * sizeof(boolean)));
+	r_read(fp, &current_room, sizeof(current_room));
+	rw_rooms(fp, 0);
+	r_read(fp, &being_held, sizeof(being_held));
+	r_read(fp, &bear_trap, sizeof(bear_trap));
+	r_read(fp, &halluc, sizeof(halluc));
+	r_read(fp, &blind, sizeof(blind));
+	r_read(fp, &confused, sizeof(confused));
+	r_read(fp, &levitate, sizeof(levitate));
+	r_read(fp, &haste_self, sizeof(haste_self));
+	r_read(fp, &see_invisible, sizeof(see_invisible));
+	r_read(fp, &detect_monster, sizeof(detect_monster));
+	r_read(fp, &wizard, sizeof(wizard));
+	r_read(fp, &score_only, sizeof(score_only));
+	r_read(fp, &m_moves, sizeof(m_moves));
+	r_read(fp, &seconds, sizeof(long));
+
+	if (fread(buf, 1, 1, fp) > 0) {
+		clear();
+		clean_up("extra characters in file");
+	}
+	if (seconds < sbuf.st_mtime) {
+		clear();
+		clean_up("sorry, file has been touched");
+	}
+	if ((!wizard) && unlink(fname)) {
+		clean_up("cannot unlink file");
+	}
+	message_cleared = 0;
+	ring_stats(0);
+	fclose(fp);
+}
+
+write_pack(pack, fp)
+object *pack;
+FILE *fp;
+{
+	struct object t;
+
+	while (pack = pack->next_object) {
+		r_write(fp, pack, sizeof(struct object));
+	}
+	t.ichar = t.what_is = 0;
+	r_write(fp, &t, sizeof(struct object));
+}
+
+read_pack(pack, fp, is_rogue)
+object *pack;
+FILE *fp;
+boolean is_rogue;
+{
+	struct object read_obj, *new_obj;
+	object *alloc_object();
+
+	for (;;) {
+		r_read(fp, &read_obj, sizeof(struct object));
+		if (read_obj.ichar == 0) {
+			pack->next_object = (object *) 0;
+			break;
+		}
+		new_obj = alloc_object();
+		*new_obj = read_obj;
+		if (is_rogue) {
+			if (new_obj->in_use_flags & BEING_WORN) {
+					do_wear(new_obj);
+			} else if (new_obj->in_use_flags & BEING_WIELDED) {
+					do_wield(new_obj);
+			} else if (new_obj->in_use_flags & (ON_EITHER_HAND)) {
+				do_put_on(new_obj,
+					((new_obj->in_use_flags & ON_LEFT_HAND) ? 1 : 0));
+			}
+		}
+		pack->next_object = new_obj;
+		pack = new_obj;
+	}
+}
+
+rw_dungeon(fp, rw)
+FILE *fp;
+boolean rw;
+{
+	short i, j;
+	char ch;
+
+	for (i = 0; i < DROWS; i++) {
+		if (rw) {
+			r_write(fp, dungeon[i], (DCOLS * sizeof(dungeon[0][0])));
+			for (j = 0; j < DCOLS; j++) {
+				ch = mvinch(i, j);
+				r_write(fp, &ch, 1);
+			}
+		} else {
+			r_read(fp, dungeon[i], (DCOLS * sizeof(dungeon[0][0])));
+			for (j = 0; j < DCOLS; j++) {
+				r_read(fp, &ch, 1);
+				mvaddch(i, j, ch);
+			}
+		}
+	}
+}
+
+rw_id(id_table, fp, n, wr)
+struct identify id_table[];
+FILE *fp;
+int n;
+boolean wr;
+{
+	short i;
+
+	for (i = 0; i < n; i++) {
+		if (wr) {
+			r_write(fp, &(id_table[i].value), sizeof(short));
+			r_write(fp, &(id_table[i].id_status), sizeof(unsigned char));
+			write_string(id_table[i].title, fp);
+		} else {
+			r_read(fp, &(id_table[i].value), sizeof(short));
+			r_read(fp, &(id_table[i].id_status), sizeof(unsigned char));
+			read_string(id_table[i].title, fp);
+		}
+	}
+}
+
+write_string(s, fp)
+char *s;
+FILE *fp;
+{
+	short n;
+
+	n = strlen(s) + 1;
+	xxxx(s, n);
+	r_write(fp, &n, sizeof(short));
+	r_write(fp, s, n);
+}
+
+read_string(s, fp)
+char *s;
+FILE *fp;
+{
+	short n;
+
+	r_read(fp, &n, sizeof(short));
+	r_read(fp, s, n);
+	xxxx(s, n);
+}
+
+rw_rooms(fp, rw)
+FILE *fp;
+boolean rw;
+{
+	short i;
+
+	for (i = 0; i < MAXROOMS; i++) {
+		rw ? r_write(fp, (rooms + i), sizeof(struct room)) :
+			r_read(fp, (rooms + i), sizeof(struct room));
+	}
+}
+
+r_read(fp, buf, n)
+FILE *fp;
+char *buf;
+int n;
+{
+	if (fread(buf, 1, n, fp) != n) {
+		clean_up("read() failed, don't know why");
+	}
+}
+
+r_write(fp, buf, n)
+FILE *fp;
+char *buf;
+int n;
+{
+	if (!write_failed) {
+		if (fwrite(buf, 1, n, fp) != n) {
+			message("write() failed, don't know why", 0);
+			sound_bell();
+			write_failed = 1;
+		}
+	}
+}
+SHAR_EOF
+echo shar: extracting score.c
+cat - << \SHAR_EOF > score.c
+/*
+ * score.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <signal.h>
+#include <curses.h>
+#include "object.h"
+#include "monster.h"
+#include "room.h"
+#include <sys/file.h>
+
+char *score_file = SCORE_FILE;
+
+extern char login_name[];
+extern char *monster_names[];
+extern short max_level, message_cleared;
+extern boolean score_only, show_skull;
+extern char *byebye_string, *nick_name;
+
+killed_by(monster, other)
+object *monster;
+short other;
+{
+	char buf[80];
+
+	signal(SIGINT, SIG_IGN);
+
+	if (other != QUIT) {
+		rogue.gold = ((rogue.gold * 9) / 10);
+	}
+
+	if (other) {
+		switch(other) {
+		case HYPOTHERMIA:
+			strcpy(buf, "died of hypothermia");
+			break;
+		case STARVATION:
+			strcpy(buf, "died of starvation");
+			break;
+		case POISON_DART:
+			strcpy(buf, "killed by a dart");
+			break;
+		case QUIT:
+			strcpy(buf, "quit");
+			break;
+		}
+	} else {
+		strcpy(buf, "Killed by ");
+		if (is_vowel(monster_names[monster->m_char - 'A'][0])) {
+			strcat(buf, "an ");
+		} else {
+			strcat(buf, "a ");
+		}
+		strcat(buf, monster_names[monster->m_char - 'A']);
+	}
+	strcat(buf, " with ");
+	sprintf(buf+strlen(buf), "%d gold", rogue.gold);
+	if ((!other) && show_skull) {
+		clear();
+		mvaddstr(4, 32, "__---------__");
+		mvaddstr(5, 30, "_~             ~_");
+		mvaddstr(6, 29, "/                 \\");
+		mvaddstr(7, 28, "~                   ~");
+		mvaddstr(8, 27, "/                     \\");
+		mvaddstr(9, 27, "|    XXXX     XXXX    |");
+		mvaddstr(10, 27, "|    XXXX     XXXX    |");
+		mvaddstr(11, 27, "|    XXX       XXX    |");
+		mvaddstr(12, 28, "\\         @         /");
+		mvaddstr(13, 29, "--\\     @@@     /--");
+		mvaddstr(14, 30, "| |    @@@    | |");
+		mvaddstr(15, 30, "| |           | |");
+		mvaddstr(16, 30, "| vvVvvvvvvvVvv |");
+		mvaddstr(17, 30, "|  ^^^^^^^^^^^  |");
+		mvaddstr(18, 31, "\\_           _/");
+		mvaddstr(19, 33, "~---------~");
+		center(21, (nick_name[0] ? nick_name : login_name));
+		center(22, buf);
+		if (message_cleared) {
+			message("", 0);
+		}
+	} else {
+		message(buf, 0);
+	}
+	message("", 0);
+	put_scores(monster, other);
+}
+
+win()
+{
+	unwield(rogue.weapon);		/* disarm and relax */
+	unwear(rogue.armor);
+	un_put_on(rogue.left_ring);
+	un_put_on(rogue.right_ring);
+
+	clear();
+	mvaddstr(10, 11, "@   @  @@@   @   @      @  @  @   @@@   @   @   @");
+	mvaddstr(11, 11, " @ @  @   @  @   @      @  @  @  @   @  @@  @   @");
+	mvaddstr(12, 11, "  @   @   @  @   @      @  @  @  @   @  @ @ @   @");
+	mvaddstr(13, 11, "  @   @   @  @   @      @  @  @  @   @  @  @@");
+	mvaddstr(14, 11, "  @    @@@    @@@        @@ @@    @@@   @   @   @");
+	mvaddstr(17, 11, "Congratulations,  you have  been admitted  to  the");
+	mvaddstr(18, 11, "Fighters' Guild.   You return home,  sell all your");
+	mvaddstr(19, 11, "treasures at great profit and retire into comfort.");
+	message("", 0);
+	message("", 0);
+	id_all();
+	sell_pack();
+	put_scores((object *) 0, WIN);
+}
+
+quit(from_intrpt)
+boolean from_intrpt;
+{
+	char buf[128];
+	short i, orow, ocol, mc;
+
+	ignore_signals();
+
+	if (from_intrpt) {
+
+		orow = curscr->_cury;
+		ocol = curscr->_curx;
+		mc = message_cleared;
+
+		for (i = 0; i < DCOLS; i++) {
+			buf[i] = mvinch(0, i);
+		}
+	}
+	check_message();
+	message("really quit?", 1);
+	if (rgetchar() != 'y') {
+		heed_signals();
+		check_message();
+		if (from_intrpt) {
+			for (i = 0; i < DCOLS; i++) {
+				mvaddch(0, i, buf[i]);
+			}
+			message_cleared = mc;
+			move(orow, ocol);
+			refresh();
+		}
+		return;
+	}
+	if (from_intrpt) {
+		clean_up(byebye_string);
+	}
+	check_message();
+	killed_by(0, QUIT);
+}
+
+put_scores(monster, other)
+object *monster;
+short other;
+{
+	short i, j, n, rank = 10, x;
+	char scores[10][82];
+	char nick_names[10][30];
+	char buf[100];
+	FILE *fp;
+	int s;
+	long xxx();
+	boolean dont_insert = 0, failed = 0;
+	char *mode = "r+w";
+
+	while ((fp = fopen(score_file, mode)) == NULL) {
+		if (!failed) {
+			mode = "w";
+		} else {
+			message("cannot read/write/create score file", 0);
+			goto M;
+		}
+		failed = 1;
+	}
+	xxx(1);
+
+	for (i = 0; i < 10; i++) {
+L:		if (((n = fread(scores[i], 1, 80, fp)) < 80) && (n != 0)) {
+			message("error in score file format", 0);
+M:			message("", 0);
+			clean_up("sorry, score file is out of order");
+		} else if (n == 0) {
+			break;
+		} else {
+			xxxx(scores[i], 80);
+			if ((n = fread(nick_names[i], 1, 30, fp)) != 30) {
+				goto M;
+			}
+			xxxx(nick_names[i], 30);
+		}
+		if (score_only) {
+			continue;
+		}
+		if (!name_cmp(scores[i]+15, login_name)) {
+			x = 7;
+			while (scores[i][x] == ' ') x++;
+			s = get_number(scores[i] + x);
+			if (s <= rogue.gold) {
+				goto L;
+			} else {
+				dont_insert = 1;
+			}
+		}
+	}
+	if (dont_insert || score_only) goto DI;
+
+	for (j = 0; j < i; j++) {
+		if (rank > 9) {
+
+			x = 7;
+			while (scores[j][x] == ' ') x++;
+			s = get_number(scores[j] + x);
+
+			if (s <= rogue.gold) {
+				rank = j;
+			}
+		}
+	}
+	if (i == 0) {
+		rank = 0;
+	} else if ((i < 10) && (rank > 9)) {
+		rank = i;
+	}
+	if (rank <= 9) {
+		insert_score(scores, nick_names, nick_name, rank, i, monster,
+			other);
+
+		if (i < 10) {
+			i++;
+		}
+	}
+	rewind(fp);
+DI:
+	clear();
+	mvaddstr(3, 30, "Top  Ten  Rogueists");
+	mvaddstr(8, 0, "Rank   Score   Name");
+
+	ignore_signals();
+
+	xxx(1);
+
+	for (j = 0; j < i; j++) {
+		if (j == rank) {
+			standout();
+		}
+		if (j == 9) {
+			scores[j][0] = '1';
+			scores[j][1] = '0';
+		} else {
+			scores[j][0] = ' ';
+			scores[j][1] = j + '1';
+		}
+		nick_namize(buf, scores[j], nick_names[j]);
+		mvaddstr(j+10, 0, buf);
+		if (rank < 10) {
+			xxxx(scores[j], 80);
+			fwrite(scores[j], 1, 80, fp);
+			xxxx(nick_names[j], 30);
+			fwrite(nick_names[j], 1, 30, fp);
+		}
+		if (j == rank) {
+			standend();
+		}
+	}
+	refresh();
+	fclose(fp);
+	message("", 0);
+	if (score_only) {
+		message("", 0);
+	}
+	clean_up("");
+}
+
+insert_score(scores, nick_names, n_name, rank, n, monster, other)
+char scores[][82];
+char nick_names[][30];
+char *n_name;
+short rank, n;
+object *monster;
+{
+	short i;
+	char buf[82];
+
+	for (i = (n - 1); i >= rank; i--) {
+		if (i < 9) {
+			strcpy(scores[i+1], scores[i]);
+			strcpy(nick_names[i+1], nick_names[i]);
+		}
+	}
+	sprintf(buf, "%2d    %6d   %s: ", rank+1, rogue.gold, login_name);
+
+	if (other) {
+		switch(other) {
+		case HYPOTHERMIA:
+			strcat(buf, "died of hypothermia");
+			break;
+		case STARVATION:
+			strcat(buf, "died of starvation");
+			break;
+		case POISON_DART:
+			strcat(buf, "killed by a dart");
+			break;
+		case QUIT:
+			strcat(buf, "quit");
+			break;
+		case WIN:
+			strcat(buf, "a total winner");
+			break;
+		}
+	} else {
+		strcat(buf, "killed by ");
+		if (is_vowel(monster_names[monster->m_char - 'A'][0])) {
+			strcat(buf, "an ");
+		} else {
+			strcat(buf, "a ");
+		}
+		strcat(buf, monster_names[monster->m_char - 'A']);
+	}
+	sprintf(buf+strlen(buf), " on level %d ",  max_level);
+	if ((other != WIN) && has_amulet()) {
+		strcat(buf, "with amulet");
+	}
+	for (i = strlen(buf); i < 79; i++) {
+		buf[i] = ' ';
+	}
+	buf[79] = 0;
+	strcpy(scores[rank], buf);
+	strcpy(nick_names[rank], n_name);
+}
+
+is_vowel(ch)
+short ch;
+{
+	return( (ch == 'a') ||
+		(ch == 'e') ||
+		(ch == 'i') ||
+		(ch == 'o') ||
+		(ch == 'u') );
+}
+
+sell_pack()
+{
+	object *obj;
+	short row = 2, val;
+	char buf[80];
+
+	obj = rogue.pack.next_object;
+
+	clear();
+
+	while (obj) {
+		mvaddstr(1, 0, "Value      Item");
+		if (obj->what_is == FOOD) {
+			goto NEXT;
+		}
+		obj->identified = 1;
+		val = get_value(obj);
+		rogue.gold += val;
+
+		if (row < DROWS) {
+			sprintf(buf, "%5d      ", val);
+			get_description(obj, buf+11);
+			mvaddstr(row++, 0, buf);
+		}
+NEXT:		obj = obj->next_object;
+	}
+	refresh();
+	if (rogue.gold > MAX_GOLD) {
+		rogue.gold = MAX_GOLD;
+	}
+	message("", 0);
+}
+
+get_value(obj)
+object *obj;
+{
+	short wc;
+	int val;
+
+	wc = obj->which_kind;
+
+	switch(obj->what_is) {
+	case WEAPON:
+		val = id_weapons[wc].value;
+		if ((wc == ARROW) || (wc == DAGGER) || (wc == SHURIKEN) ||
+			(wc == DART)) {
+			val *= obj->quantity;
+		}
+		val += (obj->damage_enchantment * 85);
+		val += (obj->to_hit_enchantment * 85);
+		break;
+	case ARMOR:
+		val = id_armors[wc].value;
+		val += (obj->damage_enchantment * 75);
+		if (obj->is_protected) {
+			val += 200;
+		}
+		break;
+	case WAND:
+		val = id_wands[wc].value * (obj->class + 1);
+		break;
+	case SCROLL:
+		val = id_scrolls[wc].value * obj->quantity;
+		break;
+	case POTION:
+		val = id_potions[wc].value * obj->quantity;
+		break;
+	case AMULET:
+		val = 5000;
+		break;
+	}
+	if (val <= 0) {
+		val = 10;
+	}
+	return(val);
+}
+
+id_all()
+{
+	short i;
+
+	for (i = 0; i < SCROLLS; i++) {
+		id_scrolls[i].id_status = IDENTIFIED;
+	}
+	for (i = 0; i < WEAPONS; i++) {
+		id_weapons[i].id_status = IDENTIFIED;
+	}
+	for (i = 0; i < ARMORS; i++) {
+		id_armors[i].id_status = IDENTIFIED;
+	}
+	for (i = 0; i < WANDS; i++) {
+		id_wands[i].id_status = IDENTIFIED;
+	}
+	for (i = 0; i < POTIONS; i++) {
+		id_potions[i].id_status = IDENTIFIED;
+	}
+}
+
+name_cmp(s1, s2)
+char *s1, *s2;
+{
+	short i = 0;
+	int r;
+
+	while(s1[i] != ':') {
+		i++;
+	}
+	s1[i] = 0;
+	r = strcmp(s1, s2);
+	s1[i] = ':';
+	return(r);
+}
+
+xxxx(buf, n)
+unsigned char *buf;
+short n;
+{
+	short i;
+	unsigned char c;
+	long xxx();
+
+	for (i = 0; i < n; i++) {
+		c = (unsigned char) xxx(0);
+		buf[i] ^= c;
+	}
+}
+
+long
+xxx(st)
+short st;
+{
+	static long f, s;
+	long r;
+
+	if (st) {
+		f = 37;
+		s = 7;
+		return(0L);
+	}
+	r = ((f * s) + 9337) % 8887;
+	f = s;
+	s = r;
+	return(r);
+}
+
+nick_namize(buf, score, n_name)
+char *buf, *score, *n_name;
+{
+	short i = 15, j;
+
+	if (!n_name[0]) {
+		strcpy(buf, score);
+		return;
+	}
+	strncpy(buf, score, 16);
+
+	while (score[i] != ':') {
+		i++;
+	}
+
+	strcpy(buf+15, n_name);
+	j = strlen(buf);
+
+	while (score[i]) {
+		buf[j++] = score[i++];
+	}
+	buf[j] = 0;
+	buf[79] = 0;
+}
+
+center(row, buf)
+short row;
+char *buf;
+{
+	short margin;
+
+	margin = ((DCOLS - strlen(buf)) / 2);
+	mvaddstr(row, margin, buf);
+}
+SHAR_EOF
+echo shar: extracting throw.c
+cat - << \SHAR_EOF > throw.c
+/*
+ * throw.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "object.h"
+#include "move.h"
+#include "room.h"
+#include "monster.h"
+
+extern short current_room;
+extern char *curse_message;
+extern char hit_message[];
+
+throw()
+{
+	short wch;
+	boolean first_miss = 1;
+	object *weapon, *get_letter_object();
+	short dir, row, col;
+	object *monster, *get_thrown_at_monster();
+
+	while (!is_direction(dir = rgetchar())) {
+		sound_bell();
+		if (first_miss) {
+			message("direction? ", 0);
+			first_miss = 0;
+		}
+	}
+	check_message();
+	if (dir == CANCEL) {
+		return;
+	}
+	if ((wch = get_pack_letter("throw what?", WEAPON)) == CANCEL) {
+		return;
+	}
+	check_message();
+
+	if (!(weapon = get_letter_object(wch))) {
+		message("no such item.", 0);
+		return;
+	}
+	if ((weapon->in_use_flags & BEING_USED) && weapon->is_cursed) {
+		message(curse_message, 0);
+		return;
+	}
+	row = rogue.row; col = rogue.col;
+
+	if ((weapon->in_use_flags & BEING_WIELDED) && (weapon->quantity <= 1)) {
+		unwield(rogue.weapon);
+	} else if (weapon->in_use_flags & BEING_WORN) {
+		mv_aquatars();
+		unwear(rogue.armor);
+		print_stats(STAT_ARMOR);
+	} else if (weapon->in_use_flags & ON_EITHER_HAND) {
+		un_put_on(weapon);
+	}
+	monster = get_thrown_at_monster(weapon, dir, &row, &col);
+	mvaddch(rogue.row, rogue.col, rogue.fchar);
+	refresh();
+
+	if (rogue_can_see(row, col) && ((row != rogue.row) || (col != rogue.col))){
+		mvaddch(row, col, get_dungeon_char(row, col));
+	}
+	if (monster) {
+		wake_up(monster);
+		check_gold_seeker(monster);
+
+		if (!throw_at_monster(monster, weapon)) {
+			flop_weapon(weapon, row, col);
+		}
+	} else {
+		flop_weapon(weapon, row, col);
+	}
+	vanish(weapon, 1, &rogue.pack);
+}
+
+throw_at_monster(monster, weapon)
+object *monster, *weapon;
+{
+	short damage, hit_chance;
+	char *name_of();
+	short t;
+
+	hit_chance = get_hit_chance(weapon);
+	damage = get_weapon_damage(weapon);
+	if ((weapon->which_kind == ARROW) &&
+		(rogue.weapon && (rogue.weapon->which_kind == BOW))) {
+		damage += get_weapon_damage(rogue.weapon);
+		damage = ((damage * 2) / 3);
+		hit_chance += (hit_chance / 3);
+	} else if ((weapon->in_use_flags & BEING_WIELDED) &&
+		((weapon->which_kind == DAGGER) ||
+		(weapon->which_kind == SHURIKEN) ||
+		(weapon->which_kind == DART))) {
+		damage = ((damage * 3) / 2);
+		hit_chance += (hit_chance / 3);
+	}
+	t = weapon->quantity;
+	weapon->quantity = 1;
+	sprintf(hit_message, "the %s", name_of(weapon));
+	weapon->quantity = t;
+
+	if (!rand_percent(hit_chance)) {
+		strcat(hit_message, "misses  ");
+		return(0);
+	}
+	strcat(hit_message, "hit  ");
+	monster_damage(monster, damage);
+	return(1);
+}
+
+object *
+get_thrown_at_monster(obj, dir, row, col)
+object *obj;
+short dir;
+short *row, *col;
+{
+	object *object_at();
+	short orow, ocol;
+	short i, ch;
+
+	orow = *row; ocol = *col;
+
+	ch = get_mask_char(obj->what_is);
+
+	for (i = 0; i < 24; i++) {
+		get_dir_rc(dir, row, col, 0);
+		if ((dungeon[*row][*col] == NOTHING) ||
+				((dungeon[*row][*col] & (HORWALL | VERTWALL | HIDDEN)) &&
+				(!(dungeon[*row][*col] & TRAP)))) {
+			*row = orow;
+			*col = ocol;
+			return(0);
+		}
+		if ((i != 0) && rogue_can_see(orow, ocol)) {
+			mvaddch(orow, ocol, get_dungeon_char(orow, ocol));
+		}
+		if (rogue_can_see(*row, *col)) {
+			if (!(dungeon[*row][*col] & MONSTER)) {
+				mvaddch(*row, *col, ch);
+			}
+			refresh();
+		}
+		orow = *row; ocol = *col;
+		if (dungeon[*row][*col] & MONSTER) {
+			if (!imitating(*row, *col)) {
+				return(object_at(&level_monsters, *row, *col));
+			}
+		}
+		if (dungeon[*row][*col] & TUNNEL) {
+			i += 2;
+		}
+	}
+	return(0);
+}
+
+flop_weapon(weapon, row, col)
+object *weapon;
+short row, col;
+{
+	object *new_weapon, *alloc_object(), *monster;
+	short i = 0;
+	char msg[80];
+	boolean found = 0;
+	short mch, dch;
+	unsigned short mon;
+
+	while ((i < 9) && dungeon[row][col] & ~(FLOOR | TUNNEL | DOOR | MONSTER)) {
+		rand_around(i++, &row, &col);
+		if ((row > (DROWS-2)) || (row < MIN_ROW) ||
+			(col > (DCOLS-1)) || (col < 0) || (!dungeon[row][col]) ||
+			(dungeon[row][col] & ~(FLOOR | TUNNEL | DOOR | MONSTER))) {
+			continue;
+		}
+		found = 1;
+		break;
+	}
+
+	if (found || (i == 0)) {
+		new_weapon = alloc_object();
+		*new_weapon = *weapon;
+		new_weapon->in_use_flags = NOT_USED;
+		new_weapon->quantity = 1;
+		new_weapon->ichar = 'L';
+		put_object_at(new_weapon, row, col);
+		if (rogue_can_see(row, col) &&
+				((row != rogue.row) || (col != rogue.col))) {
+			mon = dungeon[row][col] & MONSTER;
+			dungeon[row][col] &= (~MONSTER);
+			dch = get_dungeon_char(row, col);
+			if (mon) {
+				mch = mvinch(row, col);
+				if (monster = object_at(&level_monsters, row, col)) {
+					monster->trail_char = dch;
+				}
+				if ((mch < 'A') || (mch > 'Z')) {
+					mvaddch(row, col, dch);
+				}
+			} else {
+				mvaddch(row, col, dch);
+			}
+			dungeon[row][col] |= mon;
+		}
+	} else {
+		short t;
+
+		t = weapon->quantity;
+		weapon->quantity = 1;
+		sprintf(msg, "the %svanishes as it hits the ground",
+		name_of(weapon));
+		weapon->quantity = t;
+		message(msg, 0);
+	}
+	return(found);
+}
+
+rand_around(i, r, c)
+short i, *r, *c;
+{
+	static char* pos = "\010\007\001\003\004\005\002\006\0";
+	static short row, col;
+	short j;
+
+	if (i == 0) {
+		short x, y, o, t;
+
+		row = *r;
+		col = *c;
+
+		o = get_rand(1, 8);
+
+		for (j = 0; j < 5; j++) {
+			x = get_rand(0, 8);
+			y = (x + o) % 9;
+			t = pos[x];
+			pos[x] = pos[y];
+			pos[y] = t;
+		}
+	}
+	switch((short)pos[i]) {
+	case 0:
+		*r = row + 1;
+		*c = col + 1;
+		break;
+	case 1:
+		*r = row + 1;
+		*c = col - 1;
+		break;
+	case 2:
+		*r = row - 1;
+		*c = col + 1;
+		break;
+	case 3:
+		*r = row - 1;
+		*c = col - 1;
+		break;
+	case 4:
+		*r = row;
+		*c = col + 1;
+		break;
+	case 5:
+		*r = row + 1;
+		*c = col;
+		break;
+	case 6:
+		*r = row;
+		*c = col;
+		break;
+	case 7:
+		*r = row - 1;
+		*c = col;
+		break;
+	case 8:
+		*r = row;
+		*c = col - 1;
+		break;
+	}
+}
+SHAR_EOF
+echo shar: extracting trap.c
+cat - << \SHAR_EOF > trap.c
+/*
+ * trap.c
+ *
+ * This source herein may be modified and/or distributed by anybody who
+ * so desires, with the following restrictions:
+ *    1.)  This notice shall not be removed.
+ *    2.)  Credit shall not be taken for the creation of this source.
+ *    3.)  This code is not to be traded, sold, or used for personal
+ *         gain or profit.
+ *
+ */
+
+#include <curses.h>
+#include "monster.h"
+#include "move.h"
+#include "object.h"
+#include "room.h"
+
+trap traps[MAX_TRAPS];
+boolean trap_door = 0;
+short bear_trap = 0;
+
+char *trap_strings[TRAPS * 2] = {
+	"trap door",
+			"you fell down a trap",
+	"bear trap",
+			"you are caught in a bear trap",
+	"teleport trap",
+			"teleport",
+	"poison dart trap",
+			"a small dart just hit you in the shoulder",
+	"sleeping gas trap",
+			"a strange white mist envelops you and you fall asleep",
+	"rust trap",
+			"a gush of water hits you on the head"
+};
+
+extern short current_level, party_room;
+extern char *new_level_message;
+extern boolean interrupted;
+extern short ring_exp;
+extern boolean sustain_strength;
+extern short blind;
+
+trap_at(row, col)
+register row, col;
+{
+	short i;
+
+	for (i = 0; ((i < MAX_TRAPS) && (traps[i].trap_type != NO_TRAP)); i++) {
+		if ((traps[i].trap_row == row) && (traps[i].trap_col == col)) {
+			return(traps[i].trap_type);
+		}
+	}
+	return(NO_TRAP);
+}
+
+trap_rogue(row, col)
+short row, col;
+{
+	short t;
+
+	if ((t = trap_at(row, col)) == NO_TRAP) {
+		return;
+	}
+	dungeon[row][col] &= (~HIDDEN);
+	if (rand_percent(rogue.exp + ring_exp)) {
+		message("the trap failed", 1);
+		return;
+	}
+	switch(t) {
+	case TRAP_DOOR:
+		trap_door = 1;
+		new_level_message = trap_strings[(t*2)+1];
+		break;
+	case BEAR_TRAP:
+		message(trap_strings[(t*2)+1], 1);
+		bear_trap = get_rand(4, 7);
+		break;
+	case TELEPORT_TRAP:
+		mvaddch(rogue.row, rogue.col, '^');
+		teleport();
+		break;
+	case POISON_DART_TRAP:
+		message(trap_strings[(t*2)+1], 1);
+		rogue.hp_current -= get_damage("1d6", 1);
+		if (rogue.hp_current <= 0) {
+			rogue.hp_current = 0;
+		}
+		if ((!sustain_strength) && rand_percent(40) &&
+			(rogue.strength_current >= 3)) {
+			rogue.strength_current--;
+		}
+		print_stats(STAT_HP | STAT_STRENGTH);
+		if (rogue.hp_current <= 0) {
+			killed_by((object *) 0, POISON_DART);
+		}
+		break;
+	case SLEEPING_GAS_TRAP:
+		message(trap_strings[(t*2)+1], 1);
+		take_a_nap();
+		break;
+	case RUST_TRAP:
+		message(trap_strings[(t*2)+1], 1);
+		rust((object *) 0);
+		break;
+	}
+}
+
+add_traps()
+{
+	short i, n, tries = 0;
+	short row, col;
+
+	if (current_level <= 2) {
+		n = 0;
+	} else if (current_level <= 7) {
+		n = get_rand(0, 2);
+	} else if (current_level <= 11) {
+		n = get_rand(1, 2);
+	} else if (current_level <= 16) {
+		n = get_rand(2, 3);
+	} else if (current_level <= 21) {
+		n = get_rand(2, 4);
+	} else if (current_level <= (AMULET_LEVEL + 2)) {
+		n = get_rand(3, 5);
+	} else {
+		n = get_rand(5, MAX_TRAPS);
+	}
+	for (i = 0; i < n; i++) {
+		traps[i].trap_type = get_rand(0, (TRAPS - 1));
+
+		if ((i == 0) && (party_room != NO_ROOM)) {
+			do {
+				row = get_rand((rooms[party_room].top_row+1),
+						(rooms[party_room].bottom_row-1));
+				col = get_rand((rooms[party_room].left_col+1),
+						(rooms[party_room].right_col-1));
+				tries++;
+			} while ((dungeon[row][col] | (OBJECT | STAIRS | TRAP)) &&
+					(tries < 15));
+			if (dungeon[row][col] & (OBJECT | STAIRS | TRAP)) {
+				get_rand_row_col(&row, &col, (FLOOR | MONSTER));
+			}
+		} else {
+			get_rand_row_col(&row, &col, (FLOOR | MONSTER));
+		}
+		traps[i].trap_row = row;
+		traps[i].trap_col = col;
+		dungeon[row][col] |= (TRAP | HIDDEN);
+	}
+}
+
+identify_trap()
+{
+	short dir, row, col;
+	short t;
+
+	message("direction? ", 0);
+
+	while (!is_direction(dir = rgetchar())) {
+		sound_bell();
+	}
+	check_message();
+
+	if (dir == CANCEL) {
+		return;
+	}
+	row = rogue.row;
+	col = rogue.col;
+
+	get_dir_rc(dir, &row, &col, 0);
+
+	if ((dungeon[row][col] & TRAP) && (!(dungeon[row][col] & HIDDEN))) {
+		t = trap_at(row, col);
+		message(trap_strings[t*2], 0);
+	} else {
+		message("no trap there", 0);
+	}
+}
+
+show_traps()
+{
+	short i, j;
+
+	for (i = 0; i < DROWS; i++) {
+		for (j = 0; j < DCOLS; j++) {
+			if (dungeon[i][j] & TRAP) {
+				mvaddch(i, j, '^');
+			}
+		}
+	}
+}
+
+search(n, is_auto)
+short n;
+boolean is_auto;
+{
+	short s, i, j, row, col, t;
+	short shown = 0, found = 0;
+	static boolean register_search;
+
+	for (i = -1; i <= 1; i++) {
+		for (j = -1; j <= 1; j++) {
+			row = rogue.row + i;
+			col = rogue.col + j;
+			if ((row < MIN_ROW) || (row >= (DROWS-1)) ||
+					(col < 0) || (col >= DCOLS)) {
+				continue;
+			}
+			if (dungeon[row][col] & HIDDEN) {
+				found++;
+			}
+		}
+	}
+	for (s = 0; s < n; s++) {
+		for (i = -1; i <= 1; i++) {
+			for (j = -1; j <= 1; j++) {
+				row = rogue.row + i;
+				col = rogue.col + j ;
+				if ((row < MIN_ROW) || (row >= (DROWS-1)) ||
+						(col < 0) || (col >= DCOLS)) {
+					continue;
+				}
+				if (dungeon[row][col] & HIDDEN) {
+					if (rand_percent(17 + (rogue.exp + ring_exp))) {
+						dungeon[row][col] &= (~HIDDEN);
+						if ((!blind) && ((row != rogue.row) ||
+								(col != rogue.col))) {
+							mvaddch(row, col, get_dungeon_char(row, col));
+						}
+						shown++;
+						if (dungeon[row][col] & TRAP) {
+							t = trap_at(row, col);
+							message(trap_strings[t*2], 1);
+						}
+					}
+				}
+				if (((shown == found) && (found > 0)) || interrupted) {
+					return;
+				}
+			}
+		}
+		if ((!is_auto) && (register_search = !register_search)) {
+			register_move();
+		}
+	}
+}
+SHAR_EOF

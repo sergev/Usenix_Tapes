@@ -1,0 +1,134 @@
+
+#include	<stdio.h>
+
+#define	MAXBUF	32760		/* maximum buffer size                */
+#define BLKSIZE    80           /* label size and default blocksize   */
+
+#define VOLERR	0
+#define SECERR	1
+#define REDERR  2
+#define CMDERR  3
+#define OPNERR  4
+#define FLGERR  5
+#define EOVERR  6
+#define FPRERR	7
+#define CLOERR	8
+#define TECERR	9  
+#define FCLERR  10
+#define FOPERR  11
+
+#define SPACE   ' '
+#define SPACES  "  "
+
+struct	vol_sl			/* sl standard volume label (VOL1)   */
+   {
+	char	id[4];		/* label identifier (VOL1)           */
+	char	volid[6];	/* volume serial number	             */
+	char	resv1;  	/* reserved for future use (0)       */
+	char	vtocptr[10];	/* VTOC pointer (' ''s)              */
+	char	resv2[20];	/* reserved for future use (' ''s)   */
+	char	ownid[10];	/* owner name and address	     */
+	char	resv3[29];      /* reserved for future use (' ''s)   */
+   };
+
+struct	vol_al			/* ansi standard volume label (VOL1) */
+   {
+	char	id[4];		/* label identifier (VOL1)           */
+	char	volid[6];	/* volume serial number              */
+	char	volsec;  	/* volume accessibility code (' ')   */
+	char	resv1[26];	/* reserved for future use (' ''s)   */
+	char	ownid[14];	/* owner name and address            */
+	char	resv2[28];	/* reserved for future use (' ''s)   */
+	char	stlev;  	/* ansi standards used (1)           */
+   };           	
+
+struct	ds_lab1			/* data set label 1 (HDR1/EOV1/EOF1) */
+   {
+	char	id[4];		/* label identifier (HDR1/EOV1/EOF1) */
+	char	dsid[17];	/* data set or file name 	     */
+	char	volid[6];	/* volume serial number              */ 
+	char	vseqno[4];	/* volume sequence number (1)        */
+	char	dseqno[4];	/* data set sequence number (1)      */
+	char	genno[4];	/* generation number for gdg         */
+	char	verno[2];	/* version number for gdg            */
+	char	crdate[6];	/* creation date (byyddd)	     */
+	char	exdate[6];	/* expiration date (byyddd)          */
+	char	dssec;  	/* data set security (sl:'0',al:' ') */
+	char	blkct[6];     	/* number of data blocks in data set */
+	char	syscd[13];	/* system code (OS36000000000)       */
+	char	resv1[7];	/* reserved for future use (' ''s)   */
+   };
+
+struct	ds_lab2			/* data set label (HDR2/EOV2/EOF2)   */
+  {
+	char	id[4];		/* label identifier (HDR2/EOV2/EOF1) */
+	char	recfm;  	/* record format (F/V/D/U)           */
+	char	blklen[5];	/* block length in bytes             */
+	char	reclen[5];	/* record length in bytes	     */
+	char 	tpden;  	/* tape density code (3)	     */
+	char	dspos;   	/* volume switch code (0)            */
+	char	jobid[17];	/* creation job and job step id      */
+	char	tprec[2];	/* tape recording technique (' ')    */
+	char	ctrlch; 	/* ctrl code for char set (A/M/' ')  */
+	char	resv1;  	/* reserved for future use (' ''s)   */
+	char	blkatr;   	/* blocking type (B/S/R/' ')         */
+	char	resv2[11];	/* reserved for future use (' ''s)   */
+	char	bufos[2];	/* length of block prefix            */
+	char   	resv3[28];	/* reserved for future use (' ''s)   */
+   };
+
+struct	user_lab		/* user header or trailer label      */
+   {
+	char	id[4];		/* label identifier (UHLn/UTLn)      */
+	char	info[76];	/* user specified information        */
+   };
+
+struct	any_lab			/* any label identifier              */
+   {
+	char	id[4];		/* label identifier	             */
+	char	info[76];	/* rest of the record	             */
+   };
+
+union buffer			/* 80 byte buffer for labels         */
+   {
+	struct	vol_sl   sl;	/* sl standard volume label          */
+	struct	vol_al   al;    /* ansi standard volume label        */
+	struct	ds_lab1  dl1;	/* data set label1                   */
+	struct	ds_lab2  dl2; 	/* data set label2                   */
+	struct	user_lab ul; 	/* user header or trailer label      */
+	struct	any_lab  gl;    /* general label identifier          */
+	char    ibuf[BLKSIZE];  /* 80 byte buffer                    */ 
+   };
+
+
+
+typedef	union buffer	BUF; 	/* identifier for buffer             */
+typedef	BUF     	*BPTR;  /* identifier for buffer pointer     */
+
+BUF	buf;			/* label buffer                      */
+
+char	inptbuf[MAXBUF];            
+char	fname[17];		/* UNIX file name                    */
+char	dsname[17];             /* file name on tape                 */
+char	*vid;			/* volume serial number		     */
+int	ifd;			/* input file (tape) descriptor      */
+FILE	*ofp;			/* output file pointer		     */
+int	filectr;
+
+extern  int   errno;
+int	ansi;			/* flag for ansi label tape          */
+int	stdl;			/* flag for stdl tape                */
+int	flags;			/* flag for required parameters      */
+int	files;			/* flag for files to be read         */
+int	eov;			/* count of tapemarks for eov        */
+int	p;			/* flag for padding or no padding    */
+
+/* labels to check */
+# define	L_VOL1		1
+# define	L_HDR1		2
+# define	L_HDR2		3
+# define	L_EOF1		4
+# define	L_EOF2		5
+# define	L_EOV1		6
+# define	L_UTL		7
+# define	L_UHL		8

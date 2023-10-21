@@ -1,0 +1,227 @@
+.TH DIGEST 1L 
+.ad b
+.SH NAME
+digest \- tools to help maintain a mailing list/digest
+.SH HP-UX COMPATIBILITY
+.TP 10
+Level:
+HP-UX/USER CONTRIBUTED
+.TP
+Origin:
+Hewlett-Packard Laboratories
+.SH DESCRIPTION
+The
+.I digest
+system is composed of a number of programs and scripts;
+.nf
+
+  Makefile            - to customize all the scripts, etc
+  center.c            - to center lines for formatting
+  center.1            -   manual entry for \fIcenter\fR
+  digest.all          - script to create an individual digest
+  digest.awk          - awk script to `massage' mailboxes
+  issue.master        - master copy of issue script
+  mail.digest.master  - master copy of mail.digest script
+  mail_issue.master   - master copy of mail_issue script
+  mydate.c            - program for `nice' date strings
+  mydate.1            -   manual entry for \fImydate\fR
+  readword.c          - dumb program for reading line from stdin
+
+.fi
+When the \fImake\fR is done, a number of other files will appear
+and will comprise the full \fIdigest\fR script and mailing system;
+.nf
+
+  DIGEST_ALIAS_ADDRESS - the address you use to send mail to everyone
+  DIGEST_NAME          - the full name of the digest
+  MODERATOR            - the full name of the moderator
+  MODERATOR_ADDRESS    - the email addres of MODERATOR
+  center               - executable version of center.c
+  digest.tail          - localized copy of digest.tail
+  issue                - localized copy of issue
+  mail.digest          - localized copy of mail.digest
+  mail_issue           - localized copy of mail_issue 
+  mydate               - executable version of mydate.c
+  readword             - executable version of readword.c
+  volume_number        - file used to autoincrement issues
+
+.fi
+The easiest way to see how they all interact is by example...
+.SH EXAMPLE
+Let's say that we want to create a new mailing list called
+called "Snail-Fans Digest", and we've already created the
+aliases "snail-fans-request" and "snail-fans" as the mail
+addresses for requests to join the list/submit articles and
+to send mail to everyone in the group, respectively.
+.P
+We could then type...[user input in \fBbold face\fR, comments in 
+square brackets like this];
+.nf
+
+  $ \fBmake all\fR
+
+	/bin/cc -O readword.c -o readword [for interactive makefile]
+
+ The name of the digest: \fBSnail-Fans Digest\fR
+ The alias you'll use for sending it out: \fBsnail-fans\fR
+ The full name of the moderator: \fBJohn Q. Public\fR
+ The mailing address of the moderator: \fBsnail-fans-request\fR
+
+ 	/bin/cc -O center.c -o center
+	/bin/cc -O mydate.c -o mydate
+
+ Creating digest.tail...
+ Creating issue script...
+ Creating mail.digest...
+ Creating mail_issue...
+ Creating volume_number file...
+ digest system ready to go...
+
+  $ \fBmore digest.tail\fR
+
+  -------------------------------------
+ 
+  To join this group or have your thoughts in the next issue, please
+  send electronic mail to John Q. Public at the following address;
+   
+	  snail-fans-request
+ 
+  *********************
+  End of Snail-Fans Digest
+  *********************
+
+  $ \fBhead issue\fR
+ 
+   digest_name='Snail-Fans Digest'
+
+  # ISSUE  - Shell script creates a new issue of a mailing-list Digest.
+  #          To do this it creates a new title file then calls the digest.all
+  #          program to summarize the mailings.  It then drops you into the
+  #          editor to modify the subject headers, if desired.  Upon leaving
+  #          it then starts up the batchmail program in the background and
+  #          exits.
+  #
+
+  $ \fBhead mail.digest\fR
+ 
+   digest_name='Snail-Fans Digest'
+  
+  # mail_issue - This shell script mails out the previously created digest...
+  #
+  
+         digest="outbound.digest"
+        archive="Digest."
+         volume="volume_number"
+  
+
+  $ \fBhead mail_issue\fR
+ 
+   digest_name='Snail-Fans Digest'
+            to='snail-fans'
+  
+  # mail_issue - This shell script mails out the previously created digest...
+  #
+  
+         digest="outbound.digest"
+        archive="Digest."
+         volume="volume_number"
+
+
+  $ \fBmore volume_number\fR
+
+  1
+
+.fi
+That's an idea of the files it creates.  Now let's actually send out
+an issue of the digest!
+.P
+First off, a few administration details - the \fIdigest\fR system 
+assumes that you use \fIoutbound\fR as the name of the mailbox that
+all outbound mail is queued in (note that no processing whatsoever
+need be done beforehand on the mailbox) and that you won't mind
+saving back issues as Digest.\fIn\fR where \fIn\fR is the number of
+the digest...the most recently mailed digest mailbox is also saved
+(until the next mailing) as \fIoutbound.last\fR.
+.P
+.nf
+
+  $ \fBcat outbound\fR
+
+  From jqpublic Mon Jun  2 17:40:31 1986
+  To: jqpublic
+  Date: Mon Jun 2 17:40:31 1986 PST
+  Subject: Welcome to the Snail Fans Digest!
+
+  Just a short hello to welcome everyone to the list and
+  to try out the digest software.
+
+  Please let me know if you have any problems!
+
+				-- JQ
+
+  [ now we can actually send it out... ]
+
+  $ \fBissue\fR
+
+  Creating Snail-Fans Digest, Number 1
+ 
+  Extracting all the 'subject' lines...
+ 
+  ...feeding the file to awk...
+ 
+  [your favorite editor is then invoked with the ready-to-be-sent
+   digest, for a final pass through (recommended)]
+
+  Are you sure you want to send this issue out now? (y/n) \fBno\fR
+  just type "mail_issue" when you're ready to mail it out!
+
+  [since we cancelled the actual mailing, let's look at the digest
+   it created...]
+
+  $ \fBcat outbound.digest\fR
+ 
+                          Snail-Fans Digest, Number 1
+ 
+                             Monday, June 2nd 1986
+ 
+  Today's Topics:
+ 
+                       Welcome to the Snail Fans Digest!
+  ----------------------------------------------------------------------
+ 
+  Date: Mon Jun 2 17:40:31 1986 PST
+  Subject: Welcome to the Snail Fans Digest!
+  From: jqpublic
+
+  Just a short hello to welcome everyone to the list and
+  to try out the digest software.
+
+  Please let me know if you have any problems!
+
+				-- JQ
+ 
+  -------------------------------------
+ 
+  To join this group or have your thoughts in the next issue, please
+  send electronic mail to John Q. Public at the following address;
+ 
+	  snail-fans-request
+ 
+  *********************
+  End of Snail-Fans Digest
+  *********************
+   
+  $ \fBmail_issue\fR
+
+  Mailing Snail-Fans Digest, Number 1
+ 
+  $
+
+.fi
+Pretty slick, eh?  In practice, maintaining a mailing list is
+mostly maintaining the actual addresses themselves.  The overhead
+of creating a digest (etc) is all avoided.
+.SH AUTHOR
+Dave Taylor, Hewlett-Packard Laboratories
+.SH "SEE ALSO"
+awk(1), center(1), mydate(1), mailx(1), sendmail(1).

@@ -1,0 +1,881 @@
+Path: plus5!wucs1!cuae2!gatech!lll-lcc!pyramid!prls!mips!dce
+From: dce@mips.UUCP (David Elliott)
+Newsgroups: net.sources
+Subject: Modifications to 4.3BSD su - part 1 (su diffs)
+Message-ID: <161@quacky.mips.UUCP>
+Date: 4 Feb 87 16:51:30 GMT
+Reply-To: dce@quacky.UUCP (David Elliott)
+Organization: MIPS Computer Systems, Sunnyvale, CA
+Lines: 611
+
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by jss on Thu Jun 25 13:49:04 CDT 1987
+# Contents:  background patchman patchsu.c psu_people.5
+ 
+echo x - background
+sed 's/^@//' > "background" <<'@//E*O*F background//'
+
+I just realized that some of the people that see these changes may not
+have read the article I posted in other newsgroups.
+
+These modifications are for the 4.3BSD su command. I prefer modifications
+to having yet another new command to maintain.
+
+A full explanation of the modifications is discussed in an article
+posted to comp.unix.questions, comp.unix.wizards, and comp.bugs.4bsd.
+You can also get most of the information from the manual page changes
+and comments found in the diffs.
+
+@//E*O*F background//
+chmod u=r,g=r,o=r background
+ 
+echo x - patchman
+sed 's/^@//' > "patchman" <<'@//E*O*F patchman//'
+
+*** su.1.old	Wed Feb  4 08:10:22 1987
+--- /usr/man/man1/su.1	Tue Jan 20 09:00:00 1987
+***************
+*** 4,29 ****
+  .\"
+  .\"	@(#)su.1	6.2 (Berkeley) 5/5/86
+  .\"
+! .TH SU 1 "May 5, 1986"
+  .UC
+  .SH NAME
+! su \- substitute user id temporarily
+  .SH SYNOPSIS
+  .B su
+! [ \-f ] [ \- ] [ userid ]
+  .SH DESCRIPTION
+! .I Su
+  demands the password of the specified
+  .I userid,
+  and if it is given,
+  changes to that 
+  .I userid
+! and invokes the Shell
+! .IR sh (1)
+! or
+! .IR csh (1)
+  without changing the current directory.
+! The user environment
+  is unchanged except for HOME and SHELL,
+  which are taken from the password file
+  for the user being substituted
+--- 4,44 ----
+  .\"
+  .\"	@(#)su.1	6.2 (Berkeley) 5/5/86
+  .\"
+! .TH SU 1
+  .UC
+  .SH NAME
+! su, ssu \- substitute user id temporarily
+  .SH SYNOPSIS
+  .B su
+! [
+! .B \-f
+! ] [
+! .B \-
+! ] [
+! .B \-e
+! ] [
+! .B \-c
+! ] [
+! .I userid
+! [
+! .I command
+! [
+! .I args...
+! ] ] ]
+  .SH DESCRIPTION
+! .B Su
+  demands the password of the specified
+  .I userid,
+  and if it is given,
+  changes to that 
+  .I userid
+! and invokes the shell (unless
+! .B \-c
+! is given, see below)
+  without changing the current directory.
+! Unless the
+! .B \-e
+! option is given (see below), the user environment
+  is unchanged except for HOME and SHELL,
+  which are taken from the password file
+  for the user being substituted
+***************
+*** 34,55 ****
+  If no 
+  .I userid
+  is specified, ``root'' is assumed.
+! Only users in the ``wheel'' group (group 0) can
+! .I su
+! to ``root'', even with the root password.
+  To remind the super-user of his responsibilities,
+  the Shell substitutes `#' for its usual prompt.
+  .PP
+! The
+  .B \-f
+! option prevents
+  .IR csh (1)
+  from executing the .cshrc file; thus making
+! .I su
+  start up faster.
+! .PP
+! The
+  .B \-
+! option simulates a full login.
+  .SH "SEE ALSO"
+! sh(1), csh(1)
+--- 49,114 ----
+  If no 
+  .I userid
+  is specified, ``root'' is assumed.
+! Only users in the ``wheel'' group (group 0) or in the file
+! .I /etc/su_people
+! (described below) can
+! .B su
+! to ``root'', even with the root password (this can be overridden by changing
+! .B su
+! to have group wheel and turning on the set-group-id permission).
+  To remind the super-user of his responsibilities,
+  the Shell substitutes `#' for its usual prompt.
+  .PP
+! The command
+! .B ssu
+! is a link to
+! .B su.
+! Executing
+! .B ssu
+! is the same as executing the command `su -c -e root'.
+! .PP
+! If the user tries to su to root and the root account has a password (as
+! is the preferable case), the file
+! .I /etc/su_people
+! is read to see if that username is allowed to become root without a
+! password.
+! Since this can be dangerous, the file must have owner 0 (root), group
+! wheel (0), and mode 0600 (read and write by owner only), or it will
+! be silently ignored.
+! See the manual page for
+! .I su_people(5)
+! for details on this file.
+! .SH OPTIONS
+! .TP 4
+  .B \-f
+! Prevents
+  .IR csh (1)
+  from executing the .cshrc file; thus making
+! .B su
+  start up faster.
+! .TP 4
+  .B \-
+! Simulates a full login by executing the shell with name `-sh'.
+! .TP 4
+! .B \-e
+! Do not overwrite any of the environment.
+! This means that the variables HOME and SHELL are retained from the
+! original user and that shell is executed.
+! For
+! .I csh(1)
+! users, this means that the aliases are taken from the original
+! user's .cshrc file, which is very convenient.
+! .TP 4
+! .B \-c
+! If any arguments are given after the username, they are executed as a
+! command instead of the shell.
+! For example, `su -c root ls' will execute the command
+! .I ls(1)
+! as root, whereas `su root ls' will execute the command `csh ls' as root
+! (this is not the same thing).
+! .SH FILES
+! .TP 25
+! .I /etc/su_people
+! Special permission database
+  .SH "SEE ALSO"
+! sh(1), csh(1), su_people(5)
+@//E*O*F patchman//
+chmod u=r,g=r,o=r patchman
+ 
+echo x - patchsu.c
+sed 's/^@//' > "patchsu.c" <<'@//E*O*F patchsu.c//'
+
+*** su.c.old	Wed Feb  4 08:06:53 1987
+--- su.c	Wed Feb  4 08:08:23 1987
+***************
+*** 17,26 ****
+--- 17,29 ----
+  #include <stdio.h>
+  #include <pwd.h>
+  #include <grp.h>
++ #include <string.h>
+  #include <syslog.h>
+  #include <sys/types.h>
+  #include <sys/time.h>
+  #include <sys/resource.h>
++ #include <sys/stat.h>
++ #include <sys/param.h>
+  
+  char	userbuf[16]	= "USER=";
+  char	homebuf[128]	= "HOME=";
+***************
+*** 28,41 ****
+  char	pathbuf[128]	= "PATH=:/usr/ucb:/bin:/usr/bin";
+  char	*cleanenv[] = { userbuf, homebuf, shellbuf, pathbuf, 0, 0 };
+  char	*user = "root";
+! char	*shell = "/bin/sh";
+  int	fulllogin;
+  int	fastlogin;
+  
+  extern char	**environ;
+  struct	passwd *pwd;
+  char	*crypt();
+  char	*getpass();
+  char	*getenv();
+  char	*getlogin();
+  
+--- 31,77 ----
+  char	pathbuf[128]	= "PATH=:/usr/ucb:/bin:/usr/bin";
+  char	*cleanenv[] = { userbuf, homebuf, shellbuf, pathbuf, 0, 0 };
+  char	*user = "root";
+! 
+! #define DEFAULT_SHELL	"/bin/sh"
+! char	*shell = DEFAULT_SHELL;
+  int	fulllogin;
+  int	fastlogin;
+  
++ /*
++  * New flags:
++  *
++  *	-e	Do not reset the environment.
++  *	-c	Execute extra arguments directly as command instead of using
++  *		shell. If none are given, use the shell.
++  *
++  * If su is called as 'ssu', it is the same as 'su -e -c root'.
++  *
++  */
++ 
++ int	Reset_env = 1;
++ int	Command = 0;
++ int	Have_user = 0;
++ 
++ /*
++  * New feature:
++  *
++  *	If the user is trying to su to root, the file /etc/su_people is read
++  *	to see if the user is in it. If so, no password is required.
++  *
++  *	This file MUST have owner and group 0 and mode 600 to be read, and no
++  *	messages are printed if it isn't. This avoids someone accidentally
++  *	leaving the file in such a state that users can change it and gain
++  *	free system access.
++  */
++ 
++ #define FREE_FILE	"/etc/su_people"
++ int	ck_free_entry();
++ 
+  extern char	**environ;
+  struct	passwd *pwd;
+  char	*crypt();
+  char	*getpass();
++ char	*get_enveq();
+  char	*getenv();
+  char	*getlogin();
+  
+***************
+*** 44,67 ****
+  	char *argv[];
+  {
+  	char *password;
+! 	char buf[1000];
+  	FILE *fp;
+! 	register char *p;
+  
+  	openlog("su", LOG_ODELAY, LOG_AUTH);
+  
+! again:
+! 	if (argc > 1 && strcmp(argv[1], "-f") == 0) {
+! 		fastlogin++;
+! 		argc--, argv++;
+! 		goto again;
+  	}
+! 	if (argc > 1 && strcmp(argv[1], "-") == 0) {
+! 		fulllogin++;
+! 		argc--, argv++;
+! 		goto again;
+! 	}
+! 	if (argc > 1 && argv[1][0] != '-') {
+  		user = argv[1];
+  		argc--, argv++;
+  	}
+--- 80,125 ----
+  	char *argv[];
+  {
+  	char *password;
+! 	char name[1000];
+  	FILE *fp;
+! 	int su_for_free;
+! 	register char *mylogin;
+  
+  	openlog("su", LOG_ODELAY, LOG_AUTH);
+  
+! 	ckname(argv[0]);	/* Set flags based on name */
+! 
+! 	while (argc > 1 && argv[1][0] == '-') {
+! 		switch (argv[1][1]) {
+! 
+! 			case 'f':
+! 				fastlogin = 1;
+! 				break;
+! 
+! 			case '\0':
+! 				fulllogin = 1;
+! 				break;
+! 
+! 			case 'e':
+! 				Reset_env = 0;
+! 				break;
+! 
+! 			case 'c':
+! 				Command = 1;
+! 				break;
+! 			
+! 			default:
+! 				fprintf(stderr, "su: usage: su [-e] [-f] [-c] [-] [user] ...");
+! 				exit(1);
+! 				break;
+! 
+! 		}
+! 		argv++;
+! 		argc--;
+  	}
+! 				
+! 	
+! 	if (!Have_user && argc > 1 && argv[1][0] != '-') {
+  		user = argv[1];
+  		argc--, argv++;
+  	}
+***************
+*** 69,89 ****
+  		fprintf(stderr, "Who are you?\n");
+  		exit(1);
+  	}
+! 	strcpy(buf, pwd->pw_name);
+  	if ((pwd = getpwnam(user)) == NULL) {
+  		fprintf(stderr, "Unknown login: %s\n", user);
+  		exit(1);
+  	}
+  	/*
+! 	 * Only allow those in group zero to su to root.
+  	 */
+! 	if (pwd->pw_uid == 0) {
+  		struct	group *gr;
+  		int i;
+  
+  		if ((gr = getgrgid(0)) != NULL) {
+  			for (i = 0; gr->gr_mem[i] != NULL; i++)
+! 				if (strcmp(buf, gr->gr_mem[i]) == 0)
+  					goto userok;
+  			fprintf(stderr, "You do not have permission to su %s\n",
+  				user);
+--- 127,159 ----
+  		fprintf(stderr, "Who are you?\n");
+  		exit(1);
+  	}
+! 	strcpy(name, pwd->pw_name);
+  	if ((pwd = getpwnam(user)) == NULL) {
+  		fprintf(stderr, "Unknown login: %s\n", user);
+  		exit(1);
+  	}
+  	/*
+! 	 * Only allow those in group zero or in the su_people file to su to
+! 	 * root, unless the effective groupid is 0 (i.e., if the command
+! 	 * is setgid 0).
+  	 */
+! 
+! 	if ((mylogin = getlogin()) == NULL || *mylogin == '\0') {
+! 		mylogin = name;
+! 	}
+! 	if (pwd->pw_uid == 0 && ck_free_entry(mylogin, name)) {
+! 		su_for_free = 1;
+! 	} else {
+! 		su_for_free == 0;
+! 	}
+! 
+! 	if (!su_for_free && pwd->pw_uid == 0 && getegid() != 0) {
+  		struct	group *gr;
+  		int i;
+  
+  		if ((gr = getgrgid(0)) != NULL) {
+  			for (i = 0; gr->gr_mem[i] != NULL; i++)
+! 				if (strcmp(name, gr->gr_mem[i]) == 0)
+  					goto userok;
+  			fprintf(stderr, "You do not have permission to su %s\n",
+  				user);
+***************
+*** 93,114 ****
+  		setpriority(PRIO_PROCESS, 0, -2);
+  	}
+  
+! #define Getlogin()  (((p = getlogin()) && *p) ? p : buf)
+! 	if (pwd->pw_passwd[0] == '\0' || getuid() == 0)
+! 		goto ok;
+! 	password = getpass("Password:");
+! 	if (strcmp(pwd->pw_passwd, crypt(password, pwd->pw_passwd)) != 0) {
+! 		fprintf(stderr, "Sorry\n");
+! 		if (pwd->pw_uid == 0) {
+! 			syslog(LOG_CRIT, "BAD SU %s on %s",
+! 					Getlogin(), ttyname(2));
+  		}
+- 		exit(2);
+  	}
+- ok:
+  	endpwent();
+  	if (pwd->pw_uid == 0) {
+! 		syslog(LOG_NOTICE, "%s on %s", Getlogin(), ttyname(2));
+  		closelog();
+  	}
+  	if (setgid(pwd->pw_gid) < 0) {
+--- 163,182 ----
+  		setpriority(PRIO_PROCESS, 0, -2);
+  	}
+  
+! 	if (pwd->pw_passwd[0] != '\0' && getuid() != 0 && !su_for_free) {
+! 		password = getpass("Password:");
+! 		if (strcmp(pwd->pw_passwd, crypt(password, pwd->pw_passwd)) != 0) {
+! 			fprintf(stderr, "Sorry\n");
+! 			if (pwd->pw_uid == 0) {
+! 				syslog(LOG_CRIT, "BAD SU %s on %s",
+! 						mylogin, ttyname(2));
+! 			}
+! 			exit(2);
+  		}
+  	}
+  	endpwent();
+  	if (pwd->pw_uid == 0) {
+! 		syslog(LOG_NOTICE, "%s on %s", mylogin, ttyname(2));
+  		closelog();
+  	}
+  	if (setgid(pwd->pw_gid) < 0) {
+***************
+*** 123,139 ****
+  		perror("su: setuid");
+  		exit(5);
+  	}
+! 	if (pwd->pw_shell && *pwd->pw_shell)
+! 		shell = pwd->pw_shell;
+  	if (fulllogin) {
+! 		cleanenv[4] = getenv("TERM");
+  		environ = cleanenv;
+  	}
+! 	if (strcmp(user, "root"))
+! 		setenv("USER", pwd->pw_name, userbuf);
+! 	setenv("SHELL", shell, shellbuf);
+! 	setenv("HOME", pwd->pw_dir, homebuf);
+  	setpriority(PRIO_PROCESS, 0, 0);
+  	if (fastlogin) {
+  		*argv-- = "-f";
+  		*argv = "su";
+--- 191,222 ----
+  		perror("su: setuid");
+  		exit(5);
+  	}
+! 	if (Reset_env) {
+! 		if (pwd->pw_shell && *pwd->pw_shell) {
+! 			shell = pwd->pw_shell;
+! 		}
+! 	} else {
+! 		shell = getenv("SHELL");
+! 		if (shell == NULL) {
+! 			shell = DEFAULT_SHELL;
+! 		}
+! 	}
+  	if (fulllogin) {
+! 		cleanenv[4] = get_enveq("TERM");
+  		environ = cleanenv;
+  	}
+! 	if (Reset_env) {
+! 		if (strcmp(user, "root"))
+! 			setenv("USER", pwd->pw_name, userbuf);
+! 		setenv("SHELL", shell, shellbuf);
+! 		setenv("HOME", pwd->pw_dir, homebuf);
+! 	}
+  	setpriority(PRIO_PROCESS, 0, 0);
++ 	if (Command && argc > 1) {
++ 		execvp(argv[1], argv + 1);
++ 		fprintf(stderr, "Could not execute %s\n", argv[1]);
++ 		exit(7);
++ 	}
+  	if (fastlogin) {
+  		*argv-- = "-f";
+  		*argv = "su";
+***************
+*** 170,177 ****
+  	}
+  }
+  
+  char *
+! getenv(ename)
+  	char *ename;
+  {
+  	register char *cp, *dp;
+--- 253,269 ----
+  	}
+  }
+  
++ /*
++  * The subroutine get_enveq() was called getenv(), but this isn't a
++  * good idea, since it may cause profiling to break. Also, we need the
++  * normal getenv behavior, too.
++  *
++  * This routine returns the full "NAME=value" string instead of just the
++  * value portion.
++  */
++ 
+  char *
+! get_enveq(ename)
+  	char *ename;
+  {
+  	register char *cp, *dp;
+***************
+*** 184,187 ****
+--- 276,541 ----
+  			return (*--ep);
+  	}
+  	return ((char *)0);
++ }
++ 
++ /*
++  * The subroutine ckname() sets options based on the name of the command.
++  */
++ 
++ ckname(name)
++ char *name;
++ {
++ 	char *base;
++ 
++ 	base = rindex(name, '/');
++ 	if (base) {
++ 		base++;
++ 	} else {
++ 		base = name;
++ 	}
++ 
++ 	if (strcmp(base, "ssu") == 0) {
++ 		Have_user = 1;
++ 		Reset_env = 0;
++ 		Command = 1;
++ 	}
++ }
++ 
++ /*
++  * The subroutine ck_free_entry() checks to see if the user need not give
++  * a password. This is only true if the file /etc/su_people is mode 0600,
++  * has owner and group 0, and contains one of the given names. We look up
++  * both the current username and the login name, since the user could
++  * already be su'ed.
++  *
++  * The return value is 1 if the above are true, and 0 if not.
++  */
++ 
++ static int ck_apply();
++ #define A_NOT		0
++ #define A_ALLOW		1
++ #define A_DENY		2
++ 
++ ck_free_entry(name1, name2)
++ char *name1;
++ char *name2;
++ {
++ 
++ 	struct stat statb;
++ 	FILE *fp;
++ 	char buf[1024];		/* Buffer for holding data	*/
++ 
++ 	if (name1 == NULL || name1[0] == '\0' ||
++ 	    name2 == NULL || name2[0] == '\0') {	/* Unsafe */
++ 		return 0;
++ 	}
++ 
++ 	if (stat(FREE_FILE, &statb) < 0) {
++ 		return 0;
++ 	}
++ 
++ 	if ((statb.st_mode & ~S_IFMT) != 0600 || statb.st_uid != 0 ||
++ 	    statb.st_gid != 0) {
++ 		return 0;
++ 	}
++ 
++ 	if ((fp = fopen(FREE_FILE, "r")) == NULL) {
++ 		return 0;
++ 	}
++ 
++ 	while (fgets(buf, sizeof(buf), fp) != NULL) {
++ 		if (buf[strlen(buf) - 1] != '\n') {	/* Line too long */
++ 			(void) fclose(fp);
++ 			return 0;
++ 		}
++ 		if (buf[0] == '#') {			/* Comment */
++ 			continue;
++ 		}
++ 
++ 		switch(ck_apply(name1, buf)) {
++ 			case A_ALLOW:
++ 				(void) fclose(fp);
++ 				return 1;
++ 
++ 			case A_DENY:
++ 				(void) fclose(fp);
++ 				return 0;
++ 		}
++ 
++ 		if (strcmp(name1, name2) == 0) {
++ 			continue;
++ 		}
++ 		switch(ck_apply(name2, buf)) {
++ 			case A_ALLOW:
++ 				(void) fclose(fp);
++ 				return 1;
++ 
++ 			case A_DENY:
++ 				(void) fclose(fp);
++ 				return 0;
++ 		}
++ 	}
++ 
++ 	(void) fclose(fp);
++ 	return 0;
++ }
++ 
++ /*
++  * The subroutine ck_apply() checks to see if the buffer applies to the
++  * given name. If not, A_NOT is returned. Otherwise, the buffer is checked
++  * to see how it applies, based on the buffer type.
++  *
++  * The buffer may be one of the following types:
++  *
++  *	{name}
++  *		Return A_ALLOW if either of the names is {name}
++  *	{name} {hostname list}
++  *		Return A_ALLOW if either of the names is {name} and the
++  *		current hostname is in {hostname list}
++  *	{name} !{hostname list}
++  *		Return A_DENY if either of the names is {name} and the
++  *		current hostname is in {hostname list}
++  *
++  * The hostname list is a list of names separated by commas or whitespace.
++  */
++ 
++ static int ck_host();
++ 
++ static int
++ ck_apply(name, buf)
++ char *name;
++ char *buf;
++ {
++ 
++ 	int len;	/* Length of name */
++ 
++ 	len = strlen(name);
++ 	if (strncmp(name, buf, len) == 0) {
++ 		switch(buf[len]) {
++ 			case '\n':
++ 				return A_ALLOW;
++ 				break;
++ 
++ 			case '\t':
++ 			case ' ':
++ 				if (ck_empty(&buf[len + 1])) {
++ 					return A_ALLOW;
++ 				}
++ 				return ck_host(&buf[len + 1]);
++ 				break;
++ 		}
++ 
++ 		/*
++ 		 * Name doesn't match. May not be a syntax error. Example:
++ 		 * 	name = foo
++ 		 *	buffer = foobar
++ 		 */
++ 	}
++ 
++ 	return A_NOT;
++ }
++ 
++ /*
++  * The subroutine ck_empty() returns 1 if the given string contains only
++  * spaces and tabs followed by a newline, and 0 otherwise.
++  */
++ 
++ static
++ ck_empty(str)
++ char *str;
++ {
++ 
++ 	while (*str != '\n') {
++ 		if (*str != ' ' && *str != '\t') {
++ 			return 0;
++ 		}
++ 		str++;
++ 	}
++ 
++ 	return 1;
++ }
++ 
++ /*
++  * The subroutine ck_host() takes a list of hostnames and checks to see
++  * if the current hostname is in the list.
++  *
++  * If the current hostname is in the list, A_ALLOW is returned. If not,
++  * A_DENY is returned. If the list begins with '!', these two values are
++  * reversed.
++  *
++  * If there are any syntax errors, A_DENY is returned for the sake of safety.
++  */
++ 
++ static int
++ ck_host(list)
++ char *list;
++ {
++ 
++ 	int not = 0;				/* 1 if list begins with ! */
++ 	static char host[MAXHOSTNAMELEN + 1];	/* Current hostname */
++ 	static int hlen = 0;			/* Length of hostname */
++ 
++ 	if (hlen == 0) {
++ 		gethostname(host, MAXHOSTNAMELEN);
++ 		hlen = strlen(host);
++ 	}
++ 
++ 	/*
++ 	 * Find beginning of list.
++ 	 */
++ 
++ 	while (*list == ' ' || *list == '\t') {
++ 		list++;
++ 	}
++ 
++ 	if (*list == '!') {
++ 		not = 1;
++ 		list++;
++ 		while (*list == ' ' || *list == '\t') {
++ 			list++;
++ 		}
++ 		if (*list == '\n') {
++ 			return A_DENY;		/* Syntax */
++ 		}
++ 	}
++ 
++ 	/*
++ 	 * Look at each list element
++ 	 */
++ 
++ 	while (*list != '\n') {
++ 		if (strncmp(list, host, hlen) == 0) {
++ 			switch (list[hlen]) {
++ 				case ' ':
++ 				case ',':
++ 				case '\t':
++ 				case '\n':
++ 					if (not) {
++ 						return A_DENY;
++ 					} else {
++ 						return A_ALLOW;
++ 					}
++ 					break;
++ 			}
++ 		}
++ 
++ 		/*
++ 		 * Go to next list item.
++ 		 */
++ 
++ 		list++;
++ 		while (*list != ' ' && *list != '\t' && *list != ',' &&
++ 		       *list != '\n') {
++ 			list++;
++ 		}
++ 		while (*list == ' ' || *list == '\t' || *list == ',') {
++ 			list++;
++ 		}
++ 	}
++ 
++ 	if (not) {
++ 		return A_ALLOW;
++ 	} else {
++ 		return A_DENY;
++ 	}
+  }
+@//E*O*F patchsu.c//
+chmod u=r,g=r,o=r patchsu.c
+ 
+echo x - psu_people.5
+sed 's/^@//' > "psu_people.5" <<'@//E*O*F psu_people.5//'
+
+@.TH SU_PEOPLE 5
+@.SH NAME
+su_people \- special access database for su
+@.SH SYNOPSIS
+@.B /etc/su_people
+@.SH DESCRIPTION
+When
+@.I su(1)
+is executed such that the user being subsituted is root (userid 0), the
+file
+@.I /etc/su_people
+is searched to see if the user executing the command or the user logged
+in originally (if these are different) is priveleged enough not to
+have to give the password (this is called having free access).
+This is done as a convenience, and should not be taken lightly.
+@.PP
+In order to stop any possible security hazards with this feature,
+@.I /etc/su_people
+must have mode 0600 (read and write for owner only), owner 0 (root),
+and group 0 (wheel) or it will be ignored.
+In addition, if any syntax errors are found in the file, free access
+will be denied.
+@.PP
+There are a number of different types of lines that can be placed in
+this file:
+@.TP 4
+\fB#\fP\fItext\fP
+Comment.
+This line is ignored.
+@.TP 4
+\fIusername\fP
+The named user is allowed free access.
+@.TP 4
+\fIusername\fP \fIhostname_list\fP
+The named user is allowed free access on the hosts named
+in \fIhostname_list\fP, which is a list of hostnames separated by spaces,
+tabs, and/or commas.
+@.TP 4
+\fIusername\fP \fB!\fP\fIhostname_list\fP
+The named user is denied free access on the hosts named
+in \fIhostname_list\fP, which is a list of hostnames separated by spaces,
+tabs, and/or commas.
+@.SH "SEE ALSO"
+su(1)
+@//E*O*F psu_people.5//
+chmod u=r,g=r,o=r psu_people.5
+ 
+echo Inspecting for damage in transit...
+temp=/tmp/shar$$; dtemp=/tmp/.shar$$
+trap "rm -f $temp $dtemp; exit" 0 1 2 3 15
+cat > $temp <<\!!!
+     12     78    488 background
+    164    750   3829 patchman
+    607   2323  13038 patchsu.c
+     45    234   1389 psu_people.5
+    828   3385  18744 total
+!!!
+wc  background patchman patchsu.c psu_people.5 | sed 's=[^ ]*/==' | diff -b $temp - >$dtemp
+if [ -s $dtemp ]
+then echo "Ouch [diff of wc output]:" ; cat $dtemp
+else echo "No problems found."
+fi
+exit 0

@@ -1,0 +1,59 @@
+Installing and maintaining 'talk'
+
+	These instructions are intended to be fairly generic. They were
+written for a 3B20. Your milage may vary.
+
+	The talk system is composed of three executable pieces.
+
+	talk		the user interface
+	talkdemon	the background process that supervises conversations
+	stoptalk	a program for removing the talk msgqueue
+
+	(Yes, I know it's usally spelled 'daemon'. But since my 3B20 has
+an 'errdemon' I figured System V wanted to be different. C'est la vie.)
+
+	First, read the 'Makefile' and make any nessecary modifications.
+You might want to also change 'talk.h'. Running 'make install' will create
+and install the three binaries for you. /usr/bin/talk must run setuid.
+This is so that independent 'talk' process can exchange signals. Talkdemon
+and stoptalk should have 'other' permissions turned off to prevent regular
+users from tampering with them. The owner and group ids of the files are
+not important so you can set them as you like.
+
+	After installing the binaries, provisions for automatic startup
+and shutdown of the talkdemon should be made. In your startup script
+(/etc/rc on my 3B20), at the point where /etc/cron is started, insert
+these lines:
+
+	echo talkdemon started
+	/etc/talkdemon
+
+and in your shutdown script (/etc/shutdown on my 3B20), before all user
+processes are killed, insert these lines:
+
+	echo Talk msgqueue being removed
+	/etc/stoptalk
+
+The entry in shutdown is needed because taking the system down to single
+user mode doesn't remove msgqueues and because /etc/shutdown kills
+user processes with a '-9' which prevents the talkdemon from removing
+it's own msgqueue.
+
+	The 'infotalk' program provides status on the state of the demon.
+It was initally used for debugging purposes and has been included for
+completeness.
+
+Known problems with talk
+
+1)	My version of System V has no high-precision sleep call, so the
+main loop of 'talk' runs as fast as the machine allows. I don't think
+this leads to any problems other than high CPU usage. If your system
+has a fractional-second sleep call, I suggest you use it to reduce talk's
+CPU time consumption. Let me know how it goes.
+
+2)	The version of `curses` on my machine has a bug which causes
+the cursor to jump to and from the beginning of the current line when
+a character is added to the screen. This is not harmful, just annoying.  
+
+Edward C. Bennett
+...ihnp4!cbosgd!ukma!ukecc!edward

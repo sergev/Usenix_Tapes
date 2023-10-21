@@ -1,0 +1,1325 @@
+     C Language Implementation of the Core System - CLICS
+		   Project Description and
+		    Current Documentation
+
+			   Outline
+
+
+1. Project Origin and Resources
+2. Philosophy and Goals
+3. User Manual
+	3.1. Naming Conventions
+	3.2. Error Handling
+4. Internal Design
+	4.1. Major Structures
+		4.1.1 Segment Structure
+		4.1.2. View Surface Structure
+		4.1.3. DD Argument Structure
+		4.1.4. Software Character Storage Format
+		4.1.5. Other Structures
+	4.2. Major Modules
+		4.2.1. Output Primitive Functions
+		4.2.2. Dynamic Segment Attribute Setting Functions
+		4.2.3. The Repaint Subfunction
+		4.2.4. The Segdraw Subfunction
+		4.2.5. The Setmatrix Subfunction
+		4.2.6. The Reopen Subfunction
+	4.3. Device Driver Specifications
+		4.3.1. Device Property Flags
+		4.3.2. DI-DD Communication Structure
+		4.3.3. DI-DD Opcodes
+5. Known Flaws
+	5.1. Hardware Clipping and Transformation
+	5.2. Use of Segment Type by DD
+	5.3. Internal Segment ID's
+	5.4. Batching of Primitives
+	5.5. Limited Number of Segments
+	5.6. No Garbage Collection
+6. Efficiency Improvements
+	6.1. Restructuring Data Structures
+	6.2. In-line versus Function
+	6.3. Optimization
+	6.4. Restrictions
+7. Completion
+	7.1. Input Functions
+	7.2. Nice Functions
+	7.3. Special Interfaces
+8. Extension
+	8.1. Dynamic Loading of DD's
+	8.2. Sharable DI
+	8.3. Unlimited Number of Segments
+	8.4. Dynamic View Surface List
+	8.5. Raster Extensions
+	8.6. Extending, Copying, and Saving Segments
+
+
+
+
+
+
+
+     C Language Implementation of the Core System - CLICS
+		   Project Description and
+		    Current Documentation
+
+
+1. Project Origin and Resources
+
+In February of 1978, Mike Garrett, who was doing research in
+graphical interfaces to data base management systems, recruited
+Drew Greenholt, a data systems intern, to assist in the project
+for one year. There was a need for a device independent graphics
+package on a UNIX based PDP 11/70 and interest had been shown in
+the Core Graphics System by other elements of the agency
+involved. So, it was decided that Drew was to do an
+implementation of the Core with the assistance of Mike Garrett
+(approximately quarter time) and the consultation of Jim Foley
+and other members of the Graphics Standards Planning Committee.
+Drew subsequently took a course in the C language, and audited a
+course in computer graphics, before beginning work on the project.
+Thus, the work discussed here amounts to less than one man year.
+The product was not intended for a production environment and
+will have no maintenance support.
+
+2. Philosophy and Goals
+
+Being extremely ambitious, Drew and Mike decided to do as much as
+possible of a level 4, 2D implementation. The goals were
+adherence to the Core report, a high degree of device
+independence, efficient operation, and utility in a network
+environment. It was hoped that the system could be evaluated for
+agency functions, and extended for raster device type
+capabilities. As time grew short, the goals were relaxed more and
+more until it was decided that the most that could be done was to
+design for ease of eventual implementation of level four but
+implement only level two capabilities. We would then document
+fully, and hope that other resources for optimization,
+completion, extension, and evaluation could be found.
+
+Most of the burden of graphics processing was to be performed by
+the device independent (DI) part of the system. Thus the
+specifications for device drivers (DD) were to be very simple so
+that new devices could be added easily, this at the expense of
+not making use of all of the hardware capabilities of high
+performance graphics devices, which are not expected to be
+attached to PDP 11/70's under UNIX, anyway.  The DD
+specifications are discussed later (section 4.3).
+
+Original intentions were for the DD's to be dynamically loaded at
+execution time, but sufficient UNIX system expertese was not
+available to determine how to do this efficiently. The system as
+it stands now requires declaration at compile time of DD's to be
+used. It would also be desirable to have the DI sharable among
+tasks, but again the present system does not allow this.
+
+3. User Manual
+
+The user manual for CLICS has not been completed. It will consist
+of a modified and amended GSPC Status Report which we have
+available on line. (The GSPC Status Report may be obtained from
+the University of Colorado.) The modifications will be minor,
+consisting of deletion of some of the detail in the report,
+explanation of the CLICS-dependent features, function name
+revision, parameter conventions, and error handling. The function
+name and error handling conventions are discussed here.
+
+	3.1. Function Naming Conventions
+
+Objectives (in order):
+
+1. uniqueness - all mnemonics must be unique in the first 7 characters
+		although additional characters may be used to clarify
+		the purpose of the function
+
+2. recallability - ability to remember mnemonics without looking them up
+
+3. consistency - similar names should convert to similar mnemonics
+
+4. minimality - minimum number of rules for conversion
+
+5. pronouncability - esthetically appealing mnemonics
+
+
+The following substitution conventions come close to achieving the
+above objectives and, after considering several other schemes, including
+some transposition schemes, have been adopted:
+
+
+_ <underline>   ->      <null> {i.e. delete it}
+<upper case>    ->      <lower case>
+char            ->      ch
+disable         ->      disabl
+disassoc        ->      disass
+echo            ->      eco
+image           ->      <null>
+initialize      ->      init
+input           ->      in
+inquire         ->      inq
+line            ->      lin
+marker          ->      mrk
+move            ->      mov
+output          ->      out
+polyline        ->      ply
+position        ->      pos
+rotate          ->      ro
+scale           ->      sc
+segment         ->      seg
+space           ->      spc
+terminate       ->      term
+translate       ->      tr
+view            ->      vw
+viewing         ->      vw
+
+This occasionally results in mnemonics with fewer than 7
+characters which is fine. In some cases using only the first 7
+characters results in termination of the mnemonic in the middle
+of a word. Users will probably want at least to complete the word
+but it is not necessary.
+
+(NOTE: set_button_all is inconsistent with other names which follow
+the pattern of verb_all_object and was changed to set_all_button
+before conversion)
+
+The names resulting from application of these rules are listed in
+appendix A.
+
+	3.2. Error Handling
+
+When an error occurs in a Core function, an error handling
+function is called which sends an error message to the operator's
+standard output, usually a terminal. The message consists of the
+function name in which the error occurred, and a synopsis of the
+error, which is usually identical to the synopsis in the GSPC
+Status Report.  In addition, the error number is returned as the
+functional value of the Core function, so that the user can
+handle it programmatically.  A value of 0 is returned if no error
+occurs.  All errors are treated as non-fatal and no fancy error
+handling is done. Programmers are expected to use standard
+interactive debugging tools available on UNIX systems.
+
+4. Internal Design
+
+The internal design of CLICS is based on the "Internal Design of
+the GSPC Core Graphics System, Final Report"[2]. There are
+exceptions, however. The minor ones are documented in the code.
+Major exceptions are covered here. First of all, only functions
+mentioned in the GSPC report[4] are included in our system. Second,
+the DI-DD interface is not the same. Ours is discussed in section
+4.3. In the following, specific exceptions are discussed in the
+context of the functions affected.
+
+	4.1. Major Structures
+
+Here we discuss the more important data structures used in CLICS.
+The limitied C language data structuring capability[3] was used to
+build a fairly clean structure.
+
+		4.1.1 Segment Structure
+
+The segment structure in CLICS consists of a fixed length array
+of segment descriptor frames and a variable set of segment
+display records which together form what we refer to as the
+pseudo display file. The segment descriptor frames may each
+contain a description of a segment, including name, type, dynamic
+segment attributes, a view surface list, control flags, and a
+pointer to the segment display record (SDR) in the PDF for the segment.
+The segment structure used in CLICS at present is inefficient in
+space and has been redesigned but not reimplemented. The new
+design is discussed in section 6.1.
+
+The pdfptr is the byte number in the file at which the primitives
+and primitive attributes for the segment begin. Each such entity
+begins with a byte which indicates what primitive or attribute it
+is. If the entity requires a variable number of arguments, i.e.
+text and polyline, the next two bytes form an integer which is
+that number. Following that, if present, are the arguments: one
+byte per character, two bytes per integer, four bytes per
+floating point number or one byte per short integer. Coordinates
+are stored as floating point, two dimensional, normalized device
+coordinates. No viewing transformation information is kept in the
+file; all such transformations will have already been done. 2D
+image transformations can, of course, be applied, with
+unspecified results if partially off the view surface.
+
+The effect of image transformations on text is expressed in terms
+of effects on the text attributes. The position is of course
+multiplied by the image transformation directly. The character
+spacing is also multiplied by the transformation. However, it is
+assumed that if users really want distorted characters they will
+use high quality text.  Thus the height and width parameters are
+each scaled by the average of the x and y scale factors of the
+image transformation, preserving the aspect ratio. The angle of
+the text extent is computed from the transformed character
+spacing and supplied to the DD so characters can be angled to
+conform to the extent.  In low quality text mode, character
+spacing is ignored, but the angle may still be used by the DD.
+For medium quality, character spacing has been computed for each
+character individually, so character spacing information is never
+needed directly; it is only used to compute the angle.
+Nevertheless, it must be kept for multiplication by the image
+transformation.
+
+Finally each segment's set of entities is terminated by a null
+byte. The following table shows the indicator bytes and the
+corresponding arguments:
+
+
+Code    Mnemonic                    Arguments
+			#       name    type    description
+
+
+0       end_segment     0
+
+1       move            2       x,y     float   adjust current position
+
+2       line            2       x,y     float   draw line from current position
+
+3       polyline        n       (xi,yi) float   draw sequence of lines
+
+4       text            n       (ci)    char    draw sequence of characters
+
+6       marker          1       c       char    draw corresponding marker centered
+
+11      color           3       r,g,b   float   change color mode
+
+12      intensity       1       i       float   change intensity mode
+
+13      linestyle       1       l       short   change linestyle mode
+
+14      linewidth       1       l       float   change linewidth (expressed as multiple of standard linewidth)
+
+15      font            1       f       short   change font mode
+
+16      charsize        2       h,w     float   change character size
+
+17      charspace       2       x,y     float   change character spacing
+
+18      charquality     1       q       short   change character quality
+
+20      pick_id         1,4     i,xm,ym, short, change pick_id and corresponding extent
+
+		4.1.2. View Surface Structure
+
+The view surface structure, again with hindsight, could use
+restructuring.  It consists of an array of surface descriptor
+frames, each of which can hold a description of a view surface,
+including the name, some control flags, some property flags, and
+a pointer to the device driver of the view surface. The original
+plan called for loading DD's dynamically and filling the
+descriptor with this information. This is not implemented.  The
+meaning of the control flags is explained in in-code comments.
+The meaning of the property flags is discussed in the DD
+specifications, section 4.3. These are used in the functions to
+determine how a particular function is to be handled for each
+device.
+
+		4.1.3. DD Argument Structure
+
+The DD arguments are passed by means of a pointer to a structure
+which can hold the opcode and each possible set of arguments for
+that opcode. This type of arrangement would probably have to be
+modified if the DD's were dynamically loaded.  This structure is
+discussed in section 4.3.
+
+		4.1.4. Software Character Storage Format
+
+Each printable ascii character plus each of a selection of markers is
+stored as 16 command instances each chosen from the following commands
+of which there also happen to be 16:
+
+
+UP      UP_LEFT         UP_2            DOWN_4
+DOWN    UP_RIGHT        DOWN_2          UP_PEN
+LEFT    DOWN_LEFT       LEFT_2          DOWN_PEN
+RIGHT   DOWN_RIGHT      RIGHT_2         STOP
+
+
+Thus all characters are drawn limited to vertical, horizontal, and
+diagonal strokes.  An "M" is 4 strokes high by 4 strokes wide and
+all command sequences assume pen up and lower left corner positioning
+to start.  Each character takes 4, 16-bit words for storage for a
+total of 512 words.  This storage scheme was stolen from a previous
+graphics subroutine package designed by one of the authors because
+to do so was expedient.  The time was not taken to consider other
+schemes which may be more efficient.
+
+		4.1.5. Other Structures
+
+Some other structures are used in CLICS which are mainly groupings
+of related objects, but in some cases they are used to facilitate
+definition of multiple objects of the same type.
+
+	4.2. Major Modules
+
+Some of the Core functions in CLICS vary enough from the
+specifications in [2] that they require discussion.  Also, several
+subfunctions of the Core functions in CLICS are separated out
+into modules. These are discussed here.
+
+		4.2.1. Output Primitive Functions
+
+The major subfunctions of output primitive functions are similar
+and are here described by means of a crude pseudo code rather
+than flow charts. The indentations indicate subfunctions.
+
+
+Check for errors
+
+If clipping is in effect:
+
+    clip primitive
+
+If primitive is outside window:
+
+    update cp
+
+    perform no more functions(return)
+
+Convert from world to normalized device coordinates
+
+If open segment is being retained:
+
+    If primitive attributes have changed:
+
+	put primitive attributes into SDR
+
+    Put primitive into SDR
+
+For each view surface in segment descriptor:
+
+    If primitive attributes have changed:
+
+	send primitive attributes to DD
+
+    If does not have transformation hardware:
+
+	transform primitive
+
+    If must simulate certain attributes:
+
+	simulate and send appropriate things to DD
+
+    else send modified primitive to DD (DD will ignore if visibility off)
+
+return
+
+		4.2.2. Dynamic Segment Attribute Setting Functions
+
+Again we use crude pseudo code:
+
+
+check for errors
+
+for the named segment:
+
+    check for segment dependent errors, if any
+
+    if the change is real and this is not an empty open segment:
+
+	if this is the open segment:
+
+	    temporarily close it
+
+	if segment already has repaint flag set:
+
+	    set local flag (used below)
+
+	mark this segment as needing repaint
+
+	for each view surface in this segment's list:
+
+	    if the view surface can handle the attribute:
+
+		notify the DD of the change
+
+	    else:
+
+		mark the view surface as needing repaint
+
+		if the view surface is raster (erasure) and
+		segment not already marked as needing repaint (flag set above)
+
+		    erase this segment by redrawing with 0 color and intensity
+		    (it will be redrawn at next repaint with new attributes)
+		    (new_frame by the user will get rid of anomalies)
+
+		else:
+
+		    if simulation is necessary for this VS:
+
+			 simulate
+
+	change attribute in segment descriptor
+
+	if batch of updates is not in effect:
+
+	    do repaint now(overhead to check all segments for change)
+
+	if this was an open segment:
+
+	    reopen it
+
+    else if this is an empty open segment:
+
+	set up the transformation matrix and the identity flag
+
+return
+
+
+In general, it will be time consuming for the user to change the
+dynamic attributes of the open segment after primitives are created
+and before the segment is closed, but it also seems unlikely.
+
+		4.2.3. The Repaint Subfunction
+
+The "repaint" function does the following:
+
+
+for each view surface:
+
+    if (VS's repaint flag is set) and ((VS is storage type)  or
+    (we are doing an explicit repaint)):
+
+	erase this view surface by calling DD
+
+for each segment descriptor:
+
+    set local flag to false
+
+    for each VS in this segment's list:
+
+	if (VS can delete segments) and (segment is not retained) and
+	(not doing explicit repaint)
+
+	    delete this segment from this view surface
+
+	else if (the VS's repaint flag is set) and
+	((the segment's repaint flag is set) or (the VS is storage) or
+	(we are doing an explicit repaint)):
+
+	    set local flag to true
+
+    if local flag is true and this segment is retained:
+
+	for each VS in this segment's list:
+
+	    if (VS needs segments opened) and
+	    (VS's repaint flag and segment's repaint flag are both set)
+
+		reopen this segment on this view surface by calling DD
+
+	    set up all attributes for the segment by calling DD
+
+	set up transformation matrix and identity flag for this segment
+
+	for each SDR function for this segment (as read from PDF):
+
+	    for each VS in this segment's list:
+
+		if (VS's repaint flag is set)
+		and (segment is visible or VS has visibility hardware)
+		and ((segment repaint flag is set) or (VS is storage type)
+		or (we are doing an explicit repaint)):
+
+		    do the appropriate DD things to create this primitive
+		    (this is the big switch statement)
+
+	for each VS in this segment's list
+
+	    if ((VS's repaint flag and segment's repaint flag are both set)
+	    or (we are doing explicit repaint))
+	    and VS can delete segments:
+
+		close this segment
+
+    restore all attributes to pre-segdraw values by calling DD
+
+    if segment is not retained
+
+	mark segment descriptor frame as empty
+
+    else:
+	reset this segment's repaint flag
+
+reset all VS's repaint flags
+
+return
+
+
+		4.2.4. The Segdraw Subfunction
+
+The segdraw function is called to repeat the drawing of a segment on a
+device. It does the following:
+
+
+
+If this segment's visibility off and no visibility hardware:
+
+    return
+
+else
+
+    send visibility to DD
+
+form current matrix from transformation attributes of this segment
+
+for each SDR function for the segment (as read from PDF):
+
+    do the appropriate DD things
+    /** huge case statement **/
+
+return
+
+
+The segdra0 function is called to erase a segment from a raster
+type device. It does the same things as the segdraw function
+except that the color and intensity attributes are set to 0 and
+subsequent PDR entries which indicate change of color or
+intensity are ignored.  Thus the entire segment is redrawn with
+zero intensity and color.  Color and intensity are restored to
+their pre-segdraw0 values before returning.
+
+Note that these two functions achieve their goals by calls to the DD
+only.  No entries are made in the PDF.
+
+		4.2.5. The Setmatrix Subfunction
+
+There is only one matrix kept in this system. If there is an open
+segment, it corresponds to (and is computed from) the
+transformation parameters of that segment (scale, rotate, and
+translate). All newly created primitives' points are multiplied
+by this transformation unless the flag indicating that the
+transformation is the identity is set. The matrix and the flag
+are set to the identity default when the segment is opened. If
+any tranformation attributes are changed before any primitives
+are put into the segment, it is merely recomputed from those
+values with no other effects. If the parameters are changed after
+primitives are added to the segment, the segment is temporarily
+closed and the same things are done as if it had not been an open
+segment, after which it is reopened. However, during the course of
+these things happening the matrix may be changed by the repaint
+function to correspond to the parameters of other segments. Thus,
+the reopen function as one of its acts must set the matrix up.
+
+		4.2.6. The Reopen Subfunction
+
+The existence of a reopensegment function as a module will be
+convenient later, to allow for appending to any segment, since
+its function is to take a given segment (above, the previously
+open segment) and make it the open segment while keeping all of
+its current primitives in tact. Presently it assumes that the
+segment it is opening is the most recently created segment, which
+was closed by tempcloseseg. Thus it is greatly simplified.
+
+	4.3. Device Driver Specifications
+
+Here we discuss the specifications for the output device drivers
+for CLICS.
+
+		4.3.1. Device Property Flags
+
+The device property flags are set according to the
+following rules:
+
+vshardwr - visibility - device keeps identifiable segments in its
+           memory and can on command make them visible or
+           invisible while still retaining them in its memory
+
+hlhardwr - highlighting - device keeps identifiable segments in
+           its memory and can on command highlight one or more of
+           them by some means (e.g. blinking).
+
+dthardwr - detectability - device keeps identifiable segments in
+           its memory and has an input device (e.g. light pen)
+           which when used can return the pick id of a set of
+           primitives within a segment and the segment name, AND
+           the segments may be marked as either detectable
+           (pickable) or indetectable.
+
+trhardwr - translation - device keeps identifiable segments in
+           its memory and can on command translate (move) them
+           from one position to another selected position.
+
+schardwr -  scaling - see trhardwr
+
+rohardwr -  rotation - see trhardwr
+
+dehardwr - ability to delete a segment - device keeps identifiable
+	   segments in its memory and can on command remove a segment
+	   from its memory
+
+idhardwr -  primitive PICK-ID - device keeps identifiable
+	   segments in its memory and has an input device (e.g. light pen)
+	   which when used can return the pick id of a set of primitives
+	   within a segment and the segment name.
+
+lshardwr -  at least 4 differing line styles(dot,dashed).
+
+lwhardwr -  more than one line width.
+
+inhardwr - gray scaling of a set of primitives (color and
+           intensity are mutually exclusive; if this flag is set,
+           color specifications should be ignored, if received.
+           However, they should not be received because they will
+           be translated by the DI into intensity specifications
+           for your device)
+
+clhardwr - coloring of a set of primitives (color and intensity
+           are mutually exclusive, but, of course, a full color
+           device can be used for gray scale under user control;
+           if this flag is set, intensity specifications should
+           be ignored) {efficient use of full color systems for
+           gray scale applications will be made possible by
+           providing separate device drivers, which will, of
+           course, be very similar to their counterpart full
+           color device drivers, but will use fewer bit planes,
+           leaving others free for other gray scale devices if
+           available, or in some cases for storage of programs or
+           data}
+
+txhardwr - can provide hardware text generation.
+
+erasure - can effectively delete selected parts of an image by redrawing
+	   them with 0 intensity and color (e.g. raster)
+
+segopclo - device needs to be informed of the opening and closing of
+	   segments before it can manipulate them(build them).
+
+nwframdv - device requires complete regeneration of an image in order
+	   to delete one part (e.g. storage tube, hard copy)
+
+
+		4.3.2. DI-DD Communication Structure
+
+
+The structure used to pass arguments to the DD's looks like:
+
+struct
+   {
+   int opcode;
+   int logical;
+   char *string;            NOTE: NOT EVERY STRUCTURE MEMBER WILL BE
+   int int1;                      UTILIZED FOR EACH PARTICULAR OPCODE
+   float float1;                  SPECIFIED.
+   float float2;
+   float float3;            NOTE: A POINTER TO THIS STRUCTURE IS PASSED
+   } ddstruct;                    AS AN ARGUMENT TO THE DEVICE DRIVER
+				  EXAMPLE: driver1(&ddstruct);
+
+
+		4.3.3. DI-DD Opcodes
+
+The opcodes and their values are:
+
+OPCODE      VALUE
+------      -----
+
+CLEAR         0
+INITIAL       1
+SETVSBL       2
+SETHILIT      3
+SETDTCT       4
+DELETE        5
+ROTATE        6
+SCALE         7
+TRANSLATE     8
+OPENSEG       9
+TERMINATE    10
+CLOSEG       11
+NDCSP2       12
+GETCP        13
+SETPID       14
+SETCOL       15
+SETWIDTH     16
+SETSTYL      17
+SETINT       18
+MOVE         19
+LINE         20
+TEXT         21
+
+MARK         23
+SETFONT      24
+SETSIZE      25
+SETANGLE     26
+
+
+The meanings of those opcodes are:
+
+OPCODE: CLEAR
+	-----
+PERTINENT STRUCTURE MEMBERS: NONE         (OTHER THAN 'opcode')
+
+FUNCTION: erase the screen (raster, storage), delete all segments (vector)
+	  advance to clean paper (hard copy)
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: INITIAL
+	-------
+PERTINENT STRUCTURE MEMBERS: NONE
+
+FUNCTION: set variables internal to device driver to their initial states.
+	  do whatever is necessary to get device ready to do any function.
+	  do an implicit clear (see above).
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETVSBL
+	-------
+PERTINENT STRUCTURE MEMBERS:    logical    visibility flag(on or off)
+				int        id of segment affected
+
+FUNCTION: set or clear visibility bit in display file for segment
+	  identified if DD is for device which has 'vshardwr'
+	  flag set in VSD.  Otherwise, if visibility is set to
+	  OFF, the DD should ignore all primitives sent to it
+	  until visibility is once again set to ON!!!
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETHILIT
+	--------
+PERTINENT STRUCTURE MEMBERS:    logical    highlighting flag
+				int        id of segment affected
+
+FUNCTION: set or clear highlighting bit in display file. only applicable
+	  to divices which have 'hlhardwr' flag set in VSD.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+
+OPCODE: SETDTCT
+	-------
+PERTINENT STRUCTURE MEMBERS:    logical    detectability flag
+				int        id of segment affected
+
+FUNCTION: set or clear detectability bit in display file. only applicable
+	  to devices which have 'dthardwr' flag set in VSD.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: DELETE
+	------
+PERTINENT STRUCTURE MEMBERS:    int        id of segment affected
+
+FUNCTION: delete named segment form screen.
+	  only applicable to devices with 'dehardwr' flag set in the VSD.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: ROTATE
+	-------
+PERTINENT STRUCTURE MEMBERS:    float1     angle of rotation
+				int        id of segment affected
+
+FUNCTION: Rotate the segment about the origin the given angle of rotation.
+	  only applicable to devices with 'rohardwr' flag set in the VSD.
+	  (not to be concatenated with previous combined transformation, but
+	  rather, replaces previous rotation)
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SCALE
+	------
+PERTINENT STRUCTURE MEMBERS:    float1     scaling factor in x direction
+				float2     scaling factor in y direction
+				int        id of segment affected
+
+FUNCTION: scale the segment in the x and y directions as specified.
+	  only applicable to devices with 'schardwr' flag set in the VSD.
+	  (not to be concatenated with previous combined transformation, but
+	  rather, replaces previous scaling)
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: TRANSLATE
+	----------
+PERTINENT STRUCTURE MEMBERS:    float1     translation factor in x direction
+				float2     translation factor in y direction
+				int        id of segment affected
+
+FUNCTION: translate the segment in the x and y directions as specified.
+	  only applicable to devices with 'trhardwr' flag set in the VSD.
+	  (not to be concatenated with previous combined transformation, but
+	  rather, replaces previous translation)
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: OPENSEG
+	-------
+PERTINENT STRUCTURE MEMBERS:    int        id of segment affected
+
+FUNCTION: inform the device that the named segment should be created and
+	  made ready to accept output primitives. only applicable to devices
+	  with 'segopclo' flag set in the VSD.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: TERMINATE
+	---------
+PERTINENT STRUCTURE MEMBERS: NONE
+
+FUNCTION: do implicit clear. release device.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: CLOSEG
+	------
+PERTINENT STRUCTURE MEMBERS:    int        id of segment affected
+
+FUNCTION: inform the device that the named segment is complete
+	  and should therefore be closed.
+	  only applicable to devices with 'segopclo' flag set in the VSD.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: NDCSP2
+	------
+PERTINENT STRUCTURE MEMBERS:    float1     width of normalized device coordinate space.
+				float2     height of normalized device coordinate space.
+
+FUNCTION: store ndc coordinates specified to be used in calculation of
+	  device coordinates. initial values should be 1 for both.
+
+NOTE: Mapping of coordinates is as follows: world coordinates ->
+      NDC coordinates -> Device Coordinates When the programmer
+      specifies world coordinates, the system will convert them
+      to NDC coordinates to be used by the device driver to
+      figure device coordinates. The default range for normalized
+      device coordinate space is 0 to 1 along each axis, although
+      this may be further constrained along one axis, but not
+      both, to promote efficient use of non-square display
+      surfaces. The device driver programmer has the decision
+      where to map the NDC space rectangle to on his display
+      surface. If he doesn't chose the origin as the Lower Left
+      Hand Corner of NDC space, then the width and height of the
+      space will be needed in the conversion of NDC coordinates
+      to device coordinates. The mapping will "usually" make the
+      rectangle as large as possible thus minimizing the unusable
+      area of the display surface. The area outside the range of
+      NDC coordinates on the screen can be used for operator
+      communication,error messages, or echoing of input device
+      input.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETPID
+	------
+PERTINENT STRUCTURE MEMBERS:    int1       current pick identification number
+
+FUNCTION: set primitive pick id to that specified. only applicable
+	  to devices with 'idhardwr' flag set in the VSD.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETCOL
+	------
+PERTINENT STRUCTURE MEMBERS:     float1     first current color value
+				 float2     second current color value
+				 float3     third current color value
+
+FUNCTION: set color to that specified. only applicable to devices
+          with 'clhardwr' flag set in VSD.  Color specification
+          is RGB. Each color's intensity is given in normalized
+          fraction of full intensity and should be translated by
+          the DD. As an example, if device intensities are
+          integral with N values, an integral value of I would be
+          used if the normalized value is between I/N and
+          (I+1)/N.  {use of video lookup tables will be provided
+          for when the raster extensions are implemented as will
+          direct pixel manipulation}
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETWIDTH
+	--------
+PERTINENT STRUCTURE MEMBERS:     float1    current linewidth value
+
+FUNCTION: set linewidth to one specified. only applicable to
+	  devices with 'lwhardwr' flag set in VSD.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETSTYL
+	-------
+PERTINENT STRUCTURE MEMBERS:     int1      current linestyle value
+
+FUNCTION: set linestyle to one specified. only applicable to
+	  devices with 'lshardwr' flag set in VSD.  A value of 1
+	  indicates solid lines; all other codes are unspecified
+	  but are expected to result in unique linestyles up to
+	  a value of 4 if the "lshardwr" flag is set in VSD.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETINT
+	------
+PERTINENT STRUCTURE MEMBERS:     int1      current intensity value
+
+FUNCTION: set intensity primitive to one specified. only applicable to
+	  devices with 'inhardwr' flag set in VSD.  Intensity is
+	  given in normalized fraction of full intensity and should
+	  be translated by the DD.  As an example, if device intensities
+	  are integral with N values, an integral value of I would be
+	  used if the normalized value is between I/N and (I+1)/N.
+	  {use of video lookup tables will be provided for when the
+	  raster extensions are implemented as will direct pixel
+	  manipulation}
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: MOVE
+	----
+PERTINENT STRUCTURE MEMBERS:     float1     x coordinate
+				 float2     y coordinate
+
+FUNCTION: adjust current position to reflect new x,y coordinate.
+
+NOTE: device driver must keep track of current position on the screen
+      at all times.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: LINE
+	----
+PERTINENT STRUCTURE MEMBERS:     float1     x coordinate
+				 float2     y coordinate
+
+FUNCTION: draw a line from current position to specified endpoint.
+	  update current position.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETFONT
+	-------
+PERTINENT STRUCTURE MEMBERS:     int1       identifier of font to apply to following text
+
+FUNCTION: set font to the specification.  Standard ASCII is to be used if
+	  indicated font is 1; integers for other fonts are device driver
+	  dependent and are deliberately unspecified.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: SETSIZE
+	-------
+PERTINENT STRUCTURE MEMBERS:     float1     height of characters in NDC units
+				 float2     width of characters in NDC units
+
+FUNCTION: set size of characters to specification.  If a continuous range
+	  of sizes is not available, choose largest size smaller than the
+	  specification in both directions.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+OPCODE: SETANGLE
+	-------
+PERTINENT STRUCTURE MEMBERS:     float1     angle of characters in radians
+
+FUNCTION: set angle of characters to specification.  If a continuous range
+	  of angles is not available, choose available angle that is closest
+	  to specification.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: TEXT
+	----
+PERTINENT STRUCTURE MEMBERS:     string     string to be placed on screen
+
+FUNCTION: using a hardware character generator, draw the string of
+	  characters at current position. height and width of character are
+	  used to obtain a "best fit" for the hardware character size.
+	  The largest size smaller that that called for shoud be used.
+	  Adjust the current position to the end of string, so that concatenation
+	  of strings is possible without an intervening 'move' instruction.
+	  Current position is assumed to be the lower left hand corner of the character box.
+
+"""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: MARK
+	----
+PERTINENT STRUCTURE MEMBERS:     string    marker to be placed on screen
+
+FUNCTION: using a hardware character generator, draw the marker "centered"
+	  at the current position, unrotated at the standard hardware
+	  character size.  Marker codes correspond to ascii codes.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+OPCODE: GETCP
+	-----
+PERTINENT STRUCTURE MEMBERS:     float1    x coordinate of current position
+				 float2    y coordinate of current position
+
+FUNCTION: return your current position on screen in structure members as
+	  specified.
+
+""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""""
+
+
+5. Known Shortcomings
+
+It is known that several major shortcomings exist in our design as
+well as many minor ones.  The major ones are discussed here.
+
+	5.1. Hardware Clipping and Transformation
+
+Presently, CLICS makes no use of clipping hardware capabilities
+of devices at all. It is all done in software.  The original
+design did include use of transformation hardware, but this is
+only partially implemented. Where code exists to implement this,
+it is currently commented out.
+
+	5.2. Use of Segment Type by DD
+
+CLICS does not send the segment type to the DD's.  In some cases
+this could lead to inefficient storage of segments in display files.
+
+	5.3. Internal Segment ID's
+
+Currently segments are identified by a string.  An internal small
+integer ID would be more efficient and a table could be kept of
+the corresponding names, or users could be forced to use integers
+which is not a bad restriction.
+
+	5.4. Batching of Primitives
+
+CLICS does not batch primitives. Each primitive is sent to the
+appropriate DD's as the user creates it. Whether the DD buffers
+them or not is unspecified. What could happen is for the DD's
+that can buffer to do so if batch of updates is in effect,
+emptying only when buffers are full or when ending batch of
+updates. This would require opcodes to the DD's telling them when
+batchs of updates begin and end.  (Batching of other functions is
+handled, however, by the repaint structure.)
+
+	5.5. Limited Number of Segments
+
+Users are currently limited to a fixed (at compile time) number
+of segments.  The absence of a "heap" in C makes allowing
+unlimited segments difficult.
+
+	5.6. No Garbage Collection
+
+Although the segment descriptor frames of deleted segments are
+reusable in CLICS, space in the segment display file is not.
+A segment display record, once created, exists for the duration
+even if the owning segment is deleted.
+
+6. Efficiency Improvements
+
+Knowledge gained about the C compiler has made us aware of many
+efficiency improvements.  Others were recognized as a result of
+better understanding of the Core gained from the implementation
+itself.
+
+	6.1. Restructuring Data Structures
+
+An example of how restructuring could improve efficiency
+is the segment desciptor.  An alternative structure is:
+
+extern struct segstruc
+   {
+   char *segname;
+   struct
+      {
+       unsigned type : 3;          /* retain, non-retain, etc.       */
+       unsigned visibility : 1;
+       unsigned detectability : 1;
+       unsigned highlight : 1;
+       unsigned update : 1;        /* needs redrawing at next redraw */
+       unsigned vs1 : 1;           /* appears on view surface # 1    */
+       unsigned vs2 : 1;
+       unsigned vs3 : 1;
+       unsigned vs4 : 1;
+       unsigned vs5 : 1;
+      } flags;
+   float scale[2];
+   float translate[2];
+   float rotate;
+   long int pdfptr;                /* pointer to primitives in PDF   */
+   struct
+      {
+       float xmax;
+       float ymax;
+       float xmin;
+       float ymin;
+      } extent;                    /* for pick id computation        */
+   } segment;
+
+This would take less space.  Implementation would require revision
+of functions which use the structure, especially those which use
+the flags.
+
+	6.2. In-line versus Function
+
+Some groups of operations which are now functions would better be
+in-line code, e.g. clipping functions, conversion from world
+coordinates to NDC's image transformations, and setting up the
+matrix.
+
+	6.3. Optimization
+
+No experiments have been performed to determine where the critical
+parts of the code are, in order to increase efficiency.  In some
+cases excessive use of "." and "->" operators can be avoided by
+some careful precalculation of pointers.
+
+	6.4. Restrictions
+
+If certain restrictions were placed on the user which the Core
+does not place, efficiency could be gained.  For example, if
+users could not change dynamic segment attributes while creating
+a segment, the system would be simplified.
+
+7. Completion of Original Design
+
+Completion of the originally intended system would require at least
+another man year of work.  Here we dicuss what needs to be done
+other than correcting the known shortcomings and improving efficiency.
+
+	7.1. Input Functions
+
+Specification of the input device drivers, and designing and
+writing the input functions have not been done.
+
+	7.2. Nice Functions
+
+Some of the features which are niceties have not been implemented.
+High quality text has been implemented except for putting all of
+the character drawing commands into the arrays.  Only simple ASCII
+font characters are intended to be stored, although others could be
+with little, if any, change in the code.  "Simline" which simulates
+lines of a given width or style when the hardware cannot supply them,
+has not been written.
+
+	7.3. Special Interfaces
+
+Hooks and escapes need to be provided.
+
+8. Extensions
+
+If resources could be found, the following extensions would be useful.
+
+	8.1. Dynamic Loading of DD's
+
+If only the DD's asked for at initialization time are loaded, space
+could be saved.
+
+	8.2. Sharable DI
+
+A DI that is sharable between tasks would save space where there
+are multiple graphics users.
+
+	8.3. Unlimited Number of Segments
+
+If memory can be expanded to accommodate any number of segment
+descriptors and/or parts of the segment display file, better performance
+would result.
+
+	8.4. Dynamic View Surface List
+
+Addition of a view surface to an already created segment is a natural
+extension to a level 4 system.  Getting hard copy of an image would
+thus be facilitated.
+
+	8.5. Raster Extensions
+
+Raster extensions as proposed by Foley[1] would be very useful.
+
+	8.6. Extending, Copying, and Saving Segments
+
+These would be easily implemented with the present structure.
+
+
+References
+
+1. Foley, James D., Templeman, James, and Dastyar, Dara, "Raster
+   Extensions to the Core Graphics System", George Washington
+   University, August, 1978
+
+2. Greatorex, Frank S., and Michener, James C., "Internal Design
+   of the GSPC Core Graphics System, Final Report", 15 December
+   1977, Contract N66604-M-77-8896, Naval Underwater Systems
+   Center, prepared by Intermetrics, Inc.
+
+3. Kernighan, Brian W., and Ritchie, Dennis M., The C Programming
+   Language, Prentice-Hall, 1978
+
+4. Status Report of the GSPC, ACM SIGGRAPH, ACM, New York, 1977
+
+
+
+
+Appendix A.
+
+Core function names in CLICS resulting from rules in section 3.1.
+
+movabs2                       inqsegsurfaces
+movabs3                       inqnumberofsegs
+movrel2                       inqsegnames
+movrel3                       inqoutcapabilities
+linabs2                       setvisibility
+linabs3                       sethighlighting
+linrel2                       inqvisibility
+linrel3                       inqhighlighting
+plyabs2                       setdetectability
+plyabs3                       inqdetectability
+plyrel2                       enabledevice
+plyrel3                       enableclass
+text                          disabldevice
+mrkabs2                       disablclass
+mrkabs3                       disablall
+mrkrel2                       readlocator
+mrkrel3                       readvaluator
+createseg                     awaitevent
+closeseg                      flushdeviceevents
+deleteallsegs                 flushclassevents
+setcolor                      flushallevents
+setintensity                  associate
+setlinwidth                   disassiate
+setlinstyle                   disassdevice
+setfont                       disassclass
+setchsize                     disassall
+setchspc                      getpickdata
+setchplane                    getlocatordata
+setchquality                  getvaluatordata
+setpickid                     seteco
+inqcolor                      setecoclass
+inqintensity                  setecopos
+inqlinwidth                   setecosurface
+inqlinstyle                   setlocator
+inqfont                       setvaluator
+inqchsize                     setkeyboard
+inqchspc                      setbutton
+inqchplane                    setallbutton
+inqchquality                  inqinstatusparameters
+inqpickid                     inqincapabilities
+setsegtype                    settr2
+inqsegtype                    settr3
+inqnamedsegtype               setro2
+vwreferencepoint              setro3
+vwplanenormal                 setsc2
+vwplanedistance               setsc3
+parallel                      inqtr2
+perspective                   inqtr3
+vwup3                         inqro2
+window2                       inqro3
+vwdepth                       inqsc2
+ndcspc2                       inqsc3
+vwport2                       ndcspc3
+vwup2                         vwport3
+window3                       reportmostrecenterror
+initcore                      newframe
+termcore                      beginbatchofupdates
+initvwsurface                 endbatchofupdates
+selectvwsurface               clipwindow
+deselectvwsurface             clipplanes
+termvwsurface                 coordinatesystemtype
+setdefaultattributes          modellingtransformation
+inqpos2                       inqmodellingtransformation
+inqpos3                       inqcompositetransformation
+inqvwparameters               escape
+inqvwtransformation           inqescape
+inqdefaultattributes          deleteseg
+inqoutstatusparameters        renameseg
+
+

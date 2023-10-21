@@ -1,0 +1,311 @@
+%{
+
+/* RCS Info: $Revision: $ on $Date: $
+ *           $Source: $
+ * Copyright (c) 1985 Wayne A. Christopher 
+ *	Permission is granted to do anything with this code except sell it
+ *	or remove this message.
+ */
+
+#define CH(n, o)	return ((((random() - 1313513) % o) < n) ? 1 : 0)
+
+char *ones;
+
+#define YOUR	ones = "your"
+#define MY	ones = "my"
+#define HIS	ones = "his"
+
+%}
+
+%%
+
+#  flame
+
+<start>	=	<flame>;
+
+<flame> =	"how can you say that " <statement> "?" { CH(1,100); } ;
+<flame>	=	"I can't believe how " <adjective> " you are." { CH(1,100); } ;
+<flame>	=	"only a " <der-term> " like you would say that " <statement> "." { CH(1,70); } ;
+<flame>	=	<statement> ", huh?" { CH(1,80); } ;
+<flame>	=	so, <statement> "?" { CH(1,80); } ;
+<flame>	=	<statement> ", right?" { CH(1,80); } ;
+<flame>	=	"I mean," <flame> { CH(1,80); } ;
+<flame>	=	"don't you realize that" <statement> "?" { CH(1,80); } ;
+<flame>	=	"I firmly believe that" <statement> "." { CH(1,80); } ;
+<flame>	=	"let me tell you something, you " <der-term> "." { CH(1,80); } ;
+<flame>	=	"furthermore, you " <der-term> ", " <flame> { CH(1,70); } ;
+<flame>	=	"I couldn't care less about your " <thing> "." { CH(1,100); } ;
+<flame>	=	"how can you be so " <adjective> "?" { CH(1,100); } ;
+<flame>	=	"you make me sick." { CH(1,100); } ;
+<flame>	=	"it's well known that" <statement> "."{ CH(1,70); } ;
+<flame>	=	<statement> "."{ CH(1,70); } ;
+<flame>	=	"it takes a" <group-adj> <der-term> "like you to say that" <statement> "." { CH(1,60); } ;
+<flame>	=	"I don't want to hear about your" <thing> "." { CH(1,100); } ;
+<flame>	=	"you're always totally wrong." { CH(1,100); } ;
+<flame>	=	"I've never heard anything as ridiculous as the idea that " <statement> "." { CH(1,90); } ;
+<flame>	=	"you must be a real" <der-term> "to think that" <statement> "." { CH(1,100); } ;
+<flame>	=	you <adjective> <group-adj> <der-term> "!" { CH(1,70); } ;
+<flame>	=	"you're probably" <group-adj> "yourself." { CH(1,80); } ;
+<flame>	=	"you sound like a real" <der-term> "." { CH(1,100); } ;
+<flame>	=	why, <statement> "!" { CH(1,100); } ;
+<flame>	=	"I have many" <group-adj> "friends." { CH(1,100); } ;
+<flame>	=	"save the" <thing> "#s!" { CH(1,80); } ;
+<flame>	=	"no nukes!" { CH(1,100); } ;
+<flame>	=	ban <thing> "#s!" { CH(1,100); } ;
+<flame>	=	"mercy mercy puddin and pie!" { CH(1,100); } ;
+<flame>	=	"I'll bet you think that" <thing> "#s are" <adjective> "." { CH(1,80); } ;
+<flame>	=	"you know," <statement> "." { CH(1,100); } ;
+<flame>	=	your <quality> "reminds me of a" <thing> "." { CH(1,80); } ;
+<flame>	=	"you have the" <quality> "of a" <der-term> "." { CH(1,100); } ;
+<flame>	=	<der-term> "!" { CH(1,100); } ;
+<flame>	=	<adjective> <group-adj> <der-term> "!" { CH(1,80); } ;
+<flame>	=	"you're a typical" <group-adj> "person, totally" <adjective> "." { CH(1,90); } ;
+<flame>	=	"man, " <flame> { CH(1,100); } ;
+<flame> =	<flame> ;
+
+<quality> =	ignorance { CH(1, 100); } ;
+<quality> =	stupidity { CH(1, 100); } ;
+<quality> =	worthlessness { CH(1, 100); } ;
+<quality> =	prejudice { CH(1, 90); } ;
+<quality> =	"lack of intelligence" { CH(1, 100); } ;
+<quality> =	complete <quality> { CH(1, 100); } ;
+<quality> =	lousiness { CH(1, 90); } ;
+<quality> =	"bad grammer" { CH(1, 70); } ;
+<quality> =	"lousy spelling" { CH(1, 70); } ;
+<quality> =	"lack of common decency" { CH(1, 70); } ;
+<quality> =	ugliness { CH(1, 70); } ;
+<quality> =	nastiness { CH(1, 70); } ;
+<quality> =	pregnancy { CH(1, 70); } ;
+<quality> =	<quality> ;
+
+<adjective> =	ignorant { CH(1, 100); } ;
+<adjective> =	pregnant { CH(1, 100); } ;
+<adjective> =	egotistical { CH(1, 100); } ;
+<adjective> =	sick { CH(1, 100); } ;
+<adjective> =	perverted { CH(1, 70); } ;
+<adjective> =	sadistic { CH(1, 100); } ;
+<adjective> =	stupid { CH(1, 70); } ;
+<adjective> =	unpleasant { CH(1, 100); } ;
+<adjective> =	lousy { CH(1, 70); } ;
+<adjective> =	abusive { CH(1, 70); } ;
+<adjective> =	bad { CH(1, 70); } ;
+<adjective> =	selfish { CH(1, 70); } ;
+<adjective> =	improper { CH(1, 60); } ;
+<adjective> =	nasty { CH(1, 60); } ;
+<adjective> =	disgusting { CH(1, 60); } ;
+<adjective> =	foul { CH(1, 60); } ;
+<adjective> =	intolerable { CH(1, 60); } ;
+<adjective> =	primitive { CH(1, 60); } ;
+<adjective> =	depressing { CH(1, 60); } ;
+<adjective> =	dumb { CH(1, 60); } ;
+<adjective> =	phoney { CH(1, 60); } ;
+<adjective> =	as <adjective> "as a" <thing> { CH(1, 60); } ;
+<adjective> =	"hungry like a wolf" { CH(1, 60); } ;
+<adjective> =	<adjective> ;
+
+<der-term> =	<adjective> <der-term> { CH(1, 30); } ;
+<der-term> =	sexist { CH(1, 100); } ;
+<der-term> =	weakling { CH(1, 80); } ;
+<der-term> =	coward { CH(1, 80); } ;
+<der-term> =	beast { CH(1, 100); } ;
+<der-term> =	racist { CH(1, 80); } ;
+<der-term> =	fool { CH(1, 80); } ;
+<der-term> =	jerk { CH(1, 80); } ;
+<der-term> =	ignoramus { CH(1, 80); } ;
+<der-term> =	idiot { CH(1, 60); } ;
+<der-term> =	"macho stud" { CH(1, 60); } ;
+<der-term> =	rat { CH(1, 60); } ;
+<der-term> =	slimebag { CH(1, 60); } ;
+<der-term> =	Neanderthal { CH(1, 60); } ;
+<der-term> =	sadist { CH(1, 60); } ;
+<der-term> =	drunk { CH(1, 60); } ;
+<der-term> =	capitalist { CH(1, 50); } ;
+<der-term> =	dogmatist { CH(1, 50); } ;
+<der-term> =	sheep { CH(1, 50); } ;
+<der-term> =	maniac { CH(1, 50); } ;
+<der-term> =	"whimpering scumbucket" { CH(1, 50); } ;
+<der-term> =	"pea brain" { CH(1, 50); } ;
+<der-term> =	"Illuminati scum" { CH(1, 50); } ;
+<der-term> =	"quiche - eater" { CH(1, 50); } ;
+<der-term> =	"real man" { CH(1, 50); } ;
+<der-term> =	goof { CH(1, 50); } ;
+<der-term> =	incompetent { CH(1, 50); } ;
+<der-term> =	lunkhead { CH(1, 50); } ;
+<der-term> =	<der-term> ;
+
+<thing>	=	<adjective> <thing> { CH(1,30); } ;
+<thing>	=	computer { CH(1,100); } ;
+<thing>	=	abortion { CH(1,100); } ;
+<thing>	=	whale { CH(1,100); } ;
+<thing>	=	operation { CH(1,100); } ;
+<thing>	=	"sexist joke" { CH(1,100); } ;
+<thing>	=	ten-incher { CH(1,100); } ;
+<thing>	=	dog { CH(1,60); } ;
+<thing>	=	VAX { CH(1,60); } ;
+<thing>	=	"Unix license" { CH(1,60); } ;
+<thing>	=	"astrological sign" { CH(1,100); } ;
+<thing>	=	"mental problem" { CH(1,100); } ;
+<thing>	=	"sexual fantasy" { CH(1,100); } ;
+<thing>	=	"venereal disease" { CH(1,60); } ;
+<thing>	=	"Jewish grandmother" { CH(1,100); } ;
+<thing>	=	"royal ancestry" { CH(1,100); } ;
+<thing>	=	"punk haircut" { CH(1,100); } ;
+<thing>	=	surfboard { CH(1,60); } ;
+<thing>	=	"system call" { CH(1,60); } ;
+<thing>	=	tatoo { CH(1,100); } ;
+<thing>	=	"wood-burning stove" { CH(1,60); } ;
+<thing>	=	"graphics editor" { CH(1,100); } ;
+<thing>	=	"right wing death squad" { CH(1,60); } ;
+<thing>	=	disease { CH(1,60); } ;
+<thing>	=	impotence { CH(1,60); } ;
+<thing>	=	vegetable { CH(1,60); } ;
+<thing>	=	religon { CH(1,60); } ;
+<thing>	=	duckpond { CH(1,60); } ;
+<thing>	=	"wheat germ" { CH(1,60); } ;
+<thing>	=	"bug fix" { CH(1,60); } ;
+<thing>	=	lawyer { CH(1,60); } ;
+<thing>	=	copywrite { CH(1,60); } ;
+<thing>	=	<thing> ;
+
+<group-adj> =	gay { CH(1, 70); } ;
+<group-adj> =	old { CH(1, 100); } ;
+<group-adj> =	lesbian { CH(1, 100); } ;
+<group-adj> =	young { CH(1, 100); } ;
+<group-adj> =	black { CH(1, 70); } ;
+<group-adj> =	Polish { CH(1, 70); } ;
+<group-adj> =	<adjective> { CH(1, 100); } ;
+<group-adj> =	white { CH(1, 70); } ;
+<group-adj> =	"mentally retarded" { CH(1, 100); } ;
+<group-adj> =	swinging { CH(1, 100); } ;
+<group-adj> =	European { CH(1, 100); } ;
+<group-adj> =	homosexual { CH(1, 70); } ;
+<group-adj> =	dead { CH(1, 70); } ;
+<group-adj> =	underpriveledged { CH(1, 100); } ;
+<group-adj> =	religous { CH(1, 70); } ;
+<group-adj> =	<thing> "#-loving" { CH(1, 100); } ;
+<group-adj> =	feminist { CH(1, 70); } ;
+<group-adj> =	foreign { CH(1, 100); } ;
+<group-adj> =	intellectual { CH(1, 100); } ;
+<group-adj> =	crazy { CH(1, 70); } ;
+<group-adj> =	working { CH(1, 70); } ;
+<group-adj> =	"musically inclined" { CH(1, 100); } ;
+<group-adj> =	psychadelic { CH(1, 100); } ;
+<group-adj> =	"disco-loving" { CH(1, 100); } ;
+<group-adj> =	unborn { CH(1, 100); } ;
+<group-adj> =	Asian { CH(1, 100); } ;
+<group-adj> =	short { CH(1, 100); } ;
+<group-adj> =	<adjective> { CH(1, 50); } ;
+<group-adj> =	poor { CH(1, 100); } ;
+<group-adj> =	rich { CH(1, 100); } ;
+<group-adj> =	"funny-looking" { CH(1, 100); } ;
+<group-adj> =	"Puerto Rican" { CH(1, 100); } ;
+<group-adj> =	Mexican { CH(1, 100); } ;
+<group-adj> =	Italian { CH(1, 100); } ;
+<group-adj> =	communist { CH(1, 70); } ;
+<group-adj> =	Iranian { CH(1, 100); } ;
+<group-adj> =	<group-adj> ;
+
+<statement> =	your <thing> "is great" { CH(1, 100); } ;
+<statement> =	<thing> "#s are fun" { CH(1, 60); } ;
+<statement> =	<person> "is a " <der-term> { CH(1, 60); } ;
+<statement> =	<group-adj> "people are" <adjective> { CH(1, 60); } ;
+<statement> =	every <group-adj> "person is a" <der-term> { CH(1, 60); } ;
+<statement> =	most <group-adj> "people have" <thing> "#s" { CH(1, 60); } ;
+<statement> =	all <group-adj> "dudes should get" <thing> "#s" { CH(1, 60); } ;
+<statement> =	<person> "is" <group-adj> { CH(1, 60); } ;
+<statement> =	"trees are" <adjective> { CH(1, 100); } ;
+<statement> =	"if you've seen one" <thing> ", you've seen them all" { CH(1, 100); } ;
+<statement> =	"you're" <group-adj> { CH(1, 100); } ;
+<statement> =	"you have a" <thing> { CH(1, 60); } ;
+<statement> =	my <thing> "is pretty good" { CH(1, 60); } ;
+<statement> =	"the Martians are coming" { CH(1, 100); } ;
+<statement> =	"the National Enquirer is always right" { CH(1, 100); } ;
+<statement> =	<person> "was" <group-adj> { CH(1, 60); } ;
+<statement> =	<person> "#'s ghost is living in your" <thing> { CH(1, 60); } ;
+<statement> =	"Liz Taylor is fat" { CH(1, 100); } ;
+<statement> =	"you had 90 AP units" { CH(1, 100); } ;
+<statement> =	"I'm pregnant" { CH(1, 100); } ;
+<statement> =	"you look like a" <thing> { CH(1, 60); } ;
+<statement> =	"the plural of moose is mooses" { CH(1, 100); } ;
+<statement> =	"the oceans are full of dirty fish" { CH(1, 100); } ;
+<statement> =	"people are dying every day" { CH(1, 100); } ;
+<statement> =	a <group-adj> "man ain't got nothin in the world these days" { CH(1, 60); } ;
+<statement> =	"women are inherently superior to men" { CH(1, 100); } ;
+<statement> =	"the system staff is fascist" { CH(1, 100); } ;
+<statement> =	"there is life after death" { CH(1, 100); } ;
+<statement> =	"the world is full of" <der-term> "#s" { CH(1, 100); } ;
+<statement> =	"you remind me of" <person> { CH(1, 60); } ;
+<statement> =	"technology is evil" { CH(1, 60); } ;
+<statement> =	"every day ya gotta write the book" { CH(1, 100); } ;
+<statement> =	<person> killed <person> { CH(1, 60); } ;
+<statement> =	"the CIA killed" <person> { CH(1, 100); } ;
+<statement> =	"the sexual revolution is over" { CH(1, 100); } ;
+<statement> =	"disco sucks" { CH(1, 100); } ;
+<statement> =	"Lassie was" <group-adj> { CH(1, 60); } ;
+<statement> =	"the Hari Krishnas have really got it all together"  { CH(1, 100); } ;
+<statement> =	"I was" <person> "in a previous life" { CH(1, 60); } ;
+<statement> =	"breathing causes cancer" { CH(1, 100); } ;
+<statement> =	"it's fun to be really" <adjective> { CH(1, 60); } ;
+<statement> =	<quality> "is pretty fun" { CH(1, 50); } ;
+<statement> =	"you're a" <der-term> { CH(1, 50); } ;
+<statement> =	the <group-adj> "culture is fascinating" { CH(1, 50); } ;
+<statement> =	"when ya gotta go, ya gotta go" { CH(1, 50); } ;
+<statement> =	"girls just wanna have fun" { CH(1, 50); } ;
+<statement> =	<person> is <adjective> { CH(1, 50); } ;
+<statement> =	<person> "#'s" <quality> is <adjective> { CH(1, 50); } ;
+<statement> =	"it's a wonderful day" { CH(1, 50); } ;
+<statement> =	"everything is really a" <thing> { CH(1, 50); } ;
+<statement> =	"there's a" <thing> in <person> "#'s brain" { CH(1, 50); } ;
+<statement> =	<person> "is a cool dude" { CH(1, 50); } ;
+<statement> =	"the more" <thing> "#s you have, the better" { CH(1, 60); } ;
+<statement> =	"life is a" <thing> { CH(1, 60); } ;
+<statement> =	"life is" <quality> { CH(1, 60); } ;
+<statement> =	<person> is <adjective> { CH(1, 40); } ;
+<statement> =	<group-adj> "people are all" <adjective> <der-term> "#s" { CH(1, 50); } ;
+<statement> =	<statement> ", and" <statement> { CH(1, 50); } ;
+<statement> =	<statement> ", but" <statement> { CH(1, 50); } ;
+<statement> =	"I wish I had a" <thing> { CH(1, 50); } ;
+<statement> =	"you should have a" <thing> { CH(1, 50); } ;
+<statement> =	"you hope that" <statement> { CH(1, 50); } ;
+<statement> =	<person> "is secretly" <group-adj> { CH(1, 50); } ;
+<statement> =	"you wish you were" <group-adj> { CH(1, 40); } ;
+<statement> =	"you wish you were a" <thing> { CH(1, 40); } ;
+<statement> =	"I wish I were a" <thing> { CH(1, 40); } ;
+<statement> =	"you think that" <statement> { CH(1, 40); } ;
+<statement> =	<statement> ", because" <statement> { CH(1, 20); } ;
+<statement> =	<group-adj> "people don't get married to" <group-adj> "people, because" <reason1> { CH(1, 5); } ;
+<statement> =	<group-adj> "people are all" <adjective> because <reason1> { CH(1, 5); } ;
+<statement> =	<group-adj> "people are" <adjective> ", and" <reason1> { CH(1, 40); } ;
+<statement> =	<statement> ;
+
+<person> =	Reagan { CH(1, 100); } ;
+<person> =	"Old Man River" { CH(1, 100); } ;
+<person> =	JFK { CH(1, 100); } ;
+<person> =	"the Pope" { CH(1, 100); } ;
+<person> =	Gadaffi { CH(1, 100); } ;
+<person> =	Napoleon { CH(1, 100); } ;
+<person> =	"Karl Marx" { CH(1, 100); } ;
+<person> =	"Groucho" { CH(1, 100); } ;
+<person> =	"Wierd Al" { CH(1, 100); } ;
+<person> =	"Michael Jackson" { CH(1, 100); } ;
+<person> =	Caesar { CH(1, 100); } ;
+<person> =	"the Demolition Man" { CH(1, 100); } ;
+<person> =	Nietzsche { CH(1, 100); } ;
+<person> =	Heidegger { CH(1, 100); } ;
+<person> =	Aqualung { CH(1, 100); } ;
+<person> =	"the Sierra club" { CH(1, 100); } ;
+<person> =	"Henry Kissenger" { CH(1, 100); } ;
+<person> =	Nixon { CH(1, 100); } ;
+<person> =	"the Boogie Man" { CH(1, 100); } ;
+<person> =	Prince { CH(1, 100); } ;
+<person> =	<person> ;
+
+<reason1> =	"they don't want their children to grow up to be too lazy to steal" { CH(1, 20); } ;
+<reason1> =	"they can't tell them apart from" <group-adj> "dudes" { CH(1, 20); } ;
+<reason1> =	"they're too" <adjective> { CH(1, 20); } ;
+<reason1> =	<person> "wouldn't have done it" { CH(1, 20); } ;
+<reason1> =	"they can't spray paint that small" { CH(1, 20); } ;
+<reason1> =	"they don't have" <thing> "#s" { CH(1, 20); } ;
+<reason1> =	"they don't know how" { CH(1, 20); } ;
+<reason1> =	<reason1> ;
+

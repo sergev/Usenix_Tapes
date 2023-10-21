@@ -1,0 +1,288 @@
+#
+/*
+ * ep.c - Indirect Houston electrostatic printer driver over DH11
+ * line and DM-11BB for handshaking. Regular DM-11BB driver not used.
+ * -ghg 8/21/77
+ */
+
+#include "../param.h"
+#include "../systm.h"
+#include "../user.h"
+#include "../tty.h"
+#include "../conf.h"
+#include "../buf.h"
+
+#define NEP	3	/* number of printers */
+#define NCH 	64	/* number of characters to DMA out */
+#define EPDEV0	020034	/* major + minor of DH11 port to use */
+#define	EPDEV1	020022
+#define	EPDEV2	020036
+#define EPWPI	89	/* sleep pri for device wait */
+#define EPPRI	8	/* sleep pri for busy dev */
+#define DHLPR	002107	/* load into DHLPR 19200bps + 2 stop + 8 bits */
+
+/* internal state bit definations for ep_flag */
+#define EPOPEN	01	/* ep device is open */
+#define BUFBSY	02	/* ep buffer busy */
+#define EPBUSY	04	/* printer busy (CTS lead low) or offline */
+#define DHBUSY	010	/* DH11 transmission in progress to printer */
+#define EPSLEEP	020	/* process asleep waiting on busy to clear */
+#define CENTRON	040	/* Centronics printer on serial interface */
+
+/* defines used by DM11-BB handler */
+#define SCENABL	040	/* turn on DM11-BB scanner */
+#define LINENBL	01	/* turn on this line (in line status reg) */
+#define CTS	040	/* clear-to-send lead high (in line stat) */
+
+/*
+ * Characters which cause paper motion (i.e. make not ready)
+ * in the Centronics 306C printer with serial interface.  Since
+ * the interface does not have an onboard memory like the Houston
+ * we must know in advance what characters will make the printer
+ * go busy and cutoff DMA transfer there.
+ */
+#define LF	012	/* Line feed */
+#define VT	013	/* Vertical tab */
+#define FF	014	/* Form Feed */
+#define CR	015	/* Carriage return */
+
+int	epnch NCH;	/* contents of NCH (so it can be patched) */
+int	dhtab[];	/* initialized in dh.c CSR'S of DH11's */
+int	dhsar[];	/* defined in dh.c */
+int	dmtab[] {0170500, 0170510, 0170520, 0}; /* DM11-BB CSR's */
+int	epdev[] {EPDEV0, EPDEV1, EPDEV2, 0};
+int	eplpr[] {DHLPR,033507, DHLPR, 0};
+
+struct dhregs {
+	int	dhcsr;
+	int	dhnxch;
+	int	dhlpr;
+	int	dhcar;
+	int	dhbcr;
+	int	dhbar;
+	int	dhbreak;
+	int	dhsilo;
+};
+
+struct	dmregs {
+	int	dmcsr;
+	int	dmlstat;
+};
+
+struct	epr {
+	int	ep_flag;	/* internal state bits */
+	char	*ep_b1;		/* buffer pointer (head) */
+	char	*ep_b2;		/* buffer pointer (tail) */
+	char	*ep_buf;	/* pointer to stolen disk buffer */
+} epr[NEP];
+
+struct tty dh11[];
+
+epopen(dev,flag)
+{
+	register struct epr *ep;
+	register struct tty *tp;
+	register int *dhaddr;
+	int idev;
+	extern	dhstart();
+
+# ifdef POWERFAIL
+	if (dev == NODEV)
+		return; /* dh handler recovers */
+# endif
+	idev = dev;
+	dev =& 077;
+	if (idev.d_minor >= NEP) {
+		u.u_error = ENXIO;
+		return;
+	}
+	ep = &epr[dev];
+	if(ep->ep_flag&EPOPEN) {
+		u.u_error = ENXIO;
+		return;
+	}
+	ep->ep_flag =| EPOPEN;
+	if (idev & 0100)
+		ep->ep_flag =| CENTRON;	/* Centronics printer */
+	if(idev & 0100)
+		ep->ep_flag =| CENTRON;	/* Centronics printer */
+	ep->ep_buf = getblk(NODEV); /* steal a disk buffer */
+	tp = &dh11[epdev[dev].d_minor];
+/* reserve the DH11 port */
+	if(tp->t_state & (WOPEN|ISOPEN)) {
+		spl5();	/* somebody using port, blast him */
+		tp->t_state =| (DRSVD|EPRNTR);
+		tp->t_speeds =| BLITZ;
+		flushtty(tp);
+		while(tp->t_speeds & BLITZ)
+			sleep(&tp->t_speeds, EPWPI); /* wakeup by dhclose() */
+		spl0();
+	}
+	tp->t_state = (DRSVD | EPRNTR);
+	tp->t_dev = epdev[dev]; /* incase nobody has called dhopen() */
+	tp->t_addr = dhstart; /* "" */
+	tp->t_col = dev; /* used by epstart() */
+
+/* set up DH11 line parameters (baud rate + stop bits + char len */
+
+	dhaddr = dhtab[(tp->t_dev>>4)&017];
+	spl5();
+	dhaddr->dhcsr.lobyte = (tp->t_dev&017) | IENABLE;
+	dhaddr->dhlpr = eplpr[dev];
+	spl0();
+	emopen(tp->t_dev);	/* turn on the DN11-BB */
+}
+
+epwrite(dev)
+{
+	register struct epr *ep;
+	register struct tty *tp;
+
+	dev =& 077;
+	if((u.u_count <= 0) || (u.u_count > 512 )) {
+		u.u_error = ENXIO;
+		return;
+	}
+	tp = &dh11[epdev[dev].d_minor];
+	ep = &epr[dev];
+	spl5();
+	while(ep->ep_flag&BUFBSY) {
+		ep->ep_flag =| EPSLEEP;	/* zzzzzzzz for awhile */
+		sleep(&ep->ep_flag, EPPRI);
+		ep->ep_flag =& ~EPSLEEP;
+	}
+	spl0();
+	ep->ep_b1 = ep->ep_buf->b_addr; /* head */
+	ep->ep_b2 = ep->ep_b1 + u.u_count;
+	ep->ep_flag =| BUFBSY;
+	iomove(ep->ep_buf, 0, u.u_count, B_WRITE);
+	epstart(tp);
+}
+
+epstart(atp)
+{
+	register char *cp;
+	register struct epr *ep;
+	register int *dhaddr;
+	struct tty *tp;
+	int sps;
+	int dhunit;
+	int nch;
+
+	tp = atp;
+	ep = &epr[tp->t_col];
+	sps = PS->integ;
+	spl5();
+	if(ep->ep_flag&EPBUSY)
+		goto out;
+	if(tp->t_state&BUSY)
+		goto out;
+	dhunit = (tp->t_dev>>4)&017;
+	dhaddr = dhtab[dhunit];
+	if(ep->ep_b1 == ep->ep_b2) {
+		ep->ep_flag =& ~ BUFBSY;
+		wakeup(&ep->ep_flag);
+		goto out;
+	}
+	if (ep->ep_flag & CENTRON) {
+		for (cp = ep->ep_b1; cp != ep->ep_b2; cp++)
+			if (*cp == VT
+			||  *cp == FF
+			||  *cp == CR
+			||  *cp == LF) {
+				cp++;
+				break;
+			}
+		nch = cp - ep->ep_b1;
+	}
+	else
+		if(( nch = ep->ep_b2 - ep->ep_b1) > epnch)
+			nch = epnch;	/* full load to DMA out */
+	dhaddr->dhcsr.lobyte = (tp->t_dev&017) | IENABLE;
+	dhaddr->dhcar = ep->ep_b1; /* set buffer address to DH11 */
+	dhaddr->dhbcr = -nch;     /* set char count */
+	ep->ep_b1 =+ nch;	  /* advance buffer */
+	nch = 1<<(tp->t_dev&017); /* calc bar bit */
+	dhaddr->dhbar =| nch;	  /* start up this line */
+	dhsar[dhunit] =| nch;	  /* save software copy of dhbar */
+	tp->t_state =| BUSY;
+out:
+	PS->integ = sps;	  /* restore processor status word */
+}
+
+epclose(dev)
+{
+	register struct tty *tp;
+	register struct epr *ep;
+	register idev;
+
+	idev = dev & 077;
+	ep = &epr[idev];
+	tp = &dh11[epdev[idev].d_minor];
+	spl5();
+	while(ep->ep_flag&BUFBSY) {
+		ep->ep_flag =| EPSLEEP;
+		sleep(&ep->ep_flag, EPPRI-1);
+	}
+	emclose(epdev[idev]);
+	brelse(ep->ep_buf);
+	ep->ep_buf = 0;
+	tp->t_state = 0;
+	tp->t_col = 0;
+	tp->t_speeds = 0;
+	ep->ep_flag = 0;
+	spl0();
+}
+
+emopen(dev)
+{
+	register int *dmaddr;
+	register struct epr *ep;
+	register struct tty *tp;
+
+	tp = &dh11[dev.d_minor];
+	ep = &epr[tp->t_col];
+	dmaddr = dmtab[(dev>>4)&017];
+	dmaddr->dmcsr = dev&017;
+	dmaddr->dmlstat = LINENBL;
+	if((dmaddr->dmlstat&CTS) == 0)
+		ep->ep_flag =| EPBUSY;
+	dmaddr->dmcsr = IENABLE | SCENABL;
+}
+
+emintr(dev)
+{
+	register struct tty *tp;
+	register struct epr *ep;
+	register int *dmaddr;
+	int *i;
+
+	dev =& 017;
+	dmaddr = dmtab[dev];
+	if(dmaddr->dmcsr&DONE) {
+		tp = &dh11[(dev<<4) | (dmaddr->dmcsr & 017)];
+		if (tp->t_state & EPRNTR) {
+			for (i = &epdev; *i; i++)
+				if (*i == tp->t_dev) {
+					ep = &epr[tp->t_col];
+					if(dmaddr->dmlstat&CTS) {
+						ep->ep_flag =& ~EPBUSY;
+						epstart(tp);
+					}
+					else
+						ep->ep_flag =| EPBUSY;
+				}
+		}
+		dmaddr->dmcsr = SCENABL | IENABLE;
+	}
+}
+
+emclose(dev)
+{
+	register int *dmaddr;
+
+	dmaddr = dmtab[(dev>>4)&017];
+	dmaddr->dmcsr = dev&017;
+	dmaddr->dmlstat = 0; /* turn off line */
+	dmaddr->dmcsr = IENABLE | SCENABL;
+}

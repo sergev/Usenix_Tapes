@@ -1,0 +1,327 @@
+.TH PERSISTENT 3I "15 June 1987" "InterViews" "InterViews Reference Manual"
+.SH NAME
+Persistent \- persistent object package for Graphic
+.SH SYNOPSIS
+.B #include <InterViews/Graphic/persistent.h>
+.SH DESCRIPTION
+.B Persistent
+is a class that implements a general persistent object.  Persistent objects
+can exist in memory, on disk, or both; the implementation supports a
+transparent interface to objects regardless of their location.  Thus
+persistent objects can exist beyond the lifetime of the programs that create
+and use them.  Though Persistent was designed to support the persistent
+structured graphics provided by Graphic(3I), programmers can build their own
+persistent classes by deriving from Persistent.  The file
+<InterViews/Graphic/persistent.h> need not be included if Graphic header
+files are already included; it should be included only when deriving new
+Persistent objects.
+
+The following operations are defined on \fBPersistent\fP objects:
+.TP
+.B "virtual ClassId GetClassId()"
+Every class derived from Persistent must have a globally unique identifier
+associated with it.  This member function must be redefined in derived
+classes to return the identifier reserved for that class.
+.TP
+.B "virtual boolean IsA(ClassId)"
+Returns \fItrue\fP if the persistent object is an instance of the class (or
+subclass of the class) specified by the given ClassId.  This member function
+must be redefined in derived classes to return the appropriate value.
+.TP
+.B "virtual Persistent* GetCluster()"
+If a persistent object (the \fIparent\fP object)
+contains other persistent objects as part of its
+internal state, then the parent 
+and the objects it contains can be \fIclustered\fP on disk, or
+written and read consecutively.  This
+can improve performance when the parent object is read since the
+objects within it are not scattered throughout the disk.  GetCluster is called
+internally to determine whether the object is clustered within a parent or
+not.  GetCluster returns \fIthis\fP
+by default, meaning that the object is not to
+be clustered within another.  If GetCluster is redefined to return nil, then
+the object is assumed to be clustered within a parent and will be written and
+read automatically whenever the parent is written or read.
+.TP
+.B "virtual boolean write(File* f)"
+.ns
+.TP
+.B "virtual boolean read(File* f)"
+These functions define what information is written and read when the
+persistent object is transferred to and from disk.  The argument is a
+class (defined in <InterViews/Graphic/file.h>) that encapsulates stdio file
+operations.  \fIParentClass\fP::read(f) must be called in the read function
+before anything else is read.  Similarly, \fIParentClass\fP::write(f) must
+be called in the write function before anything else is written.  Write and
+read operations typically write and read ASCII and/or binary data and/or
+references to other persistent objects (provided by 
+the \fBRef\fP class, described below).  Write and read
+return \fIfalse\fP if the operation was unsuccessful for any reason;
+otherwise they return \fItrue\fP.  These functions should not perform any
+operation (such as File::SeekTo and the like, or dereferencing a
+\fBRef\fP) that changes the position of the next input or output
+operation on the File.
+.TP
+.B "virtual boolean writeObjects(File* f)"
+.ns
+.TP
+.B "virtual boolean readObjects(File* f)"
+These functions define what clustered persistent objects should be written
+and read along with instances of the class.
+\fIParentClass\fP::readObjects(f) \fImust\fP be called in the readObjects
+function before anything else is read.  Similarly,
+\fIParentClass\fP::writeObjects(f) must be called in the writeObjects
+function before anything else is written.  WriteObjects and readObjects
+operations typically perform WriteObjects and ReadObjects operations on
+references to other persistent objects that were written/read in the write
+and read functions.  WriteObjects and readObjects
+return \fIfalse\fP if the operation was
+unsuccessful for any reason, otherwise they return \fItrue\fP.
+These functions should not perform any operation that changes the position
+of the next input or output operation on the File.
+.TP
+.B "virtual boolean initialize()"
+Initialize can be used to initialize an object's internal state with
+pointers to its clustered objects.  Dereferencing of \fBRef\fPs to
+clustered objects
+should only take place in this function, \fInot\fP in read or readObjects.
+\fIParentClass\fP::initialize() should be called in this function
+before anything else is done.
+.TP
+.B "virtual boolean Save()"
+Explicitly saves the object.  Persistent objects
+that are part of a cluster should not be saved explicitly since
+they are automatically written and read with the parent object.
+.TP
+.B "virtual boolean IsDirty()"
+.ns
+.TP
+.B "virtual void Touch()"
+.ns
+.TP
+.B "virtual void Clean()"
+A dirty bit is maintained for each persistent object.  IsDirty returns the
+status of the dirty bit, Touch sets the dirty bit, and Clean resets it.
+Persistent objects are
+automatically touched when they are created.
+.SH REFERENCES TO PERSISTENT OBJECTS
+The \fBRef\fP class provides a mechanism for referring to a persistent
+object in a manner analogous to pointer references to conventional objects.
+Refs are dereferenced to yield the object to which they refer.  They can be 
+compared with each other, tested for validity,
+written to and read from disk.  Each Ref has a unique universal identifier
+(UID) that serves as the object's ``address''.
+\fBRef\fP is defined in <InterViews/Graphic/ref.h>.
+.TP
+.B "Ref()"
+.ns
+.TP
+.B "Ref(UID)"
+.ns
+.TP
+.B "Ref(Persistent*)"
+A parameterless constructor creates a nil (undefined) reference.  The
+constructor with a UID argument creates a reference with a particular UID;
+this constructor should not be used unless one knows what he or she is
+doing.  The third constructor is the one most commonly used.  It creates a
+reference to the given object.
+.TP
+.B "Persistent* operator()()"
+Parenthesis are overloaded to perform the dereferencing operation on a Ref.
+The return value will most likely have to be cast into a pointer to the
+proper derived persistent class.
+.TP
+.B "boolean operator==(Ref r)"
+.ns
+.TP
+.B "boolean operator!=(Ref r)"
+Refs can be compared for equality and inequality using these overloaded
+operators.
+.TP
+.B "boolean Write(File*)"
+.ns
+.TP
+.B "boolean Read(File*)"
+Write or read a reference to an object.  Theses functions return
+\fIfalse\fP if the
+operation is unsuccessful for any reason; otherwise \fItrue\fP is returned.
+.TP
+.B "boolean WriteObjects(File*)"
+.ns
+.TP
+.B "boolean ReadObjects(File*)"
+Write or read consecutively the object(s) referenced
+by the Ref.  If the referenced object is the head of a cluster, then these
+operations are nop's.  These functions return \fIfalse\fP if the operation is
+unsuccessful for any reason; otherwise \fItrue\fP is returned.
+.PP
+A \fBRefList\fP is class derived from \fBRef\fP used to form circular 
+doubly-linked lists
+of references to persistent objects.  Each RefList object references a
+persistent object and contains pointers to the RefLists preceding and
+following it in the list.
+The \fBRefList\fP class is defined in <InterViews/Graphic/reflist.h>.
+.TP
+.B "RefList()"
+.ns
+.TP
+.B "RefList(UID u)"
+.ns
+.TP
+.B "RefList(Persistent*)"
+RefList constructors perform the same functions as their \fBRef\fP
+counterparts.
+.TP
+.B "void SetRef(Ref r)"
+Explicitly set the reference to the given one.
+.TP
+.B "boolean IsEmpty()"
+Returns \fItrue\fP if the RefList has no neighbors, \fIfalse\fP otherwise.
+.TP
+.B "void Append(RefList*)"
+.ns
+.TP
+.B "void Prepend(RefList*)"
+Append inserts the given RefList after \fIthis\fP; prepend inserts it before
+\fIthis\fP.
+.TP
+.B "void Remove(RefList*)"
+.ns
+.TP
+.B "void Delete(Ref)"
+.ns
+.TP
+.B "RefList* Find(Ref)"
+Remove finds the given RefList and removes it from the list.  Delete finds
+the given Ref and deletes the RefList containing it.  Find returns the
+RefList containing the given Ref.
+.TP
+.B "RefList* First()"
+.ns
+.TP
+.B "RefList* Last()"
+.ns
+.TP
+.B "RefList* End()"
+.ns
+.TP
+.B "RefList* Next()"
+.ns
+.TP
+.B "RefList* Prev()"
+These functions return a particular element of the list relative to
+the position of this RefList in the list.  First returns a pointer
+to the RefList following
+\fIthis\fP, Last returns a pointer to 
+the last RefList starting from \fIthis\fP, and End
+returns a pointer to the RefList marking the end of the list.  Next and Prev
+return pointers to the RefLists following and preceding \fIthis\fP in the
+list.
+.TP
+.B "boolean Write(File*)"
+.ns
+.TP
+.B "boolean Read(File*)"
+.ns
+.TP
+.B "boolean WriteObjects(File*)"
+.ns
+.TP
+.B "boolean ReadObjects(File*)"
+These functions behave just as their \fBRef\fP counterparts do, except they
+perform their operations on all elements in the RefList.
+.TP
+.B "RefList* operator[](int n)"
+Returns a pointer to the \fIn\fPth element in the RefList, returning
+\fIthis\fP if \fIn\fP = 0, \fIthis\fP->Next() for \fIn\fP = 1, etc.
+.SH OBJECT MANAGER CLASS AND OPERATIONS
+The \fBObjectMan\fP class implements the \fIobject manager\fP, a
+one-of-a-kind global object responsible for reading and writing persistent
+objects to and
+from disk.  The object manager also serves as a well-known entity
+from which programs can
+retrieve the persistent objects they have created.  
+\fBObjectMan\fP is derived from \fBPersistent\fP and so is itself persistent.
+There is exactly one object manager per group of related persistent objects;
+no references can exist between persistent objects created by different
+object managers (different in the sense that they use different files
+for storage).  Most of the member functions defined in \fBObjectMan\fP
+need never be used by programs unless they derive new persistent
+classes.
+.TP
+.B "ObjectMan(char* filename, void (*userInit)(RefList*) = nil, Persistent* (*userCreator)(ClassId) = nil)"
+The filename parameter requires a null-terminated string which will be used
+to prefix the names of two files that will contain all persistent object
+information: \fIfilename\fP.map and \fIfilename\fP.sto.  If these files do
+not already exist when the constructor is called, then they will be created
+and the function pointed to by \fIuserInit\fP will be called.
+\fIuserInit\fP must point to a function that creates primordial root
+objects needed by your application and installs them in the passed
+\fBRefList\fP.  If you want to use the default persistent paint objects in 
+Graphic, then this function should call InitPPaint, defined in
+<InterViews/Graphic/ppaint.h>.  \fIuserCreator\fP must point to a function
+that can create an instance of any persist object used in the
+application, given a ClassId.
+\fIuserCreator\fP should call GraphicConstruct,
+defined in <InterViews/Graphic/grconstruct.h>, if it receives an 
+unrecognized ClassId.  If your application does not derive any new
+persistent objects, \fIuserCreator\fP can simply point to GraphicConstruct.
+A newly allocated object manager should be assigned to 
+the global variable \fITheManager\fP.  Further references to the object
+manager should be made via this global.
+.TP
+.B "RefList* GetRoot()"
+Returns a pointer to the RefList containing well-known objects.
+Persist objects that are to be accessed
+directly should have references to them appended to the root RefList in a
+well-known order for later retrieval.  For example, the default persistent
+paint objects defined in InitPPaint should be appended to the root RefList
+so that they can be accessed when the program is restarted.
+.TP
+.B "Persistent* Create(ClassId)"
+Creates a persistent object of class specified by \fIClassId\fP.  Create
+calls the function pointed to by userCreator.
+.TP
+.B "boolean Invalidate(Persistent*)"
+Used to permanently deallocate a persistent object.  Returns \fIfalse\fP if
+the operation was unsuccessful, otherwise returns \fItrue\fP.
+.TP
+.B "boolean IsCached(Ref*)"
+Returns \fItrue\fP if the referenced object has been read from disk into
+memory, \fIfalse\fP if not.  IsCached updates
+the reference to reflect the address of
+the object if it is in memory.
+.TP
+.B "boolean Find(Ref*)"
+Seeks for and reads the referenced object from disk if it is not in
+memory and updates
+the reference to reflect the memory address of the object.  
+Find returns \fItrue\fP if the operation was successful.
+.TP
+.B "boolean Retrieve(Ref*)"
+Like Find except does not perform a seek; the object is read blindly from disk.
+Retrieve is used to read clustered objects.
+.TP
+.B "boolean Store(Persistent*)"
+.ns
+.TP
+.B "boolean Update(Persistent*)"
+Store allocates new disk space for an object and writes it to disk.  Update
+rewrites an existing object and updates the map containing its disk offset.
+Both return \fItrue\fP if the operation was successful.
+.TP
+.B "boolean ObjectIsDirty(Persistent*)"
+.ns
+.TP
+.B "void ObjectTouch(Persistent*)"
+.ns
+.TP
+.B "void ObjectClean(Persistent*)"
+The object manager maintains a dirty bit for each persistent object in its
+object cache.  These functions allow the dirty bit for an object to be
+tested, set and reset.  The dirty bit operations defined in \fBPersistent\fP
+actually call these functions through the global variable TheManager.  
+Dirty objects are automatically written to disk when TheManager
+is deleted.
+.SH SEE ALSO
+Graphic(3I)

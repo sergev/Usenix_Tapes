@@ -1,0 +1,152 @@
+Path: plus5!wuphys!wucs!wucs2!wucs1!cuae2!clyde!rutgers!husc6!wjh12!lotto
+From: lotto@wjh12.UUCP (Jerry Lotto)
+Newsgroups: net.sources
+Subject: MS-DOS (Microsoft C) gnuplot changes
+Message-ID: <39@wjh12.UUCP>
+Date: 23 Nov 86 23:00:09 GMT
+Reply-To: lotto@wjh12.UUCP (Jerry Lotto)
+Distribution: net
+Organization: Harvard Univ. Chem. Dept.
+Lines: 140
+Posted: Sun Nov 23 17:00:09 1986
+
+
+I made the following changes to gnuplot to get it to work on my PC/AT.
+Please forgive the comment diffs, the third shar archive was reposted
+with some differences and I misplaced the originals.
+
+The bugs that are fixed are:
+
+1) fpe allowed the accumulation of exception generated values on the
+80287 stack, resulting in eventual overflow (which generates an
+exception, whew!)
+
+2) kbhit never flushed the keybord buffer, and therefore only waited
+for the first keypress.
+
+3) points[foo].undefined was never initialized for a file read,
+resulting in random dropouts of plotted data.
+
+I also wanted to be able to control the playback of a "save" file,
+thus the new option "set continuous". It is trivial to extend this to
+"set continuous [delay <value>]", but I have not yet done so.
+
+I also have previously posted changes in this diff for pcgraph.asm and
+the QMS "driver".
+
+
+diff gnu/command.c newgnu/command.c
+32a33
+> BOOLEAN			cont		= FALSE;
+371a373,380
+> 		else if (almost_equals(c_token,"cont$inuous")) {
+> 			cont = TRUE;
+> 			c_token++;
+> 		}
+> 		else if (almost_equals(c_token,"nocont$inuous")) {
+> 			cont = FALSE;
+> 			c_token++;
+> 		}
+464a474,478
+> 		else if (almost_equals(c_token,"cont$inuous")) {
+> 			fprintf(stderr,"\ncontinuous is %s\n\n",(cont)? "ON" : "OFF");
+> 			screen_ok = FALSE;
+> 			c_token++;
+> 		}
+495a510
+> 			fprintf(stderr,"continuous is %s\n",(cont)? "ON" : "OFF");
+667c682
+< 				x = i;		/* and make the index into x */
+---
+> 				x = i;		/* assign the index to x */
+687a703,704
+> 					plot[plot_num].points[i].undefined =
+> 						FALSE;
+696a714
+> 	(void) fclose(fp);
+diff gnu/corgraph.asm newgnu/corgraph.asm
+1a2
+> ;	Colin Kelley
+diff gnu/misc.c newgnu/misc.c
+19c19
+< extern BOOLEAN screen_ok;
+---
+> extern BOOLEAN screen_ok,cont;
+118c118
+< 					   echoed on error */
+---
+> 								   echoed on error */
+119a120,122
+> #ifndef PC
+> 			if (!cont && (getchar() == '+')) cont = TRUE;
+> #endif
+diff gnu/parse.c newgnu/parse.c
+44a45,47
+> #ifdef MSDOS
+> 	_fpreset();
+> #endif /* MSDOS */
+diff gnu/pcgraph.asm newgnu/pcgraph.asm
+2a3,4
+> ;	Colin Kelley
+> ;	November 9, 1986
+183a186,187
+> 	push bp
+> 	push ax
+184a189,190
+> 	pop ax
+> 	pop bp
+diff gnu/plot.h newgnu/plot.h
+38c38
+< #define MAX_UDFS 30			/* max number of user-defined functions */
+---
+> #define MAX_UDFS 20			/* max number of user-defined functions */
+diff gnu/term.c newgnu/term.c
+23c23
+< extern BOOLEAN term_init;
+---
+> extern BOOLEAN term_init,cont;
+285,286c285
+< 		while (!kbhit())
+< 			;
+---
+> 		if (!cont && (getch() == '+')) cont = TRUE;
+357,358c356
+< 		while (!kbhit())
+< 			;
+---
+> 		if (!cont && (getch() == '+')) cont = TRUE;
+409,410c407
+< 		while (!kbhit())
+< 			;
+---
+> 		if (!cont && (getch() == '+')) cont = TRUE;
+720c717,718
+< 	fprintf(outfile,"^IOL\n");
+---
+> /* This was just ^IOL, but at Rutgers at least we need some more stuff */
+>   fprintf(outfile,"^PY^-\n^IOL\n^ISYNTAX00000^F^IB11000^IJ00000^IT00000\n");
+733c731,733
+< 	fprintf(outfile,"^IGE\n^,");
+---
+> /* added ^-, because ^, after an ^I command doesn't actually print a page */
+> /* Did anybody try this code out? */
+> 	fprintf(outfile,"^IGE\n^-^,");
+741,742c741,750
+< static int type[9+2] =  {0, 0, 0, 2, 5, 0, 2, 5, 0, 2, 5};
+< 	fprintf(outfile,"^PW%02d\n^V%x\n",width[linetype+2], type[linetype+2]);
+---
+> /*
+>  * I don't know about Villanova, but on our printer, using ^V without
+>  * previously setting up a pattern crashes the microcode.
+>  */
+> #ifdef notdef
+>     static int type[9+2] =  {0, 0, 0, 2, 5, 0, 2, 5, 0, 2, 5};
+>     fprintf(outfile,"^PW%02d\n^V%x\n",width[linetype+2], type[linetype+2]); 
+> #endif
+>     fprintf(outfile,"^PW%02d\n",width[linetype+2]); 
+> 
+780c788,789
+< 	fprintf(outfile,"^,\n");
+---
+> /* add ^- just in case last thing was ^I command */
+> 	fprintf(outfile,"^-^,\n");

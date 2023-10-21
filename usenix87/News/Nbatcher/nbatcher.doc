@@ -1,0 +1,81 @@
+
+DETAILED DESCRIPTION OF "NBATCHER.CTL" FILE
+-------------------------------------------
+
+As distributed, nbatcher.ctl contains just a terse summary of its
+format.  For each site you feed news to, providing that site uses the
+":F:BATCHDIR/site" batching syntax in the sys file, a corresponding
+entry should exist in nbatcher.ctl  Each line is a five-field,
+colon-separated entry indicating what to do for that site.  The default
+for BATCHDIR is /usr/spool/batchnews.
+
+The format is:
+	site:hour:bits:queue_size:command
+The site field is the name of the UUCP site that will get the batched
+news.  There MUST be a file in the BATCHDIR directory with the
+sitename.  Nbatcher will complain about mismatches.  This file contains
+a full-path listing of the files to batch.
+
+Next is the hour field.  The syntax directly imitates the crontab entry
+for hour.  If hour = "*", than assume a match for every hour.  If hour
+= "off", then no work is ever spooled for this site.  (This is the only
+difference from crontab).  You can specify a specific hour, like 8 or
+09 or 22.  Or a range of hours, like 10-15, meaning check for work from
+10am thru 3pm.  You can also cycle thru a 24-hour period by saying
+22-4, which matches for 10pm thru 4am.  Also, hours comma separated
+like 7,14,21, says check for work at 7 AM, 4PM and 9PM only.  This
+gives lots of flexibility for sites that feed multiple remotes.
+
+Next is the bits field, which has a value of 9-16, or may be left blank.
+If non-null, this field is directly passed on to compress with the -b
+flag.  If it is null, then no compression is done for this site.
+
+The queue_size field is the maximum number of bytes allowed on the UUCP
+queue at any time.  It defaults to 100K bytes, and if it's greater than
+1MB (see parse.c about MAX_BYTES), than it uses 1MB as the default
+number of bytes.
+
+What nbatcher does is first check the UUCPDIR for that site and sums up
+the number of bytes already on-queue.  The size of each news article is
+accumulated prior to batching to the tempfile, and this accumulation +
+the UUCP on-queue bytes are checked to see if they surpass the queue_size
+value.  If not, things proceed normally.  But if it would exceed the
+max value, then spool what's already been batched, and save the
+remainder of the articles for the next scheduled batch.
+
+This is so noted in the nbatcher.log file, showing the UUCP bytes that
+were on-queue (if any), and the number of bytes that were spooled.
+Also, if nbatcher is run from a terminal instead of from cron, a copy
+of what gets logged is sent to the terminal.
+
+The last field is the command field.  This optional field is used for
+specific UUCP command execution.  As written, it defaults to "uux - -r
+site!rnews".  Since my uux doesn't require the -z option for rnews, I
+left it out of the UUX define in nbatcher.h  This can easily be changed
+for your own taste, or just use the command field.
+
+Example:
+	site-A:3,10:16:450000:
+Check for work for site-A at 3AM and 10AM.  Use compress with
+16 bits and only spool up to 450K bytes, using "uux - -r site-A!rnews".
+
+Another example:
+	foo:23-4::300000:uux - -r -z foo!rnews
+Check for work for foo between 11PM and 4AM.  No compression is used
+and spool up to 300K bytes using the command field.
+
+This format should help ease UUCP congestion on the local site for
+news.  I currently feed 5 remote sites, compressed and non-compressed
+formats, and have noticed a vast improvement in disk space as well as
+out port availability for UUCP.  It has allowed me to check for work
+for all sites every hour, since there's a limit on how much gets
+queued.  And if the remote doesn't answer on the hourly UUCP poll, so
+what!  Nbatcher just won't spool any more until the queue_size limit
+on-queue is reduced.
+
+Nbatcher was designed to weed out any illegal syntax in the control
+file, but it's not bug-proof, so use some discretion.
+
+Bob Esposito
+Bell of Penna.
+June 1986

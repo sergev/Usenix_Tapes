@@ -1,0 +1,90 @@
+/*
+ * Definitions for talk and the talkdemon
+ *
+ * AUTHOR
+ *	Edward C. Bennett (edward@ukecc)
+ *
+ * Copyright 1985 by Edward C. Bennett
+ *
+ * Permission is given to alter this code as needed to adapt it to forign
+ * systems provided that this header is included and that the original
+ * author's name is preserved.
+ */
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <errno.h>
+#include <utmp.h>
+#include <string.h>
+
+/*
+ * If your system has a high resolutiuon sleep call, define SLEEP to
+ * be the name of the function and define SLEEP_TIME to be whatever number
+ * gives you about a .1 second delay. The defines are used like this:
+ *	SLEEP(SLEEP_TIME);
+ */
+/* #define	SLEEP	sleep		/* Name of high resolution sleep call */
+/* #define	SLEEP_TIME	100	/* Number to give ~.1 second delay */
+
+/*
+ * If your system has the old utmp file format, i.e. without USER_PROCESS,
+ * define OLDUTMP
+ */
+/* #define	OLDUTMP		/* If you use the old utmp format */
+
+/*
+ * If you have a version of curses that is more Berkeley than System V,
+ * you'll probably need at least one of these.
+ */
+/* #define	cbreak	crmode		/* to turn off canonical input */
+
+/* #define	CLRONEXIT	/* turn on if you want the screen cleared on exit */
+/*
+ * Defines for using msgget()
+ * If for some reason the msgkey that talk generates is already used on
+ * your system, change MAGIC_ID to another character.
+ */
+#define	TALK_PATH	"/local/bin/talk"
+#define	MAGIC_ID	'E' 		/* This can be any char. Be creative. */
+#define	MSGQ_PERMS	0666		/* You may want to change these */
+					/* to increase security */
+
+#define	NAMESIZ	8	/* from <utmp.h> */
+#define	LINESIZ	12	/* from <utmp.h> */
+#define	TTYLOC	16	/* ttys always start in this location in 'mtext' */
+#define	SEND	0	/* Locations in the 'lines' array for these msgtypes */
+#define	RECEIVE	1
+#define	CTL	2
+#define	PIDLOC	7	/* pids always ride in this spot in the 'lines' array */
+#define	STATUS	3	/* mtype for status messages */
+
+/*
+ * Stuff for the Deamon MeSsaGes
+ * All message involving the demon use this structure
+ *
+ * Here's how the buffer is laid out:
+ *					1			2
+ *	0		8		6			8
+ *     | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | | |
+ *     |  name         |  name         | tty line              | pid
+ *     | send  |receive| ctl   |       |       |       |       | pid   |
+ */
+typedef	struct	{
+	long	mtype;
+	union	{
+		char	mtext[32];
+		long	lines[8];
+	} msgval;
+} DMSG;
+
+DMSG	dmsgbuf;
+#define	MSGSIZ	sizeof(dmsgbuf.msgval.mtext)
+
+/*
+ * 'Find' return codes
+ */
+#define	TALKABLE	 1
+#define	NOTLOGGEDON	-1
+#define	NOTWRITE	-2
+#define	LOGGEDMORE	-3
+#define	NOTONLINE	-4

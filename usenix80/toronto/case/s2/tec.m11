@@ -1,0 +1,2370 @@
+	.title	teco	
+	.ident	/23jan6/
+	.dsabl	lc
+	.enabl	ama		;while debugging
+	.list	meb		; ditto
+
+r0=%0
+r1=%1
+r2=%2
+r3=%3
+r4=%4
+r5=%5
+sp=%6
+pc=%7
+
+mesc=	33	;double esc is master
+cptr=	r3	;char ptr
+eoa=	r4	;end of all
+base=	r5	;beg of buff
+
+;r2,r1,r0 are for fun
+
+rubout=	177
+xctu=	'u-100
+
+.macro	def	mac
+ .globl	$'mac
+ .macro	mac
+	do	$'mac
+ .endm	mac
+.endm	def
+
+	def	tyi
+	def	tyo
+	def	typer
+	def	pri
+	def	ppo
+	def	decin
+	def	decout
+	def	prinit
+	def	ppinit
+	def	crlf
+	def	clo
+	def	backt
+	def	typeb
+	def	crlfb
+	def	tyob
+	def	tyoer
+	def	tyerr
+	def	octout
+	def	prompt
+
+	.macro	cexit	x
+ex..'x=1
+ex$.'x=.
+ex.'x'0=.
+	.macro	exit'x	y
+	.if le	.-ex$.'x-254.
+	.irp	z,<\<ex..'x-1>>
+	.if nb	y
+	y	ex.'x''z
+	.iff
+	br	ex.'x''z
+	.endc
+	.endm
+	.iff
+	.irp	z,<\<ex..'x>>
+	.if nb	y
+	y	ex.'x''z
+	.iff
+ex..'x=ex..'x+1
+ex$.'x=.
+ex.'x''z=.
+	jmp	ex.'x'0
+	.endc
+	.endm
+	.endc
+	.endm
+	.endm
+
+.macro	error	nrx
+
+.if ndf	e.'nrx
+e.'nrx=0
+ee$cnt=ee$cnt+1
+	.irp	x,<\ee$cnt>
+	.macro	e$'x
+e.'nrx=.
+	.asciz	\nrx\
+	.endm
+	.endm
+.endc
+	mov	#e.'nrx,r1
+	exitz
+.endm
+
+.iif ndf ee$cnt,	ee$cnt=0
+
+	.macro	do	xx
+	jsr	pc,xx
+	.endm
+
+	.macro	done
+	rts	pc
+	.endm
+	.macro	pushr1
+	mov	r1,-(sp)
+	sub	cstart(base),@sp
+	.endm
+
+	.macro	popr1
+	mov	(sp)+,r1
+	add	cstart(base),r1
+	.endm
+
+	.macro	tstmem	x,bad,good,?a,?b
+	add	eoa,x
+	.if nb	bad
+	bcs	bad
+	.iff
+	bcs	b
+	.endc
+a:	cmp	x,limbf(base)
+	.if nb	good
+	blo	good
+	.iff
+	blo	b
+	.endc
+	do	getmex
+	bne	a
+	.if nb	bad
+	br	bad
+	.endc
+b:
+	.endm
+
+	.macro	hiseg	x
+	.psect	x	con, shr
+	.endm
+
+	.macro	loseg	x
+	.psect	x	con, prv
+	.endm
+	.sbttl	user's impure data area
+	.asect
+	.dsabl	pnc
+
+state:	.blkw		;must be first!!!
+tbufx:	.blkw
+boq:	.blkw		;start of q register area
+bob:	.blkw		;start of text buffer (end of q regs)
+enbf.4:	.blkw		;end of buffer area - 4
+enbf:	.blkw		;end of buffer area
+stksv:	.blkw		;stack ptr save
+limbf:	.blkw		;limit for text
+cmdloc:	.blkw		;debug
+cstart:	.blkw		;place to put start of q-macro
+cend:	.blkw		;end of current command str
+cval:	.blkw		;value of exp
+cval1:	.blkw		;first of two args
+itter:	.blkw		;iteration count
+coval:	.blkw		;for :
+coval1:	.blkw
+costat:	.blkb
+cocop:	.blkb
+debsw:	.blkb		;debug sw
+qpds:	.blkb		;q push down pointer
+fflg:	.blkb		;-1 => ff 0 => none  1 => eof  (input)
+schsw:	.blkb		;-1 => :search success  0 => :search failure
+inpflg:	.blkb
+outflg:	.blkb
+bakflg:	.blkb
+ffsw:	.blkb		;<ff> displ as ^l or not
+addsw:	.blkb		;adds switch (i.e. ^z is cursor up)
+gosw:	.blkb		;set by ^c
+itcnt:	.blkb
+atsw:	.blkb
+colsw:	.blkb		;colon for searches
+cmodsw:	.blkb		;colon for t,k & x
+qmode:	.blkb		;q reg we're executing
+cop:	.blkb
+udsw:	.blkb
+crsw:	.blkb		;convert <cr> to <lf>
+exstat:	.blkb		;exit status
+	.even
+bompos:	.blkw		;cptr @ beginning of last search match (##psl)
+chbomp='_		;q_ returns the above (##psl)
+blspos:	.blkw		;cptr before last search (##psl)
+chblsp=']		;(##psl)
+boipos:	.blkw		;cptr position before last insert (##psl)
+chboip='[		;(##psl)
+schsiz:	.blkw		;search string size
+schbuf:	.blkb	52.
+mchsiz:	.blkw		;match string size (not necess ==schsiz) (##psl)
+oupfh:	.blkw
+inpfh:	.blkw
+rdptr:	.blkw
+rdfil:	.blkb	52.
+filstr:	.blkb	52.
+bakfil:	.blkb	56.
+tmpfil:	.blkb	60.
+ttymax=80.
+ttybuf:	.blkb	ttymax
+ttyend:
+ttybp:	.blkw
+ttyep:	.blkw
+pinmax=^d512
+pinbuf:	.blkb	pinmax
+pincnt:	.blkw
+pinptr:	.blkw
+tbuf:			;text buffer
+	.globl	oldtty, tectty, calsh, texit, macsiz, getmac
+	.globl	intty, quitx, finish, decoux, ppol
+	.globl	delit, caltst, getuc, stfil, setrnm, setfnm
+	.globl	getmem, checkc, checkz, tecox, redo
+
+	.globl	ttymax, ttybuf, gosw, ttybp, ttyep, datasp
+	.globl	rdfil, bakfil, tmpfil, pinmax, pinbuf
+	.globl	pincnt, pinptr, oupfh, inpfh, inpflg, outflg
+	.globl	bakflg, state, linflg, ffsw, rdptr
+	.globl	filstr, udsw, crsw, ttyend, exstat, cmodsw
+
+	.enabl	pnc
+	hiseg	logic
+	.sbttl	tecox -- initial entry
+tecox:	mov	r4,enbf(base)	;end of buffer is passed in r4
+	mov	r4,limbf(base)
+	mov	r4,enbf.4(base)
+	sub	#6,enbf.4(base)	;other checker
+	mov	base,eoa
+	add	#tbuf,eoa	;text buffer
+	mov	eoa,tbufx(base)
+	mov	eoa,boq(base)	;q register area, one extra word
+	tst	(eoa)+		;fix it
+	mov	eoa,cptr
+	mov	eoa,bob(base)
+	mov	sp,stksv(base)	;save the stack i'm given
+	mov	eoa,cend(base)
+	mov	eoa,cmdloc(base)
+	clrb	debsw(base)
+	clrb	qpds(base)
+	clrb	fflg(base)
+	clrb	schsw(base)
+	clrb	inpflg(base)
+	clrb	outflg(base)
+	clrb	bakflg(base)
+	clrb	ffsw(base)
+	clrb	gosw(base)
+	clrb	qmode(base)
+	clr	schsiz(base)
+	clr	schbuf(base)
+	clr	@base
+	do	intty
+	mov	#hello,r1		;say hello
+	mov	#helln,r2
+	typeb
+	do	stfil
+	beq	redo
+	do	setfnm
+	do	caltst
+	beq	2$
+	backt
+	do	iputc
+	br	redo
+
+2$:	ppinit
+	mov	#filmsg,r1
+	mov	#filmen,r2
+	typeb
+	br	redo
+	cexit	z		;exitz's come here
+	clrb	cmodsw(base)	;in case it was :t or :x
+	mov	stksv(base),sp
+	do	tectty
+	mov	#'?,r0
+	tyoer
+	clr	r0
+	mov	#enderr,r2	;worst case end
+	do	sstr		;find the null
+	mov	r0,r2		;set up end
+	tyerr			;typ the error short form
+
+redo:	mov	stksv(base),sp
+cont:	crlfb
+next:	do	clrpds		;clear the q-pds
+	mov	eoa,r1		;ptr to input buffer
+	clrb	(r1)+
+	clrb	@r1
+	mov	limbf(base),cstart(base)
+	mov	enbf(base),limbf(base)
+	prompt				;output a * prompt
+nchr:	cmp	r1,enbf.4(base)	;still room in input buffer?
+;enbf contains end of buffer, enbf.4 contains end - 4
+	blo	bakg		; yes
+	mov	r1,-(sp)	;save it
+	do	getmex
+	mov	(sp)+,r1
+	tst	r0
+	bne	nchr
+	mov	r1,-(sp)	;save it for a sec
+	mov	#watch,r1	;warning msg
+	mov	#watchn,r2	;end of it
+	typer			;zap it
+	mov	(sp)+,r1	;get it back
+	cmp	r1,enbf(base)	;last chance?
+	blo	bakg		;still lucky
+	error	<no.room>	; no. give error
+	.sbttl	bakg
+bakg:	clrb	gosw(base)
+	tyi			;get a char into r0
+	cmp	r0,#3		;is it ^c?
+	beq	cont
+	cmp	r0,#rubout	;is it the rubout char?
+	bne	10$
+	jmp	cta
+10$:	cmp	r0,#xctu	;delete line char?
+	beq	ctu
+	tst	r0		;null?
+	beq	ctu
+	cmp	r0,#'r-'@	;control r?
+	beq	ctr
+	cmp	r0,#12		;is lf?
+	beq	clfua
+	cmp	r0,#'^		;is up-arrow?
+	beq	clfua
+	cmp	r0,#'*		;maybe asterisk?
+	bne	bakgx
+	jmp	cstar
+bakgx:	movb	r0,(r1)+
+	cmpb	1(eoa),#'?	;got a '?' ?
+	bne	2$
+	crlfb
+	tstb	qmode(base)
+	beq	3$
+	mov	#qmsg,r1
+	mov	#qmen,r2
+	typeb
+	movb	qmode(base),r0
+	tyob
+	crlfb
+3$:	mov	cmdloc(base),r1
+	mov	r1,r2
+	add	#100,r2
+	cmp	r2,cend(base)
+	blo	1$
+	mov	cend(base),r2
+1$:	typeb
+	br	redo
+
+2$:	cmp	r0,#mesc	;is it an escape char?
+	bne	ctgin		; no - check for ^g
+	cmpb	r0,-2(r1)	;is the previous an esc??
+	beq	go2it
+	br	nchr
+
+ctgin:	cmp	r0,#7		;bell??
+	bne	nchr		; no- just get nxt chr
+	cmpb	r0,-2(r1)	;was last char a bell also?
+	beq	redo		;yup... treat as a kill input buffer
+	br	nchr		;no just get nxt chr
+	.sbttl	clfua -- <lf> or '^' as first char
+clfua:	dec	r1		;backup ptr
+	cmp	r1,eoa		;was lf or ^ first in input buffer?
+	bne	clfx		; nope...
+	inc	r1
+	tstb	addsw(base)	;adds mode?
+	beq	5$
+	movb	#27,(r1)+	;yup, include ^w
+	movb	#232,(r1)+	; ^z
+	movb	#40,(r1)+	; <sp>
+	movb	#210,(r1)+	; <bs>
+	movb	#27,(r1)+	; ^w
+5$:	cmp	r0,#'^		;^?
+	bne	10$		; no
+	movb	#'-,(r1)+	;yup negate that 'l
+	crlf			;and gen a <cr><lf>
+10$:	movb	#'l,(r1)+
+	movb	#'t,(r1)+
+	movb	#mesc,(r1)+
+	movb	#mesc,(r1)+	;char has become lt$$ or -lt$$
+	br	go2itz
+
+clfx:	inc	r1
+	br	bakgx
+	.sbttl	command control r (^r) (retype input buffer)
+ctr:	mov	r1,r2		;end
+	mov	eoa,r1		;start of input
+	inc	r1
+	cmp	r1,r2
+	bne	1$
+	jmp	cont
+1$:	mov	#'*,r0
+	tyob
+	typer			;put it
+	mov	r2,r1		;restore
+	jmp	nchr
+
+;control u (^u) (delete input line)
+
+ctu:
+1$:	cmpb	-(r1),#12
+	beq	2$
+	cmp	r1,eoa
+	bhi	1$
+	jmp	next
+
+2$:	inc	r1
+	jmp	nchr
+
+cta:	movb	-(r1),r0
+	cmp	r1,eoa
+	blos	1$
+	tyo
+	jmp	nchr
+1$:	inc	r1
+	jmp	nchr
+	.sbttl	evaluate & dispatch on commands in buffer
+go2it:
+	crlf
+go2itz:	clrb	gosw(base)
+	clrb	itcnt(base)
+	clrb	qmode(base)	;turn off q mode
+	mov	enbf(base),r0
+1$:	movb	-(r1),-(r0)	;move input buffer to the
+	cmp	r1,eoa		;end of the world, thus leaving
+	bhi	1$		;the most room for main buffer.
+	inc	r0
+	mov	r0,r1
+	mov	r0,limbf(base)
+	do	setst
+	do	cmdx		;now dispatch on commands.
+	cmp	r1,enbf(base)	;did it end up proper?
+	bne	2$
+	jmp	next
+
+2$:	error	<cmd.end>		; no- tell him.
+
+	cexit
+cmdx:	clr	@base
+	clrb	cmodsw(base)
+	clrb	atsw(base)
+	clrb	colsw(base)	;is this necess?
+	mov	r1,cmdloc(base)
+	mov	#1,cval(base)	;dummy value of 1
+	cexit	a
+null:	do	checkc
+	do	getchu
+	cmp	r0,#'^
+	bne	2$
+	do	getchu
+	sub	#100,r0
+	cmp	r0,#40
+	bhis	none
+2$:	cmp	r0,#'_
+	bhi	none
+	asl	r0
+	jmp	@dtab(r0)	;dispatch on command
+
+none:	error	<no.cmd>
+	.sbttl	cstar -- save last typed-in command string in a q-reg
+;* must be first char in response to prompt
+
+	.sbttl	command * (also see chmul)
+cstar:	dec	r1		;backup ptr
+	cmp	r1,eoa		;is this the first char?
+	bne	clfx		;no, forget it
+
+	mov	enbf(base),r1
+	sub	cstart(base),r1	;#of chars
+	mov	r1,r2
+	tyi
+	do	setq
+	add	#4,r2
+	mov	cstart(base),r0
+	tst	r1		;count
+	beq	5$
+
+3$:	movb	(r0)+,(r2)+
+	sob	r1,3$
+
+5$:	movb	#mesc,(r2)+
+	do	eatchr
+	jmp	redo
+	.sbttl	command +
+
+chpl:	bit	#7,@base
+	exita	beq
+chop:	bit	#2,@base
+	bne	exper1
+	movb	-1(r1),cop(base)
+chpl1:	bis	#2,@base
+	exita
+
+	.sbttl	command -
+
+chmi:	bit	#7,@base
+	bne	chop
+	neg	cval(base)
+	br	chpl1
+
+chmul:
+chdiv:
+chand:
+chor:	bit	#7,@base
+	bne	chop
+exper1:	error	<exp>
+
+	.sbttl	command ,
+
+chcom:	do	arg.7
+	mov	#10,@base
+	mov	cval(base),cval1(base)
+	clr	cval(base)
+	exita
+
+	.sbttl	command @
+chat:	tstb	atsw(base)
+	bne	1$
+	incb	atsw(base)
+	exita
+
+1$:	error	<at.error>
+
+	.sbttl	command :
+chcol:	tstb	colsw(base)
+	bne	1$
+	incb	colsw(base)
+	movb	@base,costat(base)
+	movb	cop(base),cocop(base)
+	mov	cval(base),coval(base)
+	mov	cval1(base),coval1(base)
+	clr	@base
+	exita
+
+1$:	error	<colon.error>
+
+restor:	movb	costat(base),@base	;undo : savings
+	movb	cocop(base),cop(base)
+	mov	coval(base),cval(base)
+	mov	coval1(base),cval1(base)
+	done
+	.sbttl	command \ (string to num)
+chbs:	cmp	@base,#4
+	beq	1$
+	mov	r1,-(sp)	;ascii string to num conversion
+
+	mov	cptr,r1
+	cmpb	@r1,#'-
+	beq	3$
+	cmpb	@r1,#'+
+	bne	4$
+	inc	r1
+4$:	decin
+5$:	cmp	r1,eoa
+	bhi	2$
+	mov	r1,cptr
+	mov	(sp)+,r1
+	br	eval
+
+3$:	inc	r1
+	decin
+	neg	r0
+	br	5$
+
+1$:	jmp	chbs2		;number to ascii string conversion
+
+2$:	error	<bslash>
+
+	.sbttl	command ^^
+ctup:	do	getch
+	br	eval
+
+	.sbttl	command ^t
+ctt:	tyi
+	cmp	r0,#'b-'@
+	bne	eval
+	jmp	cont
+
+	.sbttl	command q
+chq:	do	findq
+	bpl	qrerr
+	mov	2(r2),r0
+	br	eval
+
+	.sbttl	command %
+chper:	do	findq
+	bpl	qrerr
+	inc	2(r2)
+	mov	2(r2),r0
+	br	eval
+
+qrerr:	error	<q.reg>
+
+	.sbttl	command ^e
+cte:	movb	fflg(base),r0
+	br	eval
+
+	.sbttl	command _ (negative of previous search length)
+chba:	mov	schsiz(base),r0
+	neg	r0
+	br	eval
+	.sbttl	command )
+chrp:	do	arg.7
+	done
+
+	.sbttl	command (
+chlp:	tstb	colsw(base)	;in colon?
+	bne	1$		;yup
+	tstb	cmodsw(base)	; or :t, :x
+	beq	2$
+1$:	movb	costat(base),-(sp)
+	movb	cocop(base),-(sp)
+	mov	coval(base),-(sp)
+	mov	coval1(base),-(sp)
+2$:	movb	atsw(base),-(sp)
+	movb	colsw(base),-(sp)
+	movb	cmodsw(base),-(sp)
+	movb	@base,-(sp)
+	movb	cop(base),-(sp)
+	mov	cval(base),-(sp)
+	mov	cval1(base),-(sp)
+	movb	itcnt(base),-(sp)
+	clrb	itcnt(base)
+	do	cmdx
+	cmpb	-1(r1),#')
+	bne	4$
+	mov	cval(base),r0
+	movb	(sp)+,itcnt(base)
+	mov	(sp)+,cval1(base)
+	mov	(sp)+,cval(base)
+	movb	(sp)+,cop(base)
+	movb	(sp)+,@base
+	movb	(sp)+,cmodsw(base)
+	movb	(sp)+,colsw(base)
+	movb	(sp)+,atsw(base)
+	tstb	colsw(base)	;in colon?
+	bne	3$
+	tstb	cmodsw(base)	; maybe :t or :x?
+	beq	eval
+3$:	mov	(sp)+,coval1(base)
+	mov	(sp)+,coval(base)
+	movb	(sp)+,cocop(base)
+	movb	(sp)+,costat(base)
+	br	eval
+
+4$:	error	<paren.end>
+	.sbttl	command b (beginning of buffer)
+
+chb:	clr	r0
+eval:	add	@base,pc
+	br	chb1
+	br	chb2
+	br	trp3
+	br	chb3
+	br	chb1
+	br	chb2
+	br	trp3
+;;;;	br	chb3
+
+chb3:	movb	cop(base),r2	;op
+	cmp	r2,#'-
+	bne	chb4
+	sub	r0,cval(base)
+chb6x:	bic	#2,@base
+	exita
+
+chb4:	cmp	r2,#'+
+	bne	1$
+trp3=.
+	add	r0,cval(base)
+	br	chb6x
+
+1$:	cmp	r2,#'*
+	bne	2$
+	mov	r1,-(sp)
+	mul	cval(base),r0
+	mov	r1,cval(base)
+	mov	(sp)+,r1
+	br	chb6x
+
+2$:	cmp	r2,#'/
+	bne	3$
+	mov	r1,-(sp)
+	mov	r0,-(sp)
+	clr	r0
+	mov	cval(base),r1
+	div	(sp)+,r0
+	mov	r0,cval(base)
+	mov	(sp)+,r1
+	br	chb6x
+
+3$:	cmp	r2,#'&
+	bne	4$
+	com	r0
+	bic	r0,cval(base)
+	br	chb6x
+
+4$:	cmp	r2,#'#
+	bne	5$
+	bis	r0,cval(base)
+	br	chb6x
+5$:	error	<opr>
+
+chb1:	mov	r0,cval(base)	;replace dummy
+	bis	#4,@base
+	exita
+
+chb2:	neg	r0
+	mov	r0,cval(base)
+	add	#2,@base
+	exita
+
+	.sbttl	command h (all)
+
+chh:	do	arg.5
+	clr	cval1(base)
+	mov	#10,@base
+
+	.sbttl	command z
+
+chz:	mov	eoa,r0
+	sub	bob(base),r0
+	br	eval
+
+	.sbttl	command period (.)
+
+chpd:	mov	cptr,r0
+	sub	bob(base),r0
+	br	eval
+
+
+	.sbttl	command number (ie 0-9)
+
+chnm:	movb	(r1)+,r0
+	do	getuc
+	cmpb	r0,#'a
+	beq	7$
+	sub	#2,r1
+	decin
+	br	eval
+
+	.sbttl	command 1a
+7$:	clr	r0
+	cmp	cptr,eoa	;last??
+	beq	1$		;yes
+	movb	(cptr),r0
+1$:	br	eval
+	.sbttl	command escape ($)
+
+cmesc:	cmp	r1,cend(base)
+	bhis	1$
+	cmpb	@r1,#mesc
+	exit	bne
+	inc	r1
+1$:	done
+
+	.sbttl	command a
+cha:	do	arg.5
+	do	iputc
+	exit
+
+	.sbttl	command j (jump)
+
+chj:	do	arg.1
+	bne	1$
+	clr	cval(base)	;allow for dummy arg
+1$:	mov	cval(base),r0
+	add	bob(base),r0
+	cmp	bob(base),r0
+	blos	2$
+	mov	bob(base),r0
+2$:	mov	r0,cptr
+	cmp	cptr,eoa
+	exit	blos
+	mov	eoa,cptr
+	exit
+
+	.sbttl	command r
+
+chr:	neg	cval(base)
+
+	.sbttl	command c (advance ptr)
+
+chc:	do	arg.2		;fix the args
+	mov	r0,cptr
+	exit
+	.sbttl	command l (next line)
+
+chl:	do	arg.3		;get result
+	mov	r0,cptr
+	exit
+
+	.sbttl	command t (type)
+
+cht:	do	arg.11		;get bounds
+	mov	r1,-(sp)	;save it
+	mov	r0,r1		;switch
+	typer
+	mov	(sp)+,r1	;restore
+	exit
+
+	.sbttl	command v
+chv:	do	arg.5		;test it
+	mov	#4,@base	;fake it
+	clr	cval(base)	;0l
+	do	arg.9
+	mov	r0,-(sp)	;save it
+	inc	cval(base)	;make it 1
+	do	arg.9		;get end
+	mov	(sp)+,r0	;switch
+	mov	r1,-(sp)
+	mov	r0,r1
+	typer			;zap it
+	mov	(sp)+,r1	;pop
+	exit
+	.sbttl	command x (store text in q-reg)
+chx:	do	arg.11		;get bounds
+	sub	r0,r2		;how many??
+	sub	bob(base),r0	;make offset
+	mov	r0,-(sp)	;and save it
+	do	getch		;r0 gets qname
+ 	do	setq		;allocate a q-reg
+	mov	(sp)+,r0	;offset
+	add	bob(base),r0	;fix it back
+	tst	(r2)+
+	mov	(r2),-(sp)	;qsize
+	tst	(r2)+
+	beq	2$
+
+22$:	movb	(r0)+,(r2)+	;move in text
+	dec	@sp		;finished??
+	bne	22$		;no
+2$:	movb	#mesc,(r2)+	;esc at end
+	tst	(sp)+		;get rid of junk
+	tstb	cmodsw(base)	;is :x ?
+	beq	1$
+	do	restor
+	jmp	chk		;do a kill
+1$:	exit
+	.sbttl	command [ (push that q-reg!)
+chlbr:	do	arg.5	;no args
+	do	findq		;get the reg
+	beq	qbad		;lose
+	decb	qpds(base)	;another name
+	bvs	2$		;lose again
+	mov	#4,-(sp)	;assume numeric
+	tst	@r2		;correct?
+	bmi	5$		;yes
+	add	#2,@sp		;fix it
+	add	2(r2),@sp	;comme ca
+	bic	#1,@sp		;words
+5$:	mov	@sp,-(sp)	;save it
+	tstmem	@sp,xbad
+	mov	@sp,r0		;get end
+6$:	movb	-(eoa),-(r0)	;move down
+	cmp	eoa,boq(base)	;done?
+	bhi	6$		;no
+	mov	r0,boq(base)	;fix that
+	mov	(r2)+,(eoa)+	;move in stuff
+	movb	qpds(base),-2(eoa)	;new name
+7$:	mov	(r2)+,(eoa)+	;move it in
+	cmp	eoa,r0		;done?
+	blo	7$		;no
+	mov	(sp)+,eoa	;new end
+	add	@sp,cptr	;fix these
+	add	(sp)+,bob(base)	;comme ca
+	exit			;la fin
+
+2$:	incb	qpds(base)	;fix it
+	error	<q.pds>
+
+qbad:	error	<q.reg>
+
+xbad:	error	<q.room>
+	.sbttl	command u (use q-reg)
+chu:	do	arg.7
+	do	findq		;find the old q
+	beq	2$		;not there
+	bpl	3$		;text
+	mov	cval(base),2(r2)	;put it in
+	exit			;and leave
+
+3$:	do	killq		;kill the old
+2$:	mov	#4,r2
+	tstmem	r2,xbad
+	mov	r2,r0
+	br	5$		;skip over
+
+4$:	movb	-(eoa),-(r0)
+5$:	cmp	eoa,bob(base)
+	bhi	4$
+	mov	r2,eoa
+	clr	-(r0)
+	mov	r0,boq(base)
+	add	#4,cptr
+	add	#4,bob(base)
+	mov	cval(base),-(r0)
+	movb	#-1,-(r0)
+	movb	-1(r1),-(r0)
+	exit
+
+	.sbttl	command g (get a q register)
+chg:	do	arg.5
+	do	findq		;find the q register
+	ble	qbad		;bad news
+	mov	cptr,boipos(base) ;save begin-of-insert
+	sub	bob(base),boipos(base)
+	tst	(r2)+		;skip name
+	mov	(r2)+,-(sp)	;get count
+	beq	7$
+	tstmem	@sp,gbad2
+	mov	@sp,r0
+	br	2$
+
+1$:	movb	-(eoa),-(r0)	;move in the text
+2$:	cmp	eoa,cptr	;done??
+	bhi	1$		;no
+	mov	r0,cptr		;new one
+3$:	movb	(r2)+,(eoa)+	;move it in
+	cmp	eoa,r0		;finished??
+	blo	3$		;no
+	mov	(sp)+,eoa	;set it up
+	exit			;and return
+
+7$:	tst	(sp)+
+	exit
+
+gbad2:	error	<g.room>
+	.sbttl	command m (macro a q)
+chm:	do	arg.5
+	do	findq		;find it
+	ble	qbad		;not alpha
+	pushr1
+	movb	qmode(base),-(sp)	;and mode flag
+	movb	@r2,qmode(base)	;reset it
+	do	setst
+	mov	cstart(base),r1
+	movb	itcnt(base),1(sp)	;save this thing too
+	clrb	itcnt(base)
+	do	cmdx		;go to it
+	cmpb	-(r1),#mesc
+	bne	mbad2		;no
+	movb	1(sp),itcnt(base)
+	movb	(sp)+,qmode(base)	;and fix
+	do	setst
+	popr1
+	exit			;and leave
+
+mbad2:	error	<m.return>	;bad return
+
+	.sbttl	command ] (pop q reg)
+chrbr:	do	arg.5		;no args
+	movb	qpds(base),r0	;get name
+	beq	1$		;none on stack
+	do	findq2		;find it
+	beq	1$		;lose again
+	do	findq		;find where to pop
+	beq	2$		;none
+	do	killq		;kill it
+2$:	movb	qpds(base),r0
+	do	findq2		;encore
+	beq	1$
+	movb	-1(r1),@r2	;change name
+	incb	qpds(base)
+	exit			;quit
+
+1$:	error	<q.pop>
+	.sbttl	command d (delete)
+
+chd:	do	arg.8
+	br	dele		;skip over	
+
+	.sbttl	command k (kill)
+
+chk:	do	arg.11
+
+dele:	cmp	r0,r2
+	bhis	6$
+	cmp	r0,cptr
+	bhis	3$
+	cmp	r2,cptr
+	blo	4$
+	mov	r0,cptr
+	br	3$
+
+4$:	sub	r2,cptr
+	add	r0,cptr
+	br	3$
+
+2$:	movb	(r2)+,(r0)+
+3$:	cmp	r2,eoa
+	blo	2$
+	mov	r0,eoa
+6$:	exit
+	.sbttl	command e (er, ew, ed, ey, ef, eb, ex, esb, esf, ecb, ecf)
+
+che:	do	arg.5
+	do	getchu
+	mov	#chetab,r2	;dispatch on cmd
+1$:	cmp	r0,(r2)+
+	beq	5$
+	tst	(r2)+
+	bne	1$
+	br	che3a
+
+5$:	tst	r0
+	beq	che3a
+	jmp	@(r2)
+
+che3a:	error	<e.error>
+
+	.sbttl	command er
+cher:	do	setrnm	;set up the  file name
+	prinit			;and open the file
+
+c1$:	clrb	fflg(base)		;start afresh
+	exit
+
+	.sbttl	command ew
+chew:	do	setfnm
+	ppinit			;open fil for output
+	exit
+
+	.sbttl	command ed (unlink)
+ched:	do	setfnm
+	do	delit
+	exit
+
+	.sbttl	command y
+chy:	mov	#yankms,r1
+	mov	#yanken,r2
+	tyerr
+	jmp	redo
+
+	.sbttl	command ey
+chey:	mov	bob(base),eoa
+	do	iputc
+	mov	bob(base),cptr	;reset pointer to beginning
+	exit
+
+	.sbttl	command ef
+chef:	clo
+	exit
+
+	.sbttl	command eb
+cheb:	do	setfnm		;set up file name
+	backt			;do the whole thing
+	br	c1$
+
+	.sbttl	command eg
+cheg:	movb	#1,exstat(base)
+	br	chex1
+
+	.sbttl	command ex
+chex:	clrb	exstat(base)
+chex1:	do	oldtty
+1$:	mov	bob(base),r0
+	mov	eoa,r2		;buffer limits
+	cmp	r0,r2		;any there?
+	beq	3$		;no
+	do	oput		;output it
+	mov	bob(base),eoa	;reset
+3$:	tstb	fflg(base)	;more?
+	bgt	2$		;no
+4$:	tstb	inpflg(base)	;input file?
+	beq	2$
+	do	iputc		;get more
+	br	1$
+2$:	clo			;close it
+	jmp	texit		;leave
+
+
+	.sbttl	command e_
+cheba:	jmp	chbas
+	.sbttl	command es (set flag)
+ches:	do	getchu
+	cmp	r0,#'b
+	bne	1$
+	incb	bakflg(base)
+	exit
+
+1$:	cmp	r0,#'c
+	bne	2$
+	incb	crsw(base)
+	exit
+
+2$:	cmp	r0,#'f		;<ff> display switch
+	bne	3$
+	bisb	#1,ffsw(base)
+	exit
+
+3$:	cmp	r0,#'u		;update switch
+	bne	4$
+	incb	udsw(base)
+	exit
+
+4$:	cmp	r0,#'e		;<ff> / eof flag
+	bne	5$
+	exit
+
+5$:	cmp	r0,#'a		;adds mode switch
+	bne	6$
+	movb	r0,addsw(base)
+	exit
+
+6$:	jmp	che3a
+
+	.sbttl	command ec (clear flag)
+chec:	do	getchu
+	cmp	r0,#'b
+	bne	1$
+	clrb	bakflg(base)
+	exit
+
+1$:	cmp	r0,#'c
+	bne	2$
+	clrb	crsw(base)
+	exit
+
+2$:	cmp	r0,#'f
+	bne	3$
+	clrb	ffsw(base)
+	exit
+
+3$:	cmp	r0,#'u
+	bne	4$
+	clrb	udsw(base)
+	exit
+
+4$:	cmp	r0,#'e		;form-feed flag
+	bne	5$
+	clrb	fflg(base)
+	exit
+
+5$:	cmp	r0,#'a		;adds mode switch
+	bne	6$
+	clrb	addsw(base)
+	exit
+
+6$:	jmp	che3a
+	.sbttl	command eq
+cheq:	jmp	quitx
+
+	.sbttl	command e!
+cheexp:	mov	#mesc,r0
+	tstb	atsw(base)
+	beq	1$
+	movb	(r1)+,r0
+1$:	mov	r1,-(sp)
+	do	sstrx
+	mov	r0,r1
+	mov	(sp)+,r0
+	mov	r1,-(sp)
+	do	calsh
+	mov	(sp)+,r1
+	cmpb	@r1,#mesc
+	beq	5$
+	inc	r1
+5$:	exit
+
+
+	.sbttl	command em
+chem:	mov	#mesc,r0
+	do	sstrx
+	mov	r1,-(sp)
+	mov	r0,-(sp)
+	do	macsiz		;returns size in r0
+	mov	(sp),r1
+	inc	r1
+	mov	r0,r2		;size
+	do	getch		;r0 has q-name
+	do	setq		;r2 pts to q-reg
+	do	getmac		;nread in r0
+	tst	(r2)+
+	add	(r2)+,r2
+	movb	#mesc,@r2
+	add	#4,sp
+	exit
+	.sbttl	chetab -- e command dispatch table
+chetab:	.word	'x
+	.word	chex
+	.word	'r
+	.word	cher
+	.word	'w
+	.word	chew
+	.word	'y
+	.word	chey
+	.word	'f
+	.word	chef
+	.word	'd
+	.word	ched
+	.word	'!
+	.word	cheexp
+	.word	'q
+	.word	cheq
+	.word	'g
+	.word	cheg
+	.word	'b
+	.word	cheb
+	.word	'm
+	.word	chem
+	.word	'_
+	.word	cheba
+	.word	's
+	.word	ches
+	.word	'c
+	.word	chec
+	.word	0
+	.word	0		;must have 2 zeros!
+	.sbttl	command p & pw (output current buffer and read next one.)
+
+chp:	movb	@r1,r0		;wheck for pw
+	do	getuc
+	cmpb	r0,#'w		;??
+	beq	4$		;yes
+	cmp	@base,#14	;two args?
+	beq	1$		;yes
+	do	arg.6		;get args
+2$:	mov	bob(base),r0	;start
+	mov	eoa,r2		;end
+	cmp	r0,r2		;nothing?
+	beq	3$		;yes
+	do	oput		;do it to it
+	mov	bob(base),cptr
+	mov	cptr,eoa
+3$:	tstb	inpflg(base)
+	beq	13$
+	do	iputc		;get next buffer
+	dec	cval(base)	;fin??
+	bgt	2$		;no
+13$:	exit			;done
+
+1$:	do	arg.10		;get range
+	do	oput		;zap it
+	exit			;and quit
+
+4$:	do	getch		;just checking
+	cmp	@base,#14	;two args?
+	beq	1$		;yes - same as p
+	do	arg.6		;get arg
+5$:	mov	bob(base),r0	;start
+	mov	eoa,r2		;end
+	cmp	r0,r2		;nothing?
+	beq	6$		;yup
+	do	oput		;zap it
+	dec	cval(base)	;done?
+	bgt	5$		;no
+6$:	exit
+	.sbttl	subr fchg -- replace searched string with that at r1
+	;return r0 = old r1 (pts to middle delimiter)
+	;return r1 at end of cmd (ptr to final delimiter)
+
+
+fchg:	mov	bompos(base),boipos(base) ;begin-of-insert = begin-of-match
+	movb	(r1)+,r0
+dchg:	do	sstrx
+	sub	r1,r0		;r0/# insert chars
+	sub	mchsiz(base),r0	;r0/ # chars to shift used to be schsiz (##psl)
+	mov	r0,-(sp)
+	blt	5$
+	beq	8$
+	mov	r0,r2
+	tstmem	r2,19$
+	mov	eoa,r0
+	mov	r2,eoa
+	br	3$
+4$:	movb	-(r0),-(r2)
+3$:	cmp	r0,cptr
+	bhi	4$
+	br	8$
+5$:	add	cptr,r0		;shift buf back
+	mov	cptr,r2
+	br	6$
+7$:	movb	(r2)+,(r0)+
+6$:	cmp	r2,eoa
+	blo	7$
+	mov	r0,eoa
+8$:	mov	r1,r0
+	dec	r0
+	mov	cptr,r2
+	add	(sp)+,r2
+	sub	mchsiz(base),cptr	;used to be schsiz (##psl)
+	br	9$
+10$:	movb	(r1)+,(cptr)+
+9$:	cmp	cptr,r2
+	blo	10$
+	done
+
+19$:	error	<i.room>
+	.sbttl	command f (fs, fd and fn)
+
+chf:	do	arg.4
+	do	getchu
+	cmp	r0,#'s
+	bne	chfd
+	.sbttl	command fs
+	do	scbf
+	bcs	chflos		;lost--skip over rest of cmd
+	br	2$
+1$:	do	scbfx
+	bcs	chflos
+2$:	dec	cval(base)
+	bgt	1$
+	do	fchg		;replace the nth occurence
+	br	chswin
+
+	.sbttl	command fd
+chfd:	cmp	r0,#'d
+	bne	chfn
+	do	scbf
+	bcs	chslose
+	br	2$
+1$:	do	scbfx
+	bcs	chslose
+2$:	dec	cval(base)
+	bgt	1$
+	movb	atsw(base),r0	;set delimiter
+	do	dchg		;and destroy!
+	br	chswin
+
+chflos:	inc	r1		;skip middle delimiter (fs & fn)
+	movb	atsw(base),r0
+	do	sstrx
+	mov	r0,r1
+	br	chslose
+
+chfn:	cmp	r0,#'n
+	bne	19$
+	do	scbf
+	bcs	5$
+2$:	do	fchg
+	dec	cval(base)
+	ble	chswin
+	mov	r0,r1
+	br	1$
+3$:	do	iputc
+1$:	do	scbfx
+	bcc	2$
+5$:	do	checkc
+	mov	bob(base),r0
+	mov	eoa,r2
+	cmp	r0,r2
+	beq	4$
+	do	oput
+	mov	bob(base),eoa
+	tstb	fflg(base)
+	ble	3$
+	br	chflos
+
+4$:	tstb	fflg(base)
+	ble	3$
+	br	chflos
+
+19$:	error	<f.command>
+	.sbttl	command s (search)
+
+chs:	do	arg.4
+	do	scbf
+	bcs	chslose
+2$:	dec	cval(base)
+	ble	chswin
+	do	scbfx
+	bcc	2$
+chslose:
+chswin:	movb	schsw(base),r0
+	tstb	colsw(base)
+	beq	2$
+	inc	r1
+	clrb	atsw(base)
+	clrb	colsw(base)
+	do	restor		;replace stuff saved by :
+	jmp	eval
+
+2$:	cmpb	@r1,#mesc
+	beq	3$
+	inc	r1
+3$:	bisb	itcnt(base),r0	;test for iter or success
+	exit	bne		;success
+	error	<search>
+	.sbttl	command n (no-nonsense search)
+
+chn:	do	arg.4
+	do	scbf
+	bcs	5$
+2$:	dec	cval(base)
+	bgt	1$
+	br	chswin
+
+3$:	do	iputc		;get next page
+1$:	do	scbfx
+	bcc	2$
+5$:	do	checkc
+	mov	bob(base),r0	;get start
+	mov	eoa,r2		;and end
+	cmp	r0,r2
+	beq	4$
+	do	oput		;put it
+	mov	bob(base),eoa	;reset
+	tstb	fflg(base)	;finished??
+	ble	3$		;nope
+	br	chslose
+
+4$:	tstb	fflg(base)
+	ble	3$
+	br	chslose
+
+	.sbttl	command e_
+chbas:	do	arg.4
+	do	scbf		;search buffer
+	bcs	3$
+2$:	dec	cval(base)	;finished?
+	ble	chswin
+1$:	do	scbfx
+	bcc	2$
+3$:	do	checkc
+	mov	bob(base),eoa	;reset
+	tstb	fflg(base)	;finished?
+	bgt	chslose		;yes
+	do	iputc
+	br	1$		;and continue
+	.sbttl	command tab (insert)
+
+chtab:	do	arg.5
+	cmpb	-(r1),#11
+	beq	chi1
+	mov	#11,cval(base)
+	br	chi3
+
+	.sbttl	command i (insert)
+
+chi:	tst	@base
+	beq	chi1
+	do	arg.7
+chi3:	mov	cptr,boipos(base) ;save begin-of-insert
+	sub	bob(base),boipos(base)
+	mov	#1,r2
+	tstmem	r2,bmv6
+	mov	eoa,r0		;get other pointer
+	mov	r2,eoa		;reset it
+	br	2$		;and skip
+
+1$:	movb	-(r0),-(r2)	;move the chars down
+2$:	cmp	r0,cptr		;finished?
+	bhi	1$		;no
+	movb	cval(base),(cptr)+	;move in the char
+	exit			;and go
+
+chi1:	mov	cptr,boipos(base) ;save begin-of-insert
+	sub	bob(base),boipos(base)
+	mov	#mesc,r0	;end of insert
+	tstb	atsw(base)
+	beq	7$
+	movb	(r1)+,r0
+7$:	do	sstrx		;find the delimiter.
+	sub	r1,r0
+	beq	6$
+	mov	r0,r2
+	tstmem	r2,bmv6
+	mov	eoa,r0
+	mov	r2,eoa
+	br	3$
+
+4$:	movb	-(r0),-(r2)
+3$:	cmp	r0,cptr
+	bhi	4$
+5$:	movb	(r1)+,(cptr)+
+	cmp	cptr,r2
+	blo	5$
+6$:	cmpb	@r1,#mesc	;can i try to execute it?
+	beq	20$		;yes
+	inc	r1		;skip delimiter
+20$:	exit
+
+bmv6:	error	<i.room>
+	.sbttl	command \   (number to string)
+
+chbs2:	do	arg.7		;exactly 1 arg
+	mov	cptr,boipos(base) ;save begin-of-insert
+	sub	bob(base),boipos(base)
+	mov	cval(base),r0	;get that arg
+	do	decoux		;get chars
+	movb	(sp)+,r2		;count
+	tstmem	r2,bmv6
+	mov	r2,r0	;save it
+	br	5$
+
+3$:	movb	-(eoa),-(r2)	;move down
+5$:	cmp	eoa,cptr
+	bhi	3$
+4$:	movb	(sp)+,(cptr)+
+	cmp	cptr,r2
+	blo	4$
+	mov	r0,eoa
+	exit
+	.sbttl	command left bracket (<)
+
+clb:	do	arg.1
+	bne	1$		;arg specified
+	neg	cval(base)	;set to -1
+1$:	mov	itter(base),-(sp)
+	mov	cval(base),itter(base)
+	beq	3$
+	incb	itcnt(base)
+5$:	pushr1
+	do	cmdx
+
+itpush=6
+
+	cmpb	-1(r1),#'>
+	bne	looper
+	dec	itter(base)
+	beq	4$
+	popr1
+	br	5$
+
+4$:	decb	itcnt(base)
+	tst	(sp)+
+	mov	(sp)+,itter(base)
+	exit
+
+3$:	mov	(sp)+,itter(base)
+	mov	#'>+<'<*400>,r0
+	do	mstrx
+	mov	r0,r1
+	inc	r1
+	exit
+
+looper:	error	<loop.end>
+
+	.sbttl	command right bracket (>)
+
+crb:	do	arg.5
+	done
+	.sbttl	command " (conditional "...')
+
+chdq:	do	arg.7
+	do	getchu
+	cmp	r0,#'g		;greater than zero
+	bne	2$
+	tst	cval(base)
+	exit	bgt
+
+11$:	mov	#''+<'"*400>,r0	;success!
+	do	mstrx
+	mov	r0,r1
+	exit
+
+2$:	cmp	r0,#'l		;less than zero
+	bne	3$
+	tst	cval(base)
+	exit	blt
+	br	11$
+
+3$:	cmp	r0,#'e		;equal to zero
+	bne	4$
+	tst	cval(base)
+	exit	beq
+	br	11$
+
+4$:	cmp	r0,#'n		;non-equal to zero
+	bne	5$
+	tst	cval(base)
+	exit	bne
+	br	11$
+
+5$:	cmp	r0,#'c		;char (non-separator)
+	bne	6$
+	mov	cval(base),r0
+	do	chksep
+	exit	bcc
+	br	11$
+
+6$:	error	<dq.error>
+	.sbttl	command ; 
+
+csc:	do	arg.1
+	beq	1$
+	tst	cval(base)
+	br	3$
+
+1$:	tstb	schsw(base)
+3$:	exit	bne
+	tstb	itcnt(base)
+	beq	2$
+	mov	#'>+<'<*400>,r0
+	do	mstrx
+	mov	#1,itter(base)
+	mov	r0,r1
+	exit
+
+2$:	error	<sc.bad>
+	.sbttl	command !
+
+chexpl:	movb	#'!,r0
+	do	sstrx
+	mov	r0,r1
+	inc	r1
+	exit
+
+	.sbttl	command o (branch)
+
+cho:	do	arg.1
+	bne	1$
+	clr	cval(base)
+1$:	mov	r1,r0
+	mov	cval(base),r1
+	cmpb	r1,itcnt(base)
+	bhi	2$
+	mul	#itpush,r1
+	add	r1,sp
+	cmp	sp,stksv(base)
+	bhis	3$
+	mov	r0,r1
+	mov	r0,-(sp)
+	mov	#mesc,r0
+	do	sstrx
+	mov	cstart(base),r1
+8$:	mov	#'!,r0
+5$:	cmp	r1,cend(base)
+	bhis	2$
+	cmpb	(r1)+,r0
+	bne	5$
+	do	sstrx
+	mov	@sp,r2
+6$:	cmp	r1,r0
+	bhis	7$
+	cmpb	@r2,#mesc
+	beq	9$
+	cmpb	(r1)+,(r2)+
+	beq	6$
+9$:	inc	r0
+	mov	r0,r1
+	br	8$
+
+7$:	cmpb	@r2,#mesc
+	bne	9$
+	inc	r0
+	mov	r0,r1
+	tst	(sp)+
+	exit
+
+2$:	error	<o.error>
+
+3$:	error	<system.error>
+	.sbttl	command ^w type a string
+
+ctw:	do	arg.5
+	mov	#'w-'@,r0
+	do	sstrx
+	mov	r0,r2
+	typer
+	inc	r1
+	exit
+
+	.sbttl	command ^l (echo a form feed)
+
+ctl:	do	arg.5
+	mov	#214,r0
+	tyo
+	exit
+
+	.sbttl	command = (type out value)
+
+ceq:	do	arg.7
+	mov	cval(base),r0
+	cmpb	@r1,#'=
+	beq	1$
+	decout
+	crlf
+	exit
+
+1$:	inc	r1
+	octout
+	crlf
+	exit
+
+	.sbttl	command ^g (ding-dong)
+
+ctg:	do	getchu
+	cmpb	r0,#mesc
+	bne	1$
+	do	getchu
+	cmpb	r0,#mesc
+	bne	1$
+	jmp	quitx
+
+1$:	error	<ctg>
+
+	.sbttl	command ?
+chques:	do	arg.5
+	comb	debsw(base)
+	exit
+	.sbttl	setq -- takes name in r0, size in r2
+;returns with r2 pointing to an allocated q-reg
+
+setq:	mov	r0,-(sp)
+	mov	r2,-(sp)
+	mov	r2,-(sp)
+	do	findq3		;get the q-reg
+	beq	6$		;not there
+	bmi	10$		;numeric
+	cmp	2(r2),@sp	;larger?
+	bhis	7$
+	sub	2(r2),@sp	;get difference
+	br	10$		;skip over
+
+6$:	clr	r2		;use it as a flag
+10$:	add	#12,@sp
+	tstmem	@sp,setqbd
+7$:	mov	r2,(sp)+	;get rid of junk and test r2
+	beq	11$		;skip if non-existent
+	do	killq		;kill the old
+11$:	mov	@sp,r2		;restore
+	add	#6,r2		;header and trailer
+	bic	#1,r2		;words
+	mov	r2,-(sp)	;save it
+	add	eoa,r2		;get end
+	mov	r2,-(sp)	;save it
+	br	3$
+
+21$:	movb	-(eoa),-(r2)	;move down
+3$:	cmp	eoa,bob(base)	;done??
+	bhi	21$		;no
+	mov	(sp)+,eoa	;fix it
+	mov	r2,bob(base)
+	clr	-(r2)		;fix boq word
+	mov	r2,boq(base)
+	add	@sp,cptr
+	sub	(sp)+,r2	;address to put q
+	mov	(sp)+,2(r2)	;size
+	movb	(sp),(r2)	;name
+	movb	(sp)+,1(r2)	;nonzero positive number
+	done
+
+
+setqbd:	error	<q.room>
+	.sbttl	findq -- find a q reg
+findq:	do	getch
+findq3:	do	tstalf		;alpha?
+	bcs	3$
+findq2=.			;will this work??
+6$:	mov	tbufx(base),r2
+	mov	r0,@boq(base)	;get q register name to stop search
+7$:	cmpb	r0,@r2		;is this it?
+	beq	4$		;yes
+	tst	(r2)+		;numeric?
+	bmi	5$		;yup
+	add	(r2)+,r2	;alpha - add count
+	bic	#1,r2		;make words
+5$:	tst	(r2)+		;go to next
+	br	7$		;continue
+
+4$:	cmp	boq(base),r2	;really found?
+	beq	20$		;no
+	tst	@r2
+20$:	done
+
+
+3$:	cmp	r0,#chbomp	;does it want begin of match?
+	bne	10$
+	mov	#bompos-2,r2	;point near it
+	br	15$
+10$:	cmp	r0,#chblsp	;maybe before-last-search?
+	bne	11$
+	mov	#blspos-2,r2
+	br	15$
+11$:	cmp	r0,#chboip	;or before-last-insert?
+	bne	19$
+	mov	#boipos-2,r2
+15$:	add	base,r2
+	sen			;make sure bpl doesn't
+	done
+19$:	error	<q.reg>		;bad news
+
+killq:	mov	#4,r0		;count for numeric
+	tst	@r2		;is it numeric??
+	bmi	1$		;yes
+	add	2(r2),r0	;get count
+	bic	#1,r0		;make words
+	tst	(r0)+		;skip to end
+1$:	sub	r0,cptr		;reset all the pointers
+	sub	r0,bob(base)
+	sub	r0,boq(base)
+	sub	r0,eoa
+	add	r2,r0		;address to move from
+2$:	mov	(r0)+,(r2)+	;move things up
+	cmp	r2,eoa		;done??
+	blo	2$		;nope
+	tstb	qmode(base)
+	beq	3$
+	pushr1
+	do	setst
+	popr1
+	cmp	r1,cend(base)	;kill me?
+	bhis	qk
+3$:	done
+
+qk:	error	<q.killed>
+setst:	movb	qmode(base),r0
+	beq	1$
+	do	findq2
+	ble	qk
+	add	#4,r2
+	mov	r2,cstart(base)
+	add	-2(r2),r2
+	inc	r2
+	mov	r2,cend(base)
+	done
+
+1$:	mov	limbf(base),cstart(base)
+	mov	enbf(base),cend(base)
+	done
+
+getmex:	mov	r2,-(sp)
+	pushr1
+	mov	enbf(base),r0
+	do	getmem
+	beq	1$
+	mov	r0,-(sp)
+	mov	enbf(base),r1
+	add	r1,r0
+	mov	r0,enbf(base)
+	mov	r0,enbf.4(base)
+	sub	#6,enbf.4(base)
+	br	2$
+
+3$:	movb	-(r1),-(r0)
+2$:	cmp	r1,limbf(base)
+	bhi	3$
+	mov	r0,limbf(base)
+	do	setst
+	mov	(sp)+,r0
+1$:	popr1
+	mov	(sp)+,r2
+	tst	r0
+	done
+	.sbttl	sstrx, mstrx -- search for char in string
+;r0=char  r1=ptr  r2=end
+sstrx:	mov	cend(base),r2
+sstr:	mov	r1,-(sp)
+sstr2:	cmp	r1,r2
+	bhis	sstr1
+	cmpb	r0,(r1)+
+	bne	sstr2
+sstr3:	mov	r1,r0
+	dec	r0
+	mov	(sp)+,r1
+	done
+
+sstr1:	mov	r0,-(sp)
+sstr1x:	mov	#'[,r0
+	tyoer
+	mov	(sp)+,r0
+	tyoer
+	mov	#'],r0
+	tyoer
+	error	<delimiter>
+
+mstrx:	mov	cend(base),r2
+	mov	r1,-(sp)
+	clr	-(sp)
+	mov	r0,-(sp)
+	swab	r0
+1$:	cmp	r1,r2
+	bhis	sstr1x
+	cmpb	r0,@r1
+	bne	3$
+	inc	2(sp)
+	inc	r1
+	br	1$
+
+3$:	cmpb	@sp,(r1)+
+	bne	1$
+	dec	2(sp)
+	bge	1$
+	add	#4,sp
+	br	sstr3
+	.sbttl	getchu, getch
+getchu:	do	getch
+	jmp	getuc
+
+getch:	cmp	r1,cend(base)
+	bhis	1$
+	movb	(r1)+,r0
+	tstb	debsw(base)
+	beq	2$
+	tyo
+2$:	done
+
+1$:	error	<cmd.end>
+
+chksep:	cmpb	r0,#'$		;does r0 hold a separator?
+	beq	2$
+	cmpb	r0,#'.
+	beq	2$
+	cmpb	r0,#'0
+	blo	1$
+	cmpb	r0,#'9
+	blos	2$
+	cmpb	r0,#'a
+	blo	1$
+	cmpb	r0,#'z
+	blos	2$
+	cmpb	r0,#'a+40
+	blo	1$
+	cmpb	r0,#'z+40
+	blos	2$
+1$:	sec			;r0 holds a separator
+	done
+
+2$:	clc			;r0 does not hold a sep.
+	done
+
+clrpds:	tstb	qpds(base)	;clear q-reg push down stack
+	beq	1$
+	movb	qpds(base),r0
+	incb	qpds(base)
+	do	findq2
+	beq	clrpds
+	do	killq
+	br	clrpds
+
+1$:	done
+	.sbttl	iputc, oput -- get next page, write this page
+iputc:	tstb	fflg(base)
+	bgt	11$
+	beq	17$
+	movb	#14,(eoa)+	;fflg was on, insert a <ff>
+17$:	clrb	fflg(base)
+	tstb	inpflg(base)
+	beq	4$
+	mov	limbf(base),r2
+	sub	eoa,r2
+	cmp	r2,#3000.
+	bhi	2$
+	do	getmex
+	add	r0,r2
+	cmp	r2,#200
+	blo	1$
+2$:	pri
+	bcs	7$
+	cmp	r0,#14
+	beq	3$
+	movb	r0,(eoa)+
+	do	checkc
+	dec	r2
+	cmp	r2,#400
+	bhis	2$
+	cmp	r0,#12
+	beq	11$
+	cmp	r2,#200
+	bhis	2$
+11$:	done
+
+3$:	decb	fflg(base)
+	done
+4$:	error	<no.input>
+
+1$:	error	<input.room>
+
+7$:	incb	fflg(base)		;eof flag
+	done
+
+oput:	tstb	outflg(base)	;any output file
+	bne	1$		;yes
+	error	<no.output>
+
+1$:	mov	r1,-(sp)
+	mov	r0,r1
+	do	ppol
+	mov	(sp)+,r1
+	done
+	.sbttl	scbf, scbfx -- searchers
+;search (initialization)
+scbf:	mov	cptr,blspos(base) ;save before-last-search pos
+	sub	bob(base),blspos(base)
+	mov	#mesc,r0
+	tstb	atsw(base)
+	beq	9$
+	movb	(r1)+,r0
+9$:	movb	r0,atsw(base)
+	do	sstrx		;be sure there is a terminator
+	sub	r1,r0		;r0 pointed to delim, is now length
+	beq	scbfx		;use old search buf & siz
+	cmp	r0,#51.
+	ble	11$
+	error	<srh.too.big>
+
+11$:	mov	r0,schsiz(base)
+	mov	base,r2
+	add	#schbuf,r2	;r2 points to search string buffer
+12$:	movb	(r1)+,(r2)+
+	sob	r0,12$
+	clrb	(r2)		;null terminated
+				;r1 pts to delimiter in cmd string
+;search (the real thing)
+scbfx:	mov	r1,-(sp)
+	mov	base,r1
+	add	#schbuf,r1	;r1 points to search string
+	movb	#-1,schsw(base)	;initialize to success
+9$:	mov	r1,r0
+	mov	cptr,r2
+1$:	tstb	@r0		;end of search string?
+	beq	12$		;yes, a match
+	cmp	r2,eoa		;end of text buffer?
+	bhis	13$
+	cmpb	@r0,#'e-'@	;special char? (^e, ^n, ^p, ^q)
+	beq	6$		; ^e
+	cmpb	@r0,#'n-'@
+	beq	4$		; ^n
+	cmpb	@r0,#'p-'@
+	beq	8$		; ^p
+	cmpb	@r0,#'q-'@
+	beq	5$		; ^q (used to be ^a)
+
+2$:	cmpb	(r0)+,(r2)+	;nothing special, just compare
+	beq	1$
+3$:	inc	cptr		;no, not a match
+	br	9$
+
+6$:	inc	r0		;^e -- accept next char literally
+	br	2$
+
+5$:	cmpb	(r0)+,(r2)+	;^q (^a) -- match any char
+	br	1$
+
+4$:	inc	r0		;^nx -- match anything but x
+	tstb	(r0)
+	beq	7$
+	cmpb	(r0)+,(r2)+
+	bne	1$
+	br	3$
+7$:	error	<ctn.error>
+
+8$:	mov	r0,-(sp)	;^p -- match any separator
+	movb	(r2)+,r0
+	do	chksep
+	mov	(sp)+,r0
+	inc	r0
+	bcs	1$
+	br	3$
+
+12$:	mov	cptr,bompos(base) ;success! save begin of match (##psl)
+	sub	bob(base),bompos(base) ;(##psl)
+	mov	r2,mchsiz(base)	;save size of match (##psl)
+	sub	cptr,mchsiz(base) ;(##psl)
+	mov	r2,cptr
+	mov	(sp)+,r1
+	clc
+	done
+
+13$:	mov	bob(base),cptr	;failure
+	clrb	schsw(base)
+	mov	(sp)+,r1
+	sec
+	done
+eatchr:		;read till a $$ is typed
+	clr	r1
+1$:	tyi
+	cmp	r0,#mesc
+	bne	eatchr
+	tst	r1
+	bne	2$
+	inc	r1
+	br	1$
+2$:	done
+
+tstalf:			;check for alphanumeric, bcc if so
+	cmp	r0,#'a
+	bhis	1$
+	cmp	r0,#'9
+	bhi	3$
+	cmp	r0,#'0
+	blo	3$
+	br	6$
+1$:	cmp	r0,#'z
+	blos	6$
+	cmp	r0,#'a+40
+	blo	3$
+	cmp	r0,#'z+40
+	blos	6$
+3$:	sec			;not alphanum
+	done
+6$:	clc			;alphanumeric
+	done
+
+checkc:	tstb	gosw(base)	;was ^c hit?
+	bne	checkz
+	done
+
+checkz:	clrb	linflg
+	mov	stksv(base),sp
+	mov	eoa,r1
+	jmp	bakg
+	.sbttl	arg.xx -- arg test routines
+;type one argument - c, r, d
+
+arg.8:	do	arg.2
+lfb1:	mov	r0,r2		;dup it
+	cmp	r0,cptr		;before or after??
+	bhi	11$		;before
+	mov	cptr,r2		;fix
+	done			;and quit
+
+11$:	mov	cptr,r0		;lower one
+	done			;fini
+
+;type two argument - l
+
+arg.9:	do	arg.3
+	br	lfb1
+
+;type four arg - t, k,x, ...
+
+arg.11:	tstb	colsw(base)	; :t, :k, or :x?
+	beq	10$
+	movb	costat(base),@base
+	clrb	colsw(base)
+	incb	cmodsw(base)
+
+10$:	cmp	@base,#14
+	bne	arg.9		;line oriented
+				;drop for two args
+
+;type three arg - x,y
+
+arg.10:	tstb	colsw(base)
+	bne	colbad
+	mov	cval(base),r2
+	mov	cval1(base),r0
+	add	bob(base),r0
+	cmp	r0,eoa
+	bhi	fxarg1
+	add	bob(base),r2
+	cmp	r2,r0
+	blo	fxarg1
+	cmp	r2,eoa
+	blos	fxarg2
+	mov	eoa,r2
+fxarg2:	done
+
+fxarg1:	error	<exp>
+
+;type 5 arg - no arg - ex, ...
+
+arg.5:	tstb	colsw(base)
+	bne	colbad
+	tst	@base
+	beq	1$		;good
+	error	<arg5>
+
+1$:	done
+;type 6 arg - 1 or none
+
+arg.6:	tstb	colsw(base)
+	bne	colbad
+	bit	#13,@base
+	beq	1$
+	error	<arg6>
+
+1$:	done
+
+colbad:	error	<colon.error>
+
+;type seven arg - exactly one
+
+arg.7:	tstb	colsw(base)
+	bne	colbad
+	cmp	@base,#4	;is it?
+	beq	1$		;yup
+	error	<arg7>
+
+1$:	done
+
+;type 8 arg - 0 or 1 and set codes eq for 0 ne for 1
+
+arg.1:	tstb	colsw(base)
+	bne	colbad
+	bit	@base,#13
+	beq	1$
+	error	<arg1>
+
+1$:	tst	@base
+	done
+
+;type 9
+
+arg.2:	tstb	colsw(base)
+	bne	colbad
+	cmp	@base,#4
+	blos	18$		;good
+	error	<arg2>
+
+18$:	mov	cval(base),r0	;get arg
+	add	cptr,r0	;make real addr
+	cmp	r0,eoa		;too far?
+	blos	1$		;no
+	mov	eoa,r0		;fix it
+	done
+
+1$:	cmp	r0,bob(base)	;before buffer?
+	bhis	2$		;good
+	mov	bob(base),r0	;fix it
+2$:	done
+;type 10
+
+arg.3:	tstb	colsw(base)
+	bne	colbad
+	mov	cval(base),r2	;set up arg
+	mov	cptr,r0
+	cmp	@base,#4
+	blos	$7
+	error	<arg3>
+
+$7:	beq	lfq
+	tst	@base
+	beq	lff
+lfb:	cmp	r0,bob(base)
+	blos	lff1
+	cmpb	-(r0),#12
+	bne	lfb
+	inc	r2
+	ble	lfb
+	inc	r0
+lff1:	done
+
+lfq:	tst	r2
+	ble	lfb
+lff:	cmp	r0,eoa
+	bhis	lff1
+	cmpb	(r0)+,#12
+	bne	lff
+	dec	r2
+	bgt	lff
+	done
+
+arg.4:	bit	#13,@base
+	beq	1$
+	error	<arg4>
+
+1$:	done
+
+	.nlist	bex
+	.enabl	lc		;next few lines are mostly upper-case
+HELLO:	.ASCII	/Case Unix Teco 12.031078/<12>
+HELLN:
+	.dsabl	lc		;end of upper-case
+watch:	.ascii	<12>/nearing end of buffer!!/<12>
+watchn:
+filmsg:	.ascii	/file created/<12>
+filmen:
+qmsg:	.ascii	/in macro  q-reg - /
+qmen:
+yankms:	.ascii	/?the "y" command has been changed to "ey"/<12>
+yanken:
+	.even
+	.list	bex
+	.sbttl	dispatch table
+
+dtab:
+				;control chars.
+	.word	none	;null
+	.word	none	;^a
+	.word	none	;^b
+	.word	none	;^c
+	.word	none	;^d
+	.word	cte	;^e	form feed & eof flag
+	.word	none	;^f
+	.word	ctg	;^g	<bel>
+	.word	none	;^h
+	.word	chtab	;^i <tab>
+	.word	null	;^j <lf>
+	.word	none	;^k
+	.word	ctl	;^l <ff>
+	.word	null	;^m <cr>
+	.word	none	;^n
+	.word	none	;^o
+	.word	none	;^p
+	.word	none	;^q
+	.word	none	;^r
+	.word	none	;^s
+	.word	ctt	;^t	char value input
+	.word	none	;^u
+	.word	none	;^v
+	.word	ctw	;^w	message delimiters
+	.word	none	;^x
+	.word	none	;^y
+	.word	none	;^z
+				;funny ctrl & specials
+	.word	cmesc	;<esc>
+	.word	none	;^\
+	.word	none	;^]
+	.word	ctup	;^^	dec char value (^^a= 97)
+	.word	none	;^_
+	.word	null	;<sp>
+	.word	chexpl	; !
+	.word	chdq	; "
+	.word	chor	; #
+	.word	none	; $
+	.word	chper	; %
+	.word	chand	; &
+	.word	null	; '
+	.word	chlp	; (
+	.word	chrp	; )
+	.word	chmul	; *
+	.word	chpl	; +
+	.word	chcom	; ,
+	.word	chmi	; -
+	.word	chpd	; .
+	.word	chdiv	; /
+.rept	10.
+	.word	chnm	; 0-9
+.endr
+				;more specials
+	.word	chcol	; :
+	.word	csc	; ;
+	.word	clb	; <
+	.word	ceq	; =
+	.word	crb	; >
+	.word	chques	; ?
+	.word	chat	; @
+				;alphabetics
+	.word	cha	; a
+	.word	chb	; b
+	.word	chc	; c
+	.word	chd	; d
+	.word	che	; e
+	.word	chf	; f
+	.word	chg	; g
+	.word	chh	; h
+	.word	chi	; i
+	.word	chj	; j
+	.word	chk	; k
+	.word	chl	; l
+	.word	chm	; m
+	.word	chn	; n
+	.word	cho	; o
+	.word	chp	; p
+	.word	chq	; q
+	.word	chr	; r
+	.word	chs	; s
+	.word	cht	; t
+	.word	chu	; u
+	.word	chv	; v
+	.word	none	; w
+	.word	chx	; x
+	.word	chy	; y
+	.word	chz	; z
+	.word	chlbr	; [
+	.word	chbs	; \
+	.word	chrbr	; ]
+	.word	none	; ^
+	.word	chba	; _
+	.sbttl	error message macros generated during assembly
+	.nlist bex
+	hiseg	errsec
+ee$cnx=0
+	.rept	ee$cnt
+ee$cnx=ee$cnx+1
+	.irp	x,<\ee$cnx>
+	e$'x
+	.endm
+	.endm
+
+enderr:
+
+	loseg	usrsp
+
+datasp:
+	.end

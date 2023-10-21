@@ -1,0 +1,489 @@
+From uucp Sun Mar 15 22:18:54 1987 EDT remote from lids
+Received: by lids on Sun Mar 15 22:18:54 1987 EDT
+>From uucp  Tue Apr  7 20:28:41 1987 remote from mit-eddie
+Received: by EDDIE.MIT.EDU with UUCP with smail2.3 with sendmail-5.31/4.7 id <AA05017@EDDIE.MIT.EDU>; Tue, 7 Apr 87 20:28:30 EDT
+Received: by lids on Sun Mar 15 22:14:42 1987 EDT
+Date: 7 Apr 87 19:28:17 EST (Tue)
+From: uucp@EDDIE.MIT.EDU
+Message-Id: <8704071928.AA05012@EDDIE.MIT.EDU>
+To: lids!lamb
+
+Hello there.
+From uucp Sun Mar 15 22:51:39 1987 EDT remote from lids
+Received: by lids on Sun Mar 15 22:51:39 1987 EDT
+>From uucp  Tue Apr  7 20:55:47 1987 remote from mit-eddie
+Received: by EDDIE.MIT.EDU with UUCP with smail2.3 with sendmail-5.31/4.7 id <AA05699@EDDIE.MIT.EDU>; Tue, 7 Apr 87 20:55:33 EDT
+Received: by lids on Sun Mar 15 22:36:58 1987 EDT
+Date: 7 Apr 87 19:55:25 EST (Tue)
+From: uucp@EDDIE.MIT.EDU
+Message-Id: <8704071955.AA05697@EDDIE.MIT.EDU>
+To: lids!uucp
+
+>From uucp  Tue Apr  7 20:45:40 1987 remote from mit-eddie
+Received: by EDDIE.MIT.EDU with UUCP with smail2.3 with sendmail-5.31/4.7 id <AA05435@EDDIE.MIT.EDU>; Tue, 7 Apr 87 20:44:59 EDT
+Received: by lids on Sun Mar 15 22:26:58 1987 EDT
+Received: by rutgers.UUCP (5.51/UUCP.1.01x) on Sat, 14 Mar 87 12:53:36 EST; 
+Date: Sat, 14 Mar 87 12:53:36 EST
+From: UUCP <rutgers!uucp@EDDIE.MIT.EDU>
+Subject: jeez
+Message-Id: <8704071944.AA05432@EDDIE.MIT.EDU>
+To: lids!mit-eddie!lids!uucp
+
+Hello there
+#include "dcp.h"
+#include "dcp0.h"
+
+/*<FF>*/
+/* usage dcp (master/slave(D)) (debug level 0=none(D)) (system name(MYNAME))*/
+/* (console device)                          */
+main(argc,argv)
+int argc;
+char *argv[];
+{
+int ftmp;
+char line[132];
+
+flog=creat(SYSLOG,0775);
+close(flog); flog=open(SYSLOG,2);
+
+remote=TRUE;
+debug=3;        
+fp = -1;
+fw = -1;
+
+ftmp=open(USERFILE,0);
+getline(ftmp,line);
+sscanf(line,"%s %s %s",myname,username);
+getline(ftmp,line);
+sscanf(line,"%s %s",tty,speed);
+strcpy(spooldir,".");  /* default spooldir is current dir */
+close(ftmp);
+
+if(argc > 1 && strcmp(argv[1],"master") == 0) remote=FALSE;
+if(argc > 2) sscanf(argv[2],"%d",&debug);
+if(argc > 3) strcpy(myname,argv[3]);
+if(argc > 4) strcpy(tty,argv[4]);
+
+if(! remote) 
+{
+if((fsys=open(SYSTEMS,0)) ==-1) return(FALSE);
+state='I';
+while(TRUE)
+{
+if(debug>0) printmsg("Mstate = %c",state);
+switch(state)
+{
+case 'I': state=getsystem();    break;
+case 'S': state=callup();       break;
+case 'P': state=startup();      break;
+case 'D': state=master();       break;
+case 'Y': state=sysend();       break;
+case 'G': state='I';            break;
+}
+if(state=='A') break;
+}
+close(fsys);
+}
+else
+{
+if(openline(tty,speed)==-1) return(FALSE);
+state='L';
+while(TRUE)
+{
+if(debug>0) printmsg("Sstate = %c",state);
+switch(state)
+{
+case 'L':state=login();     break;
+case 'I':state=startup();   break;
+case 'R':state=slave();     break;
+case 'Y':state=sysend();    break;
+}
+if(state=='A') break;
+}
+closeline();
+}
+
+if(dcxqt()) if(debug) printmsg("ERROR in DCXQT");
+	/* scan and process any recieved files */
+
+
+close(flog);
+}
+
+/*<FF>*/
+/*
+**
+**
+**master
+**
+**
+*/
+master()
+{
+state='I';
+while(TRUE)
+{
+if(debug>1) printmsg("Top level state (master mode) %c",state);
+switch(state)
+{
+case 'I':state=sinit();      break;
+case 'B':state=scandir();    break;
+case 'S':state=send();       break;
+case 'Q':state=sbreak();     break;
+case 'G':state=receive();    break;
+case 'C':state='Y';          break;
+case 'Y':state=endp();       break;
+case 'P':return('Y');
+case 'A':return('A');
+default:return('A');
+}
+}
+}
+
+/*<FF>*/
+/*
+**
+**
+**slave
+**
+**
+*/
+slave()
+{
+state='I';
+while(TRUE)
+{
+if(debug>1) printmsg("Top level state (slave mode) %c",state);
+switch(state)
+{
+case 'I':state=rinit();      break;
+case 'F':state=receive();    break;
+case 'C':state=schkdir();    break;
+case 'T':state='B';          break;
+case 'B':state=scandir();    break;
+case 'S':state=send();       break;
+case 'Q':state=sbreak();     break;
+case 'G':return('Y');
+case 'Y':state=endp();       break;
+case 'P':return('Y');
+case 'A':return('A');
+default:return('A');
+}
+}
+}
+
+/*<FF>*/
+/*
+ *  r e c e i v e
+ *
+ *  This is the state table switcher for receiving files.
+ */
+
+receive()
+{
+
+state = 'F';/* Receive-Init is the start state */
+
+while(TRUE)
+{
+if (debug > 2) printmsg(" receive state: %c",state);
+switch(state)/* Do until done */
+{
+case 'F':state = rfile(); break; /* Receive-File */
+case 'D':state = rdata(); break; /* Receive-Data */
+case 'C':return('C');/* Complete state */
+case 'A':return('Y');/* "Abort" state */
+default:return('Y');
+}
+}
+}
+
+/*<FF>*/
+/*
+ *  s e n d 
+ *
+ *  Sendsw is the state table switcher for sending files.  It loops until
+ *  either it finishes, or an error is encountered.  The routines called
+ *  by sendsw are responsible for changing the state.
+ *
+ */
+send()
+{
+fp = -1;                /* reset file getter/opener */
+state = 'F';/* Send initiate is the start state */
+while(TRUE)/* Do this as long as necessary */
+{
+if (debug > 2) printmsg("send state: %c",state);
+switch(state)
+{
+case 'F':state = sfile();  break; /* Send-File */
+case 'D':state = sdata();  break; /* Send-Data */
+case 'Z':state = seof();  break; /* Send-End-of-File */
+case 'B':return ('B'); /* Complete */
+case 'A':return ('Y'); /* "Abort" */
+default:return ('Y'); /* Unknown, fail */
+}
+}
+}
+
+/*<FF>*/
+/*
+ *
+ *      login (for slave in PC mode)
+ *
+*/
+login()
+{
+char logmsg[132];
+#ifdef PC
+msgtime= 2*MSGTIME;
+lretry:
+wmsg("Username:",0);
+rmsg(logmsg,0);
+if(debug > 0) printmsg("Username = %s",logmsg);
+wmsg("Password:",0);
+rmsg(logmsg,0);
+if(debug > 0) printmsg("Password = %s",logmsg);
+if(strcmp(logmsg,"uucp") != 0) goto lretry;
+#endif
+return('I');
+}
+From uucp Mon Mar 16 03:20:48 1987 EDT remote from lids
+Received: by lids on Mon Mar 16 03:20:48 1987 EDT
+>From uucp  Tue Apr  7 21:03:05 1987 remote from mit-eddie
+Received: by EDDIE.MIT.EDU with UUCP with smail2.3 with sendmail-5.31/4.7 id <AA05879@EDDIE.MIT.EDU>; Tue, 7 Apr 87 21:02:42 EDT
+Received: by lids on Sun Mar 15 22:43:44 1987 EDT
+Date: 7 Apr 87 20:02:39 EST (Tue)
+From: uucp@EDDIE.MIT.EDU
+Message-Id: <8704072002.AA05877@EDDIE.MIT.EDU>
+To: lids!uucp
+
+>From uucp  Tue Apr  7 20:49:16 1987 remote from mit-eddie
+Received: by EDDIE.MIT.EDU with UUCP with smail2.3 with sendmail-5.31/4.7 id <AA05507@EDDIE.MIT.EDU>; Tue, 7 Apr 87 20:48:44 EDT
+Received: by lids on Sun Mar 15 22:34:18 1987 EDT
+Received: by rutgers.UUCP (5.51/UUCP.1.01x) on Sat, 14 Mar 87 12:53:36 EST; 
+Date: Sat, 14 Mar 87 12:53:36 EST
+From: UUCP <rutgers!uucp@EDDIE.MIT.EDU>
+Subject: jeez
+Message-Id: <8704071948.AA05505@EDDIE.MIT.EDU>
+To: lids!mit-eddie!lids!uucp
+
+Hello there
+#include "dcp.h"
+#include "dcp0.h"
+
+/*<FF>*/
+/* usage dcp (master/slave(D)) (debug level 0=none(D)) (system name(MYNAME))*/
+/* (console device)                          */
+main(argc,argv)
+int argc;
+char *argv[];
+{
+int ftmp;
+char line[132];
+
+flog=creat(SYSLOG,0775);
+close(flog); flog=open(SYSLOG,2);
+
+remote=TRUE;
+debug=3;        
+fp = -1;
+fw = -1;
+
+ftmp=open(USERFILE,0);
+getline(ftmp,line);
+sscanf(line,"%s %s %s",myname,username);
+getline(ftmp,line);
+sscanf(line,"%s %s",tty,speed);
+strcpy(spooldir,".");  /* default spooldir is current dir */
+close(ftmp);
+
+if(argc > 1 && strcmp(argv[1],"master") == 0) remote=FALSE;
+if(argc > 2) sscanf(argv[2],"%d",&debug);
+if(argc > 3) strcpy(myname,argv[3]);
+if(argc > 4) strcpy(tty,argv[4]);
+
+if(! remote) 
+{
+if((fsys=open(SYSTEMS,0)) ==-1) return(FALSE);
+state='I';
+while(TRUE)
+{
+if(debug>0) printmsg("Mstate = %c",state);
+switch(state)
+{
+case 'I': state=getsystem();    break;
+case 'S': state=callup();       break;
+case 'P': state=startup();      break;
+case 'D': state=master();       break;
+case 'Y': state=sysend();       break;
+case 'G': state='I';            break;
+}
+if(state=='A') break;
+}
+close(fsys);
+}
+else
+{
+if(openline(tty,speed)==-1) return(FALSE);
+state='L';
+while(TRUE)
+{
+if(debug>0) printmsg("Sstate = %c",state);
+switch(state)
+{
+case 'L':state=login();     break;
+case 'I':state=startup();   break;
+case 'R':state=slave();     break;
+case 'Y':state=sysend();    break;
+}
+if(state=='A') break;
+}
+closeline();
+}
+
+if(dcxqt()) if(debug) printmsg("ERROR in DCXQT");
+	/* scan and process any recieved files */
+
+
+close(flog);
+}
+
+/*<FF>*/
+/*
+**
+**
+**master
+**
+**
+*/
+master()
+{
+state='I';
+while(TRUE)
+{
+if(debug>1) printmsg("Top level state (master mode) %c",state);
+switch(state)
+{
+case 'I':state=sinit();      break;
+case 'B':state=scandir();    break;
+case 'S':state=send();       break;
+case 'Q':state=sbreak();     break;
+case 'G':state=receive();    break;
+case 'C':state='Y';          break;
+case 'Y':state=endp();       break;
+case 'P':return('Y');
+case 'A':return('A');
+default:return('A');
+}
+}
+}
+
+/*<FF>*/
+/*
+**
+**
+**slave
+**
+**
+*/
+slave()
+{
+state='I';
+while(TRUE)
+{
+if(debug>1) printmsg("Top level state (slave mode) %c",state);
+switch(state)
+{
+case 'I':state=rinit();      break;
+case 'F':state=receive();    break;
+case 'C':state=schkdir();    break;
+case 'T':state='B';          break;
+case 'B':state=scandir();    break;
+case 'S':state=send();       break;
+case 'Q':state=sbreak();     break;
+case 'G':return('Y');
+case 'Y':state=endp();       break;
+case 'P':return('Y');
+case 'A':return('A');
+default:return('A');
+}
+}
+}
+
+/*<FF>*/
+/*
+ *  r e c e i v e
+ *
+ *  This is the state table switcher for receiving files.
+ */
+
+receive()
+{
+
+state = 'F';/* Receive-Init is the start state */
+
+while(TRUE)
+{
+if (debug > 2) printmsg(" receive state: %c",state);
+switch(state)/* Do until done */
+{
+case 'F':state = rfile(); break; /* Receive-File */
+case 'D':state = rdata(); break; /* Receive-Data */
+case 'C':return('C');/* Complete state */
+case 'A':return('Y');/* "Abort" state */
+default:return('Y');
+}
+}
+}
+
+/*<FF>*/
+/*
+ *  s e n d 
+ *
+ *  Sendsw is the state table switcher for sending files.  It loops until
+ *  either it finishes, or an error is encountered.  The routines called
+ *  by sendsw are responsible for changing the state.
+ *
+ */
+send()
+{
+fp = -1;                /* reset file getter/opener */
+state = 'F';/* Send initiate is the start state */
+while(TRUE)/* Do this as long as necessary */
+{
+if (debug > 2) printmsg("send state: %c",state);
+switch(state)
+{
+case 'F':state = sfile();  break; /* Send-File */
+case 'D':state = sdata();  break; /* Send-Data */
+case 'Z':state = seof();  break; /* Send-End-of-File */
+case 'B':return ('B'); /* Complete */
+case 'A':return ('Y'); /* "Abort" */
+default:return ('Y'); /* Unknown, fail */
+}
+}
+}
+
+/*<FF>*/
+/*
+ *
+ *      login (for slave in PC mode)
+ *
+*/
+login()
+{
+char logmsg[132];
+#ifdef PC
+msgtime= 2*MSGTIME;
+lretry:
+wmsg("Username:",0);
+rmsg(logmsg,0);
+if(debug > 0) printmsg("Username = %s",logmsg);
+wmsg("Password:",0);
+rmsg(logmsg,0);
+if(debug > 0) printmsg("Password = %s",logmsg);
+if(strcmp(logmsg,"uucp") != 0) goto lretry;
+#endif
+return('I');
+}

@@ -1,0 +1,192 @@
+Path: plus5!wucs1!mcdchg!clyde!cbatt!ihnp4!ptsfa!hoptoad!academ!killer!mh
+From: mh@killer.UUCP (Mike Hobgood)
+Newsgroups: net.sources
+Subject: dcp rmail.c hack
+Message-ID: <839@killer.UUCP>
+Date: 4 May 87 00:34:42 GMT
+Organization: The Unix(tm) Connection, Dallas, Texas
+Lines: 183
+
+
+[]
+
+I've been playing with dcp and the rmail.c program needed some
+work to run on my system.  In the process all the MSDOS code got
+left out.  Someone may want to put it back in.  It still is based
+on Mr Lambs code however; I haven't invented anything here.
+One question: I've looked at the local /usr/spool/uucp directory
+and find that the myname and rmtname were backwards.  This may not
+matter though?  I've changed to:
+
+	S D.myname D.myname ...
+	S B.rmtname X.rmtname ...
+
+Let me know if I've screwed things up.  I don't have dcp running
+to another machine yet.
+
+/*
+ *	rmail.c
+ *
+ *	Version 1.1 Deleted MSDOS, Inserted Unix
+ *
+ *	Copyright Richard H. Lamb 1985,1986,1987
+ *	mail handler like unix "rmail".
+ *
+ *	usage:
+ *	rmail remotesystem!remoteuser user mysystem
+ *	rmail a!b	takes "user, mysystem" from USERFILE
+ *	rmail		calls "mail"
+ *
+ */
+
+#include <time.h>
+#include <string.h>
+#include "dcp.h"			/* added SPOOLDIR & PERMS define */
+
+#define	TIMEZONE	" CDT"
+#define	FALSE		0
+#define	TRUE		~FALSE
+
+
+main(argc,argv)
+int	argc;
+char	*argv[];
+{
+	int	fcfile, fxfile, fdfile, remote;
+	char	cfile[32], dfile[32], xfile[32], rmtname[32], rmtuser[32];
+	char	myname[32], rmtxfile[32], user[32], tmp[256];
+	char	datetime[32], *mktemp();
+	char	*getcwd(), *pwd, *p;
+	long	temptime;
+
+	fcfile = open(USERFILE, 0);
+	getline(fcfile, tmp);
+	sscanf(tmp, "%s %s", myname, user);
+	close(fcfile);
+
+	if (argc == 1 )  {
+		system("mail");
+		exit(0);
+	}
+
+	if (argc > 2 )
+		strcpy(user, argv[2]);
+
+	if (argc > 3 )
+		strcpy(myname, argv[3]);
+
+	if ((p = strchr(argv[1], '!')) == 0)
+		remote = FALSE;
+	else  {
+		*p = '\0';
+		remote = TRUE;
+	}
+
+	pwd = getcwd(0, 32);		/* save current working directory */
+	chdir(SPOOLDIR);		/* and change to uucp spool dir   */
+
+	time(&temptime);
+	sprintf(datetime, "%s", ctime(&temptime));
+	datetime[strlen(datetime) - 1] = '\0';
+	strcat(datetime, TIMEZONE);
+
+
+	/* input the mail */
+
+	if (remote)  {
+		strcpy(rmtname, argv[1]);		strcpy(rmtuser, p + 1);
+
+		sprintf(dfile, "D.%.6sxxxxxx", myname);
+		mktemp(dfile);
+		fdfile = creat(dfile, PERMS);
+	} else  {
+	
+		/* set up a local file with the right header info */
+
+		strcpy(dfile, "/tmp/rmailxxxxxx");
+		mktemp(dfile);
+		fdfile = creat(dfile, PERMS);
+
+		sprintf(tmp, "To: %s\n\n", argv[1]);
+		write(fdfile, tmp, strlen(tmp));
+	}
+
+	sprintf(tmp, "Received: by %s on %s\n", myname, datetime);
+	write(fdfile, tmp, strlen(tmp));
+
+	while (TRUE)  {
+	        if (getline(0, tmp) == FALSE)	/* stdin */
+			break;			/* EOF */
+
+	        if (tmp[0] == 0x04)
+			break;			/* ctrl-d */
+
+	        if (tmp[0] == '.' && tmp[1] == '\n') 
+			break;
+
+	        if (strncmp(tmp, "From ", 5) == 0)
+			write(fdfile, ">", 1);
+
+		write(fdfile, tmp, strlen(tmp));
+	}
+
+	close(fdfile);
+
+
+	/* now forward the mail */
+
+	if (!remote)  {
+
+		/* try to send local mail, leave spool mail on error */
+
+		sprintf(tmp,"mail %s <%s", argv[1], dfile);
+		if (system(tmp) != 0);
+			unlink(dfile);
+		exit(0);
+	}  else  {
+
+		/* make the spool files for uucico */
+
+		sprintf(xfile, "B.%.6sxxxxxx", rmtname);
+		mktemp(xfile);
+		fxfile = creat(xfile, PERMS);
+		sprintf(tmp, "U %s %s\nF %s\nI %s\nC rmail %s\n",
+		  user, myname, dfile, dfile, rmtuser);
+		write(fxfile, tmp, strlen(tmp));
+		close(fxfile);
+
+		sprintf(cfile, "C.%.6sxxxxxx", myname);
+		mktemp(cfile);
+		fcfile = creat(cfile, PERMS);
+		sprintf(rmtxfile, "X.%.6sxxxxxx", rmtname);
+		mktemp(rmtxfile);
+		sprintf(tmp, "S %s %s %s - %s 0666\n", dfile, dfile, user, dfile);
+		write(fcfile, tmp, strlen(tmp));
+		sprintf(tmp, "S %s %s %s - %s 0666\n", xfile, rmtxfile, user, xfile);
+		write(fcfile, tmp, strlen(tmp));
+		close(fcfile);
+	}
+
+	chdir(pwd);		/* return to original directory */
+	exit(0);
+}
+
+
+getline(fp, msg)
+int	fp;
+char	*msg;
+{
+	char	c = 1;
+
+	while (c)  {
+	        if (read(fp, &c, 1) == 0)
+			return(FALSE);		/* End Of File */
+
+	        *msg++ = c;
+
+	        if (c == '\n')
+			*msg = c = 0;
+	}
+
+	return(TRUE);				/* there is a line */
+}

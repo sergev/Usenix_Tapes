@@ -1,0 +1,51 @@
+#! SHELL
+#
+# a script to front end the 'get-mod-req' program
+# Automatically finds all requests with name 'REQ*'
+# for procesing.  Calls '${getmodreq}' for each request
+#
+# see get-quick-req for what to change below
+#
+erroruser=MYNAME
+processdir=PROCESS	# directory which we work in.
+
+getmodreq=${processdir}/quick-mod-req
+
+if [ ! -f ${getmodreq} ]
+then
+    echo "Can't find '${getmodreq}'" | Mail -s "Missing File" ${erroruser}
+    exit 1
+fi
+
+if [ $# != 0 -a $# != 2 ]
+then
+    echo "Usage: `basename ${prog}` [ Mail whom ]" 1>&2
+    exit
+elif [ $# = 2 -a "$1" != "Mail" ]
+then
+    echo "Usage: `basename ${prog}` [ Mail whom ]" 1>&2
+    exit
+elif [ $# = 2 ]
+then
+    request=$1
+    address=$2
+    exec ${getmodreq} ${processdir} ${request} ${address}
+else
+    set - REQ/*
+    if [ $# = 0 ]
+    then
+	echo "No REQ files waiting to be sent" 1>&2
+	exit 1
+    fi
+
+    for req in $*
+    do
+	address=`echo ${req} | sed -e 's,REQ/REQ\.,,'`
+	${getmodreq} ${processdir} ${req} ${address}
+	if [ $? != 0 -a $? != 99 ]
+	then
+	    exit 1
+	fi
+    done
+fi
+exit 0

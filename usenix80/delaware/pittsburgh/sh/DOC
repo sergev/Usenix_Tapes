@@ -1,0 +1,201 @@
+		Shell Extensions
+		   21 Mar 80
+		   25 Apr 80
+		    8 Jun 80
+
+I   changes to sh
+	1)  implicit chdir
+	2)  cyclic
+	3)  .PROFILE
+	4)  run time systems and alternate interpreters
+	5)  dot files
+	6)  toggle command
+II  examples
+	7)  include command
+	8)  td command (temporary chdir)
+
+
+1)  implicit chdir
+	Using a directory as a command name can cause a chdir (cd).
+	This feature may be turned on or off via the toggle command.
+	The old chdir and cd commands are still supported.
+	To change the current working directory
+	to DIRECTORY try any of:
+		chdir DIRECTORY
+		cd DIRECTORY
+		DIRECTORY
+	To change the current working directory
+	to the home directory try any of:
+		chdir
+		cd
+		$HOME
+	If a command has only one argument (its name)
+	and it is not an internal command
+	and there is no I/O redirection
+	then a chdir to it may be attempted
+	if succesfull the command terminates
+	otherwise it continues.
+
+2)  cyclic command
+	When the variable "CYCLIC" has a non-null value
+	it is evaluated (like a trap) before each
+	shell prompt (PS1) analogously to the mail check.
+	Example:
+		CYCLIC="who|grep george"
+
+3)  .PROFILE
+	The file name ".PROFILE" is used as a startup
+	file rather than ".profile", therefore
+	the .profile file can contain a command
+	such as
+		exec -new_sh
+	without ill effects.
+
+4)  run time systems and alternate interpreters
+	The variables
+		UNIXv7, UNIXv6, RT11, ALTERNATE, and CSH
+	can be used for special interpreters.
+	Their value should be the name of the interpreting
+	program.  If the variable is undefined or null
+	then the feature is turned off.
+	The interpreter becomes argument 0.
+	The file name becomes argument 1.
+	Old argument N+1 becomes argument N+2.
+		UNIXv7	will be used (on a VAX) when a
+			PDP-11 UNIX version 7 a.out
+			file is detected.
+		UNIXv6	will be used (on a VAX) when a
+			PDP-11 UNIX version 6 a.out
+			file is detected.
+		RT11	will be used (on a PDP-11 or VAX)
+			when an RT-11 version 2 .sav file
+			is detected.
+		ALTERNATE  will be used when a file lacking
+			execute permission is detected.
+		CSH	will be used when a command file
+			beginning with "#" is detected
+			(e.g. csh command files).
+	As a side effect sometimes other binary (non-ascii)
+	files are detected and the shell is inhibited from
+	interpreting them as command files.
+	At our installation we have programs for interpreting
+	UNIX v7, UNIX v6, and RT-11 files.
+	Examples:
+		UNIXv6=v6run ; export UNIXv6
+		RT11=rt ; export RT11
+		ALTERNATE=cat ; export ALTERNATE
+
+5)  dot files
+	The contents of a dot file (immediate file)
+	is interpreted in the current instantiation
+	(i.e. without forking) of the shell.
+	Dot files may be invoked by name rather than
+	by the dot command.  Dot files may not have
+	execute permission.  If they are invoked by
+	the dot command (. file), then the variable
+	PATH controls the search path.  If they are
+	invoked by name then the variable PATHd
+	controls their search path.  All simple
+	commands (without I/O redirection) which
+	aren't internal to the shell are considered
+	candidate dot files and a search is performed
+	if PATHd has a non-null value.  PATHd should
+	have a syntax similar to that of PATH.
+	(Try "PATHd=." for an effect similar to "PATH=".)
+	The ability to invoke by name a dot file with
+	a slash (i.e. "/") in its name may be controlled
+	with the toggle command.
+
+	Dot files may have arguments.  Sharp is used in
+	place of dollar.
+		#0	command name
+		#1-#9	arguments 1-9 to dot file
+		#@	argument list
+		#*	string of argument list elements
+		##	number of dot file arguments
+		#$	a number unique to this dot file evaluation
+	To shift dot file arguments, the first argument to
+	the shift command should be a dot.
+		shift .
+	#VARIABLE currently is equivalent to $VARIABLE,
+	but I advise using the latter for both
+	backward compatability and to reserve this
+	syntax for the future (e.g. local variables).
+
+	Example:  The combination of the implicit chdir
+	and dot files with arguments could permit support
+	of a cd command which is not built in to the
+	shell (but "cd" and "chdir" are built in).
+		case ##
+		in
+			0)	$HOME	;;
+			*)	#1	;;
+		esac
+
+6)  toggle command
+	This command can be used to control selected
+	features in the shell processor.
+		toggle
+	prints the current settings.
+		toggle NAMES
+	complements the values of the named switches.
+		toggle on NAMES
+	turns on the named features.
+		toggle off NAMES
+	turns off the named features.
+	The name "cd" or synonymously "chdir" controls
+	the implicit chdir feature.
+		toggle on cd
+	turns the implicit chdir feature on.
+	The name "slash" controls whether a command name
+	with a slash (i.e. "/") in it is considered a
+	candidate for dot file processing.
+		toggle off slash
+	denies that consideration of such commands.
+	The other restrictions discussed with dot files
+	are also enforced.  In particular the variable
+	"PATHd" must have a non-null value.  This toggle
+	switch may be usefull in conjunction with the
+	interpreter specified by the variable "ALTERNATE".
+
+7)  include command
+	This command is not built in to the shell,
+	but an example of a dot file with arguments.
+	It reads the file indicated by its argument.
+	The file should contain C pre-processor style
+	parameter defines (e.g. a header file).
+	It interprets simple defines as shell
+	variable assignments.
+	Example:
+		include signal
+		kill -$SIGKILL $!
+	This include program is essentially an ed
+	script and somewhat naive.
+	It does not know about conditionals,  includes,
+	undefs or complicated defines.  Its notion of
+	comments is not always accurate.
+
+8)  td command
+	This is also a dot file.  If it has an argument
+	then a chdir is performed on it.  If it has no
+	arguments then the current working directory
+	is changed to what it was at the evaluation of
+	the last td command.  It is a short program
+	given below.
+		case ##
+		in
+		
+			0)
+				TMPDIR=$DIRECTORY
+				DIRECTORY=`pwd`
+				cd $TMPDIR
+				;;
+		
+			*)
+				DIRECTORY=`pwd`
+				cd #1
+				;;
+
+		esac
+	Toggle style directory changes are accomplished by td.
+	Push down style directory changes are accomplished by pd.

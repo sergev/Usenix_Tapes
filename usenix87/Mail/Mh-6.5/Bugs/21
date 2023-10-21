@@ -1,0 +1,101 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA07469; Mon, 20 Apr 87 22:52:51 EST
+Received: by seismo.CSS.GOV (5.54/1.14) 
+	id AA28081; Mon, 20 Apr 87 22:09:15 EDT
+Received: from bboards by ICS.UCI.EDU id a018065; 20 Apr 87 18:43 MST
+Received: from nrtc-gremlin by ICS.UCI.EDU id a018060; 20 Apr 87 18:41 MST
+Received: from killer-rat by gremlin.nrtc.northrop.com id a017384;
+          20 Apr 87 18:27 PST
+To: ics.uci.edu!mh-workers
+Subject: Serious bug in BBoards channel
+Date: Mon, 20 Apr 87 18:26:51 -0800
+Message-Id: <1493.545970411@gremlin.nrtc.northrop.com>
+From: Marshall Rose <gremlin.nrtc.northrop.com!mrose>
+
+    Erik Fair and I just discovered a bug in MH's BBoards channel for
+    MMDF-II.  If you are using this for BBoards distribution to remote
+    sites (e.g., I am using it here for the ISO and ISODE and ARPA-MHS
+    and ...  lists), then you should install this fix ASAP.  Basically,
+    the return-path: field was being mangled.  I think this is also a
+    bug in MMDF-II, but since mortals don't write channels, it's easier
+    to fix this channel than MMDF-II ...
+
+    These are for files in the support/bboards/mmdfII/bboards/
+    directory:
+
+*** _bb_wtmail.c	Mon Apr 20 17:09:23 1987
+--- bb_wtmail.c	Mon Apr 20 17:09:23 1987
+***************
+*** 57,62 ****
+--- 57,64 ----
+              *delim1,
+              *delim2,
+  	    *lckdfldir,
++             *locdomain,
++             *locmachine,
+              *locname,
+  	    *sitesignature,
+  	    *supportaddr;
+***************
+*** 105,111 ****
+      bbrduid = pw -> pw_uid;
+      bbrdgid = pw -> pw_gid;
+  #ifndef	POP
+!     sprintf (bbrdfrom, "%s@%s", pw -> pw_name, locname);
+  #ifdef DEBUG
+      ll_log (logptr, LLOGGEN, "distributing as '%s'", bbrdfrom);
+  #endif
+--- 107,117 ----
+      bbrduid = pw -> pw_uid;
+      bbrdgid = pw -> pw_gid;
+  #ifndef	POP
+!     if (isstr (locmachine))
+! 	sprintf (bbrdfrom, "%s@%s.%s.%s", pw -> pw_name, locmachine, locname,
+! 		locdomain);
+!     else
+! 	sprintf (bbrdfrom, "%s@%s.%s", pw -> pw_name, locname, locdomain);
+  #ifdef DEBUG
+      ll_log (logptr, LLOGGEN, "distributing as '%s'", bbrdfrom);
+  #endif
+***************
+*** 200,206 ****
+      if ((curbb = getbbnam (adr)) == NULL)
+  	return RP_USER;
+  #ifndef	POP
+!     sprintf (bbrdaddr, "local-%s-request@%s", curbb -> bb_name, locname);
+  #endif	not POP
+  #ifdef DEBUG
+      ll_log (logptr, LLOGGEN, "=> BBoard %s: file='%s' info='%s'",
+--- 206,217 ----
+      if ((curbb = getbbnam (adr)) == NULL)
+  	return RP_USER;
+  #ifndef	POP
+!     if (isstr (locmachine))
+! 	sprintf (bbrdaddr, "local-%s-request@%s.%s.%s", curbb -> bb_name,
+! 		locmachine, locname, locdomain);
+!     else
+! 	sprintf (bbrdaddr, "local-%s-request@%s.%s", curbb -> bb_name, locname,
+! 		locdomain);
+  #endif	not POP
+  #ifdef DEBUG
+      ll_log (logptr, LLOGGEN, "=> BBoard %s: file='%s' info='%s'",
+*** _ch_bboards.c	Mon Apr 20 17:09:59 1987
+--- ch_bboards.c	Mon Apr 20 17:09:59 1987
+***************
+*** 61,67 ****
+   *	the contents of the headers of the message being re-distributed.
+   *	The following changes are made:
+   *
+!  *	    Envelope:	The failure address is changed to bboards@locname
+   *	    Headers:	Another Received: is added
+   *
+   *	The local copy going to the BBoard has two entries prepended to the
+--- 61,68 ----
+   *	the contents of the headers of the message being re-distributed.
+   *	The following changes are made:
+   *
+!  *	    Envelope:	The failure address is changed to
+! 				bboards@locname.locdomain
+   *	    Headers:	Another Received: is added
+   *
+   *	The local copy going to the BBoard has two entries prepended to the

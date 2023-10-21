@@ -1,0 +1,443 @@
+
+*** revgrep.c.orig	Sat Jul  5 13:07:05 1986
+--- revgrep.c	Sat Jul  5 14:23:00 1986
+***************
+*** 1,4
+  
+  static char rcsid[] = " $Header: revgrep.c,v 1.4 86/02/24 09:10:37 nz Exp $";
+  
+  /* **************************************************************
+
+--- 1,5 -----
+  
++ #ifndef lint
+  static char rcsid[] = " $Header: revgrep.c,v 1.4 86/02/24 09:10:37 nz Exp $";
+  #endif
+  
+***************
+*** 1,5
+  
+  static char rcsid[] = " $Header: revgrep.c,v 1.4 86/02/24 09:10:37 nz Exp $";
+  
+  /* **************************************************************
+   * revgrep: search files for a pattern backwards
+
+--- 1,7 -----
+  
+  #ifndef lint
+  static char rcsid[] = " $Header: revgrep.c,v 1.4 86/02/24 09:10:37 nz Exp $";
++ #endif
+  
+  /* **************************************************************
+   * revgrep: search files for a pattern backwards
+***************
+*** 53,58
+  #include <sys/stat.h>
+  #include <sys/file.h>
+  
+  #ifdef USG
+  #define RBUF 1024
+  char *compiled_re, *regex();
+
+--- 55,66 -----
+  #include <sys/stat.h>
+  #include <sys/file.h>
+  
++ extern long lseek();
++ 
++ #ifdef SIGTSTP
++ #define BSD
++ #endif
++ 
+  #ifdef USG
+  #define RBUF 1024
+  char *compiled_re, *regex();
+***************
+*** 57,63
+  #define RBUF 1024
+  char *compiled_re, *regex();
+  #else
+! #define RBUF 2048
+  #endif
+  
+  #define NO_FILE_FLAG -10
+
+--- 65,75 -----
+  #define RBUF 1024
+  char *compiled_re, *regex();
+  #else
+! # ifdef BSD
+! #  define RBUF 2048
+! # else
+! #  define RBUF 512
+! # endif
+  #endif
+  
+  #define NO_FILE_FLAG -10
+***************
+*** 71,77
+  #define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFIFO) || (isatty(FD))  )
+  #else
+! #define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFSOCK) || (isatty(FD)) )
+  #endif USG
+  
+
+--- 83,90 -----
+  #define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFIFO) || (isatty(FD))  )
+  #else
+! # ifdef BSD
+! # define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFSOCK) || (isatty(FD)) )
+  # else
+  # define Is_nonseek(FD,SB) \
+***************
+*** 73,78
+  #else
+  #define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFSOCK) || (isatty(FD)) )
+  #endif USG
+  
+  
+
+--- 86,95 -----
+  # ifdef BSD
+  # define Is_nonseek(FD,SB) \
+    ( (SB.st_mode == 0) || (SB.st_mode & S_IFMT == S_IFSOCK) || (isatty(FD)) )
++ # else
++ # define Is_nonseek(FD,SB) \
++   ( (SB.st_mode == 0100000) || (isatty(FD)) )
++ # endif
+  #endif USG
+  
+  
+***************
+*** 83,89
+  char print_lnum = 0;
+  char print_matches= 1;
+  char fold_upper = 0;
+- char use_stdin  = 1;
+  char do_tail    = 0;
+  char silent_mode= 0;
+  int  tail_cnt   = 0;
+
+--- 100,105 -----
+  char print_lnum = 0;
+  char print_matches= 1;
+  char fold_upper = 0;
+  char do_tail    = 0;
+  char silent_mode= 0;
+  int  tail_cnt   = 0;
+***************
+*** 221,227
+   *   is assumed to be open on rev_fd.
+   */
+   tail(fpos,fname)
+!      int fpos;
+       char *fname;
+  {
+      int len;
+
+--- 237,243 -----
+   *   is assumed to be open on rev_fd.
+   */
+   tail(fpos,fname)
+!      long fpos;
+       char *fname;
+  {
+      int len;
+***************
+*** 228,234
+      char buf[RBUF];
+  
+      if (print_names) printf("%s:",fname);
+!     if (print_blocks) printf("starting in %d",fpos/512);
+      if (print_names || print_blocks) putchar('\n');
+  
+      if (lseek(rev_fd,(fpos==0)?(0):(fpos+1),0) < 0) {
+
+--- 244,250 -----
+      char buf[RBUF];
+  
+      if (print_names) printf("%s:",fname);
+!     if (print_blocks) printf("starting in %ld",fpos/512);
+      if (print_names || print_blocks) putchar('\n');
+  
+      if (lseek(rev_fd,(fpos==0L)?(0L):(fpos+1L),0) < 0) {
+***************
+*** 231,237
+      if (print_blocks) printf("starting in %d",fpos/512);
+      if (print_names || print_blocks) putchar('\n');
+  
+!     if (lseek(rev_fd,(fpos==0)?(0):(fpos+1),0) < 0) {
+  	perror("revgrep: tail");
+  	return(-1);
+      }
+
+--- 247,253 -----
+      if (print_blocks) printf("starting in %ld",fpos/512);
+      if (print_names || print_blocks) putchar('\n');
+  
+!     if (lseek(rev_fd,(fpos==0L)?(0L):(fpos+1L),0) < 0) {
+  	perror("revgrep: tail");
+  	return(-1);
+      }
+***************
+*** 256,262
+   rgrep(files)
+       char *files[];
+  {
+-     char *s1, *s2;
+      char *lbuf;
+      int  pos, lcnt, match, match_cnt;
+      char didone = 0;
+
+--- 272,277 -----
+   rgrep(files)
+       char *files[];
+  {
+      char *lbuf;
+      long pos;
+      int  lcnt, match_cnt;
+***************
+*** 258,264
+  {
+      char *s1, *s2;
+      char *lbuf;
+!     int  pos, lcnt, match, match_cnt;
+      char didone = 0;
+  
+      for(didone = 0;
+
+--- 273,280 -----
+       char *files[];
+  {
+      char *lbuf;
+!     long pos;
+!     int  lcnt, match_cnt;
+      char didone = 0;
+  
+      for(didone = 0;
+***************
+*** 271,277
+  	    ( lbuf = rline(&pos,f) ) != NULL;
+  	    f=NULL, lcnt++)
+  	  {
+! 	      if (match = doline(lbuf,pos,lcnt,*files)) {
+  		  match_cnt++;
+  		  exitval=0;
+  		  if (do_tail) {
+
+--- 287,293 -----
+  	    ( lbuf = rline(&pos,f) ) != NULL;
+  	    f=NULL, lcnt++)
+  	  {
+! 	      if (doline(lbuf,pos,lcnt,*files)) {
+  		  match_cnt++;
+  		  exitval=0;
+  		  if (do_tail) {
+***************
+*** 305,311
+   */
+   doline(lbuf,pos,lin,fname)
+       char *lbuf;
+!      int pos, lin;
+       char *fname;
+  {
+      register char *s1, *s2;
+
+--- 321,328 -----
+   */
+   doline(lbuf,pos,lin,fname)
+       char *lbuf;
+!      long pos;
+!      int lin;
+       char *fname;
+  {
+      register char *s1, *s2;
+***************
+*** 309,315
+       char *fname;
+  {
+      register char *s1, *s2;
+!     int i,j,m;
+  
+      if (tail_cnt > 0) {
+  	    if (lin >= tail_cnt || pos <= 1) return(1);
+
+--- 326,332 -----
+       char *fname;
+  {
+      register char *s1, *s2;
+!     int m;
+  
+      if (tail_cnt > 0) {
+  	    if (lin >= tail_cnt || pos <= 1) return(1);
+***************
+*** 338,344
+      if (print_matches) {
+  	if (print_names) printf("%s:",fname);
+  	if (print_lnum) printf("-%d:",lin);
+! 	if (print_blocks) printf("%d:",pos/512);
+  	printf("%s\n",lbuf);
+      }
+      return(1);
+
+--- 355,361 -----
+      if (print_matches) {
+  	if (print_names) printf("%s:",fname);
+  	if (print_lnum) printf("-%d:",lin);
+! 	if (print_blocks) printf("%ld:",pos/512);
+  	printf("%s\n",lbuf);
+      }
+      return(1);
+***************
+*** 364,370
+      char dbuf[RBUF];
+  
+      sprintf(nambuf,"/tmp/rvg.a%d",getpid());
+!     if ( (ofd = open(nambuf,O_RDWR | O_CREAT,0600)) < 0) return(-1);
+  
+      if ( signal(SIGINT,sig_exit) == SIG_IGN) signal(SIGINT,SIG_IGN);
+      if ( signal(SIGQUIT,sig_exit) == SIG_IGN) signal(SIGQUIT,SIG_IGN);
+
+--- 381,389 -----
+      char dbuf[RBUF];
+  
+      sprintf(nambuf,"/tmp/rvg.a%d",getpid());
+!     if ( (ofd = creat(nambuf,0600)) < 0) return(-1);
+!     close(ofd);
+!     if ( (ofd = open(nambuf, 2)) < 0) return(-1);
+  
+      if ( signal(SIGINT,sig_exit) == SIG_IGN) signal(SIGINT,SIG_IGN);
+      if ( signal(SIGQUIT,sig_exit) == SIG_IGN) signal(SIGQUIT,SIG_IGN);
+***************
+*** 398,404
+   *   file of the start of the line is returned.
+   */
+   char *rline(posp, fname)
+!      int *posp;
+       char *fname;
+  {
+  	register char  *s1, *s2;
+
+--- 417,423 -----
+   *   file of the start of the line is returned.
+   */
+   char *rline(posp, fname)
+!      long *posp;
+       char *fname;
+  {
+  	register char  *s1, *s2;
+***************
+*** 404,411
+  	register char  *s1, *s2;
+  	static char *bufp;
+  	static char bf[RBUF];
+! 	static char lbf[RBUF * 2], rlbf[RBUF * 2];
+! 	static int  bf_len, fpos;
+  
+  	if (fname != NULL || fflag) {
+  		if ( (bf_len = rblock(&fpos, bf, fname)) < 0) return(NULL);
+
+--- 423,431 -----
+  	register char  *s1, *s2;
+  	static char *bufp;
+  	static char bf[RBUF];
+! 	static char lbf[RBUF * 2];
+! 	static int  bf_len;
+! 	static long fpos;
+  
+  	if (fname != NULL || fflag) {
+  		if ( (bf_len = rblock(&fpos, bf, fname)) < 0) return(NULL);
+***************
+*** 420,426
+  	  {
+  		*s2-- = *bufp;
+  		if (bufp == bf) {
+! 			if ((bf_len = rblock(&fpos,bf,NULL)) < 0) {
+  				fflag = 1;
+  				if (bf_len == NO_FILE_FLAG)
+  				  return(NULL);
+
+--- 440,446 -----
+  	  {
+  		*s2-- = *bufp;
+  		if (bufp == bf) {
+! 			if ((bf_len = rblock(&fpos,bf,(char *)NULL)) < 0) {
+  				fflag = 1;
+  				if (bf_len == NO_FILE_FLAG)
+  				  return(NULL);
+***************
+*** 452,458
+   *      The length of the block read-and-returned is returned.
+   */
+   rblock(fposp, buf, fname)
+!      int *fposp;
+       char *buf, *fname;
+  {
+  	static int nbp;
+
+--- 472,478 -----
+   *      The length of the block read-and-returned is returned.
+   */
+   rblock(fposp, buf, fname)
+!      long *fposp;
+       char *buf, *fname;
+  {
+  	static long nbp;
+***************
+*** 455,461
+       int *fposp;
+       char *buf, *fname;
+  {
+! 	static int nbp;
+  	int    len;
+  
+  	if (fname != NULL) {
+
+--- 475,481 -----
+       long *fposp;
+       char *buf, *fname;
+  {
+! 	static long nbp;
+  	int    len;
+  
+  	if (fname != NULL) {
+***************
+*** 460,466
+  
+  	if (fname != NULL) {
+  		if ( rev_fd > -1 ) close(rev_fd);
+! 		if ( (rev_fd=open(fname,O_RDONLY,0)) < 0) {
+  			fprintf(stderr,"revgrep: ");
+  			perror(fname);
+  			return(NO_FILE_FLAG);
+
+--- 480,486 -----
+  
+  	if (fname != NULL) {
+  		if ( rev_fd > -1 ) close(rev_fd);
+! 		if ( (rev_fd=open(fname,0)) < 0) {
+  			fprintf(stderr,"revgrep: ");
+  			perror(fname);
+  			return(NO_FILE_FLAG);
+***************
+*** 478,483
+  	if (nbp < 0) return(-1);
+  	if ( lseek(rev_fd,nbp,0) < 0) {
+  		if (errno == 29  ||  errno == 5) {
+  			perror("revgrep: rblock");
+  			exit(1);
+  		}
+
+--- 498,504 -----
+  	if (nbp < 0) return(-1);
+  	if ( lseek(rev_fd,nbp,0) < 0) {
+  		if (errno == 29  ||  errno == 5) {
++ 			fprintf(stderr,"rev_fd=%d,nbp=%ld\n",rev_fd,nbp);
+  			perror("revgrep: rblock");
+  			exit(1);
+  		}

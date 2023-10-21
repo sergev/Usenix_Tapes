@@ -1,0 +1,456 @@
+MAKE(I)				3/10/84					MAKE(I)
+
+
+
+NAME
+	MAKE - maintain multiple source files (VAX/VMS and MSDOS 2.0)
+
+
+SYNOPSIS
+	MAKE [-N] [-A] [-D] [-I] [-K] [-F makefile] [name ...]
+
+
+DESCRIPTION
+	MAKE is a utility inspired by the Unix(tm) command of the same
+	name.  MAKE helps maintain programs that are constructed from
+	many files.  MAKE processes a "makefile", a file which describes
+	how to build a program from its source files, and produces a
+	script file containing the commands necessary to recompile the
+	program.
+
+	Be careful: this MAKE is NOT compatible with Unix(tm) MAKE!
+
+	The 'N' option causes MAKE to print out the steps it would follow
+	in order to rebuild the program.  The 'A' option tells MAKE to
+	assume that all files are obsolete, and that everything should be
+	recompiled.  The 'I' option tells MAKE to ignore any error statuses
+	returned when MAKE executes a program.  The 'K' option tells MAKE
+	to continue compiling anything that does not depend on an entry
+	that had an error during the compilation.  The 'F' option, followed
+	by a filename, can be used to specify a makefile other than the
+	default one.
+
+	If no names are specified in the commandline, the first dependency
+	in the makefile is examined.  Otherwise, the specified root names
+	are brought up to date.
+
+	The default makefiles are:
+
+		for VAX/VMS:	MAKEFILE
+				[-]MAKEFILE
+				SYS$LOGIN:MAKEFILE
+
+		for MSDOS:	MAKEFILE
+				..\MAKEFILE
+
+	If the first makefile cannot be found, MAKE attempts to use the
+	next one.  If no makefile is ever found, MAKE prints a diagnostic
+	and aborts.
+
+THE MAKEFILE
+	Comments begin with '#' and extend to the end of the line.  A
+	'#' (or almost any other character) may be escaped with the escape
+	character (backslash (\) on VMS, backquote (`) on MSDOS).  An escape
+	character may be typed by doubling it (\\ or ``).  The standard
+	Unix escape codes are recognized (\n, \r, \t, \b, \f, `n, `r, `t,
+	`b and `f).
+
+	A makefile is a list of dependencies and library definitions.  A 
+	dependency consists of a root name, a colon, and zero or more names
+	of dependent files.  (The colon MUST be preceeded by whitespace.)
+	For instance, in:
+
+		make.exe : make.obj parsedir.obj file.obj macro.obj mk.h
+
+	the file 'make.exe' depends on five other files.  A library definition 
+	consists of a root name, a vertical bar (|), and zero or more names of
+	library entry points.  (The vertical bar MUST be preceded by 
+	whitespace.)  For instance, in:
+
+		ibm.lib | ibmtext ibmsound ibmkeys ibmser ibm_com
+
+	the file 'ibm.lib' has five entry points.  Library definitions are
+	useful for updating libraries without maintaining copies of the object
+	files for the source files.  The library entry points have the same
+	date and time as the library itself, and so if the entry depend on the
+	proper source files, all modified source files will be recompiled
+	whenever necessary.
+
+	A dependent file may be a member of an ARCHIVE.  An ARCHIVE is a
+        collection of files with date and time stamps.  An example of an
+        archive definition is:
+	
+	make.obj : make.lar ( make.c make.h )
+	
+	In this definition, make.c and make.h are members of the archive
+        make.lar.  If make.obj must be rebuilt and either make.c or make.h
+        is not found in the current directory, they will be copied out of
+        the archive, compiled, and deleted at the end of the make session.
+	
+	Archive definitions are meaningless in a library definition, and so
+        should not be used.	
+
+	A root name with an empty dependency, as in:
+
+		print :
+
+	is assumed NEVER up to date, and will always be recompiled.
+
+	The dependency list or library definition may be continued on
+	successive lines:
+
+		bigfile.exe : one.obj two.obj three.obj four.obj
+		five.obj six.obj gronk.obj freeple.obj scuzzy.lnk
+		frog.txt greeble.out
+
+			OR
+
+		msdos.lib | alloc char_io disk_io file_io exec filesize
+		freedisk freemem insert mouse port_io randg syscall 
+		sysclock sysint textsf timer ttime ucsd ucsdhelp unix
+
+	Any number of 'method' lines may follow a dependency.  Method lines
+	begin with an ascii tab.  When a file is to be rebuilt, MAKE
+	executes these method lines (minus the tab).  
+	For example, in:
+
+		make.exe : make.obj parsedir.obj file.obj macro.obj mk.h
+			$link make, parsedir, file, macro
+			$write sys$output "Just another version of MAKE ..."
+			$purge
+
+	the three lines following the dependency make up the method for
+	recompiling (or in this case, re-linking) the file 'make.exe'.
+
+	Library definitions may have method lines.  These methods will 
+	*always* be executed, since the entry points have the same date
+	as the library.
+
+	If the macro "~INIT" is defined, its text will be executed first. 
+	If the macro "~DEINIT" is defined, its text will be executed last.
+	By defining these two macros, it is possible to configure the shell 
+	enviroment:
+
+		~INIT = $set term/nowrap\n$on error then goto err_handler
+		~DEINIT = $set term/wrap\n$exit\$err_handler:\n
+		~DEINIT = #(~DEINIT)$type err.log\n$exit
+
+	will be executed as:
+
+		$set term/nowrap
+		$on error then goto err_handler
+		.
+		.
+		$set term/wrap
+		$exit
+		$err_handler:
+		$type err.log
+		$exit
+
+	When a root's method is defined, the value of the macro "~BEFORE"
+	is prefixed to the method, and the value of the macro "~AFTER" is
+	appended to it.
+
+	Frequently one wants to maintain more than one program with a single
+	makefile.  In this case, a "master dependency" can appear first in
+	the file:
+
+		allOfMyToolsAndHorribleHacks : cat peek poke.exe grunge
+		cat : cat.exe
+		cat.exe : ....
+			(stuff for CAT.EXE)
+		peek : peek.exe
+		peek.exe : (stuff for PEEK.EXE)
+		poke.exe : (stuff for POKE.EXE)
+		grunge : grunge.com
+		grunge.com : (stuff for grung)
+
+	In other words, make will bring everything up to date that is somehow
+	connected to the first dependency (its assumed that the incredibly
+	lengthy filename specified in this example won't actually exist).
+
+MACROS
+	A macro is defined by a line of the form (the '=' MUST be surrounded
+	by whitespace):
+
+		<macro-name> = <macro-body>
+
+	A macro may be deleted by assigning an empty value to it.  Macros
+	may be redefined, but old definitions stay around.  If a macro is
+	redefined, and the redefinition is later deleted, the first definition
+	will take effect:
+
+		MAC = first			! MAC = "first"
+		MAC = second			! MAC = "second"
+		MAC = #(MAC) third		! MAC = "second third"
+		MAC =				! MAC = "second"
+		MAC =				! MAC = "first"
+		MAC =				! MAC has no definition
+
+	A macro may be referenced in two ways:
+
+			#<char>	  or	#(macro-name)
+
+	The first way only works if the macro's name is a single character.
+	If the macro's name is longer than one character, it must be
+	enclosed in parenthesis.  ['#' may be escaped by doubling it ("##".)]
+	For example, in:
+
+		G = mk.h mk1.h
+		OBJS = make.obj file.obj parsedir.obj macro.obj
+		BOTH = #(OBJS) #G
+	
+		make.exe : #(OBJS) #G
+		make.exe : #(BOTH)
+		make.exe : mk.h mk1.h make.obj file.obj parsedir.obj macro.obj
+			$write sys$output "This is a number sign --> ##"
+
+	after macro expansion, the three dependencies will appear identical
+	and the two '#'s in the last line will turn into one '#'.
+
+UNIX(tm) MAKE AND THIS ONE
+	They are NOT the same.  Do not expect Unix makefiles to work with
+	this MAKE, even if you change the pathnames.  There are some major
+	differences between this version and the standard Unix(tm) MAKE:
+
+	1. The Unix(tm) comment character is '#', VAX/VMS's is '!'.
+
+	2. The Unix(tm) macro-expansion character is '$'.  While this would
+	   have been easy to leave the same, the '$' character is used so
+	   often in VAX/VMS command-lines that I thought it best to change
+	   it to '#'.
+
+	3. Multiple root names are not allowed.  Unix(tm) MAKE accepts lines
+	   of the form:
+
+		name1 name2 : depend1 depend2
+
+	   but this one doesn't.
+
+	4. There is no equivalent of double-colon ("::".)
+
+	5. There is no equivalent of .SUFFIXES, or the corresponding special
+	   macros.
+
+SAMPLE MAKEFILE
+	!
+	! VAX/VMS MAKE
+	! Landon Dyer
+	!
+	H = make.h
+	FILES = #H, make.c, macro.c, token.c, parsedir.c, file.c
+	DOCUMENTATION = distr.mem make.man makefile. make.com
+	
+	make.exe : make.obj macro.obj token.obj parsedir.obj file.obj
+		$link make.obj, macro, token, parsedir, file
+		$purge
+	
+	make.obj : make.c #H
+		$cc make.c
+	
+	macro.obj : macro.c #H
+		$cc macro
+	
+	token.obj : token.c #H
+		$cc token
+	
+	parsedir.obj : parsedir.c #H
+		$cc parsedir
+	
+	file.obj : file.c
+		$cc file
+	
+	!
+	! Print files associated with MAKE
+	!
+	print :
+		$print make.man, #(FILES), make.com, makefile.
+	
+	!
+	! Type out source to MAKE
+	!
+	type :
+		$type #(FILES), make.com, makefile.
+	
+	!
+	! Make backup of source files.
+	!
+	BACKUP = [.bak]
+	backup :
+		$copy #(FILES) #(BACKUP)
+		$copy make.man, make.com, makefile. #(BACKUP)
+	
+	!
+	! Collect MAKE into a distribution file.
+	!
+	collect :
+		$collect collect distr.mem make.man makefile make.com make.h -
+			make.c macro.c token.c parsedir.c file.c
+
+
+AUTHOR
+	Landon Dyer			G.DYER@SU-SCORE.ARPA
+	175 Calvert Dr. #F-211		BASHFL::DYER (Atari Coinop)
+	Cupertino, CA 95014
+
+MODIFIED BY
+	Eric C. Brown			brownc@utah-cs.arpa
+	1302 Austin Hall		...!harpo!utah-cs!brownc
+	University of Utah, SLC, UT 84112
+ //E*O*F make.man//
+
+echo x - readme
+cat > "readme" << '//E*O*F readme//'
+
+
+
+
+Last month I wrote a version of the Unix(tm) utility MAKE.  It runs under
+VAX/VMS and MSDOS 2.0.  I am placing it in the public domain, and it is yours
+for the asking.  You may copy it, or give it away.  You can make any changes
+you like to it.  All I ask is that you DO NOT TRY TO SELL IT.
+
+Anyway, there is now a MAKE for MSDOS.  It is free, and it works pretty well.
+I'm giving it away because it might do the world some good.  Who knows?
+
+Caveat: this version of MAKE is NOT compatible with the Unix(tm) version.
+Some differences are explained in the documentation.  Most of the problem stems
+from the fact that I've never had a chance to use the original version of MAKE,
+and the documentation I've seen on it has been poor.  My idea of what a make
+program should do is almost certainly different from what you Unix(tm) hackers
+are used to.  Well, hell -- the software is worth what you paid for it.  Have
+fun.
+
+In order to get MAKE running on your system, you need to:
+
+	1.  Read the documentation file MAKE.MAN.  (Yes, read the
+	    directions.)
+
+	2.  Edit the file MAKE.H to represent your system (VAX/VMS or
+	    MSDOS 2.0.)
+
+	3.  Recompile the source code by following the script file
+	    CMAKE.COM (for VAX/VMS) or CMAKE.BAT (for MSDOS 2.0.)
+
+	    VAX/VMS requires the DEC C compiler; MSDOS 2.0 requires
+	    Lattice C (or another C compiler of comparable quality)
+	    and the Macro Assembler.
+
+	4.  Test out MAKE by running it on itself.  (Make a backup
+	    first!)
+
+
+
+			Good luck,
+
+			Landon Dyer (G.DYER @ SU-SCORE)
+
+
+
+
+
+ //E*O*F readme//
+
+echo x - makefile
+cat > "makefile" << '//E*O*F makefile//'
+#
+# MSDOS Make utility
+# (compile with Wizard C version 2.0)
+#
+
+CLIB = c:\wcc\clib.lib
+COBJ = c:\wcc\c0.obj
+H = make.h
+
+FILES = $H make.c macro.c token.c parsedir.c file.c osdate.c execute.c
+OBJS = make.obj macro.obj token.obj parsedir.obj file.obj osdate.obj getdir.obj lwtol.obj execute.obj
+ONAME = make+macro+token+parsedir+file+osdate+getdir+lwtol+execute
+DOCUMENTATION = readme make.man makefile
+
+make : makemake.exe
+
+lar : lar.exe
+
+makemake.exe : $(OBJS) $(COBJ) $(CLIB)
+	link $(COBJ)+$(ONAME),makemake,make/map,$(CLIB)
+
+make.obj : make.lar ( make.c $H )
+	cc -c make.c
+
+macro.obj : make.lar ( macro.c $H ) 
+	cc -c macro.c
+
+token.obj : make.lar ( token.c $H )
+	cc -c token.c
+
+parsedir.obj : make.lar ( parsedir.c $H )
+	cc -c parsedir.c
+
+file.obj : make.lar ( file.c $H )
+	cc -c file.c
+
+execute.obj : make.lar ( execute.c $H )
+	cc -c execute.c
+
+osdate.obj : make.lar ( osdate.c $H ) lar.lar ( lar.h )
+	cc -c osdate.c
+
+#
+#	Makefile for lar.
+#
+
+lar.exe : lwtol.obj getdir.obj lar.obj $(COBJ) $(CLIB)
+	link $(COBJ)+lar+lwtol+getdir,lar,lar/map,$(CLIB)
+
+lar.obj : lar.lar ( lar.c lar.h )
+	cc -c lar.c
+
+#
+# Files shared by lar and make.
+#
+
+getdir.obj : lar.lar ( getdir.c lar.h )
+	cc -c getdir.c
+
+lwtol.obj : lar.lar ( lwtol.c lar.h )
+	cc -A -c lwtol.c
+
+#
+# Print files associated with MAKE
+#
+
+print :
+	print make.man $(FILES) makefile
+
+#
+# collect source and documentation files
+#
+
+collect :
+	lar uv make.lar $(FILES) $(DOCUMENTATION)
+	lar uv lar.lar lar.c lar.h lwtol.c getdir.c
+	lar rv make.lar
+	lar rv lar.lar
+
+#
+# copy to distribution disk (on A:)
+#
+distribution :
+	copy readme a:
+	copy make.man a:
+	copy makefile a:
+	copy make.c a:
+	copy macro.c a:
+	copy token.c a:
+	copy parsedir.c a:
+	copy file.c a:
+	copy osdate.c a:
+	copy execute.c a:
+	copy lar.h a:
+	copy lar.c a:
+	copy getdir.c a:
+	copy lwtol.c a:
+	copy makemake.exe a:
+  //E*O*F makefile//
+
+exit 0

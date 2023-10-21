@@ -1,0 +1,356 @@
+#!/bin/sh
+#
+#  shell script to generate a sendmail <host>.chn file containing all
+#  the routing information for this host from a set of per-mailer channel
+#  files containing in this directory.
+#
+
+if [ $# -le 1 ]
+then	echo	usage: make host files...
+	exit
+fi
+
+host=$1
+shift
+rm -f $host.chn
+
+echo -n > chn.classes
+echo -n > S9
+
+#
+# sort out which files refer to which mailers
+#
+rm -f $$.ether $$.luucp $$.uucp $$.janet $$.bitnet $$.top
+
+for i in $*
+do
+	case $i in
+	*ether.chn)	cat $i >> $$.ether
+			;;
+	*luucp.chn)	cat $i >> $$.luucp
+			;;
+	*uucp.chn)	cat $i >> $$.uucp
+			;;
+	*janet.chn)	cat $i >> $$.janet
+			;;
+	*bitnet.chn)	cat $i >> $$.bitnet
+			;;
+	*top.chn)	cat $i >> $$.top
+			;;
+	esac
+done
+
+#
+#  Standard format channel tables
+#
+for chnf in $$.ether $$.luucp
+do
+	if [ -f $chnf ]
+	then
+		awk '
+BEGIN	{
+	mailer=substr(FILENAME, index(FILENAME,".")+1)
+	MINCLSIZE = 3
+	if (mailer == "ether")
+	{	print "# Ethernet"	>>"S9"
+		classes = "PQR"
+	}
+	else if (mailer == "luucp")
+	{	print "# Local UUCP"	>>"S9"
+		classes = "LMN"
+	}
+	c = 1
+	}
+
+/^#/	{	break	}
+
+/^\*/	{
+	$1 = substr($1, 2)
+	$2 = sprintf($2, "$2")
+	printf "R$+@$+%s\t\t$@<$1>%s.%s\n", $1, $2, mailer	>>"S9"
+	break
+	}
+
+	{
+	i = index($1, ".")
+	subdom = substr($1,1,i-1)
+	restdom = substr($1,i+1)
+	
+	if (subdom == $2)
+		direct[restdom] = direct[restdom] " " subdom
+	else
+		printf "R$+@%s\t\t$@<$1@%s>%s.%s\n", $1, $1, $2, mailer	>>"S9"
+	}
+
+END	{
+	for (i in direct)
+	{	n = split(direct[i], sub, " ")
+		if (n >= MINCLSIZE && c <= length(classes))
+		{	C = substr(classes, c, 1)
+			c++
+			printf "C%s%s\n", C , direct[i]	>>"chn.classes"
+			printf "R$+@$=%s.%s\t\t$@<$1>$2.%s\n",C,i,mailer >>"S9"
+		}
+		else
+		{	for (j=1; j<=n; j++)
+				printf "R$+@%s.%s\t\t$@<$1>%s.%s\n", \
+					sub[j], i, sub[j], mailer	>>"S9"
+		}
+	}
+	print ""	>>"chn.classes"
+	print ""	>>"S9"
+	}
+' $chnf
+
+	fi
+done
+
+#
+#  The Bitnet channel (bitnet links)
+#
+if [ -f $$.bitnet ]
+then
+	awk '
+BEGIN	{
+	print "# Bitnet sites"
+	print "R$+@$+.bitnet		$@<$1>$2.bitnet"
+	}
+
+/^#/	{  break  }
+
+	{  printf "R$+@%s\t\t$:<$1>%s.bitnet\n", $1, $2  }
+
+END	{
+	print ""
+	}
+' $$.bitnet >>S9
+
+fi
+
+#
+#   The UUCP channel
+#
+if [ -f $$.uucp ]
+then
+	sed -e '/^#/d' -e '/^$/d' $$.uucp | (sort +1; echo 'x.y z!x!%s') |
+	awk '
+BEGIN	{
+	MINCLSIZE = 3
+	classes = "UVWXYZ"
+	c = 1
+	m = 0
+	print "# UUCP sites"						>>"S9"
+	print "# convert to uucp addresses and try to find a match"	>>"S9"
+	print "R$+@$+			$:$>13$1@$2"			>>"S9"
+	print ""							>>"S9"
+	}
+
+	{
+	i = index($1, ".")
+	subdom = substr($1,1,i-1)
+	restdom = substr($1,i+1)
+	
+	p = index($2, subdom)
+	ps = subdom "!%s"
+
+	if (p == 1 && $2 == ps)
+		direct[restdom] = direct[restdom] " " subdom
+	else if (p > 1 && substr($2, p) == ps)
+	{	path = substr($2, 1, p-1)
+		if (path != lastpath || restdom != lastrest)
+		{	if (m >= MINCLSIZE && c <= length(classes))
+			{	j = index(lastpath, "!")
+				host = substr(lastpath,1,j-1)
+				addr = substr(lastpath,j+1)
+
+				rclass = ""
+				for (j=1; j<=m; j++)
+					rclass = rclass " " sub[j]
+
+				C = substr(classes, c, 1)
+				c++
+				printf "C%s%s\n", C, rclass	>>"chn.classes"
+				printf "R$=%s.%s!$+\t\t$@<%s$1!$2>%s.uucp\n", \
+					C, lastrest, addr, host		>>"S9.2"
+			}
+			else
+			{	for (i=1; i<=m; i++)
+				{	j = index(lastpath, "!")
+					host = substr(lastpath,1,j-1)
+					addr = substr(lastpath,j+1) sub[i]
+					printf "R%s.%s!$+\t\t$@<%s!$1>%s.uucp\n",\
+					  sub[i], lastrest, addr, host	>>"S9.2"
+				}
+			}
+			lastpath = path
+			lastrest = restdom
+			m = 0
+		}
+		sub[++m] = subdom
+	}
+	else
+	{	i = index($2, "!")
+		host = substr($2,1,i-1)
+		addr = substr($2,i+1)
+		addr = sprintf(addr,"$1")
+		printf "R%s!$+\t\t$@<%s>%s.uucp\n", $1, addr, host	>>"S9.2"
+	}
+	}
+
+END	{
+	for (i in direct)
+	{	n = split(direct[i],sub," ")
+		if (n >= MINCLSIZE && c <= length(classes))
+		{	C = substr(classes, c, 1)
+			c++
+			printf "C%s%s\n", C , direct[i]	>>"chn.classes"
+			printf "R$=%s.%s!$+\t\t$@<$2>$1.uucp\n", C, i	>>"S9"
+		}
+		else
+		{	for (j=1; j<=n; j++)
+				printf "R%s.%s!$+\t\t$@<$1>%s.uucp\n", \
+					sub[j], i, sub[j]		>>"S9"
+		}
+	}
+	print ""	>>"chn.classes"
+	print ""	>>"S9.2"
+	print "# no match in uucp - change back to domain style"	>>"S9.2"
+	print "R$+!$+			$:$>12$1!$2"			>>"S9.2"
+	print ""	>>"S9.2"
+	}
+'
+	cat S9.2 >> S9
+	rm -f S9.2
+fi
+
+#
+#   The Janet channel
+#
+if [ -f $$.janet ]
+then
+	awk '
+BEGIN	{
+	print "# Janet sites"						>>"S9"
+	print "# convert domain order to NRS style"			>>"S9"
+	print "R$+@$+			$:$>14$1@$2"			>>"S9"
+	print ""							>>"S9"
+	}
+
+/^#/	{	break	}
+
+	{
+	if ( $1 == "uk.ac." $2 )	#  general rule will catch this
+		break
+
+	if ( $1 == "uk.co." $2 )	#  general rule will catch this
+		break
+
+	printf "R$+@%s\t\t$@<$1>%s.janet\n", $1, $2			>>"S9"
+	}
+
+END	{
+	print ""	>>"chn.classes"
+	print ""							>>"S9"
+	print "# pass all other uk addresses to hhmail to route"	>>"S9"
+	print "R$+@uk.ac.$+\t\t$@<$1>$2.janet"				>>"S9"
+	print "R$+@uk.co.$+\t\t$@<$1>$2.janet"				>>"S9"
+	print ""							>>"S9"
+	print "# convert domain order back to 822 style"		>>"S9"
+	print "R$+@$+			$:$>14$1@$2"			>>"S9"
+	print ""							>>"S9"
+	}
+' $$.janet
+
+fi
+
+#
+#   The Bitnet channel (arpa and uucp relaying)
+#
+if [ -f $$.bitnet ]
+then
+	cat >>S9 <<'EOF'
+# arpa and uucp relays via Bitnet
+R$+@$+.arpa		$@<$1@$2.arpa>smtpuser@wiscvm.barpa
+R$+@$+.uucp		$@<$1@$2.uucp>uucp@psuvax1.buucp
+
+EOF
+fi
+
+#
+#   Top Level Domain relaying
+#
+awk '
+BEGIN	{
+	print "#"
+	print "# top level domain - relaying sites"
+	print "#"
+	print "# This is a list of default relaying sites for"
+	print "# addresses that dont match anything above."
+	print "#"
+	print ""
+	}
+
+/^#/	{  break  }
+
+	{
+	if (length($1) < 4)
+		tabs = "\t\t\t"
+	else
+		tabs = "\t\t"
+	printf "R$+.%s%s$:$1.%s@%s\n", $1, tabs, $1, $2
+	}
+' $$.top >> S9
+
+#
+#  The header
+#
+cat > $host.chn <<EOF
+###############################################################################
+###############################################################################
+#####
+#####	@(#)$host.chn	UK-1.1 sendmail configuration		22/4/85
+#####
+#####	The mailer selection and routing
+#####
+###############################################################################
+###############################################################################
+
+# classes
+EOF
+
+#
+#  the classes
+#
+while read class group
+do
+	echo "$group" | fmt | sed "s/^/$class/"
+done < chn.classes >> $host.chn
+
+#
+#  the rules
+#
+cat - S9 >> $host.chn <<'EOF'
+
+############################
+#  Ruleset 9  --  routing  #
+############################
+
+#
+#  This rule takes a full domain address and returns a
+#  "address@host.network" triple.
+#
+
+S9
+EOF
+
+cat >> $host.chn <<'EOF'
+
+R$+@$+@$+		$1%$2@$3		address cleanup
+R$+			$@$>9$1			retry
+
+EOF
+
+rm -f chn.classes S9 $$.*
+
+echo $host.chn made
+exit

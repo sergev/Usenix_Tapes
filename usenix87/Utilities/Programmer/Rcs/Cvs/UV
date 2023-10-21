@@ -1,0 +1,232 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: UV,v 1.31 86/06/22 18:14:46 dick Exp $
+
+#
+#		U p d a t e   V e r s i o n
+#	UV updates the version in the present directory with respect to
+#	the RCS repository.  The present version must have been created by CV.
+#	The user can keep up-to-date by calling UV whenever he feels like it.
+#	The present version can be committed by CM, but this keeps the
+#	version in tact.
+#
+#	The call is
+#		UV [ -n ]
+#	for a general update, or
+#		UV [ -n ] file ...
+#	for a partial update.
+#
+#	Modified or non-existent RCS files are checked out.
+#	Modified user files are reported as M <user_file>.  If both the
+#	RCS file and the user file have been modified, the user file
+#	is replaced by the result of rcsmerge.  If this throws up
+#	irreconcilable differences, the file is reported as C <user_file>,
+#	and as M <user_file> otherwise.
+#	Files added but not yet committed are reported as A <user_file>.
+#	Files removed but not yet decommitted are reported as R <user_file>.
+#
+#	If the present directory contains subdirectories that hold
+#	concurrent versions, these are updated too.  (See, however, CM.)
+#
+#	The -n option restricts the actions to reporting only.
+#
+Name=UV; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+# to ACT or not to ACT, that is the question
+case "$1" in
+-n)
+	ACT=echo
+	shift
+	;;
+*)
+	ACT=
+	;;
+esac
+
+#	A T T E M P T   R E A D   A C C E S S
+
+LDR=$Repository				# the directory
+LCK=$LDR/\#cvs.lock			# the lock
+TFL=$LDR/\#cvs.tfl.$$			# a temporary test file
+RFL=$LDR/\#cvs.rfl.$$			# the personal read flag
+
+if	# we have write access to $LDR (can't test with [ -w $LDR ] )
+	cp /dev/null $TFL >/dev/null 2>/dev/null
+then	# we can do a fully protected read
+	rm $TFL
+	
+	# set lock
+	. $CVSLIB/SL.aux		# persistently tries to mkdir $LCK
+	
+	#	C R I T I C A L   S E C T I O N
+	
+	cp /dev/null $RFL		# plant the personal read flag
+	rmdir $LCK			# remove lock
+	# set trap to remove flag on interrupt and exit
+	trap 'rm -f $RFL; exit' 0 1 2 3 15
+	
+	#	E N D   O F   C R I T I C A L   S E C T I O N
+
+else	# just use your luck, and some heuristics
+	while	# the lock is there
+		[ -d $LCK ]
+	do
+		# we missed it this cycle
+		echo $Name: `date`: waiting for the lock to disappear
+		
+		sleep 60
+	done
+fi
+
+# determine the way we are called
+case $# in
+0)
+	# no file names: all pertinent files
+	set "`$CVSLIB/FN.aux $Repository`"
+	$ACT cp /dev/null CVS.adm/Mod
+	NOPARAMS=yes			# for directory search
+	;;
+esac
+
+# collect the sets of affected files
+
+OK=yes
+. $CVSLIB/CS.aux	# sets CLIST, GLIST, MLIST, OLIST, ALIST, RLIST, WLIST
+
+case $OK in
+no)
+	echo $Name failed\; correct above errors first >&2
+	exit 1
+esac
+
+# remove superfluous administration entries
+for User in $WLIST
+do
+	$ACT $CVSLIB/SC.aux $User
+done
+
+# do all the check-outs
+
+for User in $OLIST
+do
+	Rcs=$Repository/$User,v
+	
+	Tmp=,,$User
+	# put user file aside, but safety first
+	if	# $User exists
+		[ -r $User ]
+	then	# put it aside
+		$ACT mv $User $Tmp
+	else	# avoid confusion
+		$ACT rm -f $Tmp
+	fi
+	
+	if	# check out $Rcs into $User
+		$ACT $RCSBIN/co -q $Rcs $User
+	then	# adjust $User
+		$ACT chmod +w $User
+		# make a reference with the new time stamp
+		. $CVSLIB/VT.aux
+		$ACT $CVSLIB/RG.aux $User $VN_Rcs "$TS_User"
+	else
+		if	# there was a set-aside
+			[ -r $Tmp ]
+		then	# restore $User from it
+			$ACT mv $Tmp $User
+		fi
+		echo $Name: could not check out $User >&2
+		OK=no
+	fi
+	
+	# remove the set-aside
+	$ACT rm -f $Tmp
+done
+
+# report all modifications
+for User in $MLIST
+do
+	echo M $User
+	echo $User >>CVS.adm/Mod
+done
+
+for User in $ALIST
+do
+	echo A $User
+done
+
+for User in $RLIST
+do
+	echo R $User
+done
+
+# do all the merges
+for User in $GLIST
+do
+	Rcs=$Repository/$User,v
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	if	# merge differences between $Rcs version $VN_User and
+		# head version of $Rcs into $User
+		$ACT $RCSBIN/rcsmerge -r$VN_User $Rcs 2>&1
+	then	:
+	else	# something very wrong
+		echo $Name: could not merge revision $VN_User of $User >&2
+		OK=no
+		continue
+	fi
+	
+	# register again with *OLD* time stamp and *NEW* version number
+	$ACT $CVSLIB/RG.aux $User $VN_Rcs "$TS_Rcs"
+	
+	if	# find out about conflicts the only way I know
+		grep '^>>>>>>> ' $User >/dev/null
+	then
+		echo $Name: conflicts found in $User >&2
+		echo C $User		# $User Conflict
+	else
+		echo M $User		# $User Modified
+	fi
+	echo $User >>CVS.adm/Mod
+done
+
+sort -u CVS.adm/Mod -o CVS.adm/Mod
+
+# descend into lower directories, if any
+case $NOPARAMS in
+yes)
+	for D in *
+	do
+		if	# $D for directory
+			[ -d $D ] \
+		&&	# $D holds a concurrent version
+			[ -d $D/CVS.adm ]
+		then	# recursively apply UV
+			(cd $D; $CVSBIN/UV)
+		fi
+	done
+	;;
+esac
+
+$CVSLIB/EF.aux				# update CVS.adm/Files
+
+# did we succeed?
+case $OK in
+no)
+	exit 1
+	;;
+esac
+
+exit 0

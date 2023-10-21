@@ -1,0 +1,285 @@
+V7UNIX=1	/0 if V6 or PWB
+exit=1
+fork=2
+read=3
+write=4
+open=5
+close=6
+wait=7
+creat=8.
+exec=11.
+lseek=19.
+signal=48.
+iot=4
+nop=240
+
+.text
+. = .+10000
+/ this code is acutally org'd to 0150000
+go:
+	nop
+	nop
+	nop
+/       jsr     pc,init         / C program dungeon.c now opens files
+	nop                     /remove this line if jsr pc,init
+	nop                     /remove this line if jsr pc,init
+	jmp	start
+
+	
+.globl	readw
+readw:
+/Code between here and rdc: not used anymore, just filler so
+/addresses don't move.  Patched in rdx at end to handle V7
+/Lseek stuff.
+	jmp	rdx	/ V7 lseek, return to rdc:
+/	mov     (sp)+,retaddr
+	mov	r0,blk0
+	mov	fd,r0
+	sys	lseek
+blk0:	0
+ptr0:	3
+rdc:	mov     (sp)+,caddr
+	asl	(sp)	/conv word count to byte count
+	mov	(sp)+,cnt
+	mov     fd,r0
+	sys     read
+caddr:  -1
+cnt:    0
+	tst     (sp)+
+	jmp     *retaddr
+retaddr:        -1
+
+init:
+	sys     open; txtf; 0
+	bcs     err
+	mov     r0,tfd
+	sys     open; indf; 0
+	bcs     err
+	mov     r0,ifd
+/	sys     open; ovf; 0
+/	bcs     err
+/ try to open /tmp/nedtmp/.doverlay first, it is on RS04 disk
+	jsr	pc,opnovl
+	nop
+	nop
+/
+	mov     r0,ofd
+	rts     pc
+
+err:
+	iot     377     /bomb out
+
+tfd:    3       / dtext.dat open on fd3
+ifd:    4       / dindex.dat open on fd4
+ofd:    5       / doverlay open on fd5
+fd:     -1      / for saving game on dungeon.dat
+
+reado:  mov     ofd,fd
+	br      readw
+
+readi:  mov     ifd,fd
+	br      readx
+
+readt:  mov     tfd,fd
+	br      readx
+
+readx:
+	add     $2,(sp)         /bump ret addr to skip over chan
+	br      readw
+
+readd:
+	cmp     *(sp),$0        /check for chan 0
+	beq     readi           /read dinex.dat
+	cmp     *(sp),$1        /read dtext.dat
+	beq     readt
+	iot                     /too bad
+
+
+
+txtf:   </v/ghg/dtext.dat\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0>
+indf:   </v/ghg/dindex.dat\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0>
+ovf:    </v/ghg/ovr\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0>
+ovfast: </tmp/nedtmp/doverlay\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0>
+	.even
+
+
+opnovl:
+	sys     open; ovfast; 0 /see if /tmp/nedtmp/doverlay is there
+	bcc     opnx            /yep
+
+	sys     open; ovf; 0    /get overlay file on slow disk
+	bcs     err
+opnx:
+	rts     pc
+
+start:
+	mov	$4,r0
+	mov	$140232,r1
+	mov	$1,r2
+	mov	$140442,r3
+	mov	$137724,r4
+	mov	$20670,r5
+	mov	$1102,sp
+	jmp	*$17332
+
+getchar:
+	clr     r0
+	sys     read; char; 1
+	jsr     pc,getch        /extended char processing
+	cmp	$12,r0
+	bne	getx
+	mov	$15,r0	/map LF to CR
+getx:
+	rts     pc
+
+.print:                 /rt-11 .print emulator
+	mov     r1,-(sp)
+	mov     r2,-(sp)
+	mov     r0,r1   /scan until byte with right 7 bits zero found
+prl:
+	movb    (r1)+,r2
+	bic     $177600,r2
+	bne     prl
+/ terminator found
+	dec     r1      /r1 points to terminator
+	mov     r0,paddr /addr of string to output
+	movb    (r1),r2 /get terminator
+	sub     r0,r1   /size of string to output
+	mov     r1,pcnt
+	mov     $1,r0   /write to stand output
+	sys     write
+paddr:  0
+pcnt:   0
+	tstb    r2
+	bmi     pout    /skip crlf if 200 bit set in terminator
+	mov     $1,r0
+	sys     write; crlf; 2  /output crlf
+pout:
+	mov     (sp)+,r2
+	mov     (sp)+,r1
+	rts     pc
+crlf:
+	<\r\n>
+char:	0
+
+putchar:
+	mov     r0,char
+	mov     $1,r0
+	sys     write; char; 1
+	rts     pc
+
+eol:
+	mov     $1,r0
+	sys     write; crlf; 2
+	rts     pc
+
+getch:                  /extended getchar stuff
+	tst     r0      /see if EOF
+	beq     endit   /yep
+	mov     char,r0
+	cmp     lastch,$'\n
+	bne     getch2  /not start of line
+	cmp     r0,$'>  /save game
+	bne     2f
+	jsr     pc,save
+	br      savx
+2:
+	cmp     r0,$'<
+	bne     2f
+	jsr     pc,restor
+	br      savx
+2:
+	cmp     r0,$'!
+	bne     getch2
+	sys     fork
+	br      kid
+	br      parent
+/this code run in kid
+kid:    sys     signal; 2; 0
+	sys     exec; shname; shargs    /process !command line
+endit:  sys     exit
+shname: </bin/sh\0>
+	.even
+shargs: sharg0; sharg1; 0
+sharg0: <-h\0>
+sharg1: <-t\0>
+	.even
+
+parent: sys     wait
+	mov     $1,r0
+	sys     write; prom; 3
+	tst     (sp)+           /clean off stack
+	jmp     getchar
+
+prom:   <!\n\>>
+	.even
+
+savx:   clr     r0
+	tst     (sp)+
+	jmp     getchar
+
+getch2:
+	mov     char,r0
+	mov     r0,lastch
+	rts     pc
+
+lastch: '\n
+
+save:                   /save game
+	sys     creat; savfil; 644
+	bcs     serr
+	mov     r0,sfd
+	sys     write; 22410; 17812.
+	bcs     serr
+	mov     sfd,r0
+	sys     close
+	mov     $1,r0
+	sys     write; svmg; 11.
+	rts     pc
+
+sfd:    -1
+serr:   mov     $1,r0
+	sys     write; ermsg; 6
+	rts     pc
+
+ermsg:  <error\n>
+	.even
+
+restor:         /restore game
+	sys     open; savfil; 0
+	bcs     serr
+	mov     r0,sfd
+	sys     read; 22410; 17812.
+	bcs     serr
+	mov     sfd,r0
+	sys     close
+	mov     $1,r0
+	sys     write; rsmg; 14.
+	rts     pc
+savfil: <dungeon.dat\0\0\0\0\0\0\0>
+
+svmg:   <game saved\n>
+rsmg:   <game restored\n>
+	.even
+
+rdx:	mov     (sp)+,retaddr
+	.if	V7UNIX-1	/V6 seek call
+	mov	r0,blk
+	mov	fd,r0
+	sys	seek
+blk:	0
+ptr:	3
+	.endif
+	.if	V7UNIX		/V7 lseek call
+	mov	r1,-(sp)
+	mul	$512.,r0	/r0 is high offset, r1 is low offset
+	mov	r0,off1
+	mov	r1,off2
+	mov	fd,r0
+	sys	lseek
+off1:	0
+off2:	0
+whence:	0
+	mov	(sp)+,r1
+	.endif
+	jmp	rdc

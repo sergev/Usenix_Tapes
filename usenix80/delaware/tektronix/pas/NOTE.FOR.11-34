@@ -1,0 +1,66 @@
+A note for 11/34 owners:
+
+We have got troubles installing this Pascal system on a 11/34: Occasion-
+ally  programs  generated  memory faults, while the same programs worked
+fine on, for instance, a 11/40.  It worked out that this  is  caused  by
+the  way  the  autoincrement addressing mode is handled by the different
+processors.  For example, if the instruction
+
+     clr     (r5)+
+
+causes a memory-fault on an 11/40, then the register r5 is  already  in-
+cremented, while on an 11/34 the register is not yet incremented.
+
+Inside the UNIX kernel, in m40.s, is  a  routine  called  backup,  which
+tries to undo all changes to registers, whenever a program traps because
+of a segmentation violation.  All 11/34 systems I  have  seen,  use  the
+backup routine as it is for the 11/40, and therefore they fail to recov-
+er correctly.
+
+Because the autodecrement addressing mode is  not  different  for  these
+machines,  C programs do not have any problems.  Pascal programs, howev-
+er, have their stack grow upwards, using  the  autoincrement  mode  when
+pushing an item on the stack.
+
+There is a very simple solution  to  this  problem:  change  the  backup
+routine  a little bit.  Look for the routine backup.  At the end of this
+routine you will find the label 'fetch:'.  Just before  that  label  you
+will find the following table:
+
+0:      .byte   0,0,10,20,-10,-20,0,0
+
+Change this table into:
+
+0:      .byte   0,0,0,20,-10,-20,0,0    / change for autoincrement
+
+The number 10 means that for addressing mode 2 (autoincrement)  the  re-
+gister  must be decremented with 1 for byte instructions, and with 2 for
+word instructions.  Changing it to zero means that the register does not
+have to be changed at all.
+
+WARNING: This change works fine for all Pascal programs.  However, there
+are  some nasty problems with addressing mode 3, autoincrement deferred.
+If the first memory reference causes a segmentation violation, then  the
+register  is  not  yet  incremented,  but if the second memory reference
+fails, then the register is incremented.  The solution to  this  problem
+is  much  harder.  Because we do not have an 11/34 on which we can test,
+we do not have solved the problem.  We would be glad to hear of somebody
+who has a solution.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

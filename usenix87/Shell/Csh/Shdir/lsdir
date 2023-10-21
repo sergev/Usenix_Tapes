@@ -1,0 +1,84 @@
+#! /bin/csh -f
+#
+#	Shell script to load/save current directory stack from/to a file
+#
+#	Author:		Paul Lew
+#	Created at:	02/28/86  12:43
+#	Last update:	10/08/86  04:48 PM
+#
+#	Usage:	source lsdir <CR>	-- must be sourced
+#
+if ( $?0 ) then
+	echo "...You should source this program, not execute it..."
+	goto end
+	endif
+#---------------------------------------------------------------#
+#		     Variable Declarations			#
+#---------------------------------------------------------------#
+if ( ! ${?SAVED_WD} ) setenv SAVED_WD ~/saved_wd
+unset load_dirs
+set fname = ""
+echo -n "Enter S/L/D for save/load/directory: "
+switch ( "$<" )
+	case [lL]:
+		set load_dirs
+		set opt = 'load'
+		breaksw
+	case [sS]:
+		set opt = 'save'
+		breaksw
+	case [dD]:
+		ls -l ${SAVED_WD}/*.wd | less
+		while ( 1 )
+			echo -n "File to see (no extension): "
+			set fname = "$<"
+			if ( ${fname} == "" ) goto end
+			cat ${SAVED_WD}/${fname}.wd | shdir
+			end
+	default:
+		goto end
+	endsw
+#---------------------------------------------------------------#
+#	Get filename from terminal and make sure it exists	#
+#---------------------------------------------------------------#
+while ( "${fname}" == "" )
+	echo -n "File to ${opt}: "
+	set fname = "$<"
+	if ( "${fname}" == "" ) continue
+	if ( "${fname:t}" != "${fname}" ) then
+		echo -n "No path allowed, "
+		set fname = ''
+		endif
+	set filename = "${SAVED_WD}/${fname}.wd"
+	if ( ${?load_dirs} ) then
+		if ( ! -e "${filename}" ) then
+			echo -n "File [${filename}] does not exist, "
+			set fname = ''
+			endif
+		endif
+	end
+#---------------------------------------------------------------#
+#			Process request				#
+#---------------------------------------------------------------#
+if ( ${?load_dirs} ) then
+	set curdir = `dirs`
+	echo "Old directory stack looks like:"
+	shdir ${curdir}
+	@ dir_count = ${#curdir} - 1
+	repeat ${dir_count} popd > /dev/null
+	source /usr/local/bin/restdir
+	echo "New directory stack looks like:"
+	shdir `dirs`
+else
+	if ( -e ${filename} ) then
+		cat ${filename} | shdir
+		echo -n "Old file listed above, override? [y/n]: "
+		if ( "$<" != "y" ) goto end
+		endif
+	dirs > ${filename}
+	endif
+#---------------------------------------------------------------#
+#		Clean up and exit here...			#
+#---------------------------------------------------------------#
+end:
+	unset filename fname load_dirs dir_count curdir

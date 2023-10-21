@@ -1,0 +1,252 @@
+.th SCANARGS III 10/4/79
+.sh NAME
+scanargs - formatted conversion from command argument list
+.sh SYNOPSIS
+.bd "#include <stdio.h>"
+.br
+.bd "scanargs(argc, argv, format" 
+[, pointer]...
+.bd )
+.br
+.bd "int argc;"
+.br
+.bd "char *argv[];"
+.br
+.bd "char *format;"
+.sh DESCRIPTION
+.it Scanargs
+reads
+.it argc
+arguments from an argument list pointed to by
+.it argv.
+It converts the argument list according to the format string,
+and stores the results of the conversions in its parameters.
+.s3
+Scanargs expects as its parameters an argument count
+.it argc,
+a pointer to an argument list 
+.it argv
+(see exec(II)), a control string
+.it format,
+described below, and a set of
+.it pointer
+arguments indicating where the converted output should be stored.
+.s3
+The control string contains specifications, which are used to direct
+interpretation of argument sequences.  It consists of
+the necessary information to describe both an acceptable 
+syntax for the argument list, and the expected meaning of each argument.
+.s3
+If the scanning fails it will print a cryptic 
+message telling why it failed, and generate a 
+.it usage
+message from the control string.
+.s3
+The control string is composed of two parts:
+.s3
+.bd NAME:\ \ 
+The first characters in the string are assumed to be the calling 
+name of the program being executed. This is used for generating 
+usage messages.
+.s3
+.bd CONVERSIONS:\ \ 
+Following the name, an optional list of conversion specifications is given,
+with separating spaces.  The structure of a conversion specification:
+.s3
+.in 10
+.bd "label_key_conversion"
+.in 5
+.s3
+consists of a
+.it label
+which is a string of non-space characters describing the acceptable
+argument, a
+.it key
+which may be either of
+.br
+.s3
+\fB%\fR\ \ The argument is optional. Its absence is ignored.
+.br
+.s3
+\fB!\fR\ \ A required argument. If absent, an error return ensues.
+.br
+.s3
+and a 
+.it conversion
+character which indicates the interpretation of the argument; the corresponding
+pointer parameter must be of a restricted type.
+.bp
+The following conversion characters are legal:
+.br
+.s3
+.bd d
+'in 10
+\ \ \ a decimal integer is expected; the corresponding parameter should
+be an 
+.it int
+pointer.
+'in 5
+.br
+.s3
+.bd o
+'in 10
+\ \ \ an octal integer is expected; the corresponding parameter should
+be an 
+.it int
+pointer.
+'in 5
+.br
+.s3
+.bd f
+'in 10
+\ \ \ a floating point number is expected; the corresponding parameter should
+be a pointer to a
+.it float.
+.br
+'in 5
+.s3
+.bd "x X d D o O f F"
+.in 10
+all numeric types supported by 
+.it scanf(III)
+are legal.
+'in 5
+.s3
+.bd s
+'in 10
+\ \ \ a character string is expected; the corresponding parameter should be a 
+.it "pointer to a char pointer."
+'in 5
+.br
+.s3
+.bd -
+'in 10
+\ \ \ a single character flag is expected; the corresponding parameter should
+be an 
+.it int
+pointer.  The occurrence of a
+.bd -
+followed by the character specified in the label
+will cause the setting of the least significant bit of the integer pointed to 
+by the corresponding parameter.  The label may consist of up to sixteen option
+characters, in which case one of the bits of the integer is independantly
+set to reflect which one of the flags was present. (The right most character
+corresponds to the LSB of the integer)  Only one option may be chosen from
+each conversion specification.  The bits which are not set will remain in
+their previous state.
+'in 5
+.br
+.s3
+The scanner will process the control string from left to right,
+and where there are multiple conversions of the same type, they will
+be assigned one to one with their occurrence in the argument list.
+Where the order of the arguments is not ambiguous in the control string,
+they may occur in any order in the argument list. (ie. A decimal number
+will not be confused with a flag, but may
+be confused with an octal number or another decimal number. So if an
+octal and a decimal number are to be arguments, their order will determine
+their conversion, while a decimal number and a flag as arguments may occur
+in any order and still be converted correctly.)
+.br
+.s3
+An argument list that does not match the requirements of the control
+string will cause the printing of a short message telling why, and
+a message telling what the correct usage is.
+This usage is gleaned from the control string, and the labels are used
+directly.  The labels should be both terse and descriptive!  
+.bp
+The
+.it scanargs
+function returns 1 when the argument list matched the requirements
+of the control string, and returns 0 if there was a failure.
+Parameters for any conversions not matched are left untouched.
+.br
+For example, the call
+.br
+.s3
+'in 10
+int i; double x; char *name;
+.br
+scanargs(argc, argv, "program decimal%d floating%F file%s"
+.in 15
+, &i, &x, &name );
+.in 5
+.s3
+in a C program executed by the shell command
+.br
+.s3
+'in 10
+% program 10 3.5397 inputfile
+'in 5
+.br
+.s3
+will assign to 
+.it i
+the value 10, 
+.it x
+the value 3.5397, and
+.it name
+will point to the string "inputfile".
+.br
+.s3
+If the program was executed by the shell command
+.br
+.s3
+'in 10
+% program  3.4 5.7 inputfile
+'in 5
+.br
+.s3
+the following would be printed on the standard error:
+.br
+.s3
+'in 10
+extra arguments not processed
+.br
+usage : program [decimal] [floating] [file]
+'in 5
+.br
+.s3
+because 3.4 matches the type of 'floating' and inputfile matches
+the type of 'file', leaving 5.7 unmatched.
+.br
+This call could be used for the 
+.it diff
+command
+.br
+.s3
+'in 10
+int blanks; int flags; char *file1; char *file2;
+.br
+scanargs(argc, argv, "diff b%- efh%- file1!s file2!s"
+.in 15
+, &blanks, &flags, &file1, &file2 );
+.in 5
+.s3
+and would only allow one of either 
+.bd "-e -f"
+of
+.bd -h
+to be chosen optionally, with 
+.bd -b 
+as an independant option.
+.bd File1
+and
+.bd file2
+are both required.
+The usage message for this version of
+.it diff
+would be
+.br
+.s3
+'in 10
+usage : diff [-b] -{efh} file1 file2
+'in 5
+.sh SEE ALSO
+exec(II), scanf(III)
+.sh DIAGNOSTICS
+By its nature a call to scanargs defines a syntax
+which may be ambiguous, and although the results may be surprising, 
+they are quite predictable.
+.sh AUTHOR
+Gary Newman - Ampex Corp.

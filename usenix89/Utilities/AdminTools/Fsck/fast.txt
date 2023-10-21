@@ -1,0 +1,431 @@
+
+                                      ----
+                                      Fast
+                                      ----
+
+                             A file transfer protocol
+                                   for use over
+                          error-free communications links
+
+                            (Preliminary Specification)
+
+
+
+This document has been distributed to and discussed with most major
+information services, network service providers, and communications software
+developers.  Your comments are welcome and will receive serious consideration.
+Send comments to Toby Nixon [Hayes] 70271,404, on this SIG or via EasyPlex.
+
+
+------
+Source
+------
+
+Hayes Microcomputer Products, Inc.
+705 Westech Drive
+Norcross, Georgia  30092
+
+
+-------------
+Revision Date
+-------------
+
+July 8, 1986  (Text; original MacWrite)
+
+
+
+------------
+Introduction
+------------
+
+Fast is a session-level file transfer protocol designed to run over an
+error-free link such as X.25, X.PC or MNP.  Since the link is assumed to be
+error-free and packetizing is done by the network layer of the underlying
+protocol, no error detection/correction mechanisms are necessary.
+Furthermore, the underlying link mechanism is expected to handle transparency
+and flow-control.  In its simplest form, Fast will read the file from the disk
+and dump it over the link.  The receive side collects the data and writes it
+to a file.  Features are present to help assure synchronization, and allow
+either side to abort the transfer.
+
+Fast is designed to be simple and easy to implement.  This philosophy will
+serve to encourage authors of public domain software and simple terminal
+programs to support the protocol and take advantage of the power provided by
+modems with error-free capabilities.
+
+-----------
+File Header
+-----------
+
+A preamble or header is formed by the sender.  It contains the following
+information:
+
+1.      A send signature byte to confirm that this is in fact a FAST transfer
+        now underway.
+
+2.      A header length byte to ensure synchronization.
+
+3.      A 32-bit field to indicate the size of the file in bytes (high order
+        first).
+
+4.      A 2-byte field (high order first) to indicate the number of files to be
+        transferred (if known).  Set to 0 if unknown.
+
+5.      A flag which indicates whether a CCITT CRC-16 will be provided at the
+        end of the file.
+
+6.      A format byte to indicate the file format (binary, DIA, etc.)
+
+7.      Modification date and time.  Six binary format bytes:  year, month,
+        days, hours, minutes, seconds.  If unknown, fill the fields with zeros.
+
+8.      A file name length byte.
+
+9.      The file name (which may be ignored).
+
+10.     The end header byte.
+
+
+The send signature byte has the value of $01 (SOH).  It has two functions.
+First, detection of this byte confirms to the receiver that a Fast file
+transfer is underway.  Second, data preceding the send signature byte can be
+discarded or displayed on the user's terminal.
+
+The header length byte serves to further validate the Fast header.  Another
+protocol or other garbage has a slim chance of matching this value in a
+character following an SOH.  It counts the number of characters that follow
+including the end header flag ETX ($03).
+
+Next, the file size is given in a 4 byte field.  The order of the field is
+most significant byte to least significant.  The file size allows the
+receiving program to display progress information to the user.
+
+The receiver detects the end of the transfer upon receiving this number of
+characters.  The file size refers to the actual amout of data to be
+transferred, including any additional information such as a MacBinary header
+which may be included as part of the data.
+
+Except for the end header byte, the remaining fields are optional.  For each
+field the transmitter elects not to use, a special value shall be entered to
+indicate the absence of meaningful data in that field.  The reciever has the
+option whether or not to take advantage of the information contained in any of
+these fields.
+
+The file count enumerates the number of files to be sent in a batch transfer,
+and is included for convenience.  The receiving program may elect to display
+the file count to the user as progress information.  The protocol itself is
+open-ended; the presence of another file to follow the last one transferred is
+indicated by a handshake at the end of the transfer.  If the sending system is
+unable to determine exactly how many files will be transferred, it will set
+the value of this field to zero.  The file count is decremented by the sender
+after each successful transfer.
+
+The CRC flag indicates whether the transmitter will provide a CCITT CRC-16 at
+the end of the file following the FS character.  The receiver may use this
+value for validation.  If the receiver elects not to take advantage of this
+information, it must still read and dispose of the additional two characters
+following the FS when this flag is set.  The values are 1 for yes and 0 for no.
+
+The file format byte is provided for use by a higher level entity if format
+conversion is desired.  It is not strictly a part of Fast and should be set to
+0 for normal binary transfers.  Other values are for future study.
+
+The modification date and time is a six byte set of binary numbers.  The order
+of presentation is year, month, day, hour, minutes, and seconds.  This field
+is optional for both the sender and the receiver.  The sender may elect not to
+enter the information or may not be able to obtain the information.  When this
+is the case, the sender will fill the field with zeros.  Similarly, the
+receiver may elect not to process the information.  The date is the most
+recent change date on the sender's system directory.  This may not reflect the
+actual change date of the file since the sending system may only be acting as
+an intermediary.
+
+The file name length precedes the actual filename.  It is the responsibility
+of the receiving system to convert the file name into a format acceptable to
+its operating system and/or resolve name conflicts with the user.  If the file
+name length is 0, it will be up to the receiver to generate an appropriate
+file name.
+
+----------
+Procedures
+----------
+
+Fast is receiver driven.  The receiver initiates the protocol by sending a
+receive signature byte, ENQ ($05).  Having sent the ENQ, the receiver enters
+state R1.  After a timeout TIM1 (user selectable with a default value of 3
+seconds), the ENQ will be retransmitted up to N1 times (default is 20) after
+which the transfer will be aborted by the receiver with a cause of "No
+Transmitter Start."
+
+The transmitter begins by awaiting an ENQ and starting timer TIM3 (default is
+N1*TIM1 = 60 seconds).  If no ENQ is received in TIM3 seconds the
+transmitter will send an abort sequence and end the session.
+
+Having received the ENQ the transmitter will send the header as defined above
+and enter state T2.  The transmitter will ignore any redundant ENQ's received.
+
+The receiver will ignore any data received until the signature word of the
+file header (SOH) is detected or the transmitter abort sequence (described
+below) is received.
+
+Upon receiving the header the receiver will prepare for the transfer by
+opening the file, ensuring enough disk space, and resolving any file name and
+format conflicts (state R2).  The header length is verified to point to the
+ETX or more data is awaited up to timer TIM2 (default 60 seconds).  If TIM2
+expires, the receiver reenters state R1 and sends ENQ.
+
+If the header is received successfully and accepted, the receiver will then
+send a go-ahead byte (ACK $06) and enter state R3 to accept the actual file
+data.  Upon the receipt of the go-ahead signal, the transmitter sends the file
+contents (state T3).  At the end of the file the transmitter will send a file
+terminator (ASCII FS - $1C) followed by a 2 byte CRC if the CRC flag was set
+in the header.
+
+The CRC is calculated using the generator polynomial x^16 + x^12 + x^5 + 1.
+Both the transmit FCS generator and receive FCS checker are initialized to all
+ones; the transmitter ones-complements the remainder and sends it (in reverse
+bit order from the data) as the FCS.  After passing the received FCS through
+the checking algorithm, the receiver will have a result of 0001110100001111
+(x^15 through x^0) in the absence of transmission errors.
+
+If the quota of characters has not been received and the receiver has been
+idle for timer TIM2, the receiver will abort the transfer.  If the quota has
+been received but the file terminator and optional CRC have not been received
+in TIM2 seconds, the receiver will abort the transfer.  If the quota of
+characters has been received but the next character is not the file terminator
+FS, the receiver will abort the transfer.
+
+The receiver will also send an abort sequence if the CRC is invalid.  In this
+case the transmitter may elect to send a confirmational abort sequence and end
+the protocol session or alternatively resend the file again by entering state
+T1 and awaiting an ENQ.  In order to resend the file, the receiver must also
+agree to receive the file again by sending an ENQ and entering state R1.
+
+After the indicated number of bytes, the file separator ($1C - ASCII FS) and
+optional CRC have been received, the transfer is complete.  The receiver will
+enter state R1 and send an ENQ.  The ENQ serves to acknowledge a successful
+transfer of the file.  If no more files are to be sent, the transmitter sends
+the done flag (EOT, $04).  If another file is to be transferred, the
+transmitter sends the next header and the entire process is repeated.
+
+If either side detects a break, parity, framing error, it will abort the
+protocol.  A break is not the preferred method to abort the session since it
+is interpreted unpredictably by the underlying transport mechanism.
+
+--------------
+Transfer Abort
+--------------
+
+At any time during the transfer, including states R1 and R2, the receiver may
+abort the transfer with a sequence that indicates the abort and a cause code.
+The sequence format is an ASCII CAN (^X or $18) followed by one of the
+following codes:
+
+        $30 - Unspecified
+        $31 - User Cancelled
+        $32 - Transmitter Cancelled (an acknowledgement)
+        $33 - Insufficient Space (on receiver's disk)
+        $34 - CRC Error
+        $35 - File Length Error (too big - FS not where expected)
+        $36 - Receiver Timeout (TIM2)
+        $37 - Receiver Data Error (Parity error, overrun, break detected)
+        $38 - Bad Header Format (incorrect length, etc.)
+        $39 - No transmitter start (TIM1 exhausted N1 times)
+        $3A - Abort with message (message length followed by null terminated
+              text string)
+        $3B - Skip File (Send next file header or EOT).
+
+In addition, a manual abort signal (^C) is provided in the case that the
+receiver is in interactive mode.  No cause code is required for manual abort.
+
+The transmitter will acknowledge the abort with the transmitter abort sequence
+described below.  The receiver will discard all characters preceding the
+transmitter abort sequence. If the receiver has not received abort
+confirmation and the line has been idle for TIM2 (60 seconds),  it will exit
+anyway.
+
+The transmitter aborts by sending an abort sequence consisting of six
+contiguous abort characters.  Upon receipt, the receiver will confirm the
+abort with the abort packet and a cause code of "transmitter cancelled."  The
+abort sequence is defined to be six ^X ($18) characters.  While waiting for
+abort confirmation from the receiver, the transmitter will ignore any other
+incoming characters (except ^C).  If the transmitter has not received abort
+confirmation in time TIM4 (20 seconds), it will exit anyway.
+
+The mechanism for ensuring transparency of data in the file or file header
+resembling the transmitter abort sequence is modeled after the zero-bit
+insertion technique used in HDLC.  An extra quote character DLE ($10) is
+inserted after five contiguous abort characters in the data.  The receiver
+will strip off the quote character if it follows five abort characters in the
+file or header contents.
+
+----------------------
+The Skip File Function
+----------------------
+
+Upon receipt of the header and at no other time, the receiver may elect not to
+receive the current file.  It sends an abort sequence with code $3B.  The
+receiver then sends an ENQ, starts timer TIM1, and enters the protocol
+startup state R1.  Upon receipt of the skip file command, the transmitter will
+close the curent file, open the next file, and send its header.  If there are
+no more files to send, the Transmitter sends an EOT.
+
+------------------------------
+Summary of Counters and Timers
+------------------------------
+
+        Name    Description                             Value
+        ----    ------------------------------------    -----
+
+        (Receiver)
+
+        N1      Protocol startup retransmissions        20
+        TIM1    Receiver startup timeout                3 seconds
+        TIM2    Maximum intercharacter delay            60 seconds
+
+        (Transmitter)
+
+        TIM3    Transmitter startup timeout (N1 * TIM1) 60 seconds
+        TIM4    Acknowledgement turnaround              20 seconds
+
+ 
+-----------------
+Summary of States
+-----------------
+
+(Receiver)
+
+R1:     ENQ Sent - Initial state of the receiver after having
+        sent an ENQ.  The receiver is awaiting the file header.
+
+R2:     Receiving Header -  The receiver now processes the header and sends an
+        ACK.
+
+R3:     File Transfer -  The receiver awaits and then processes the file
+        contents.
+
+R4:     Abort Sent - The receiver has sent an abort sequence and awaits
+        confirmation from the sender.
+
+
+(Transmitter)
+
+T1:     Awaiting ENQ - The initial startup state of the transmitter.  The
+        input stream is scanned for an ENQ from the receiver. Upon receipt of
+        the ENQ, the transmitter sends the file header information.
+
+T2:     Header Sent - The transmitter awaits an ACK from the receiver.
+
+T3:     File Transfer - The transmitter has received the ACK and is now sending
+        the file.
+
+T4:     File Sent - The transmitter awaits an ENQ from the receiver.  Upon
+        receipt, it terminates the session with an EOT.
+
+T5:     Abort Sent - The transmitter initiated an abort and awaits receiver
+        confirmation.
+
+
+--------------------
+Receiver State Table
+--------------------
+
+At Start: Send ENQ, Start TIM1, Go to R1
+
++--------------+--------------+--------------+--------------+--------------+
+|     Data     |   State R1   |   State R2   |   State R3   |   State R4   |
+|   Received   |  (ENQ Sent)  |  (Receiving  |    (File     | (Abort Sent) |
+|              |              |    Header)   |   Transfer)  |              |
++==============+==============+==============+==============+==============+
+|              | Stop TIM1    |              |              |              |
+|  SOH         | Start TIM2   |      NA      |      NA      |      NA      |
+|              | Enter R2     |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  Header      |              | Reset TIM2   |              |              |
+|  Count       |      NA      | Send ACK     |      NA      |      NA      |
+|  Satisfied   |              | Enter R3 *%  |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  File        |              |              | Send ENQ     |              |
+|  Size        |      NA      |      NA      | Stop TIM2    |      NA      |
+|  Satisfied   |              |              | Start TIM1 * |              |
+|              |              |              | Enter R1     |              |
++--------------+--------------+--------------+--------------+--------------+
+|              |              |              |              |              |
+|  EOT         | Exit Fast    |      NA      |      NA      |      NA      |
+|              |              |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  Transmit    | Send Abort   |              |              |              |
+|  Abort       |   ($32)      |      NA      |      NA      | Exit Fast    |
+|  Sequence    | Exit Fast    |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  Garbage     | Ignore data  |              |              |              |
+|  or          | Reset TIM1   |      NA      |      NA      | Ignore Data  |
+|  Other Data  |              |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  TIM1        | Send ENQ     |              |              |              |
+|  Expires     | Reset TIM1   |      NA      |      NA      |      NA      |
+|              |              |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+|  TIM2        |              | Send Abort   | Send Abort   |              |
+|  Expires     |      NA      |   ($36)      |   ($36)      | Exit Fast    |
+|              |              | Enter R4     | Enter R4     |              |
++--------------+--------------+--------------+--------------+--------------+
+|  Character   | Send Abort   | Send Abort   | Send Abort   |              |
+|  Error or    |   ($37)      |   ($37)      |   ($37)      | Ignore       |
+|  Break       | Enter R4     | Enter R4     | Enter R4     |              |
++--------------+--------------+--------------+--------------+--------------+
+|  N1 count    | Send Abort   |              |              |              |
+|  Exhausted   |   ($39)      |      NA      |      NA      |      NA      |
+|              | Exit Fast    |              |              |              |
++--------------+--------------+--------------+--------------+--------------+
+
+*   If error detected, send abort with appropriate cause ($33, $34, $35, or
+    $38) and enter state R4.
+%   Or send Skip File, ENQ, Start TIM1, and enter state R1.
+
+Note:  Timer TIM2 is reset any time a character is received.
+
+
+-----------------------
+Transmitter State Table
+-----------------------
+
+At Start: Start Timer TIM3, enter state T1
+
++------------+------------+------------+------------+------------+------------+
+|    Data    |  State T1  |  State T2  |  State T3  |  State T4  |  State T5  |
+|  Received  |   (Await   |  (Header   |   (File    |   (File    |   (Abort   |
+|            |     ENQ)   |    Sent)   |  Transfer) |    Sent)   |    Sent)   |
++============+============+============+============+============+============+
+|            | Stop TIM3  |            | Send Abort | EOT & Exit;|            |
+|  ENQ       | Send Header| Ignore     | Enter T5   | or Header  | Reset TIM4 |
+|            | Enter T2   |            |            | & Enter T2 |            |
++------------+------------+------------+------------+------------+------------+
+|            |            | Start File | Send Abort | Send Abort |            |
+|  ACK       | Ignore     |   Transfer | Enter T5   | Enter T5   | Reset TIM4 |
+|            |            | Enter T3   |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|            |            |            |            |            |            |
+| ^C         | Exit Fast  | Exit Fast  | Exit Fast  | Exit Fast  | Exit Fast  |
+|            |            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|  Skip File | Send Abort | Close File | Send Abort | Send Abort |            |
+|  Received  | Exit Fast  | Enter T4   | Exit Fast  | Exit Fast  | Exit Fast  |
+| (Abort $3B)|            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|  Other     | Send Abort | Send Abort | Send Abort | Send Abort |            |
+|  Abort     | Exit Fast  | Exit Fast  | Exit Fast  | Exit Fast  | Exit Fast  |
+|  Sequence  |            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|  Garbage   | Ignore     | Send Abort | Send Abort | Send Abort |            |
+|  or        | Reset TIM3 | Enter T5   | Enter T5   | Enter T5   | Exit Fast  |
+|  Other     |            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|  TIM3      | Send Abort |            |            |            |            |
+|  Expires   | Exit Fast  |     NA     |     NA     |     NA     |     NA     |
+|            |            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+
+|  TIM4      |            | Send Abort |            | Send Abort |            |
+|  Expires   |     NA     | Enter T5   |     NA     | Enter T5   | Exit Fast  |
+|            |            |            |            |            |            |
++------------+------------+------------+------------+------------+------------+

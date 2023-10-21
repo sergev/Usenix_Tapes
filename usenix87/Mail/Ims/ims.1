@@ -1,0 +1,661 @@
+.TH IMS LOCAL
+.ds i \fBims\fR
+.SH NAME
+\*i \- Intelligent Message System
+.SH SYNOPSIS
+.B \*i
+[ -i ]
+.br
+.B \*i
+.I \*i-command-string
+.SH DESCRIPTION
+\*i is a mail system intended to replace 
+.BR mail (1)
+for regular use.  It uses
+.B mail
+to send messages, in order to retain compatibility with other mailers.
+.PP
+\*i implements a true ``folder'' mechanism for handling mail.  A mail
+cabinet (by default 
+.IR $HOME/.mail )
+is established the first time the program is run, as is a standard
+folder (by default
+.IR incoming-mail ).
+On entry, mail is read into files in the standard folder, unless the
+.I -i
+option is given or an
+.I \*i-command-string
+is specified.  The message pointer is then set to the first new message
+and a command prompt is issued.
+.PP
+There are two ways to use \*i:
+.IR "interactive mode" ,
+which issues a prompt until a
+.I quit
+or
+.I xit
+command is issued or a
+.I control-D
+is typed, and
+.IR "command mode" ,
+which executes the command line and then exits as if the
+.I xit
+command had been issued.  The two modes are described in detail below.
+.SH SETUP
+\*i understands a number of environment variables, supports variables of
+its own, and provides reasonable defaults for anything not specified.
+The environment variables, \*i variables, and their meanings are described
+in Table 1 at the end of this document.
+.PP
+Environment variables are specified in the usual way (see
+.IR sh (1)
+or
+.IR csh (1)
+for examples).  \*i variables are set in the file specified by the
+.I IMSINIT
+variable, or $HOME/.imsinit if no
+.I IMSINIT
+environment variable exists.  They may also be set by the
+.I set
+command from within \*i.
+There is also a system IMSINIT file,
+.IR /usr/lib/imsinit .
+.PP
+The
+.I IMSINIT
+file contains assignment statements of the form:
+.sp
+.nf
+.ce
+\fIvariable\fR = \fIvalue\fR
+.fi
+.sp
+A 
+.I value
+may be a single word or quoted text; if quoted, the value may comprise
+several lines of the
+.I IMSINIT
+file, but this is discouraged because few, if any, \*i commands make use
+of multiple-line values.  The
+.I print-command
+variable is a possible exception.
+.SH COMMANDS
+\*i supports a large number of commands for manipulating messages and
+folders.  They are detailed below.
+.nr i) 5
+.de LS
+.PP
+.ns
+.in +5n+\\n(i)n
+.ll -5n
+..
+.de LI
+.sp
+.ti -\\n(i)n
+\fB\\$1\fR \-
+..
+.de L+
+.sp
+.ti -\\n(i)n
+\fB\\$1\fR
+.br
+.ns
+..
+.de LE
+.ll
+.in
+.PP
+.ns
+..
+.LS
+.LI delete
+Delete the named message, or the current message.  If
+.I type-next-automatically
+is affirmative, a
+.I type
+command is executed with no arguments afterward.
+.LI undelete
+Restore a message deleted with the
+.I delete
+command.  Note that if
+.I xit
+is used to exit \*i, deleted messages will remain deleted but will also
+remain recoverable; an
+.I expunge
+command, either explicit or via the
+.I quit
+command, is required to physically delete messages.
+.LI expunge
+Physically delete messages marked for deletion with the
+.I delete
+command.  An implicit 
+.I expunge
+is done by the
+.I quit
+command.  Unless an
+.I expunge
+is performed, deleted messages still exist and are recoverable with
+.IR undelete .
+.LI type
+Display the specified message (or the current message) using the command
+specified by the
+.I pager
+variable.  If invoked with a numeric message number, that message
+becomes the current message.
+.LI print
+Print the specified message (or the current message) using the command
+specified by the
+.I print-command
+variable.  Note that nothing prevents you from using
+.I print
+as an alias for
+.I type
+by setting the
+.I print-command
+to the same value as that of
+.IR pager .
+.L+ save
+.LI write
+Save the message named by the second argument (or the current message)
+in the message within the
+.I save-folder
+folder named by the first argument.  If a pathname is specified as the
+save message name, it is treated as an ordinary file rather than a
+message in the
+.I save-folder
+folder.  If no arguments are provided, the current message is saved in a
+message in the
+.I save-folder
+folder identified by the current folder name.
+.sp
+Note that it is possible with this mechanism to append one message to
+another.  \*i does not directly support the splitting of messages
+created by the
+.I save
+command, as they are not stored in
+.I read
+file (i.e. mailbox) format.
+.LI set
+With no arguments,
+.I set
+displays the values of all \*i variables.  With an assignment statement
+as an argument, 
+.I set
+performs the specified assignment.  With a variable name as an argument,
+the current value of that variable is printed.  Assignment statements
+are described under
+.IR SETUP .
+Valid \*i variables are described under
+.IR VARIABLES .
+.L+ next
+.LI +
+This command skips to the next message.  If the variable
+.I type-next-automatically
+is affirmative, the new message will be displayed automatically.
+.L+ previous
+.LI -
+This command skips to the previous message.  If the variable
+.I type-next-automatically
+is affirmative, the new message will be displayed automatically.
+.LI reply
+Reply to the named (or current) message.  An envelope is built
+automatically from the message to which the reply is being made;
+all recipients are listed in the envelope.  The
+editor is invoked with a copy of the message enclosed in a box:
+.sp
+.nf
+	+---------------
+	| message is here
+	+---------------
+.fi
+.sp
+See
+.I "SENDING MAIL"
+below for more information.
+.LI goto
+Make the named message current.  If
+.I type-next-automatically
+is affirmative, the message is displayed for you.  This is also
+the default command; if you type something that is
+unrecognizeable, 
+.I goto
+is invoked with the command line as an argument.
+.L+ mail
+.LI send
+Send mail to the specified user.  An empty message is created.
+See 
+.I "SENDING MAIL"
+below for more information.
+.L+ headers
+.L+ from
+.LI list
+List the contents of the current (or named) folder.  The message
+name (number, if the messages were read in with
+.IR read ),
+sender, subject, and status are shown.
+.LI forward
+Forward the named (or current) message to the specified user.
+The message is copied as is into a temporary file, but editing
+only takes place if
+.I edit-forwarded-mail
+is affirmative.  See
+.I "SENDING MAIL"
+below for more information.
+.LI quit
+Leave \*i, performing an automatic
+.I expunge
+of the current folder.
+.L+ exit
+.LI xit
+Leave \*i immediately without expunging messages.
+.L+ ?
+.LI help
+Display a short command list.
+.LI folder
+Display the current folder, or change to the named folder.  If
+the folder does not exist, it is created.
+.sp
+Note that the command
+.br
+.nf
+.sp
+.ce
+\fBset\fR \fIfolder\fR=\fIfolder-name\fR
+.fi
+.sp
+does not create a new folder \fIunless it is used in the
+\fBIMSINIT\fI file\fR.  This is because an implicit
+.B folder
+command is automatically performed on the value of the
+.I folder
+variable on startup.
+.L+ inc
+.LI read
+Read the named file, which is assumed to be in UNIX* mailbox
+format, and extract messages from it.  Messages are named by
+numbers starting with the lowest number not already used by an
+existing (or deleted but not expunged) message in the current
+folder.
+.I read
+displays headers in a format similar to the
+.I list
+command as it goes, then displays the name (number) of the first
+new message.
+.sp
+.I read
+is automatically executed on startup by an interactive \*i unless
+the 
+.I -i
+flag is given; in this case the current message is set to the
+first message read.
+.LI folders
+This command lists the currently existing folders in the cabinet.
+.LI alias
+This command lists aliases or defines them.  With no argument, it
+lists the current aliases.  With one argument, it lists the
+value of the named alias.  With more than one argument, it
+defines the alias named by the first argument to be the rest of
+the line.
+.LI unalias
+This command deletes the aliases named as arguments.
+.LE
+.SH "INTERACTIVE MODE"
+Most uses of \*i are in inteactive mode.  In this mode, an implicit
+.I read
+is done on the current folder and the current message is set to
+the first new message.  A prompt is then issued and \*i waits for
+a command.
+.PP
+Multiple commands may be placed on a single line, separated by
+semicolons.  Note that there is no way to escape a semicolon in
+the current version of \*i.
+.PP
+A command sequence which is empty or does not begin with a
+recognized command verb is passed to the
+.I goto
+command.  An empty line causes nothing to happen if
+.I type-next-automatically
+is not affirmative, otherwise the current message is displayed.
+Anything else must be the name of a message in the current folder
+(but see
+.I "MESSAGE NAMES"
+below).
+.PP
+A command may be abbreviated.  The first command found which
+matches the given part of the command verb will be executed.  Be
+warned that
+.I e
+means
+.IR expunge ,
+while
+.I ex
+must be used for
+.IR exit .
+.SH "COMMAND MODE"
+\*i's command mode takes an \*i command line as described under
+.I "INTERACTIVE MODE"
+on the shell command line.  No implicit
+.I read
+is performed.  Also, no implicit
+.I expunge
+is performed on exit.  After the \*i command line is executed,
+\*i exits immediately.
+.PP
+\*i's command mode is provided for use in shell scripts which
+want to manipulate mail directly; once mail has been read into a
+folder, it is in a format suitable for use with shell scripts.
+(It should be noted here that the original version of \*i was
+itself a shell script; the
+.I read
+command was slow enough to warrant a rewrite in C.)
+.SH "SENDING MAIL"
+All the commands for sending mail act similarly.  An envelope is
+created from the command line or from an existing message; it is
+then presented to you for editing.  The standard UNIX erase
+character may be used to delete characters backwards; anything
+typed will be appended to the line.  (Be warned that lines longer
+than 79 characters edited by this method on a VT100 or similar
+terminal are a good way to become frustrated.)  After the
+envelope is ready, you are placed in an editor (as specified by
+the
+.I editor
+variable) to create or modify the message.  (This will not be
+done for forwarded messages unless
+.I edit-forwarded-messages
+is affirmative.)
+.PP
+After the editor returns, you are asked if you really want to
+send the message.  If you answer anything not beginning with
+``N'' or ``n'', you are again given a chance to edit the
+envelope.  After this, the message is piped to the program
+specified by the
+.I mail-sending-command
+variable (default is 
+.IR mail(1))
+with a single argument, the name of one recipient.
+.SH VARIABLES
+\*i supports a fixed number of variables; new variables can not
+be created on the fly.  The variables are:
+.nr i) 10
+.LS
+.LI folder
+The name of the current folder.  Setting this variable is similar
+to using the
+.I folder
+command, but will not create the new folder if it doesn't exist.
+(The only exception to this is when 
+.I folder
+is set in the 
+.I IMSINIT
+file; in this case, an implicit
+.I folder
+command is performed with the contents of this variable as an
+argument.  The environment variable
+.I FOLDER
+overrides this variable on startup.
+.LI cabinet
+This is the name of the directory where all folders accessible
+directly by \*i live.  It's usually not a good idea to change
+this in the middle of a session; its main use is to specify an
+alternative to the default cabinet ($HOME/.mail) in the 
+.I IMSINIT
+file.  The environment variable
+.I CABINET
+will override this on startup.
+.LI prompt
+This variable changes the prompt displayed in interactive mode.
+You might consider setting this to ``Command (? for help)? '' for
+naive users.  At present, no escape sequences exist for the
+current folder, current message, etc.  The default is 
+.BR IMS> .
+.LI pager
+This is the name of the program used to display messages.  If it
+is set to the null string, the message is displayed directly.
+The default is
+.I /usr/ucb/more
+and the environment variable
+.I PAGER
+overrides it on startup.
+.LI system-mailbox
+This variable is used to specify the mailbox which should be
+locked when it is read.  Playing with this variable is reserved
+for mail gurus; you can lose all your new mail this way.
+.LI mail-sending-command
+This is the name of the program used to send mail (see
+.I "SENDING MAIL"
+above).  It is passed one argument \- the name of a single
+recipient.  The message, with all header lines, is piped to its
+standard input.  (These may be overridden by the mailer,
+particularly if it is
+.IR sendmail(1) .)
+Its default value is
+.IR /bin/mail .
+.LI mailbox
+The name of the default mailbox.  This is used primarily in the
+.I IMSINIT
+file, as the
+.I read
+command can be given a mailbox name as an argument.  The default
+is your mailbox in whatever your system uses for a mail spool
+directory, and it is overridden by the
+.I MAIL
+environment variable.
+.LI editor
+This is the name of the editor used by the
+.IR send ,
+.IR reply ,
+and
+.I forward
+commands.  Its devault value is
+.I /usr/ucb/vi
+and it is overridden by the
+.I EDITOR
+environment variable.
+.LI save-folder
+This is the default folder for saved messages.  Its default value
+is
+.IR saved-mail ,
+and it is overridden by the
+.I SAVEFOLDER
+environment variable.
+.LI print-command
+This is the command used to print mail.  If it is empty, the mail
+will be displayed without paging.  Note that the command listed
+here need not actually be a command to send mail to the printer.
+Its default value causes mail to be piped to
+.I pr(1)
+and thence to
+.IR lpr(1) ,
+and it is overridden by the
+.I PRINTCMD
+environment variable.
+.LI type-next-automatically
+This variable controls whether the
+.IR delete ,
+.IR save ,
+.IR previous ,
+and
+.I next
+commands automatically display the next message.
+This variable can be set to any value, but only values beginning
+with
+.BR T ,
+.BR t ,
+.BR Y ,
+or
+.B y
+are considered to be affirmative.  The default value is
+.IR No .
+.LI read-new-mail-automatically
+In interactive mode, \*i checks for new mail before it displays
+the prompt, and informs you if new mail has arrived.  If this
+variable has an affirmative value (see
+.IR type-next-automatically ), a
+.I read
+is performed on the default mailbox.  The default is
+.IR No .
+.LI ask-before-append
+This variable controls whether
+.I save
+will append saved mail to an existing file.  If it is set to
+affirmative (see above), it will check for the existence of the
+save file and ask if you want to append to the file.  If you give
+a negative answer, 
+.I save
+will abort.  The default is
+.IR Yes .
+.LI lines
+This variable controls the built-in pager used by the
+.IR list ,
+.IR folders ,
+and
+.I help
+commands.  It should be set to the number of lines on the
+terminal.  The default is 24, and it is overridden by the
+.I LINES
+environment variable.
+.sp
+This variable, like all \*i variables, can be set to a string
+value.  If, at any time, the value is found to be less than 3 or
+greater than 66, it will be reset to the default of 24.
+.LI edit-forwarded-mail
+If this variable is set to an affirmative value (see above), the
+.I forward
+command will allow you to edit forwarded mail.  The default value
+is
+.IR No .
+.LI alias-recursion-level
+This variable controls how many levels of alias recursion are
+allowed.  If, during alias expansion, the recursion depth is
+found to be greater than the (numeric) contents of this variable,
+the current top-level address is aborted.  If this variable's
+numeric value is less than zero, it is set to the default, 20.
+A string value which is not numeric is treated as zero, meaning
+that aliases cannot be recursive.
+.LE
+.SH "MESSAGE NAMES"
+Any UNIX pathname beginning with / or ./ is considered a
+well-formed message name, and is searched for by path.  (\*i does
+not change the current directory while running, so paths
+beginning with ./ are relative to the current directory, not to
+the cabinet or folder.)  Otherwise, the name must identify a file
+in the current folder (except in the case of the second argument
+to
+.IR save ,
+which describes a (possibly nonexistent) file in the
+.IR save-folder ).
+.SH ALIASES
+At startup time, aliases are read from the file named by the
+environment variable
+.I IMSALIAS
+(whose default value is
+.IR $HOME/.imsalias ).
+Aliases are defined using the following syntax:
+.br
+.nf
+.sp
+.ce
+alias: list of expansions
+.sp
+.fi
+Aliases may be defined on the \*i command line using the
+.I alias 
+command.  Note that aliases may or may not be recursive (see 
+.I alias-recursion-level
+above), but at present self-reference is not trapped as a special
+case.  The best way to fake this at present is to use the current
+system's UUCP nodename as part of the user name; it slows things
+down somewhat, but the message will be sent.
+There is also a system IMSALIAS file,
+.IR /usr/lib/imsaliases
+.SH "SYNOPSIS OF COMMANDS"
+The following list of commands is presented in the order in which
+\*i processes them; for example, as
+.I save
+comes before
+.I set
+in the table, the command
+.I s
+given to \*i will equate to the
+.I save
+command.)
+.PP
+.de I.
+.br
+\fI\\$1\fR \\$2 \\$3 \\$4 \\$5 \\$6
+..
+.I. delete [message]
+.I. undelete [message]
+.I. expunge [folder]
+.I. type [message]
+.I. print [message]
+.I. save [message [save-message-name]]
+.I. set [variable[=value]]
+.I. next
+.I. +
+.I. previous
+.I. -
+.I. write [message [save-message-name]]
+.I. reply [message]
+.I. goto [message]
+.I. mail [addresses]
+.I. send [addresses]
+.I. list [folder]
+.I. headers [folder]
+.I. forward address [message]
+.I. from [folder]
+.I. quit
+.I. exit
+.I. xit
+.I. ? [command-part]
+.I. help [command-part]
+.I. folder [folder-name]
+.I. read [mailbox-name]
+.I. folders
+.I. inc [mailbox-name]
+.I. alias [alias-name [list of names]]
+.I. unalias list of names
+.SH FILES
+.ta 5n +\w'/usr/lib/imsalias'u
+$HOME/.imsinit	User \*i variables
+.br
+$HOME/.imsalias	User \*i aliases
+.br
+/usr/lib/imsinit	System \*i variables
+.br
+/usr/lib/imsalias	System \*i aliases
+.br
+/bin/mail	Used to send mail
+.SH "SEE ALSO"
+mail(1),
+.br
+delivermail(1) or sendmail(1) on BSD systems,
+.br
+sh(1).
+.SH "BUGS"
+Should have a way to specify a folder for a message, perhaps
+using a path containing a slash not as the first character.
+.PP
+While the modular nature of \*i's source made it easy to write,
+it also encourages feeping creaturism.  Some \*i commands may be
+construed as being a product of this.
+.PP
+Folder support beyond the current folder (and the save-folder for the
+.B save
+command) is virtually nonexistent.
+.SH "ACKNOWLEDGEMENTS"
+UNIX is a registered trademark of AT&T.
+.PP
+The
+.I inc
+alias for
+.I read
+is borrowed from
+.BR MH ,
+which uses folders in a much more complex way than \*i.
+.PP
+This program would never have been written if I hadn't been
+forced out of sheer desperation to assemble a shell script called
+.I ms
+to read mail on a Pixel 80.  \*i is a direct descendant of
+.IR ms .

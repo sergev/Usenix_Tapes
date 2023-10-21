@@ -1,0 +1,156 @@
+#super bundle: group files into distribution package
+#
+# author Dan Rogers 
+# with original idea from "The UNIX Programming Environment" 
+# by Kernighan/Pike.
+#
+# options: 
+#	-n (default)  Normal bundle operation (resets -c and -x)
+#
+#	-x files which follow this are chmod to execute up to
+#	   the next option 
+#
+#	-c AUTOCOMPILE: files following this are compiled as
+#	   "c" programs at the time of unbundle (does not handle curses)
+#
+#	-k causes removal of the bundled file on unpack, leaving
+#	   only the original files.
+#
+#	-m specifies the name of a single makefile to execute
+#	   after all files are unbundled.
+#
+# Usage: '$0 option file(s) option file(s) ...  > package'
+# 	( all option flags followed by a space )
+#
+if [ $# -eq 0 ]
+then
+	cat "${0}" | sed '23q'
+	exit 5
+fi
+terminator='EnD of '
+
+echo '#/bin/sh'
+echo '#This is a shar file.  To use:'
+echo '#  1. Remove everything before the /bin/sh line'
+echo '#  2. Execute with /bin/sh (not csh) to extract the files:'
+for i
+do
+	case "${i}" in
+		-*)	continue
+			;;
+		*)	echo '#         '`basename "${i}"`
+			continue
+			;;
+	esac
+done
+#
+
+echo 'file="${0}"'
+kill=0
+flag=0
+mflag=0
+mfile=""
+string=""
+for i
+do
+	case "${i}" in
+		-m)	if [ "${mflag}" -eq 1 ]
+			then
+				echo "ERROR: Only one makefile Allowed." >&2
+				exit 10
+			else
+				mflag=1
+			fi
+			continue
+			;;
+		-x)	flag=1
+			continue
+			;;
+		-c)	if [ "${flag}" -eq 1 ]
+			then
+				if [ -z "${string}" ]
+				then
+					echo "# bad execute flag"
+				else
+					echo "chmod +x ${string}"
+					string=""
+				fi
+			fi
+			flag=2
+			continue
+			;;
+		-n)	if [ "${flag}" -eq 1 ]
+			then
+				if [ -z "${string}" ]
+				then
+					echo "# bad execute flag"
+				else
+					echo "chmod +x ${string}"
+					string=""
+				fi
+			fi
+			flag=0
+			continue
+			;;
+		-k)	kill=1
+			continue
+			;;
+	esac
+	k=`basename "${i}" 2>/dev/null`
+	if [ "${flag}" -eq 1 ]
+	then
+		if [ -z "${string}" ]
+		then
+			string="${k}"
+		else
+			nstring="${string} ${k}"
+			string="${nstring}"
+		fi
+	fi
+	if [ "${mflag}" -eq 1 ]
+	then
+		mfile="${k}"
+	fi
+	echo "echo extracting ${k} 1>&2"
+	echo "cat >${k} << '${terminator}${k}'"
+	cat $i
+	echo "${terminator}${k}"
+#
+#	check to see if compile flag is set
+	if [ "${flag}" -eq 2 ]
+	then
+		if echo "${k}" | grep '.c' 1>/dev/null 2>/dev/null
+		then
+			k2=`echo "${k}" | cut -d. -f1` 
+			if [ -z "${k2}" ]
+			then
+				echo "# bad compile condition in bundle"
+			else
+				echo "echo Compiling ${k2}"
+				echo "cc -o${k2} ${k}"
+			fi
+		else
+			echo "\n# **** not a c program, cannot compile"
+		fi
+	fi
+done
+if [ "${flag}" -eq 1 ]
+then
+	if [ -z "${string}" ]
+	then
+		echo "# bad execute flag"
+	else
+		echo "chmod +x ${string}"
+	fi
+fi
+# check for a makefile
+if [ "${mflag}" -eq 1 ]
+then
+	echo "echo executing make on ${mfile}"
+	echo "make -f ${mfile}"
+fi
+# check the kill flag
+if [ "${kill}" -eq 1 ]
+then
+	echo '/bin/rm "${file}"'
+fi

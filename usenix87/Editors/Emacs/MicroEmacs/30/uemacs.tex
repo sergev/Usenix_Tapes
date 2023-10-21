@@ -1,0 +1,813 @@
+%%
+%%	W A R N I N G
+%%
+%% This file is quite out of date.  It is, however, the best we have.
+%% Build the documentation using LaTeX.
+%%
+\newcounter{Version}
+\setcounter{Version}{28}		% update at each new release
+\newlength{\Cmdwidth}			% used to indent command lists
+\setlength{\Cmdwidth}{8em}		% set by eyeball
+\documentstyle[twoside,12pt]{article}
+\pagestyle{headings}
+%\makeindex				% someday
+\load{\footnotesize}{\sf}		% Load smaller
+\load{\small}{\sf}			% Sans-Serif fonts
+\hyphenation{Mi-cro-EMACS}
+\renewcommand{\labelitemii}{$\bullet$}	% Second-level \item
+\parskip 3pt plus 2pt minus 1pt		% this looks better than
+\parindent 20pt				% the standard style
+%
+% Define textual macros:
+% \_			not correct in standard TeX for big fonts
+%
+% The following are used to switch fonts for special Uemacs terms.
+%
+% \Name{xxx}		Command name (changes font to Sans-Serif)
+% \META{}		META in running text
+% \CONTROL{}		CONTROL in running text
+% \Text{xxx}		Display text (changes font to typewriter)
+% \Nameitem{xxx}	\item[] if contents are command names.
+%			(Will put name in index eventually)
+%
+\renewcommand{\_}{{\tt \char95}}
+\newcommand{\Text}[1]{{\tt #1}}
+\newcommand{\Name}[1]{{\sf #1}}
+\newcommand{\META}{{\underline{\sc meta}}}
+\newcommand{\CONTROL}{{\underline{\sc control}}}
+\newcommand{\Nameitem}[1]{\item [\Name{#1}]}
+%
+% Environment for command lists.  Like \begin{description}, but
+% with special indentation.  Usage:
+% \begin{cmdlist}
+%   \Nameitem{xxx} Explanation of item xxx.
+%   \Nameitem{yyy} Explanation of item yyy.
+% \end{cmdlist}
+%
+\newenvironment{cmdlist}{%
+  \list{}{%					% homemade description envt.
+    \setlength{\rightmargin}{0em}		% on either side.
+    \setlength{\labelwidth}{\Cmdwidth}	% \item indentation
+    \setlength{\labelsep}{1em}			% between item and text
+    \setlength{\leftmargin}{\labelwidth}	% Indent by indentation
+    \addtolength{\leftmargin}{\labelsep}	%   + a little space
+    \renewcommand{\makelabel}[1]{##1\hfill}	% Add \index command someday
+  }
+}{\endlist}
+
+\begin{document}
+\author{\
+David G. Conroy \\
+Digital Equipment Corporation \\
+146 Main St. \\
+Maynard, MA 01754
+}
+\title{\
+  MicroEmacs \\[3ex]
+  {\large Reasonable Editing } \\
+  {\large on } \\
+  {\large Tiny Computers } \\
+}
+\maketitle
+\abstract{
+This document describes MicroEMACS,
+a public-domain display editor, loosly base on the EMACS display editor
+written by Richard Stallman at MIT. It is intended as a reference manual
+for users already familiar with EMACS.
+
+This is MicroEmacs Version \arabic{Version}.
+}
+\vfill
+\vfill			% Set this 2/3 down on the page.
+\begin{quotation}
+This document was produced using the \LaTeX{} document
+preparation system developed by Leslie
+Lamport.  All page composition and make-up was performed
+by \TeX,\footnote{\TeX{} is a registered trademark of the
+American Mathematical Society.} the typesetting system developed by
+Donald E. Knuth at Stanford University.
+\end{quotation}
+\vfill
+\newpage
+\tableofcontents
+\newpage
+\section{Introduction}
+This document describes MicroEMACS, a
+public-domain display editor, loosely based on EMACS, that runs on little
+computers.
+
+We call it Micro{\em EMACS\/} to emphasize the fact that
+most of the commands are very similar to, if not identical to,
+fundamental mode EMACS commands (actually, it implements a set of
+rebindings used by a group of users at Digital).
+
+We call it {\em Micro\/}EMACS to emphasize the fact that it is
+but a shadow of full EMACS. No attempt has been made to make MicroEMACS
+wildly
+customizable (without writing code), or to have extensive online documentation.
+All of this sophistication was thrown away right at the start, because
+it was important that MicroEMACS run on little computers.
+In all fairness, is should be stated here and now that the most popular
+small computer these days is the MicroVAX!
+\section{Some Basic Concepts}
+This section describes a number of basic concepts,
+which will be used again and again in the following descriptions.
+Most of it should be familiar to EMACS users.
+New users are advised not to get stuck reading this section,
+because most of the information will become clear the first time you
+play with the editor on a computer.
+\subsection{Screen Layout}
+MicroEMACS divides the screen into two areas. The very last
+line on the screen, which is used to display messages and
+ask one line questions, is called the echo line. Typing in the echo line
+is like typing commands to the operating system. More details later.
+
+The remainer of the screen is filled with text windows.
+When MicroEMACS is first started, there is only one text window, and it
+fills the screen. Windows can be created, deleted, and adjusted in
+size using MicroEMACS commands.
+\subsection{Mode Lines}
+The last line of a window (the line, usually in reverse video,
+that starts with \Text{MicroEMACS}) is
+the mode line for the window.
+It contains information about what is being displayed in the
+window. Mode lines separate windows from each other and from the
+echo line.
+
+Three important bits of information are displayed in the mode line.
+these are the {\em buffer name\/}, the {\em file name\/},
+and the {\em buffer changed flag\/}.
+
+A window is always displaying a buffer. The name of the buffer being
+displayed in the window is shown in the mode line, right after the
+\Text{MicroEMACS}.
+
+A buffer may have a file associated with it.
+Usually this is the last file read into or written from the
+buffer. If a file is associated with the buffer, the name of the
+file is displayed in the mode line, prefixed by \Text{File:}.
+On operating systems in which file names are case insensitive
+(for example, VMS) the file name will always be in lower case.
+
+MicroEMACS knows if a buffer has been changed since it was last
+written to its associated file. It informs you of this fact by displaying
+a \verb+*+ in the mode line immediately to the left of the \Text{MicroEMACS}
+string.
+\subsection{Keyboard Conventions}
+Internally, MicroEMACS represents keyboard characters in a special
+10 bit code. This code consists of 8 bits of character data (ASCII plus
+whatever characters your terminal puts in the right side graphics set), and
+2 flags, the \CONTROL{} flag and the \META{} flag.
+All 4 combinations of the two flags are possible.
+
+This manual represents 10 bit characters in a standard way. If you
+have a character \Text{A}, then that character with
+the \CONTROL{} bit set is
+written as \Name{C-A}. That character with the
+\META{} bit set is written as \Name{M-A}.
+If both bits are set, it is written as \Name{C-M-A}.
+
+Terminals (usually) cannot deal directly deal with the 10 bit
+character set.
+Characters with the flag bits set are entered by prefixing the
+desired character with another character.
+To get a character with the \CONTROL{} bit set,
+prefix the character with \Text{Control-}\verb+^+ (the
+word \Text{Control} here, and in the next few examples, means the key marked
+\Text{Control} or \Text{CTRL} on the ASCII keyboard).
+To get a character with the
+\META{} bit set, prefix the character
+with \Text{Control-}\verb+[+, \Text{Escape}, or \Text{ESC}.
+To get a character with the \CONTROL{}
+and \META{} bits set, prefix the character
+with \Text{Control-}\verb+\+.
+
+Those of you who understand ASCII are probably asking what you get
+if you prefix a character with \Text{Control-}\verb+]+.
+This character is not a prefix;
+it is reserved for future use as an ``exit from recursive editing level''
+command.
+
+CONTROL characters are very important, so there is a shorthand way
+of typing them.
+Characters between \Text{Control-@} and \Text{Control-Z} are mapped
+to the characters \Text{@} through \Text{Z} with the \CONTROL{} bit set.
+Characters between
+\Text{Control-a} and \Text{Control-z} are mapped to
+the characters \Text{A} through \Text{Z}
+with the \CONTROL{} bit set.
+Most of the time \Text{Control-X} and \Name{C-X} are the same.
+\subsubsection{The VT100 Keyboard}
+MicroEMACS understands the arrow keys and the keypad on VT100
+style keyboards. Only the PF1 through PF4 keys on the keypad have any
+special meaning; the digits,
+the \Text{-} key, and the \Text{,} key are treated just
+like the non keypad versions of those characters.
+The \Text{Enter} key is treated
+exactly like the \Text{Return} key.
+
+The arrow keys may be used for moving around. The left arrow is the
+same as  \Name{C-B},
+the right arrow is the same as \Name{C-F}, the up arrow is the same
+as \Name{C-P}, and the down arrow is the same as \Name{C-N}.
+
+The four function keys are command keys.
+The \Text{PF1} key is the same as \Name{M-X}
+(the \Text{PF1} key is where the \Text{Gold} key normally
+resides on DEC products, so
+it is a good choice for the key that asks for extended commands).
+The \Text{PF2} key is the same as \Name{C-Q} (quote character).
+The \Text{PF3} key is the same as \Name{C-S} (search forward).
+The \Text{PF4} key is the same as \Name{C-R} (search reverse). 
+These assignments have not been proven optimal, so they may get changed
+in the future.
+\subsubsection{The LK201 Keyboard}
+The escape key, used in all \META{} commands, is very poorly placed on
+the LK201 keyboard. To make typing a bit easier, the grave accent is also
+considered to be a \META{} prefix on the LK201;
+the grave accent is right where you expect the escape key to be located.
+A grave accent must be quoted to exter it into the text.
+
+The arrow keys and all of the keys on the keypad
+work just like they do on the VT100 keyboard.
+
+The keys immediately above the arrow keys try to do what their name
+implies. \Text{Next Screen} is the same as \Name{C-V}.
+\Text{Prev Screen} is the same as
+\Name{M-V}. \Text{Select} is the same as \Name{C-@} (set mark).
+\Text{Remove} is the same as
+\Name{C-W} (kill region). \Text{Insert here}
+is the same as \Name{C-Y} (yank from killbuffer).
+\Text{Find} is the same as \Name{C-S} (search forward).
+
+The \Text{F6}, \Text{F7}, \Text{F8},
+\Text{F9}, \Text{F10}, and \Text{F14} keys are unused.
+The \Text{F11} is escape, which is a \META{} prefix key.
+The \Text{F12} key is backspace. The \Text{F13} key is linefeed.
+
+The \Text{Help} key is unused. The \Text{Do}
+key is the same as \Name{C-X E} (execute keyboard macro).
+
+The \Text{F17} key is the same as \Name{C-X P} (previous window).
+The \Text{F18} key is the same as \Name{C-X N} (next window).
+The \Text{F19} key is the same as \Name{C-X Z} (grow window).
+The \Text{F20} key is the same as \Name{C-X C-Z} (shrink window).
+\subsection{The Echo Line}
+The echo line has two purposes; displaying messages and asking one
+line questions.
+
+Two types of messages are displayed in the echo line.
+Informational messages tell you something useful, but do not imply in any
+way that something is wrong. These messages are always enclosed in square
+brackets (\verb+[+ and \verb+]+).
+Error messages indicate that something has
+prevented a command from being executed. They are never enclosed in square
+brackets, and will be accompanied by a beep from the terminal's bell if
+the sound of the bell is not too obnoxious.
+
+The echo line is normally cleared by the next keystroke.
+However, there is a special hack to clear the echo line without
+doing anything else. If you type a \Text{Space} and there is a message in the
+echo line, then the echo line is cleared, and the \Text{Space} does not
+insert.
+
+The echo line is also used for asking and answering questions.
+After the
+prompt, you can type any characters you like. The reply is always
+terminated by a \Text{Return}. Before you commit to the reply, you can delete
+characters by typing \Text{Backspace} or \Text{Rubout}, and you can delete the
+entire line by typing \Text{Control-U}.
+You can also abort the command in progress by typing \Text{Control-G}.
+Command processors are written to ask all questions before doing nasty
+things, so that you will never do damage by aborting a command.
+\subsection{Command Arguments}
+All commands can be given a numeric argument. Most commands use this
+argument as a repeat count. Commands can tell if an argument has been
+supplied, and will use a default argument if no user argument is present.
+Usually, the default argument is \Text{1}.
+
+A \Name{C-U} always introduces an argument.
+
+If a numeric argument is just a string of \Name{C-U} characters, then the
+value of the argument is
+$4^{(number of \Name{C-U} characters)}$.
+Therefore \Name{C-U} is 4, \Name{C-U C-U} is 16,
+\Name{C-U C-U C-U} is 256, and so on.
+Some commands
+care if an argument is present, but don't look at its value; the \Name{C-U}
+character is a good way to say ``here is an argument''.
+
+If there is a signed decimal number after the string of
+\Name{C-U} characters it specifies the value of the argument. In this case
+the number of \Name{C-U} characters does not matter. An argument of 10 can be
+represented by \Name{C-U 10},
+\Name{C-U C-U 10}, or even \Name{C-U C-U C-U C-U 10}.
+\subsection{Dot, Mark, and the Region}
+Most editing commands act on the character or characters surrounding
+the current location in the current buffer. The thing that marks the current
+location is always called ``dot''. The ``dot'' always points between two
+characters. This isn't the way that the cursor works on most display terminals,
+so, by convention, dot is always immediately to the left of the character
+on which the hardware cursor is placed.
+
+There is also a second remembered position in the buffer, called the
+mark. There are commands that set the value of mark.
+
+Some commands act on a block of text called the region. The region is
+all of the characters between dot and mark. The relative position of dot
+and mark do not matter.
+\subsection{Word Syntax}
+Some MicroEMACS commands manipulate words. In full EMACS the characters
+that make up words can be changed by the user. In MicroEMACS, they are
+fixed, and include the upper and lower case letters, the dollar sign
+\verb+$+ and the underline \verb+_+. This set of characters is intended more
+for editing programs, but the word commands still work reasonably
+when editing text.
+\section{Quitting}
+When you finish editing, you have to quit.
+MicroEMACS never writes out a file because it thinks that this
+is the right thing to do. However, it will attempt to protect you from
+forgetting to do so.
+\begin{cmdlist}
+%% This was used to test the indentation
+%% \item[Foobar]
+%% \verb+\labelwidth    = + \\
+%%	\framebox[\labelwidth]{*}	\\
+%% \verb+\leftmargin    = + \\
+%%	\framebox[\leftmargin]{*}	\\
+%% \verb+\labelsep      = + \\
+%%	\framebox[\labelsep]{*}	\\
+%% \verb+\listparindent = + \\
+%%	\framebox[\listparindent]{*}	\\
+\Nameitem{C-X C-C}
+This is the basic quit command. MicroEMACS exits, returning
+control to the shell. If there are any changed buffers that have not been
+written out, it will ask for permission to quit. Supplying an argument to
+\Name{C-X C-C} makes the command quit unconditionally, without asking for
+confirmation. The value of the argument is not important.
+\Nameitem{C-C}
+This command suspends the execution of MicroEMACS, and runs
+a command interpreter in a subjob. When the subjob terminates, the screen
+is cleared and repainted.
+
+The \Name{C-C} command is the same as
+\Name{C-X C-C} if the operating system cannot
+create command interpreters in subjobs.
+
+Subjobs are implemented in VAX/VMS and MS-DOS. Users of CP/M-86 are
+out of luck.
+\Nameitem{C-Z}
+This is a slightly more elabourate quit command.
+If the current buffer has been changed, \Name{C-Z} saves the contents of
+the buffer in the associated file (it gets an error if there is no
+associated file). If the current buffer has not been changed, \Name{C-Z}
+acts like \Name{C-C}.
+\end{cmdlist}
+\section{Moving Around}
+\begin{cmdlist}
+ \item[Foobar]
+ \verb+\labelwidth    = + \\
+	\framebox[\labelwidth]{*}	\\
+ \verb+\leftmargin    = + \\
+	\framebox[\leftmargin]{*}	\\
+ \verb+\labelsep      = + \\
+	\framebox[\labelsep]{*}	\\
+ \verb+\listparindent = + \\
+	\framebox[\listparindent]{*}	\\
+
+\Nameitem{C-A}
+Move to the beginning of the current line. Any argument
+is ignored. Always succeeds.
+\Nameitem{C-B}
+Move backwards character by character. The number of characters
+to move is specified by the argument. If no argument is given it moves
+backwards by 1 character. A newline counts as a single character. Fails
+if executed at the beginning of the buffer.
+\Nameitem{C-E}
+Move to the end of the current line. Any argument is ignored.
+Always succeeds.
+\Nameitem{C-F}
+Move forwards character by character. The number of characters
+to move is specified by the argument. If no argument is given it moves
+forwards by 1 character. A newline counts as a single character. Fails
+if executed at the end of the buffer.
+\Nameitem{C-N}
+Move forward by lines. Attempt to preserve the current horizontal
+position. The number of lines to move is specified by the argument. If no
+argument is given it moves by 1 line. Fails if executed at the end of the
+buffer.
+\Nameitem{C-P}
+Move backwards by lines. Attempt to preserve the current horizontal
+position. The number of lines to move is specified by the argument. If no
+argument is given it moves by 1 line. Fails if executed at the beginning of
+the buffer.
+\Nameitem{C-V}
+Move forward by pages. If an argument is given, it specifies the
+number of lines to move. If no argument is given, the size of the window
+less 2 lines (for overlap) is used. If the window is too small to allow
+2 lines of overlap, it moves by 1 line. Dot is set to the first character
+of the first line on the new screen.
+
+There is a compile time option that makes this command take an argument
+in screenfulls instead of lines. Look in \Text{ed.h} for the gory details.
+\Nameitem{M-V}
+Move backwards by pages. If an argument is given, it specifies
+the number of lines to move. If no argument is given, the size of the window
+less 2 lines (for overlap) is used. If the window is too small to allow
+2 lines of overlap, it moves by 1 line. Dot is set to the first character
+of the first line on the new screen.
+
+There is a compile time option that makes this command take an argument
+in screenfulls instead of lines. Look in \Text{ed.h} for the gory details.
+\Nameitem{M-\verb+<+}
+Move to the beginning of the buffer. Any argument is ignored.
+Dot is set to the first character of the first line in the buffer.
+\Nameitem{M-\verb+>+}
+Move to the end of the buffer. Any argument is ignored. Dot is
+set to the first character in the fake line immediately after the buffer.
+The window is set to display dot near the center of the screen.
+\end{cmdlist}
+\section{Inserting}
+All characters between hexadecimal 20 and 7E (blank through tilde),
+and all characters between hexadecimal A0 and FE (right hand graphics)
+are self inserting. They are inserted into the buffer at the current
+location of dot, and dot moves 1 character to the right.
+
+Any self inserting character can be given an argument. This argument is
+used as a repeat count, and the character is inserted that number of
+times. This is useful for creating lines of \verb+*+ characters of a specific
+length, and other pseudo-graphic things.
+\begin{cmdlist}
+ \item[Foobar]
+ \verb+\labelwidth    = + \\
+	\framebox[\labelwidth]{*}	\\
+ \verb+\leftmargin    = + \\
+	\framebox[\leftmargin]{*}	\\
+ \verb+\labelsep      = + \\
+	\framebox[\labelsep]{*}	\\
+ \verb+\listparindent = + \\
+	\framebox[\listparindent]{*}	\\
+
+\Nameitem{C-M}
+The return key works just like you would expect it to work;
+it inserts a newline character. Lines can be split by moving into the middle
+of the line, and inserting a newline.
+
+If dot is positioned at end of line,
+and the line after the current line is a blank line,
+then \Name{C-M} does not insert a newline,
+but simply moves to the first position
+on the following line. This lets you create a block of blank space (perhaps
+using \Name{C-O}) and then type text into it.
+\Nameitem{C-O}
+This command creates blank lines. To be precise, it inserts
+a newline by doing a \Name{C-B},
+and then backs up by doing a \Name{C-B}. If dot is at
+the start of a line, this will leave dot sitting on the first character
+of a new blank line.
+\Nameitem{C-Q, M-Q}
+Characters which are special to MicroEMACS can be inserted by
+using this command.
+The next character after the \Name{C-Q} or \Name{M-Q} is stripped of
+any special meaning. It is simply inserted into the current buffer.
+Any argument specified on the \Name{C-Q}
+or \Name{M-Q} command is used as the insert
+repeat count.
+
+The\Name{C-Q} form of the command is the easiest to use. However, some terminals
+demand that MicroEMACS perform XON/XOFF processing. If this is the case,
+the \Name{C-Q} will be eaten by low level terminal support,
+and will not be usable
+as a command. The \Name{M-Q} form can always be used.
+\end{cmdlist}
+\section{Deleting and Killing}
+There are two general classes of commands that remove text from the
+buffer; delete commands and kill commands.
+Delete commands remove text from the buffer, and throw it away.
+Kill commands remove text from the buffer, but save the text in a special
+place called the kill buffer. Kill commands clear the kill buffer only
+if the previous command was not a kill command. Multiple kill commands
+executed in a row append text to the kill buffer.
+\begin{cmdlist}
+ \item[Foobar]
+ \verb+\labelwidth    = + \\
+	\framebox[\labelwidth]{*}	\\
+ \verb+\leftmargin    = + \\
+	\framebox[\leftmargin]{*}	\\
+ \verb+\labelsep      = + \\
+	\framebox[\labelsep]{*}	\\
+ \verb+\listparindent = + \\
+	\framebox[\listparindent]{*}	\\
+
+\Nameitem{C-D}
+Delete characters to the right of dot. If an argument is
+specified that number of characters is deleted. If no argument is specified
+then 1 character is deleted. In addition, if an argument is specified,
+then the command kills the text instead of deleting it. It fails if
+there are not enough characters to delete between dot and the end of
+the buffer.
+\Nameitem{Rubout}
+Delete characters to the left of dot. If an argument is
+specified then that number of characters is deleted. If no argument is
+specified then 1 character is deleted. In addition, if an argument is
+specified, the rubout command kills the text instead of deleting it.
+The command fails if there is not enough text between the start of the
+buffer and dot.
+\Nameitem{C-K}
+This is the basic killing command. If there is no argument
+it kills from dot to the end of the line, unless dot is at the
+end of line, when it kills the end of line.
+If a positive argument is specified, \Name{C-K} kills that many lines,
+including the newlines.
+If an argument of 0 is specified, \Name{C-K} kills from the start of the current
+line to dot.
+Finally, if a negative argument is specified, \Name{C-K} kills backwards over
+abs(arg) newlines. This command fails if there arn't enough characters
+left in the buffer to be killed.
+\Nameitem{C-W}
+Kill all of the text enclosed in the region. Any argument
+is ignored.
+\Nameitem{C-Y}
+Insert the text in the kill buffer into the current buffer
+at dot. If an argument is specified, it specifies the number of times
+the text is yanked. If no argument is specified, yank the text back
+once. Dot is advanced over the inserted text, as if the text had
+been typed in normally. Always succeeds.
+\Nameitem{C-X C-O}
+... Yes? ...
+\end{cmdlist}
+\section{Words}
+\begin{cmdlist}
+\Nameitem{M-B}
+The backward word command moves dot backward by words, stopping
+on the first character of the word. If an argument is specified, it is the
+number of words over which to move. The default argument is 1.
+\Nameitem{M-C}
+This command moves forward over a word, converting all characters
+in the word to lower case except the first one, which is converted to
+upper case. If an argument is supplied, it must be positive, and it specifies
+the number of words over which to move.
+\Nameitem{M-D}
+The delete word command moves dot forward by words, and kills
+any characters over which it moves. If an argument is specified, it is the
+number of words over which to move. The default argument is 1.
+\Nameitem{M-F}
+The forward word command moves dot forward by words, stopping
+on the first non-word character. If an argument is specified, it is the
+number of words over which to move. The default argument is 1.
+\Nameitem{M-L}
+This command moves forward over a word, converting it to lower
+case. If an argument is supplied, it must be positive, and it specifies the
+number of words over which to move.
+\Nameitem{C-M-H}
+The backward delete word command moves backward by words, stopping
+on the first character of the word, and killing as it moves. If an argument
+is present, it specifies the number of words over which to move. The
+default argument is 1.
+\Nameitem{M-Rubout}
+This command is the same as \Name{C-M-H}. It exists only to preserve the
+symmetry between the word commands and the character commands (both backspace
+and rubout are backward delete character).
+\Nameitem{M-U}
+This command mobes forward over a word, converting it to upper
+case. If an argument is supplied, it must be positive, and it specifies the
+number of words over which to move.
+\end{cmdlist}
+\section{Case Conversion}
+In addition to the word mode case conversion commands, MicroEMACS has
+commands to modify the case of large blocks of text. These commands should
+be used with caution because they cause major damage to (potentially)
+large areas of the buffer.
+\begin{cmdlist}
+\Nameitem{C-X C-L}
+The lowercase region command converts all of the characters
+between dot and mark into lower case.
+\Nameitem{C-X C-U}
+The uppercase region command converts all of the characters
+between dot and mark into upper case.
+\end{cmdlist}
+\section{Searching}
+Search commands look though the buffer, in either the forward or the reverse
+direction, looking for text that matches a search pattern. Search commands
+prompt for the search pattern in the echo line. The search pattern used
+by the last search command is remembered, and displayed in the prompt. If
+you want to use this pattern again, just hit carriage return at the
+prompt.
+
+In search strings, all characters stand for themselves, and all searches
+are case insensitive. There are no regular expression searches, and there
+probably should be. The newline characters at the ends of the lines are
+considered to have hexadecimal value 0A, and can be matched by a linefeed
+in a search string.
+\begin{cmdlist}
+\Nameitem{C-S, M-S}
+Search forward, from the current location, toward the end of
+the buffer. If found, dot is positioned after the matched text. If the
+text is not found, dot does not move.
+
+The \Name{C-S} form of the command is not usable if the terminal being used
+required XON/XOFF support. In fact, if you use this format of the command
+on such a terminal, it will hang until you type \Name{C-Q}.
+\Nameitem{C-R, M-R}
+Search reverse, from the current location, toward the front of
+the buffer. If found, dot is positionedat the first character of the
+matched text. If the text is not found, dot does not move.
+\end{cmdlist}
+\section{Files}
+\begin{cmdlist}
+\Nameitem{C-X C-F}
+This command prompts in the echo line for a file name,
+which becomes the new associated file name for the current buffer.
+\Nameitem{C-X C-R}
+This command prompts in the echo line for a file name,
+then it deletes all of the text in the current buffer and reads in the
+file. The associated file name is set to the name of the file just
+read. The number of lines read is displayed in the echo line.
+\Nameitem{C-X C-S}
+This command writes the contents of the current buffer
+to its associated file. The ``changed'' flag for the current buffer is
+reset. It is an error to use this command in a buffer which lacks
+an associated file name. This command is a no-operation if the
+buffer has not been changed since the last write.
+\Nameitem{C-X C-V}
+This command selects a file for editing. It prompts for
+a file name in the echo line. It then looks through all of the buffers
+for a buffer whose associated file name is the same as the file being
+selected. If a buffer is found, it just switches to that buffer.
+Otherwise it crerates a new buffer, (fabricating a name from the last
+part of the new file name), reads the file into it, and switches to the
+buffer.
+
+If the desired new buffer name is not unique (perhaps you tried to
+visit a file in some other directory with the same name as a file already
+read in) the command will prompt for a new buffer name. You can either
+supply a buffer name, or just type newline to overwrite the old
+buffer.
+\Nameitem{C-X C-W}
+This command prompts in the echo line for a file name,
+then it writes the contents of the current buffer to that file. The
+``changed'' flag for the current buffer is reset, and the supplied file
+name becomes the associated file name for the current buffer.
+\end{cmdlist}
+\section{Keyboard Macros}
+Keyboard macros simplify a large class of repitious editing tasks.
+The basic idea is simple. A set of keystrokes can be collected into a
+group, and then the group may be replayed any number of times.
+
+There is only 1 keyboard macro. It would (perhaps) be nice if you could
+have more than 1 of them.
+\begin{cmdlist}
+\Nameitem{C-X (}
+This command starts the collection of a keyboard macro. All
+keystrokes up to the next \Name{C-X )} will be gathered up,
+and may be replayed by
+the execute keyboard macro command.
+\Nameitem{C-X )}
+This command stops the collection of a keyboard macro.
+\Nameitem{C-X E}
+The execute keyboard macro command replays the current keyboard
+macro. If an argument is present, it specifies the number of times the macro
+should be executed. If no argument is present, it runs the macro once.
+\end{cmdlist}
+\section{Buffer Management}
+Previous sections have made references to the text in ``the buffer'',
+which implied that there is only one buffer. This is not true; MicroEMACS
+allows any number of buffers, memory space permitting.
+
+Each buffer has its own buffer name (a 16 character string),
+and optional associated file name,
+and a block of text. A value of dot and mark is also associated with
+any buffer that is not currently being displayed. This remembered value
+of dot and mark makes a buffer come back in approximately the same state
+as it was when it was hidden.
+
+Also associated with each buffer is a changed flag. This flag is set
+when the text in the buffer is modified, and reset when the text in the
+buffer is written out to its associated file. MicroEMACS will always ask
+for confirmation before executing a command that would cause changed
+text to be lost.
+\begin{cmdlist}
+\Nameitem{C-X C-B}
+Create a pop-up window on the screen, and display it in
+the name, size (in characters), associated file name, and changed flag
+of all buffers. This command works by creating a special buffer which
+contains the text of the display, and then selecting it in a window. You
+can switch into this window if you like. You can even edit the text.
+MicroEMACS makes no attempt to keep a buffer list which is on the screen
+updated as other buffers are edited; however, another \Name{C-X C-B} command
+will cause the display to be updated in place.
+\Nameitem{C-X B}
+This command prompts for a buffer name, and then switches
+the buffer being displayed in the current window to that buffer. The
+buffer will be created if it does not exist.
+\Nameitem{C-X K}
+This command prompts for a buffer name, and then destroys
+the buffer with that name. It will ask for permission to destroy the
+buffer if the text has been changed since it was written to the associated
+file. You cannot delete a buffer that is being displayed.
+\end{cmdlist}
+\section{Window Management}
+MicroEMACS lets you have multiple windows on the screen.
+Each window has its own mode line, its own value of dot and mark,
+and its own associated buffer. If you have a buffer displayed in more
+that one window and you edit a line, it is updated in all windows.
+\begin{cmdlist}
+\Nameitem{C-L}
+This command clears the screen, and completely redisplays all
+of the text is all of the windows. It is useful if a line error has garbaged
+your screen. If you give \Name{C-L} and argument
+(any value will do) it will re-center
+dot in the current window as well.
+\Nameitem{C-X 2}
+This is the basic window making command. The current window
+is split in two. Each window is displaying the same buffer, and has
+the same value of dot and mark. The window must be at least three lines
+high, otherwise there isn't enough room for two text lines and the
+new mode line. Any argument is ignored.
+
+After the window is created, it is usually switched to a private
+buffer using \Name{C-X B} or (perhaps more often) \Name{C-X C-V}.
+Note that because
+both windows are displaying the same buffer, reading a file in one
+window with \Name{C-X C-R} probably does not do what you want.
+\Nameitem{C-X 1}
+This is the basic window destroying command. All windows but
+the current window are removed from the screen. The current window grows
+to fill the vacated screen space. Any argument is ignored.
+\Nameitem{C-X N}
+Move to the next window down the screen. If the current window
+is the bottom window, move to the top window. Ignores any argument.
+\Nameitem{C-X P}
+Move to the previous window up the screen. If the current window
+is the top window, move to the bottom window. Ignores any argument.
+\Nameitem{C-X Z}
+The current window is enlarged, if possible. Any argument is
+used as a ``number of lines by which to grow''. The default argument is 1.
+Screen space is stolen from the window immediately below the current
+window. If the current window is the bottom window on the screen then
+space is stolen from the window immediately above the current window.
+You cannot steal all of the lines away from a window.
+\Nameitem{C-X C-N}
+Scroll the current window down. Any argument is used as a
+``number of lines by which to scroll'' count. The default argument is 1.
+\Nameitem{C-X C-P}
+Scroll the current window up. Any argument is used as a
+``number of lines by which to scroll'' count. The default argument is 1.
+\Nameitem{C-X C-Z}
+The current window is shrunk, if possible. Any argument is
+used as a ``number of lines by which to shrink''. The default argument is 1.
+Screen space is given to the window immediately below the current window.
+If the current window is the bottom window on the screen, the space is
+given to the window immediately above the current window. You cannot shrink
+a window out of existance.
+\Nameitem{M-!}
+This command is used to control the line of a window upon
+which dot is displayed. If its argument is positive, then that number is
+taken to be the origin 1 line number of the current window upon which
+the line containing dot should be placed. If its argument is 0, then dot
+is moved to the center of the window. If the number is less then zero
+then it is taken to be the negation of the origin 1 line number of the
+current window starting at the bottom upon which the line containing dot
+should be placed. If no argument is supplied, a default argument of 1 is
+used; This lets \Name{M-!} function as a ``move dot to the top of the window''
+command, which is very useful.
+\end{cmdlist}
+\section{Building a MicroEMACS}
+All versions of MicroEMACS are built from the same set of
+source files. Compile time options are selected by setting compilation
+switches in \Text{ed.h}, and then letting conditional compilation do the
+right thing.
+\subsection{Operating System}
+The three switches VMS, CPM, and MSDOS select the operating system.
+Only one of these switches should be set to \Text{1} at any time. If you set
+more than one of them to \Text{1}, you will get errors when you compile.
+
+To date, only the \Text{termio.c} (low level terminal I/O) and \Text{spawn.c}
+(subjob creation) contain code conditionalized on the operating system.
+Adding a new operating system consists mostly of adding the appropriate
+magic incantations to these two files.
+\subsection{Terminal Support}
+MicroEMACS currently supports two kinds of terminals. The \Text{ANSI}
+compilation switch selects support for ANSI compatable terminals. The
+\Text{VT52} compilation switch selects support for VT52 like terminals (this
+includes the Zenith Z19). You should not set both of these.
+
+The \Text{VT100} and \Text{LK201} compilation switches,
+if \Text{1}, select keyboard
+handling appropriate to VT100 and LK201 keyboards, respectfully. The
+LK201 support has only been tested on the Rainbow.
+
+The \Text{RAINBOW} compilation switch, when set, modifies the display
+code to use fast video.
+A special routine, written in assembler, copies data from the MicroEMACS
+screen image directly into video RAM. This routine is guaranteed to
+do bad things on anything but a Rainbow. On the Rainbow, you still need
+to set \Text{ANSI}, and you will want to set \Text{LK201}.
+\subsection{Randomness}
+In ITS EMACS, arguments on the \Name{C-V}
+and \Name{M-V} commands work in lines. In
+Gosling EMACS, arguments on the \Name{C-V}
+and \Name{M-V} commands work in screens.
+The \Text{CVMVAS} compilation switch, if \Text{1}, makes the commands work
+like in Gosling EMACS.
+\end{document}

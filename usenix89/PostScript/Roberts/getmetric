@@ -1,0 +1,159 @@
+%!
+% Get the Font Metric Information from an internal font
+%
+% Written by W.T. Roberts, Queen Mary College, LONDON UK
+% (liam@cs.qmc.ac.uk, liam@qmc-cs.UUCP)
+
+statusdict begin 0 setjobtimeout end
+
+/xdef {exch def} def
+/sp {( ) print} def
+/nl {(\n) print flush} def
+/= {dup type (stringtype) ne {buffer cvs} if print} def
+/toupper {
+   dup dup (a) 0 get ge exch (z) 0 get le and
+   {(a) 0 get sub (A) 0 get add} if  % convert to lowercase
+} def
+
+/buffer 250 string def
+/getmetric {
+  /VMsave save def
+  dup findfont /fontdict xdef       % grab the font
+  dup (AFM FILE ) print = (.afm) print nl
+  (StartFontMetrics 1.0) print nl
+  (FontName ) print = nl        % record PostScript name
+  getFontInfo
+  getFontBBox
+  recorddefaults                % get the default encoding
+  miscHeights
+  (StartCharMetrics) print nl
+  getEncoding
+  (EndCharMetrics) print nl
+  (EndFontMetrics) print nl
+  VMsave restore
+} def
+
+/getFontInfo {
+  (Comment Generated from PostScript version ) print version = nl
+  (Comment by getmetric.ps (Written by W.T. Roberts, qmc-cs.UUCP))
+  print nl
+  fontdict /FontInfo get
+  {exch buffer cvs dup
+   dup 0 get toupper 0 exch put         % convert first letter to UC
+   print sp = nl} forall
+} def
+
+/getFontBBox {
+  /fmat fontdict /FontMatrix get def
+  fontdict /FontBBox get aload pop          % llx lly trx try
+  fmat transform 4 2 roll fmat transform    % TRX TRY LLX LLY
+  4 {1000 mul round cvi 4 1 roll} repeat    % convert to 1000 point
+  (FontBBox) print
+  2 {exch sp = sp =} repeat
+  nl
+} def
+
+/maketempfont { % encoding vector
+  fontdict length dict /testdict xdef
+  fontdict
+   { 1 index /FID ne {testdict 3 1 roll put}{pop pop} ifelse
+   } forall     % copy contents of fontdict
+  testdict begin
+    /Encoding encoding def
+  end     % install the encoding vector
+  /TestName testdict definefont 1000 scalefont setfont
+} def
+
+/recorddefaults {
+  fontdict /CharStrings get
+  length 1 sub array /names xdef  % make array to hold the names
+  /#name 0 def
+  /defaultEncoding 256 dict def
+  fontdict begin
+   defaultEncoding begin
+    0 1 Encoding length 1 sub
+    {dup Encoding exch get dup
+     /.notdef ne
+       {dup recordname exch def}
+       {pop pop}
+    ifelse % record number
+    } for
+   end
+  end
+} def
+
+/recordname {
+  userdict begin
+    names exch #name exch put
+    /#name #name 1 add def
+  end
+} def
+
+/getEncoding {
+  fontdict /CharStrings get
+  {pop dup dup
+   /.notdef eq exch                     % ignore .notdef
+   defaultEncoding exch known or        % and defaultEncoding names
+    {pop} {recordname} ifelse
+  } forall
+  /namecount names length def /first 0 def
+  % while (true)
+  {namecount 256 le
+    {names first namecount getinterval}
+    {names first 256 getinterval}
+   ifelse
+   /encoding xdef maketempfont
+   0 1 encoding length 1 sub {getcharmetric} for
+   /namecount namecount 256 sub def
+   /first first 256 add def
+   namecount 0 le {exit} if
+  } loop
+} def
+
+/miscHeights {
+  /encoding fontdict /Encoding get def maketempfont     % make real font
+  defaultEncoding begin
+    p d x H     % get character codes
+  end
+  nbbox (CapHeight ) print dup = nl 4p
+  nbbox (XHeight ) print dup = nl 4p
+  nbbox (Ascender ) print dup = nl 4p
+  nbbox (Descender ) print 2 index = nl 4p
+} def
+
+/4p {pop pop pop pop} def
+/nbbox {char exch 0 exch put charbbox} def
+/charbbox {
+  newpath 0 0 moveto char true charpath flattenpath pathbbox
+  4 {4 1 roll round cvi} repeat
+} def
+
+/char ( ) def
+/getcharmetric {
+  /n xdef       % grab the character code
+  char 0 n put  % make a string from it
+  /label encoding n get def % record its text name
+  (C ) print
+  defaultEncoding label known
+    {defaultEncoding label get}{-1} ifelse
+  = ( ; ) print
+  char stringwidth round cvi /ywidth xdef round cvi /xwidth xdef
+  ywidth 0 eq
+    {(WX ) print xwidth = }
+    {(W ) print xwidth = sp ywidth =}
+  ifelse
+  ( ; N ) print label =
+  ( ; B) print
+  charbbox 4 2 roll 2 {exch sp = sp =} repeat
+  label /f eq { ( ; L i fi ; L l fl) print} if
+  ( ;) print nl
+} def
+%
+
+0 0 moveto
+100 100 lineto stroke   % convince the machine it isn't idle!
+
+% FontDirectory {pop getmetric} forall    % get EVERY font metric file
+/Times-Roman getmetric
+
+(END OF FONT METRICS) print nl

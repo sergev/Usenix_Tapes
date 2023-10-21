@@ -1,0 +1,156 @@
+.TH MIX hhb "" CMC
+.UC 4
+.SH NAME
+.nh
+.nf
+\fBmix\ unmix\ catmix\ keymix\ edmix\fR \ \ - source code protection routines
+
+\fBmix\fR  		- scramble a file
+\fBunmix\fR		- descramble a file
+\fBcatmix\fR		- print a scrambled file
+\fBkeymix\fR		- print the minimum security key
+\fBedmix\fR		- edit a scrambled file
+
+.SH SYNOPSYS
+.nf
+.B mix\ \ \t\ [\ -k\ key\ ]\ \ files
+.B unmix\t\ [\ -k\ key\ ]\ \ files
+.B catmix\t\ [\ -k\ key\ ]\ \ files
+.B keymix
+.B edmix\t\ [\ -k\ key\ ]\ [\ -e\ exec_cmd\ ]\ \ files
+
+.fi
+.SH DESCRIPTION
+The \fBmix\fR routines scramble/descramble
+ASCII files based on
+a supplied keyword.  Users in possession of the
+key have immediate access to scrambled files
+such that the scrambled nature of the files is transparent.
+The routines link to a single object.
+.PP
+\fBMix\fR scrambles, \fBunmix\fR
+descrambles the files in its argument list.  For each file in its argument list,
+\fBedmix\fR descrambles the file, effects a
+system call of the form \fBsystem(exec_cmd file)\fR, followed by
+rescrambling the file.  \fBCatmix\fR writes a descrambled version of
+its arguments to stdout.  \fBKeymix\fR prints the
+"minimum security" key to stderr.
+A given key affects the entire argument list.
+.PP
+The user normally supplies the key for the transformation mechanism.
+Allowed key lengths are 1 through 128 bytes.  Longer keys are
+silently truncated to 128 bytes; null keys
+trigger the "minimum security" option instead.
+.PP
+Performance characteristics are comparable to those of the standard
+\fBcrypt\fR command, while not incurring the restrictions that limit
+the use of \fBcrypt\fR to the United States.
+Unlike \fBcrypt\fR, the executable
+is not a filter, precluding the necessity for redirecting output to
+temporary files followed by a move of the temporary files to the
+original files.  Also unlike \fBcrypt\fR, the scrambling effect is not the same
+as the descrambling effect: two successive scramblings do not return a file
+to its original form.  The command "mix myfile myfile" for example,
+twice scrambles myfile; the appropriate reversal is
+"unmix myfile myfile".  Still another difference with respect to \fBcrypt\fR
+is that the character
+set of a file scrambled by \fBmix\fR
+is identical to that of the original file,
+permitting remote file transfer
+protocol without "control characters".
+.PP
+The \fBmix\fR
+routines do not alter files that contain less than 256 bytes,
+or files containing null (ASCII zero) bytes.  When encountering
+such, a warning message is generated, without any other side effects.
+A \fBmix\fR process locks the file on which it operates; concurrent
+\fBmix\fR
+processes competing for the same file wait until the locking
+process completes the transformation and releases the lock.
+.sp
+.PP
+.SH KEY ACQUISITION
+The \fB-k key\fR command line option directly specifies the key for
+the transformations, overriding the two
+other methods described below.
+Due to the visible records of the command line,
+this option is not the
+most secure alternative.
+.PP
+The environment variable \fBMIXKEY\fR value if non-null, is
+automatically used as the key throughout the life of the user's shell.
+The command "setenv MIXKEY key" assigns a value to \fBMIXKEY\fR under
+the Berkeley system.  The System V equivalent is "MIXKEY=key ;
+export MIXKEY".
+.PP
+Key acquisition is interactive in lieu of the above methods.
+Echoing is turned
+off and the user responds to the "Key: " prompt appearing
+on stderr.
+The commands reprompt
+with "Again: "
+under "Key: " and verify the match to avoid typos.
+On a mismatch, a control-G (bel) is printed, and
+the program exits without any file access.
+.PP
+For minimum security applications, the \fBnull key\fR
+given by the user (interactively or with the command line
+option \fB-k ""\fR) is supplanted with one
+constructed from the effective user id of the user.  This permits
+a number of individuals logging in to an environment,
+easy access to information scrambled in that environment, while
+excluding others.  For example, if myfile is scrambled by \fBproject\fR
+using
+"mix myfile < nullfile" where a redirected, empty "nullfile" supplies
+a zero length key to the interactive acquisition routine, all users
+logging in as \fBproject\fR
+have continued access to the original "myfile" using
+a null key.
+Note that scrambling/descrambling with minimum security keys does not port
+to other environments, unless the user provides the key previously
+acquired
+in the \fBoriginal\fR environment through the \fBkeymix\fR command.
+.sp
+.PP
+.SH EDMIX COMMANDS
+The default \fBsystem\fR command executed by \fBedmix\fR is the
+\fBvi\fR editor.  Thus, executing
+"edmix myfile.c myfile.h" commences with key acquisition, then myfile.c is
+descrambled, a system("vi myfile.c") call follows, then - the possibly
+modified - myfile.c is rescrambled.  Myfile.h is processed next, using the
+same key.
+.PP
+The \fB-e exec_cmd\fR supplants the default \fBvi\fR
+system call with exec_cmd.  Thus, "edmix -e emacs myfile"
+allows direct editing of the unscrambled version
+of a scrambled "myfile",
+using the \fBemacs\fR editor.  Exec_cmd normally is
+a command that takes a file name as a last argument.
+Alternately, dollar ($) signs contained by exec_cmd
+are expanded to the name of the currently descrambled file.
+Commands longer than a word should be quoted.  Examples:
+.nf
+
+edmix -e "grep xyz" file.c file.h
+edmix -e '( echo $; cat -n $ | grep xyz )  >>  lines_of_xyz' file.c file.h
+.fi
+.sp
+.SH DATA INTEGRITY
+All file reads and writes performed by the \fBmix\fR routines
+are single (atomic)
+operations pertaining to the length of the file, to minimize
+the danger of mangled data.  User interrupts are
+guaranteed to leave the entirety of a file either in its scrambled or in
+its descrambled state.  However the operating system
+using delayed writes to disk, may perform an incomplete flush
+during a system crash and make a file unrecoverable.  For
+this reason keeping some form of backup source is recommended.
+.PP
+Shell wild cards occasionally have the effect of cueing multiple
+instances of the same file in the argument list.  The command
+"mix myfile*  *.c"  for example, scrambles myfile.c twice in succession;
+a later "edmix myfile.c" fills the \fBvi\fR buffer with
+a first generation scrambling of myfile.c.
+.PP
+Loss of a key, not surprisingly, will present the user with a
+substantial exercise in cryptography.

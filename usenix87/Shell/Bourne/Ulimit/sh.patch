@@ -1,0 +1,306 @@
+*** /usr/src/bin/sh/Makefile	Fri Jul  1 06:48:58 1983
+--- Makefile	Mon Jun 30 15:47:27 1986
+***************
+*** 19,24
+  sh:	xec.o service.o error.o io.o
+  sh:	print.o macro.o expand.o
+  sh:	ctype.o msg.o
+  blok.o:		brkincr.h
+  fault.o:	brkincr.h
+  main.o:		brkincr.h
+
+--- 19,25 -----
+  sh:	xec.o service.o error.o io.o
+  sh:	print.o macro.o expand.o
+  sh:	ctype.o msg.o
++ sh:	ulimit.o
+  blok.o:		brkincr.h
+  fault.o:	brkincr.h
+  main.o:		brkincr.h
+*** /usr/src/bin/sh/defs.h	Sat Jun 11 02:38:06 1983
+--- defs.h	Mon Jun 30 15:44:51 1986
+***************
+*** 54,59
+  #define SYSREAD 17
+  #define SYSTST	18
+  #define	SYSUMASK	19
+  
+  /* used for input and output of shell */
+  #define INIO 10
+
+--- 54,60 -----
+  #define SYSREAD 17
+  #define SYSTST	18
+  #define	SYSUMASK	19
++ #define SYSULIMIT	20
+  
+  /* used for input and output of shell */
+  #define INIO 10
+***************
+*** 264,269
+  MSG		badopt;
+  MSG		badparam;
+  MSG		badsub;
+  MSG		nospace;
+  MSG		notfound;
+  MSG		badtrap;
+
+--- 265,271 -----
+  MSG		badopt;
+  MSG		badparam;
+  MSG		badsub;
++ MSG		badulimit;
+  MSG		nospace;
+  MSG		notfound;
+  MSG		badtrap;
+*** /usr/src/bin/sh/msg.c	Thu Aug 11 23:21:53 1983
+--- msg.c	Mon Jun 30 15:45:24 1986
+***************
+*** 26,31
+  MSG	badnum		= "bad number";
+  MSG	badparam	= "parameter not set";
+  MSG	badsub		= "bad substitution";
+  MSG	badcreate	= "cannot create";
+  MSG	illegal		= "illegal io";
+  MSG	restricted	= "restricted";
+
+--- 26,32 -----
+  MSG	badnum		= "bad number";
+  MSG	badparam	= "parameter not set";
+  MSG	badsub		= "bad substitution";
++ MSG badulimit	= "bad ulimit";
+  MSG	badcreate	= "cannot create";
+  MSG	illegal		= "illegal io";
+  MSG	restricted	= "restricted";
+***************
+*** 135,139
+  		{"exec",	SYSEXEC},
+  		{"times",	SYSTIMES},
+  		{"umask",	SYSUMASK},
+  		{0,	0},
+  };
+
+--- 136,141 -----
+  		{"exec",	SYSEXEC},
+  		{"times",	SYSTIMES},
+  		{"umask",	SYSUMASK},
++ 		{"ulimit",	SYSULIMIT},
+  		{0,	0},
+  };
+*** /usr/src/bin/sh/xec.c	Thu Aug 11 23:21:56 1983
+--- xec.c	Mon Jun 30 16:07:08 1986
+***************
+*** 222,227
+                                          }
+                                          break;
+  	
+  				default:
+  					internal=builtin(argn,com);
+  	
+
+--- 222,305 -----
+                                          }
+                                          break;
+  	
++ 					case SYSULIMIT:	
++ 					{	
++ 						long int i;	
++ 						long ulimit();	
++ 						int command = 2;	
++ 		
++ 						if (*a1 == '-')	
++ 						{
++ 							switch(*(a1+1))	{	
++ 							case 'f':	
++ 								command = 2;	
++ 								break;	
++ 		
++ #ifdef rt	
++ 							case 'p':	
++ 								command = 5;	
++ 								break;	
++ 		
++ #endif	
++ 							case 'c':
++ 								command = 7;
++ 								break;
++ 
++ 							case 'd':
++ 								command = 9;
++ 								break;
++ 
++ 							case 'm':
++ 								command = 11;
++ 								break;
++ 
++ 							case 't':
++ 								command = 13;
++ 								break;
++ 
++ 							default:	
++ 								error(badopt);	
++ 							}	
++ 							a1 = com[2];	
++ 						}	
++ 						if (a1)	
++ 						{	
++ 							int c;	
++ 
++ 							i = 0;	
++ 							while ((c = *a1++) >= '0' && c <= '9')	
++ 							{	
++ 								i = (i * 10) + (long)(c - '0');	
++ 								if (i < 0)	
++ 									error(badulimit);	
++ 							}	
++ 							if (c || i < 0)	
++ 									error(badulimit);	
++ 						}	
++ 						else	
++ 						{	
++ 							i = -1;	
++ 							command--;	
++ 						}	
++ 									
++ 						if ((i = ulimit(command,i)) < 0)	
++ 								error(badulimit);	
++ 		
++ 						switch (command) {	
++ 						case 1:
++ #ifdef rt
++ 						case 4:
++ #endif
++ 						case 6:
++ 						case 8:
++ 						case 10:
++ 						case 12:
++ 							prl(i);	
++ 							prc(NL);	
++ 						}	
++ 						break;	
++ 					}				
++ 
+  				default:
+  					internal=builtin(argn,com);
+  	
+***************
+*** 422,425
+  	FI
+  	execute(cmd(NL, NLFLG|MTFLG),0);
+  	pop();
+  }
+
+--- 500,532 -----
+  	FI
+  	execute(cmd(NL, NLFLG|MTFLG),0);
+  	pop();
++ }
++ 
++ /*
++  * standard itos expects 16 bit ints, so write a prl() routine
++  */
++ 
++ static int prl (n)
++ register long n;
++ {
++ 	register int i, j;
++ 	char buf[12], c;
++ 
++ 	buf[0] = '0';
++ 	buf[1] = buf[11] = 0;
++ 	for (i = 0; n && i < 11; i++)
++ 	{
++ 		buf[i] = n % 10 + '0';
++ 		n /= 10;
++ 	}
++ 	buf[i] = 0;
++ 
++ 	for (j = --i, i = 0; i < j ; i++, j--)
++ 	{
++ 		c = buf[j];
++ 		buf[j] = buf[i];
++ 		buf[i] = c;
++ 	}
++ 
++ 	prs(buf);
+  }
+*** /usr/man/man1/sh.1	Thu Jul 28 17:52:12 1983
+--- sh.1	Mon Jun 30 15:44:06 1986
+***************
+*** 1,6
+  .TH SH 1 "7 February 1983"
+  .SH NAME
+! sh, for, case, if, while, \fB:\fP, \fB.\fP, break, continue, cd, eval, exec, exit, export, login, read, readonly, set, shift, times, trap, umask, wait \- command language
+  .SH SYNOPSIS
+  .B sh
+  [
+
+--- 1,6 -----
+  .TH SH 1 "7 February 1983"
+  .SH NAME
+! sh, for, case, if, while, \fB:\fP, \fB.\fP, break, continue, cd, eval, exec, exit, export, login, read, readonly, set, shift, times, trap, ulimit, umask, wait \- command language
+  .SH SYNOPSIS
+  .B sh
+  [
+***************
+*** 762,767
+  .IR sigvec (2).
+  .I Trap
+  with no arguments prints a list of commands associated with each signal number.
+  .TP
+  \fBumask \fR[ \fInnn\fR ]
+  The user file creation mask is set to the octal value
+
+--- 762,813 -----
+  .IR sigvec (2).
+  .I Trap
+  with no arguments prints a list of commands associated with each signal number.
++ .TP
++ \fBulimit\fP \*(OK \fB\-cdfmpt\fP \*(CK \*(OK \f2n\^\fP \*(CK
++ imposes a size limit of
++ .IR n\^ .
++ .RS
++ .TP
++ .B \-c
++ imposes a size limit of
++ .I n\^
++ blocks on the size of core dumps.
++ .TP
++ .B \-d
++ imposes a size limit of
++ .I n\^
++ blocks on the size of the data area.
++ .TP
++ .B \-f
++ imposes a size limit of 
++ .I n
++ blocks on files written by child processes (files of any size may be read).
++ .TP
++ .B \-m
++ imposes a soft limit of
++ .I n\^
++ blocks on the size of physical memory.
++ .TP
++ .B \-p
++ changes the pipe size to
++ .I n
++ (\s-1UNIX\s+1/\s-1RT\s+1 only).
++ .TP
++ .B \-t
++ imposes a time limit of
++ .I n\^
++ seconds to be used by each process.
++ .PP
++ If no option is given,
++ .B \-f
++ is assumed.
++ If
++ .I n\^
++ is not given, the current limit is printed.
++ (As far as
++ .B ulimit
++ is concerned, a block is 512 bytes.)
++ .RE
+  .TP
+  \fBumask \fR[ \fInnn\fR ]
+  The user file creation mask is set to the octal value

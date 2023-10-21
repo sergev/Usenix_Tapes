@@ -1,0 +1,268 @@
+Path: plus5!wucs1!mcdchg!clyde!cbatt!ihnp4!ptsfa!lll-lcc!seismo!mcvax!cernvax!cui!petitp
+From: petitp@cui.UUCP (PETITPIERRE Dominique)
+Newsgroups: net.sources
+Subject: more bells and whistles for Rogue Monsters's shar
+Keywords: shar
+Message-ID: <41@cui.UUCP>
+Date: 11 Mar 87 06:44:22 GMT
+Reply-To: petitp@cui.UUCP (PETITPIERRE Dominique)
+Organization: University of Geneva/Switzerland
+Lines: 254
+Posted: Wed Mar 11 06:44:22 1987
+-- 
+
+Mr. Dominique Petitpierre uucp: mcvax!cernvax!cui!petitp / petitp@cui.uucp
+ISSCO			  X.400/ean: petitp@cui.unige.chunet
+University of Geneva	  JANET: petitp%cui.unige.chunet@cs.ucl.ac.uk
+54 route des acacias	  BITNET/EARN: petitp%cui.unige.chunet@CERNVAX
+CH-1227 GENEVA		  csnet: petitp%cui.unige.chunet@ubc.csnet
+(Switzerland)		ARPA:petitp%cui.unige.chunet%ubc.csnet@CSNET-RELAY.ARPA
+Tel: 0041/22/20 93 33 extension 2117  
+
+
+Rogue Monster has done a pretty nice job. Some other shars
+I know have nice bells and whistles that I like, so I added some of them
+(trivial ones) to his original program:
+
+ - an extra '-x' option that allow to specify a prefix string that will
+   be inserted before each line of the files in the archive. Of course it
+   is removed when unsharing.
+   For example this is quite useful to prevent some mailers to strip
+   everything following the first line starting with a dot in the first column
+   ([nt]roff files, ed scripts, etc.)
+   Example: the command
+     shar -f archive. -x Z *.c
+   will add a Z in front of every data line in the archive.
+
+ - the name of the archive is composed from the file prefix (option -f),
+   and a part specification: prefixMofN  where M is the part number and N
+   is the total number of parts. No other predefined suffix is inserted.
+   Example: archive.2of5
+
+ - more verbose comments tell the shar novice a bit more about how
+   to use the archive and what it contains.
+
+A diff file of the modifications to the source files implementing these
+changes is appended at the end of this message (to be used with patch).
+
+Some options not implemented (anybody interested?):
+ - an option (-b) to take the basename of the files (strip the directory
+   path so that all files are created in the current directory when
+   unsharing).
+
+ - (slightly) better checking by using the program 'sum'  when unsharing.
+   (Infortunately not all implementations of 'sum' give the same
+    results for the same file, but if it does, your confidence in the
+    integrity of the archive would be increased.)
+
+I hope this will be useful to some people in netland!
+
+Amities,	Dominique Petitpierre
+
+
+*** shar.c.orig	Tue Mar 10 22:43:13 1987
+--- shar.c	Wed Mar 11 03:20:59 1987
+***************
+*** 67,72
+  static char Perm = 0;			/* use original permissions */
+  static char OverWrite = 0;		/* overwrite existing files */
+  static char InStream = 0;		/* take names from standard input */
+  static Leaf Dot = {			/* relative tree */
+    NULL,NULL,NULL,".",F_DIR};
+  static Leaf Abs = {			/* absolute tree */
+
+--- 67,73 -----
+  static char Perm = 0;			/* use original permissions */
+  static char OverWrite = 0;		/* overwrite existing files */
+  static char InStream = 0;		/* take names from standard input */
++ static char *LinePrefix = NULL;		/* prefix to insert before each line */
+  static Leaf Dot = {			/* relative tree */
+    NULL,NULL,NULL,".",F_DIR};
+  static Leaf Abs = {			/* absolute tree */
+***************
+*** 428,434
+    }
+    if (!Quiet)
+      fprintf(stm,"echo \"writing %s\"\n",PathName);
+-   fprintf(stm,"cat > %s << '%s'\n",PathName,Terminal);
+    /*
+     *	Move the file data into the archive.
+     */
+
+--- 429,434 -----
+    }
+    if (!Quiet)
+      fprintf(stm,"echo \"writing %s\"\n",PathName);
+    /*
+     *	Move the file data into the archive.
+     */
+***************
+*** 432,440
+    /*
+     *	Move the file data into the archive.
+     */
+!   while (count = fread(Buffer,sizeof(char),sizeof(Buffer),inp))
+!     fwrite(Buffer,sizeof(char),count,stm);
+!   /*
+     *	Take care of the tail end linkage.
+     */
+    fprintf(stm,"%s\n",Terminal);
+
+--- 432,450 -----
+    /*
+     *	Move the file data into the archive.
+     */
+!   if (LinePrefix == NULL){
+!     fprintf(stm,"cat > %s << '%s'\n",PathName,Terminal);
+!     while (count = fread(Buffer,sizeof(char),sizeof(Buffer),inp))
+!        fwrite(Buffer,sizeof(char),count,stm);
+!   }
+!   else {
+!     fprintf(stm,"sed 's/^%s//' > %s << '%s'\n",LinePrefix,PathName,Terminal);
+!     while ( fgets(Buffer,sizeof(Buffer),inp) != NULL ){
+!        fputs(LinePrefix,stm);
+!        fputs(Buffer,stm);
+!     }
+!   }
+! /*
+     *	Take care of the tail end linkage.
+     */
+    fprintf(stm,"%s\n",Terminal);
+***************
+*** 478,484
+    /*
+     *	Open the output file, failure here causes a return.
+     */
+!   sprintf(CharBuf,"%s.shr%d",RootName,fil->Number);
+    if (!(stm = fopen(CharBuf,"w"))){
+      fprintf(stderr,"Unable to open archive: %s\n",CharBuf);
+      return;
+
+--- 488,494 -----
+    /*
+     *	Open the output file, failure here causes a return.
+     */
+!   sprintf(CharBuf,"%s%dof%d",RootName,fil->Number,FileCount);
+    if (!(stm = fopen(CharBuf,"w"))){
+      fprintf(stderr,"Unable to open archive: %s\n",CharBuf);
+      return;
+***************
+*** 487,494
+    /*
+     *	Put out the header.
+     */
+!   fprintf(stm,"#!/bin/sh\n");
+!   fprintf(stm,"# to extract, remove the header and type \"sh filename\"\n");
+    /*
+     *	Move through all file references and put them out.
+     */
+
+--- 497,510 -----
+    /*
+     *	Put out the header.
+     */
+!   fprintf(stm,"%s\n%s\n%s",
+!               "# This is a shell archive.  Remove anything before this line",
+! 	      "# then unpack it by saving it in a file and typing \"sh file\"",
+! 	      "# (Files unpacked will be owned by you and have ");
+!   if (Perm)
+!      fprintf(stm,"original permissions).\n");
+!   else
+!      fprintf(stm,"default permissions).\n");
+    /*
+     *	Move through all file references and put them out.
+     */
+***************
+*** 494,499
+     */
+    ClearTree(&Abs);
+    ClearTree(&Dot);
+    for (ref = fil->Ref; ref; ref = ref->Next)
+      OutputRef(stm,ref);
+    /*
+
+--- 510,521 -----
+     */
+    ClearTree(&Abs);
+    ClearTree(&Dot);
++   fprintf(stm,"# This archive contains the following files:\n");
++   for (ref = fil->Ref; ref; ref = ref->Next){
++      MakePathName(ref->Leaf);
++      fprintf(stm,"#\t%s\n",PathName);
++   }
++   fprintf(stm,"#\n");
+    for (ref = fil->Ref; ref; ref = ref->Next)
+      OutputRef(stm,ref);
+    /*
+***************
+*** 501,506
+     */
+    if (!Quiet)
+      fprintf(stm,"echo \"Finished archive %d of %d\"\n",fil->Number,FileCount);
+    fprintf(stm,"exit\n");
+    fclose(stm);
+  }
+
+--- 523,530 -----
+     */
+    if (!Quiet)
+      fprintf(stm,"echo \"Finished archive %d of %d\"\n",fil->Number,FileCount);
++   fprintf(stm,
++   "# if you want to concatenate archives, remove anything after this line\n");
+    fprintf(stm,"exit\n");
+    fclose(stm);
+  }
+***************
+*** 528,533
+     *	-o			=	overwrite existing files
+     *	-p			=	use original permissions
+     *	-q			=	generate quite code
+     */
+    while ((c = getarg(argc,argv,"cf:im:opq")) != EOF)
+      switch (c){
+
+--- 552,558 -----
+     *	-o			=	overwrite existing files
+     *	-p			=	use original permissions
+     *	-q			=	generate quite code
++    *	-x <string>		=	prefix to insert before each line
+     */
+    while ((c = getarg(argc,argv,"cf:im:opqx:")) != EOF)
+      switch (c){
+***************
+*** 529,535
+     *	-p			=	use original permissions
+     *	-q			=	generate quite code
+     */
+!   while ((c = getarg(argc,argv,"cf:im:opq")) != EOF)
+      switch (c){
+        case 'c':
+          Check = 1;
+
+--- 554,560 -----
+     *	-q			=	generate quite code
+     *	-x <string>		=	prefix to insert before each line
+     */
+!   while ((c = getarg(argc,argv,"cf:im:opqx:")) != EOF)
+      switch (c){
+        case 'c':
+          Check = 1;
+***************
+*** 553,558
+        case 'q':
+          Quiet = 1;
+          break;
+        case '?':
+          fprintf(stderr,"Unknown switch: -%c\n",c);
+          break;
+
+--- 578,586 -----
+        case 'q':
+          Quiet = 1;
+          break;
++       case 'x':
++         LinePrefix = optarg;
++ 	break;
+        case '?':
+          fprintf(stderr,"Unknown switch: -%c\n",c);
+          break;

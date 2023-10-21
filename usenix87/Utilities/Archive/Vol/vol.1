@@ -1,0 +1,140 @@
+.nh
+.TH VOL 1 
+.SH NAME
+vol  \-  create volume header files for
+.IR tar (1)
+.SH SYNOPSIS
+.B vol
+[ -ptd ] [ -s
+.B "maxblocks"
+] pathname...
+.SH DESCRIPTION
+Because multivolume
+.IR tar (1)
+archives are sequential in nature and cannot be accessed individually,
+a number of difficulties can arise.
+The most common problem is that one must search through ten floppies
+in order to retrieve a file from the eleventh.
+Searching through two cartridge tapes to get at something on the third
+is no fun, either,
+especially when it takes 30 minutes or more per tape.
+A much more devastating problem occurs when the third of fifteen floppy
+disks gets trashed or lost,
+rendering disks 4 through 15 effectively inaccessible.
+.PP
+The use of
+.I vol
+eliminates these problems by keeping the amount of data written
+to each volume within the capacity of the medium being used.
+.I Vol
+takes a maximum capacity value (in blocks) and a list of pathnames,
+and creates a sequence of volume header files of the form
+.nf
+.sp 1
+             Vol_1ofN, Vol_2ofN, ..., Vol_NofN
+.sp 1
+.fi
+Each of these files contains
+1) its own name,
+2) a subset of the pathnames specified, and
+3) a dummy file `TOTAL-NNNNN-Blocks-MM/DD/YY'.
+The total space in blocks required by this subset of files should
+be some value NNNNN which is less than or equal to the maximum
+capacity value.  Here's a sample volume header file for a
+diskette that has a 1400-block capacity:
+.nf
+.sp 1
+             $ cat Vol_1of3
+             ./Vol_1of3
+             /usr2/yost/c
+             /usr2/yost/news
+             /usr2/yost/calendar
+             TOTAL-1387-Blocks-06/02/86
+             $
+.sp 1
+.fi
+.PP
+These volume header files may then be used in conjunction with the
+command evaluation capability of
+.IR sh (1),
+as in the following examples:
+.nf
+.sp 1
+             $ tar cv `cat Vol_1of3`
+             $ ls -ls `cat Vol_1of3`
+             $ rm -rf `cat Vol_1of3`
+.sp 1
+.fi
+.PP
+.I Vol
+runs
+.IR du (1)
+on each pathname supplied on the command line to determine how
+much space it requires.
+If any pathname is larger than the maximum capacity,
+and it is a directory,
+.I vol
+processes each of the files within that directory separately,
+rather than the directory as a whole.
+For example, if the directory /usr is too big to fit on a single magtape,
+.I vol
+will split it up into tape-sized chunks.
+If a regular file is larger than the maximum capacity,
+.I vol
+will print an error message and skip the file.
+.PP
+Once all of the pathnames on the command line have been processed
+in this way,
+.I vol
+begins arranging them into volume header files.
+The default algorithm takes great liberties in rearranging the
+sequence of the pathnames in order to minimize the amount of
+wasted space on each volume.
+The -p option tells
+.I vol
+to preserve the original sequence of pathnames,
+regardless of space considerations.
+.PP
+The maximum capacity value defaults to the value of `VOLSIZE' in
+the file /etc/default/vol,
+or the environment variable `VOLSIZE'.
+The -t option to use `TAPESIZE' rather than `VOLSIZE';
+similarly, -d means use `TAPESIZE'.
+Command-line options take priority over environment variables,
+and variables take priority over the values in /etc/default/vol.
+.PP
+.I Vol
+will run much faster if you do some of its work for it.
+For example, if you wish to split up /usr into magtape-sized
+volumes, and you know it will take more than one, use the
+command
+.nf
+
+             $ vol -t /usr/*
+
+rather than
+
+             $ vol -t /usr
+
+.fi
+This will save
+.I vol
+the trouble of doing the initial
+.IR du (1)
+on /usr, only to find out that it's too big.
+.SH DIAGNOSTICS
+.I Vol
+exits with status 1 if any errors are encountered.
+.SH FILES
+/etc/default/vol /tmp/vol* ./Vol_*of*
+.SH "SEE ALSO"
+tar(1)
+du(1)
+sh(1)
+.SH BUGS
+.I Vol
+neglects to consider the size of the header files in its calculations.
+.PP
+Multiple links to a file are treated as separate files.
+.SH AUTHOR
+Brian Yost (bty!yost)

@@ -1,0 +1,62 @@
+#!/bin/sh
+# 'Dump script for single tape dump by crontab'
+
+if test "$1" != ""; then
+	weekday="manual"
+	level="$1"
+else
+	set `date`
+	case "$1" in
+	Mon)	# This backup will probably be done manually
+		weekday=Monday
+		level=6
+		;;
+	Tue)	# First of the week
+		weekday=Tuesday
+		level=6
+		;;
+	Wed)	# Second stab
+		weekday=Wednesday
+		level=6
+		;;
+	Thu)	# Should still be lots of space
+		weekday=Thursday
+		level=6
+		;;
+	Fri)	# Final unattended
+		weekday=Friday
+		level=3
+		;;
+	*)	# Any other day assume an intermediate backup
+		weekday=Weekend
+		level=6
+		;;
+	esac
+fi
+
+echo "autodump: ${weekday} level = ${level}" > /dev/console
+echo "autodump: dump W" > /dev/console
+/etc/dump W > /dev/console 2>&1
+
+if test `hostname` = stc-b; then
+	args="${level}udf 6250 /dev/rmt12"
+else
+	args="${level}uf /dev/rmt12"
+fi
+
+set `awk -F: '$3 ~ /^rw$|^rq$/ 	{if ($2 != "/tmp") print $1, $2}' /etc/fstab`
+while test $1
+do
+	echo "autodump: dump $args $1 ($weekday dump of $2)" > /dev/console
+	sync
+	sync
+	sync
+	/etc/dump $args $1 > /dev/console 2>&1
+	shift
+	shift
+done
+
+mt rew
+mt offl
+
+echo "autodump: backups completed" > /dev/console

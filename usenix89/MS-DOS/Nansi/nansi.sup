@@ -1,0 +1,266 @@
+Support Routines for nansi.sys
+The three files setraw.asm, setraw.lc, and setraw.msc contain routines
+to allow use of RAW mode from assembly, Lattice C, and Microsoft C.
+
+Lattice C is a little wierder than most, so rawtest.lc was included
+to show how to use setraw.lc; the other languages require no special
+setup to use setraw.
+
+;---- setraw.asm ----------------------------------------------
+	public	getraw, setraw
+;----- dos ----------------------
+; Call DOS function # n.
+dos	macro	fn
+	mov	ah, fn
+	int	21h
+	endm
+
+code	segment para public 'CODE'
+assume cs:code
+;----- Getraw ---------------------------------------------
+; Returns AX=1 if file BX is a device in raw mode; 0 otherwise.
+; Returns Carry set & errorcode in AX if DOS error.
+
+getraw	proc	near
+	mov	al, 0
+	DOS	44h		; Get attributes
+	jc	gr_exit		; bad file handle?
+	mov	ax, 20h
+	and	al, dl		; get that bit
+	mov	cl, 4
+	shr	ax, cl
+	clc
+gr_exit:
+	ret
+getraw	endp
+
+;----- Setraw -------------------------------------------
+; Sets Raw state of file BX to (AX != 0) if file is a device.
+; Returns Carry set & errorcode in AX if DOS error.
+setraw	proc	near
+	mov	cx, ax
+	mov	al, 0
+	DOS	44h
+	jc	sr_exit
+	test	al, 80h		; It it a device?
+	jz	sr_exit		; nope- do nothing.
+	; Current mode in DX; set CX = 20H if CX nonzero.
+	or	cx, cx
+	jz	sr_ax0
+		mov	cx, 20h
+sr_ax0: and	dx, 00cfh	; clear old raw bit and hi byte,
+	or	dx, cx		; set new value.
+	mov	al, 1
+	DOS	44h
+sr_exit:
+	ret
+setraw	endp
+code	ends
+	end
+;---- end of setraw.asm ------------------------------------------
+/*--- setraw.msc -------------------------------------------------
+  Routines to set and reset raw mode on stdin/stdout.
+  For Microsoft C.
+------------------------------------------------------------------*/
+#include <dos.h>
+/* Use the IOCTL DOS function call to change stdin and stdout to raw mode.
+ * For stdin, this prevents MSDOS from trapping ^P, ^S, ^C, thus freeing us
+ * of ^P toggling 'echo to printer'.
+ * For stdout, this radically speeds up the output because there is no
+ * checking for these special characters in the input buffer whenever
+ * screen output is occurring.
+ * Note that only the stdin OR stdout ioctl need be changed since
+ * apparently they are handled as the same device.
+ * Thanks to Mark Zbikowski (markz@microsoft.UUCP) for helping me with
+ * this.
+ * --- This stolen from sources to the mighty game HACK ---
+ */
+#define DEVICE		0x80
+#define RAW		0x20
+#define IOCTL		0x44
+#define STDIN		fileno(stdin)
+#define STDOUT		fileno(stdout)
+#define GETBITS		0
+#define SETBITS		1
+static unsigned	old_stdin, old_stdout, ioctl();
+/*--- set_raw() ----------
+  Call this to set raw mode; call restore_raw() later to restore
+  console to old rawness state.
+--------------------------*/
+set_raw()
+{
+	old_stdin = ioctl(STDIN, GETBITS, 0);
+	old_stdout = ioctl(STDOUT, GETBITS, 0);
+	if (old_stdin & DEVICE)
+		ioctl(STDIN, SETBITS, old_stdin | RAW);
+	if (old_stdout & DEVICE)
+		ioctl(STDOUT, SETBITS, old_stdout | RAW);
+}
+restore_raw()
+{
+	if (old_stdin)
+		(void) ioctl(STDIN, SETBITS, old_stdin);
+	if (old_stdout)
+		(void) ioctl(STDOUT, SETBITS, old_stdout);
+}
+static unsigned
+ioctl(handle, mode, setvalue)
+unsigned setvalue;
+{
+	union REGS regs;
+
+	regs.h.ah = IOCTL;
+	regs.h.al = mode;
+	regs.x.bx = handle;
+	regs.h.dl = setvalue;
+	regs.h.dh = 0;			/* Zero out dh */
+	intdos(&regs, &regs);
+	return (regs.x.dx);
+}
+/*-- end of setraw.msc --*/
+/*------ setraw.lc ----------------------------------------------
+Lattice C routines which get and set the current raw/cooked state
+of a file, given its Lattice file descriptor.
+Useful when trying to obtain high console output speeds.
+----------------------------------------------------------------*/
+
+#include "\lc\dos.h"
+#define CARRY 0x1
+#define ERROR (-1)
+#define TRUE 1
+#define FALSE 0
+
+extern _oserr;
+
+/*---- getraw --------------------------------------------------
+Returns TRUE if file fd is a device in raw mode; FALSE otherwise.
+Returns ERROR, puts errorcode in _oserr, if DOS error.
+----------------------------------------------------------------*/
+getraw(fd)
+int fd;
+{
+	union REGS inregs;
+	union REGS outregs;
+	int	flags;
+
+	if (fd > 2) fd+=2;		/* convert to DOS fd */
+	inregs.x.bx = fd;
+	inregs.x.ax = 0x4400;		/* get file attributes */
+	flags = intdos(&inregs, &outregs);
+	if (flags & CARRY) {
+		_oserr = outregs.x.ax;
+		return -1;
+	}
+	return (outregs.x.dx & 0x20) ? TRUE : FALSE;
+}
+
+/*---- setraw --------------------------------------------------
+Sets Raw state of file fd to raw_on (if file is not a device, does nothing).
+Returns zero if successful.
+Returns ERROR & errorcode in _oserr if DOS error.
+----------------------------------------------------------------*/
+setraw(fd, raw_on)
+int fd, raw_on;
+{
+	union REGS inregs;
+	union REGS outregs;
+	int	flags;
+
+	if (fd > 2) fd+=2;		/* convert to DOS fd */
+
+	inregs.x.ax = 0x4400;		/* get file attributes */
+	inregs.x.bx = fd;
+	flags = intdos(&inregs, &outregs);
+	if (flags & CARRY) {
+		_oserr = outregs.x.ax;
+		return ERROR;
+	}
+	if ((outregs.x.ax & 0x80) == 0)	/* return zero if not device */
+		return 0;
+
+	outregs.x.ax = 0x4401;		/* set file attributes */
+	outregs.x.bx = fd;
+	outregs.x.dx &= 0xcf;		/* clear old raw bit & hi byte */
+	if (raw_on) outregs.x.dx |= 0x20;	/* maybe set new raw bit */
+	flags = intdos(&outregs, &inregs);
+	if (flags & CARRY) {
+		_oserr = inregs.x.ax;
+		return ERROR;
+	}
+	return 0;
+}
+/*-- end of setraw.lc --*/
+/*------ rawtest.lc -------------------------------------------------
+Lattice C program to demonstrate the difference in speed between
+DOS's raw and cooked modes when writing to the DOS console.
+Requires setraw.c; make the demo as follows:
+	lc setraw rawtest
+	link \lc\s\c rawtest setraw,rawtest,,\lc\s\lc
+and run it by typing
+	rawtest
+
+Note- Lattice C's raw mode (i.e. using mode "rb" or "wb" with fopen)
+is not the same as DOS's raw mode, and does not affect speed.
+
+What does affect speed is whether output is performed with single-character
+DOS calls, which is the default.  To get a speed improvement, you must 
+open "con" WITHOUT a trailing colon, and use that file for high-speed output;
+see section 5.2 (Device I/O) of the Lattice manual.
+
+When using MS-DOS raw mode, the console is in totally unbuffered mode-
+echo is turned off, no printer echoing is done, and no line editing
+is done, regardless of which file setraw was applied to.  This means
+that the console must be in non-raw ("cooked") mode for line-oriented
+console input to work properly.
+
+Note: no speed difference will be noticed when using the standard console
+driver ANSI.SYS that comes with DOS; you must be using NANSI.SYS to
+get massively fast output.  
+To use nansi.sys, insert the following line in \config.sys:
+	device = nansi.sys
+and put nansi.sys on the top level directory; the system will load
+it at boot time.
+(If there was already a line invoking plain old ansi.sys, remove it.)
+--------------------------------------------------------------------*/
+
+#include "\lc\stdio.h"
+
+char	response[128];
+
+main(argc, argv)
+int	argc;
+char	**argv;
+{
+	FILE	*fp;
+	int	fd;
+	int	old_rawness;
+	int	i;
+
+	fp = fopen("con", "w");
+	if (fp == NULL) fprintf(stderr, "can't open 'con'!");
+	fd = fileno(fp);		/* get Level 1 file descriptor */
+	old_rawness = getraw(fd);	/* Save old raw/cooked state */
+
+	setraw(fd, 0);			/* make sure we're in cooked mode */
+
+	puts("Cooked mode test (hit return):");
+	gets(response);
+	fprintf(fp, "\033[2J");		/* clear screen */
+	for (i=0; i<20; i++)
+		fprintf(fp, "This is cooked mode!  Why is it so darned slow? %d\n", i);
+	fflush(fp);
+
+	puts("Raw mode test (hit return):");
+	gets(response);			/* must be in cooked mode to use gets */
+	setraw(fd, 1);			/* enter raw mode */
+	fprintf(fp, "\033[2J");		/* clear screen */
+	for (i=0; i<20; i++)
+		fprintf(fp, "-- This is raw mode- it's clearly faster than cooked! %d\n", i);
+	fflush(fp);			/* finish writing while in raw mode */
+	setraw(fd, old_rawness);	/* go back to old raw/cooked state  */
+
+	fclose(fp);
+}
+/*--- end of rawtest.lc ---*/
+-- 
+

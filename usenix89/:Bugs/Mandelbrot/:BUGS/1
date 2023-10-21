@@ -1,0 +1,197 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version Tektronix Network News Daemon (B 2.10.2 based); site lumiere.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!vax135!cornell!uw-beaver!tektronix!lumiere!mikee
+From: mikee@lumiere.UUCP
+Newsgroups: net.sources.bugs
+Subject: Two bug fixes for the mandelbrot programs
+Message-ID: <1193@lumiere.UUCP>
+Date: 2 Oct 85 17:25:28 GMT
+Date-Received: 4 Oct 85 15:00:17 GMT
+Sender: mikee@lumiere.UUCP
+Organization: Tektronix, Beaverton OR
+Lines: 184
+
+< munch... munch... >
+
+I've found two problems in the mandelbrot programs I posted a while
+back.  One (in "manfiles.c") is serious and can cause the "mancomp"
+program to go into an infinite loop when trying to write extremely-
+high-resolution pixel images to the pixel file.  The other is a
+(relatively) minor nit about the way "mandisp" allocates the color
+spectrum between the pixel values.  The given fix causes a "smoother"
+and MUCH faster allocation.
+
+*** /tmp/,RCSt1009251	Tue Oct  1 08:05:16 1985
+--- manfiles.c	Tue Oct  1 08:04:30 1985
+***************
+*** 333,339
+  		}
+  		PixMode = pixmode(PixValue);
+  		do {
+! 			register cnt = PixCount & MAXCOUNT;
+  			putshort(PixMode | cnt);
+  			putpixel(PixValue);
+  			PixCount -= cnt;
+
+--- 333,339 -----
+  		}
+  		PixMode = pixmode(PixValue);
+  		do {
+! 			register cnt = min(PixCount, MAXCOUNT);
+  			putshort(PixMode | cnt);
+  			putpixel(PixValue);
+  			PixCount -= cnt;
+***************
+*** 367,373
+  		if (ison(CM_LOW, newmode)) {
+  			PixMode = newmode;
+  			do {
+! 				register cnt = PixCount & MAXCOUNT;
+  				putshort(PixMode | cnt);
+  				putpixel(PixValue);
+  				PixCount -= cnt;
+
+--- 367,373 -----
+  		if (ison(CM_LOW, newmode)) {
+  			PixMode = newmode;
+  			do {
+! 				register cnt = min(PixCount, MAXCOUNT);
+  				putshort(PixMode | cnt);
+  				putpixel(PixValue);
+  				PixCount -= cnt;
+
+
+
+*** /tmp/,RCSt1009256	Tue Oct  1 08:05:24 1985
+--- mandisp.c	Tue Oct  1 08:05:02 1985
+***************
+*** 260,308
+  set_gray_scale()
+  /*
+   * Take the density histogram and turn it into a gray scale.
+   * (This should probably be interactive.)
+   */
+  {
+  	int	 colors = Gray_Scale;
+  	int	 hihist = HistMax;
+  	int	 lodens = 0;
+  	register locount = 0, midcount, hicount = HistTotal;
+  	register sections;
+  
+  	sections = getsects(hihist, lodens, 1);
+  	if (sections < 2)
+  		return;
+  	if (colors >= sections) {
+  		double	factor, curcolor;
+  
+  		factor = (double) colors / (double) sections;
+  		for (curcolor = 0.0 ; hihist >= HistMin ; hihist--) {
+  			if (Histogram[hihist] > 0) {
+  				density[hihist] = dbltoint(curcolor);
+  				curcolor += factor;
+  			}
+  		}
+  		return;
+  	}
+  
+-  	if (Histogram[HistMax] >= (HistTotal / 500)) {
+-  		density[hihist--] = lodens++;
+-  		hicount -= Histogram[HistMax];
+-  		colors--;
+-  	}
+  
+! 	while ((midcount = ((locount + hicount) / 2)) > locount) {
+! 		register sections = getsects(hihist, lodens, midcount);
+! 		if (sections < colors)
+! 			hicount = midcount;
+! 		else if (sections > colors)
+!  			locount = midcount;
+!  		else {
+!  			while (getsects(hihist, lodens, --midcount) == colors)
+!  				;
+!  			midcount++;
+!  			break;
+!  		}
+  	}
+-  	getsects(hihist, lodens, midcount);
+  }
+
+--- 260,310 -----
+  set_gray_scale()
+  /*
+   * Take the density histogram and turn it into a gray scale.
+   * (This should probably be interactive.)
+   */
+  {
+  	int	 colors = Gray_Scale;
+  	int	 hihist = HistMax;
+  	int	 lodens = 0;
+  	register locount = 0, midcount, hicount = HistTotal;
+  	register sections;
+  
++  	if (Histogram[HistMax] > Npixel) {
++  		density[hihist--] = lodens++;
++  		hicount -= Histogram[HistMax];
++  		colors--;
++  	}
+  
+  	sections = getsects(hihist, lodens, 1);
+  	if (sections < 2)
+  		return;
+  	if (colors >= sections) {
+  		double	factor, curcolor;
+  
+  		factor = (double) colors / (double) sections;
+  		for (curcolor = 0.0 ; hihist >= HistMin ; hihist--) {
+  			if (Histogram[hihist] > 0) {
+  				density[hihist] = dbltoint(curcolor);
+  				curcolor += factor;
+  			}
+  		}
+  		return;
+  	}
+  
+!  	for (;;) {
+!  		midcount = (locount + hicount) / 2;
+!  		sections = getsects(hihist, lodens, midcount);
+!  
+! 		if (sections > colors) {
+! 			if (midcount == locount) {
+! 				getsects(hihist, lodens, ++midcount);
+! 				break;
+! 			}
+!  			locount = midcount;
+!  		} else {
+!  			if (midcount == locount)
+!  				break;
+!  			hicount = midcount;
+!  		}
+  	}
+  }
+
+That's all folks!
+
+
+Mike Edmonds
+
+	UUCPnet:     {ucbvax,ihnp4,allegra,uw-beaver,...}!tektronix!mikee
+	CSnet:	     mikee@tek
+	ARPAnet:     mikee.tek@csnet-relay
+	Snail Mail:  Tektronix, Inc.,
+		     S3G Unix Support
+		     Del.Sta. 19-333
+		     PO Box 500, Beaverton, OR	97077
+	MaBell:	     (503) 627-5340
+-- 
+
+Mike Edmonds
+S3G Unix Support Manager
+
+	UUCPnet:     {ucbvax,ihnp4,allegra,uw-beaver,...}!tektronix!mikee
+	CSnet:	     mikee@tek
+	ARPAnet:     mikee.tek@csnet-relay
+	Snail Mail:  Tektronix, Inc.,
+		     S3G Unix Support
+		     Del.Sta. 19-333
+		     PO Box 500, Beaverton, OR	97077
+	MaBell:	     (503) 627-5340

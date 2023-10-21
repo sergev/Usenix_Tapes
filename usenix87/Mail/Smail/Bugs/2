@@ -1,0 +1,45 @@
+Article 1096 of net.sources.bugs:
+Path: plus5!wucs1!cuae2!clyde!cbatt!osu-eddie!karl
+From: karl@osu-eddie.UUCP (Karl Kleinpaste)
+Newsgroups: net.sources.bugs
+Subject: Security hole in smail 2.3's handling of ~/.forward
+Message-ID: <3150@osu-eddie.UUCP>
+Date: 18 Feb 87 16:04:37 GMT
+Organization: OSU
+Lines: 33
+
+The posting of smail 2.3 has a large security hole in mail delivery
+with regard to the use of ~/.forward files.  This is a feature which I
+initially added (rather badly, to be honest) and which Larry Auton saw
+fit to include in 2.3 in a much better way.  However, his checks for
+the condition of ~/.forward are inadequate.
+
+The code is this:
+			/*
+			** check for ~user/.forward file
+			** must be a regular, readable file
+			*/
+                        sprintf(buf, "%s/%s", home, ".forward");
+                        if((stat(buf, &st) >= 0)
+                        &&((st.st_mode & S_IFMT) == S_IFREG)
+                        &&((fp = fopen(buf, "r")) != NULL)) {
+                                aliased = 0;
+                                while(fgets(buf, sizeof buf, fp)) {
+                                        aliased |= recipients(addr, buf);
+				}
+                                fclose(fp);
+                                if(aliased) {
+                                        continue;
+				}
+			}
+
+This is not sufficiently careful.  It has not checked for things like
+.forward being writable a non-owner of the file, a transparent
+security hole.  I also recommend that checks be done on the home
+directory to see that it, too, is writable only by the owner, lest
+some cracker "give" you a .forward file, and suddenly you stop getting
+mail without knowing why.
+-- 
+Karl
+
+

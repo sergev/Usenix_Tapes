@@ -1,0 +1,344 @@
+	Absolute 6809 assembler			5/27/79
+
+
+		At this point, the 6809 assembler takes all
+	number fields in any indirect instructions to be 16 bits
+	long.  For an index of zero (and the coresponding byte
+	saveings) type (for example)	lda	,x .  This would
+	be the same as the old 6800 way of 'ldaa  0,x' .  This is a
+	very new assembler and no doubt has many hidden bugs in
+	the instuction area and the opcode tables.  The pshdo-op
+	code is the same as in the other 'mas' assemblers, and should
+	be reliable.
+
+Instruction format:
+
+	The motorola psydo-ops (rmb,fcc,fcb,fdb) are suported, but
+	I sugest you use the ones below.  The assmbler maps the
+	motorola into the standard as follows:
+	fcb	db	defines a byte.
+	fdc	dw	defines a word.
+	fcc	ds	defines a string in ' " ' (double-quotes)
+	rmb	ds	reserves 'n' bytes.
+
+Arithmetic:
+	The arithmetic power of the assembler is that of the
+	'c' languege on the 11/70.  There is NO order of operations,
+	so parentheis () must be used to direct the assembler.
+	The operators are:
+	+ - *	standard.
+	/	divide, get the integer portion
+	%	mod operator (i.e. 16%5 = 1)
+	>>	arithmetic shift right
+	<<	arithmetic shift left
+	^	XOR
+	!	complement
+	~	two's complement
+	&	and
+	|	or
+
+	The operators for the comparisions (used in if statment or
+	anywhere else the result it true or false)
+	==	equal to
+	!=	not equal to
+	<=	less than or equal to
+	>=	greater than or equal to
+	>	  "	 "
+	<	less	 "
+	||	or
+	&&	and
+
+	Also, at any point in the assembly you can re-assign the
+	value of a variable while evaluatin the operhand by using
+	an equals sign.  For example, if 'foo' had a value of 10 :
+	'foo = foo + 2'
+	would have a value 12, and foo would have a value of 12.
+
+	Special re-asignments exist for situations where such
+	constructions are used a great deal.  They are:
+
+	=+	'foo =+ 2' is the same as 'foo = foo + 2'
+	Others:
+	=-  =*  =/  =%  => (shift)  =< (shift) 
+
+	the equal sign in conjuction with the 'eval' psydo-op
+	is used to change the value of a variable in the symbol table.
+
+	$	is value of current location(start of that current
+		instruction)
+
+    Errors:
+	Errors are preceeded by the line number they occure in.
+	They are preceeded by a  '%%' so that files may be read
+	in with the editor to search for errors (usfull on long
+	programs.)
+
+    Table sizes:
+	Max number of symbols = 400
+	Max  "	   "  macros  = 50
+	Max  "     "  char. in a dup = 500
+	Max  "  of local variables in a macro = 20
+
+	Lables begin in the first colum.  A colen after the lable
+	is not needed, but if one is there it is ignored.  The lenght
+	of a lable may be up to 20 charactors.
+	A double-colen ( :: ) after a lable forces that lable into
+	the symbol table under all conditions, even in a macro.
+
+	All arithmetic operators have the same priority
+	(there is no order of operations)
+
+    Files produced are:
+	n.out	6809 absolute load file
+	n.lst	listing of program.
+	n.sym	Symbol table dump
+
+	At this point, symbol table overflow is not checked.
+	In fact, many tables are not checked for overflow.
+	Table overflow presents itself with a core dump.  If
+	you should get a core dump, contact me (/v/wa1yyn) and
+	I will increase the offended table.
+
+Radix Conventions:
+
+	 Numbers with no post or pre radix tags are initally decimal.
+	Post radix tags are:
+		q	octal
+		h	hex
+		.	decimal
+	Pre-radix tags are:
+		0	octal
+		00	hex
+		000	binary
+	Any numer with a hex digit in it is considered hex
+	irregardless of any radix flags.
+	Othewise, post radix has priority.
+	To change the default radix, use the 'base' psydo-op.
+	the operhand field of the base psydo-op  is allways
+	in base ten.  Usage is:
+	
+	base	16	;to set default radix to base 16
+		The operhand field of the base psydo-op is 
+		allways in base ten.
+
+Indirection:
+		Any instructions that can take indirection can use
+	brackets around the oprhand field to denote indirection, i.e.
+		lda	[4,x]
+		ldd	[1234h]
+
+Pushes, pulls and transfers:
+
+		After a push or pull instruction,  a list of registers
+	in any order may be given.  Valid registers are:
+	a,b,d,dp,x,y,c,s/u.  Transfers format is:
+		tfr	source,destination
+	Exchanges use the same format.  Valid registers are:
+	d,x,y,u,s,pc,a,b,cc and dp.  Extra letters may exist
+	after any letter for a register, i.e. p and pc and pcr
+	are equivilant.
+
+
+Pysdo Ops:
+
+    org	#
+	   A symbol on an org statement has the value
+	of the org #. i.e.
+
+	foo	org	10h
+
+	'foo' will have a value of 10h.
+
+lable    equ  [expression]
+	    Assigns the value of the expression to the lable.
+	Expressions can contain any previously defined symbols.
+	There is NO  'SET' psydo-op.  Use  'eval' instead (see below)
+
+
+    db	# [,#,#...]
+	   Define Byte.  Evaluates the number and stores it.
+	Can stack arguments seperated by commas.  Only the lower eight
+	bits are stored. Any high-order bits are truncated.
+
+    ds	# or "string" [,...]
+	   Define storage.  Evaluates the number and reserves
+	that much room.  If string, initalizes storage area
+	to string.	Special charactors are preceeded by a '\'.
+	'\r' is 15q (carrige return)
+	'\n' is 12q (line feed)
+	'\t' is 11q (tab)
+	'\b' is a 10q (backspace)
+	'\e'  is a 4  (eot)
+	'\0' is 0  (null byte)
+	'\"' for the  "  charactor itself
+	'\\' for a back-slash  (  \  )
+
+    dw	# [,...]
+	  Define word.  Evaluates the number and stores as a
+	full word (2 bytes).
+
+    repeat	n
+	   Repeats the line folling the 'repeat' n times.
+	Nested repeats produce funny but constant results.
+	Lables in the line are passed on the first repetition,
+	and delited for subsiquent repititions.
+	Do not try to repeat a dup.
+
+    dup	n
+	 .
+	[dup field]
+	 .
+	enddup
+	   Duplicates the series of lines between the dup and the
+	enddup n times.
+	Lables in the dup field are passed on the first dup, and
+	deleted for subsiquent dups.  Dups may be nested.
+
+    defmacro	name
+	 .
+	[macro body]
+	 .
+	endmacro
+	   Defines the macro 'name' as the macro body.  Arguments
+	in main are substituted whenever there is a &# , where
+	1 <= # <= 9 .  The number of calling parametors is not
+	specified.  To invoke the macro, type:
+
+	name	arg1,arg2,...arg9
+
+	Be sure the arguments match the call.  mas80 does not
+	check for this.
+	Local symbols may be used in the macros.  The symbols must
+	not apear elsewhere in the program.
+	To use a '&' in the text string or macro body, type
+	a '\&' instead.
+	Instructions may be used as macro names to replace
+	or modify an istruction to your likeing.  Generally
+	speaking, macro names take precidence over everthing.
+	Maximum nesting level is at least 22 levels, and maybee
+	more depending on various unexplicable conditions.
+
+    fixtable
+	   Fixes the symbol table to the current lenght.
+
+    expunge
+	  Expunges the table up to the point of the last 'fixtable'
+
+	expung	symbol [,symbol2,...]
+	   Expunges the symbol or symbols from the table.
+
+    fixmacro
+	expungemacro
+	expungemacro name[,name2,...]
+	   Same as fixtable group but for macros.
+
+Note:  the fixtable and fixmacro and associated commands are good
+	for globle macros and variables.
+
+    eval	expression.
+	   Evaluates the expression.  'expression' can be any
+	valid 'c' expression, and will allow you to modify the
+	value of symbols in the symbol table (i.e. foo =+ 1).
+
+    if	expression
+    .
+    (code here assembled if value of 'expression' is not-zero)
+    .
+    [else]
+    .
+    (code here assembled if value of 'expression' is zero.
+	This code here is optional.)
+    .
+   endif
+	Conditional assembly.  Done if expression is non-zero.
+	'expression' is any valid 'c' expression.
+	Can be nested.
+
+    listoff
+	Suppresses listing of source.  The statement itself is not
+	listed.
+
+    liston
+	Enables listing of source.  The statement itself is not listed.
+
+    binoff
+	Suppresses generation of binary (m.out) file.
+
+    binon
+	Enables (turns on) generation of binary (m.out) file.
+
+
+    include	"filename"
+	    Takes the file 'filename' and runs it through the assembler
+	until it is ended, when it returns to the original source.
+	The include file can include other include files.  All assembler
+	pysdo-ops are valid in the include file and code can be generated.
+	Only one file name in the operhand field is allowed.  To include
+	a number of files, use a seperate include statement for each one.
+
+    macon, macoff
+	    Disables or enables the inclusion in the listing of the
+	source (m.lst) the expanded code produced during macro expantion.
+
+    message
+	message prints out any text in the operhand field
+	on the terminal during pass 1 and on the lising durring
+	pass two.  It increments the error count too. If the
+	expression '%symbol' is encoutered in the line, the
+	value of the symbol is printed.  i.e.  if 'data' had a value
+		of 45, the line:
+	message	data was a %data.
+		would print:
+	data was a 45.
+
+    end
+	    Last statement of assembler.  Sinals end of source code.
+
+    Internal Variables:
+
+	Internal variables exist with certain usefull information in
+    them.  They may be used in expressions like any other varaibles.
+	Valid internal varibles are:
+
+	_NARGS		Number of arguments passed in the most recient
+		macro.  This is NOT a nested variable.
+
+	_NEST		Number of levels of nesting in a macro, repeat,
+		or dup.
+
+	_SECONDS	Seconds of real world clock as of time of assembly
+
+	_MIN		Minutes ...
+	_HOUR		Hours ...
+	_DAY		Day #
+	_MONTH		Month
+	_YEAR		Current year
+	_DOW		Day of week (monday = 1)
+	_DOY		Day of year
+	_DSTF		Daylight saving flag (1 = daylight saving time)
+	_ASSVERNO	Assembler version number.  Changes when major
+		changes in the assember accure.
+
+	A user may change any of these variables with sucsess except
+for '_NARGS' and '_NEST', which the assembler will clobber.  If a user
+defines a lable as any of these except '_NARGS' and '_NEST', the user
+variable has priority and is used.  Do NOT expunge these variables!
+
+	To use type:
+	% mas09 "filename"
+
+
+	As part of a total micro software package, I would also
+	like to call your attention to  dis80  and  dis68 
+	which are dis-assemblers for the 8080 and 6800.
+	Call by:	dis80 "filename"  where filname is of the
+	same form as an i.out file or m.out file.
+	Also, to spook out obscure ascii strings in 6800 code,
+	there is  xdis68.
+
+
+	There are no current plans for a motorola comapatible
+	cross assembler for the 6809.
+
+	Any problems mail the the trouble to me.
+	Tnx -Pete

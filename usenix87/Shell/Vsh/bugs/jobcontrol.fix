@@ -1,0 +1,86 @@
+*** main.c	Tue Jul 17 01:19:12 1984
+--- main.c.old	Sun Jul 15 20:32:15 1984
+***************
+*** 6,18
+  #include <sys/sgtty.h>
+  #endif
+  
+- #ifdef	STOPABLE
+- #define	sigmask(sig)	(1 << ((sig) - 1))
+- #define	sigunblock(mask) sigsetmask(sigblock(0) & ~(mask))
+- int suspend();
+- #include <sgtty.h>
+- #endif
+- 
+  /* Extract data about environment */
+  #define ENV_COUNT	6
+  
+
+--- 6,11 -----
+  #include <sys/sgtty.h>
+  #endif
+  
+  /* Extract data about environment */
+  #define ENV_COUNT	6
+  
+***************
+*** 134,142
+      wdfile = -1;
+      if (curdir () || enterdir (DOT) == NOREPLOT)
+  	leave ();
+- #ifdef	STOPABLE
+-     signal(SIGTSTP, suspend);
+- #endif
+      tty_push (RAWMODE);
+  
+  	/* Read in helpfile once */
+
+--- 127,132 -----
+      wdfile = -1;
+      if (curdir () || enterdir (DOT) == NOREPLOT)
+  	leave ();
+      tty_push (RAWMODE);
+  
+  	/* Read in helpfile once */
+***************
+*** 165,199
+  	setcolumn();
+      process ();
+  }
+- 
+- #ifdef	STOPABLE
+- suspend(signo)
+- int signo;
+- {
+- 	int putch();
+- 	
+- 	tty_push(COOKEDMODE);
+- 	/*
+- 	 * This is debatable: should we give back a full screen
+- 	 *	or just the execute window ?
+- 	 */
+- 	if (CS && ewindow) {
+- 		tputs(tgoto(CS, LI-1, 0), 0, putch);
+- 		atxy(1, LI);
+- 	}
+- #ifdef	SIGVTALRM			/* Kludge to detect 4.2BSD signal */
+- 	/* stop ourselves */
+- 	sigunblock(sigmask(signo));
+- 	signal(signo, SIG_DFL);
+- 	kill(getpid(), signo);
+- 	sigblock(sigmask(signo));
+- #else
+- 	kill(getpid(), signo);
+- #endif
+- 	signal(signo, suspend);
+- 	printf("Vsh restarted.\r");
+- 	fflush(stdout);
+- 	tty_pop();
+- 	ioctl(0, TIOCSTI, "\014");	/* Fake an input of ^L */
+- }
+- #endif
+
+--- 155,157 -----
+  	setcolumn();
+      process ();
+  }

@@ -1,0 +1,308 @@
+
+*** dextern	Mon May 12 14:58:08 1986
+--- dextern.new	Thu May  8 15:15:03 1986
+***************
+*** 123,128
+  extern FILE * finput;		/* input file */
+  extern FILE * faction;		/* file for saving actions */
+  extern FILE * fdefine;		/* file for # defines */
+  extern FILE * ftable;		/* y.tab.c file */
+  extern FILE * ftemp;		/* tempfile to pass 2 */
+  extern FILE * fdebug;		/* tempfile for two debugging info arrays */
+
+--- 123,129 -----
+  extern FILE * finput;		/* input file */
+  extern FILE * faction;		/* file for saving actions */
+  extern FILE * fdefine;		/* file for # defines */
++ extern FILE * ftoken;		/* file for tokens, y.tok.h */
+  extern FILE * ftable;		/* y.tab.c file */
+  extern FILE * ftemp;		/* tempfile to pass 2 */
+  extern FILE * fdebug;		/* tempfile for two debugging info arrays */
+***************
+*** 259,264
+  # define FILED "y.tab.h"
+  # endif
+  
+  	/* command to clobber tempfiles after use */
+  
+  # ifndef ZAPFILE
+
+--- 260,271 -----
+  # define FILED "y.tab.h"
+  # endif
+  
++ 	/* output file for tokens */
++ 
++ # ifndef FILET
++ # define FILET "y.tok.h"
++ # endif
++ 
+  	/* command to clobber tempfiles after use */
+  
+  # ifndef ZAPFILE
+***************
+*** 264,266
+  # ifndef ZAPFILE
+  # define ZAPFILE(x) unlink(x)
+  # endif
+
+--- 271,277 -----
+  # ifndef ZAPFILE
+  # define ZAPFILE(x) unlink(x)
+  # endif
++ 
++ 	/* parser template */
++ 
++ char *yaccpar;
+*** files	Mon May 12 14:57:43 1986
+--- files.new	Thu May  8 16:05:37 1986
+***************
+*** 11,18
+  	/* on some systems, notably IBM, the names for the output files and tempfiles must
+  	/* also be changed  */
+  
+! 	/* location of the parser text file */
+! # define PARSER "/usr/lib/yaccpar"
+  
+  	/* basic size of the Yacc implementation */
+  #ifdef WORD32
+
+--- 11,18 -----
+  	/* on some systems, notably IBM, the names for the output files and tempfiles must
+  	/* also be changed  */
+  
+! 	/* location of the default parser text file */
+! # define PARSER "/usr/lib/yaccpar5"
+  
+  	/* basic size of the Yacc implementation */
+  #ifdef WORD32
+*** y1.c	Mon May 12 15:18:37 1986
+--- y1.new.c	Thu May  8 15:17:06 1986
+***************
+*** 64,71
+  others(){ /* put out other arrays, copy the parsers */
+  	register c, i, j;
+  
+! 	finput = fopen( PARSER, "r" );
+! 	if( finput == NULL ) error( "cannot find parser %s", PARSER );
+  
+  	warray( "yyr1", levprd, nprod );
+  
+
+--- 64,71 -----
+  others(){ /* put out other arrays, copy the parsers */
+  	register c, i, j;
+  
+! 	finput = fopen( yaccpar, "r" );
+! 	if( finput == NULL ) error( "cannot find parser %s", yaccpar );
+  
+  	warray( "yyr1", levprd, nprod );
+  
+***************
+*** 192,197
+  
+  	if( ftemp != NULL ) fclose( ftemp );
+  	if( fdefine != NULL ) fclose( fdefine );
+  	}
+  
+  /* VARARGS1 */
+
+--- 192,198 -----
+  
+  	if( ftemp != NULL ) fclose( ftemp );
+  	if( fdefine != NULL ) fclose( fdefine );
++ 	if( ftoken != NULL ) fclose( ftoken );
+  	}
+  
+  /* VARARGS1 */
+*** y2.c	Mon May 12 15:18:43 1986
+--- y2.new.c	Thu May  8 15:23:07 1986
+***************
+*** 50,55
+  FILE * finput;		/* yacc input file */
+  FILE * faction;		/* file for saving actions */
+  FILE * fdefine;		/* file for # defines */
+  FILE * ftable;		/* y.tab.c file */
+  FILE * ftemp;		/* tempfile to pass 2 */
+  FILE * fdebug;		/* where the strings for debugging are stored */
+
+--- 50,56 -----
+  FILE * finput;		/* yacc input file */
+  FILE * faction;		/* file for saving actions */
+  FILE * fdefine;		/* file for # defines */
++ FILE * ftoken;		/* file for tokens, y.tok.h */
+  FILE * ftable;		/* y.tab.c file */
+  FILE * ftemp;		/* tempfile to pass 2 */
+  FILE * fdebug;		/* where the strings for debugging are stored */
+***************
+*** 75,80
+  
+  	foutput = NULL;
+  	fdefine = NULL;
+  	i = 1;
+  	while( argc >= 2  && argv[1][0] == '-' ) {
+  		while( *++(argv[1]) ){
+
+--- 76,83 -----
+  
+  	foutput = NULL;
+  	fdefine = NULL;
++ 	ftoken = NULL;
++ 	yaccpar = PARSER;
+  	i = 1;
+  	while( argc >= 2  && argv[1][0] == '-' ) {
+  		while( *++(argv[1]) ){
+***************
+*** 79,84
+  	while( argc >= 2  && argv[1][0] == '-' ) {
+  		while( *++(argv[1]) ){
+  			switch( *argv[1] ){
+  			case 'v':
+  			case 'V':
+  				foutput = fopen(FILEU, "w" );
+
+--- 82,94 -----
+  	while( argc >= 2  && argv[1][0] == '-' ) {
+  		while( *++(argv[1]) ){
+  			switch( *argv[1] ){
++ 			case 'f':
++ 				yaccpar = argv[2];
++ 				argv++;
++ 				while ( *++(argv[1]) )
++ 					;
++ 				--argv[1];
++ 				continue;
+  			case 'v':
+  			case 'V':
+  				foutput = fopen(FILEU, "w" );
+***************
+*** 84,89
+  				foutput = fopen(FILEU, "w" );
+  				if( foutput == NULL ) error( "cannot open y.output" );
+  				continue;
+  			case 'D':
+  			case 'd':
+  				fdefine = fopen( FILED, "w" );
+
+--- 94,104 -----
+  				foutput = fopen(FILEU, "w" );
+  				if( foutput == NULL ) error( "cannot open y.output" );
+  				continue;
++ 			case 'A':
++ 			case 'a':
++ 				ftoken = fopen( FILET, "w" );
++ 				if ( ftoken == NULL ) error( "cannot open y.tok.h" );
++ 				continue;
+  			case 'D':
+  			case 'd':
+  				fdefine = fopen( FILED, "w" );
+***************
+*** 501,506
+  				tokset[i].name, tokset[i].value );
+  		fprintf( ftable, "# define %s %d\n", tokset[i].name, tokset[i].value );
+  		if( fdefine != NULL ) fprintf( fdefine, "# define %s %d\n", tokset[i].name, tokset[i].value );
+  
+  	nodef:	;
+  		}
+
+--- 516,522 -----
+  				tokset[i].name, tokset[i].value );
+  		fprintf( ftable, "# define %s %d\n", tokset[i].name, tokset[i].value );
+  		if( fdefine != NULL ) fprintf( fdefine, "# define %s %d\n", tokset[i].name, tokset[i].value );
++ 		if( ftoken != NULL ) fprintf( ftoken, "\t\"%s\",\n", tokset[i].name );
+  
+  	nodef:	;
+  		}
+*** yacc.1	Mon May 12 15:00:03 1986
+--- yacc.new.1	Mon May 12 15:16:17 1986
+***************
+*** 4,12
+  .SH SYNOPSIS
+  .B yacc
+  [
+! .B \-vdlt
+! ]
+! grammar
+  .SH DESCRIPTION
+  .I Yacc\^
+  converts a context-free grammar into a set of
+
+--- 4,13 -----
+  .SH SYNOPSIS
+  .B yacc
+  [
+! .B \-vdlta
+! ] [
+! .B \-f
+! prototype ] grammar
+  .SH DESCRIPTION
+  .I Yacc\^
+  converts a context-free grammar into a set of
+***************
+*** 83,88
+  If its value is zero, then the code will not be included.
+  The size and execution time of a program produced without the
+  runtime debugging code will be smaller and slightly faster.
+  .SH FILES
+  y.output
+  .br
+
+--- 84,104 -----
+  If its value is zero, then the code will not be included.
+  The size and execution time of a program produced without the
+  runtime debugging code will be smaller and slightly faster.
++ .PP
++ If the
++ .B \-f
++ flag is given, the file
++ .I prototype
++ is used instead of
++ .I /usr/lib/yaccpar
++ as the prototype for C programs.  This was done to allow an alternate
++ prototype file, described in Schreiner and Friedman's book, to be used.
++ .PP
++ If the
++ .B \-a
++ flag is used, the auxillary file
++ .IR y.tok.h ,
++ used by Schreidner and Freidman's modification, is generated.
+  .SH FILES
+  y.output
+  .br
+***************
+*** 90,95
+  .br
+  y.tab.h			defines for token names
+  .br
+  yacc.tmp,
+  .br
+  yacc.debug, yacc.acts	temporary files
+
+--- 106,113 -----
+  .br
+  y.tab.h			defines for token names
+  .br
++ y.tok.h	tokens in form used by Schreidner and Friedman
++ .br
+  yacc.tmp,
+  .br
+  yacc.debug, yacc.acts	temporary files
+***************
+*** 106,111
+  .I "\s-1YACC\s+1\-Yet Another Compiler Compiler\^"
+  in the
+  .IR "\s-1UNIX\s+1 System Support Tools Guide" .
+  .SH DIAGNOSTICS
+  The number of reduce-reduce and shift-reduce conflicts
+  is reported on the standard error output;
+
+--- 124,132 -----
+  .I "\s-1YACC\s+1\-Yet Another Compiler Compiler\^"
+  in the
+  .IR "\s-1UNIX\s+1 System Support Tools Guide" .
++ .br
++ .I "Introduction to Compiler Construction with UNIX"
++ by A. T. S. Schreiner and H. G. Friedman Jr., Prentice-Hall, 1985.
+  .SH DIAGNOSTICS
+  The number of reduce-reduce and shift-reduce conflicts
+  is reported on the standard error output;

@@ -1,0 +1,434 @@
+.TH NCHESS 6 "14 October 1986"
+.SH NAME
+nchess \- general-purpose chess tool
+.SH SYNOPSIS
+.B nchess
+[\fB-c\fP]
+.br
+	[\fB-e\fP | \fB-r\fP\fIrestoreFileName\fP]
+.br
+	[\fB-s\fP\fIsaveFileName\fP]
+.br
+	[\fB-d\fP\fIpieceIconDirectory\fP]
+.br
+	[\fB-t\fP\fItranscriptFileName\fP]
+.br
+	[\fB-x\fP\fIn\fP]
+.br
+
+	\fB-m\fP\fIchessProgram\fP [\fB-m\fP\fIarg\fP ...] | \fB-n\fP\fIchessProgram\fP [\fB-n\fP\fIarg\fP ...]
+.br
+	or
+.br
+	\fB-m\fP\fIchessProgram\fP [\fB-m\fP\fIarg\fP ...] \fB-n\fP\fIchessProgram\fP [\fB-n\fP\fIarg\fP ...]
+.br	
+	or
+.br
+	[\fB-b | -w\fP] \fIuser@host\fP
+.SH DESCRIPTION
+.I Nchess
+is a general-purpose chess interface suitable for playing any 
+combination of { human, machine } vs. { human, machine }.
+Some of the more notable features of nchess 
+are facilities for generating transcript files
+in various formats,
+for saving and restoring games,
+and for setting up initial board situations.
+.SH "INVOCATION"
+.LP
+Nchess accepts numerous command line arguments:
+.IP "\fB-c\fP"
+don't keep an internal copy of the board's display image
+(the default is to keep one)
+.IP "\fB-b\fP"
+ask to play the black pieces
+.IP "\fB-w\fP"
+ask to play the white pieces
+.IP "\fB-e\fI"
+edit the board (i.e., set up a non-standard board configuration)
+prior to starting the game
+.IP "\fB-r\fP \fIrestoreFileName\fP"
+resume a game from the game saved in \fIrestoreFileName\fP
+.IP "\fB-s\fP \fIsaveFileName\fP"
+use \fIsaveFileName\fP for saving games instead of the 
+default \fB"nchess.save"\fP.
+.IP "\fB-t\fP \fItranscriptFileName\fP"
+use \fItranscriptFileName\fP for writing transcripts instead of the 
+default \fB"nchess.transcript"\fP.
+.IP "\fB-x\fP\fIn\fP"
+generate transcripts in format \fIn\fP, where \fIn\fP is one of:
+.nf
+
+		0	formal; e.g., P/K2-K4, R/KB3xP
+		1	minimal; e.g., P-K4, RxP (the default)
+		2	algebraic; e.g., E2E4, F3F5
+.fi
+.IP "\fB-d\fP \fIpieceIconDirectory\fP"
+look in \fIpieceIconDirectory\fP for piece icons to use instead
+of the default ones supplied by \fInchess\fP.
+.IP "\fB-m\fP \fIchessProgram\fP"
+start up \fIchessProgram\fP playing the white pieces
+.IP "\fB-n\fP \fIchessProgram\fP"
+start up \fIchessProgram\fP playing the black pieces
+.LP
+Specifying \fB-c\fP forces \fInchess\fP to recompute the board
+image whenever any portion of it must be made visible again.
+However, the memory savings it entails may justify its use 
+for systems which are running a bit short.
+.LP
+The \fB-m\fP and \fB-n\fP arguments are cumulative.
+The first of either is interpreted as the name of an 
+executable chess program;
+subsequent instances are collected and passed as arguments 
+to the chess program.
+.SH "HUMAN VS. HUMAN"
+.LP
+Human vs. human games are started by
+invoking \fInchess\fP with an argument of
+the form "\fIuser@host\fP" and
+neither of the \fB-m\fP, \fB-n\fP arguments.
+Both the local machine and the host specified by the \fIhost\fP
+argument must be running \fInchessd(6)\fP (hereafter referred
+to as the daemon).
+\fINchess\fP first checks the local daemon for an invitation 
+registered by \fIuser\fP at \fIhost\fP.
+If none is found, \fInchess\fP sends an invitation to the 
+daemon running on \fIhost\fP,
+prints something like "Waiting for \fIuser\fP to respond...",
+then idles waiting for a message from a 
+responding \fInchess\fP process.
+In turn, the remote daemon prints something useful 
+and sufficiently distracting on the remote console.
+.LP
+If an invitation was found waiting in the local daemon,
+\fInchess\fP sends a response message to the 
+peer \fInchess\fP process.
+Subsequent communication is peer-to-peer; 
+i.e., the daemon is no longer consulted for anything.
+If either user specified \fB-b\fP or \fB-w\fP,
+the two peers attempt to satisfy color preferences;
+if both users requested the same color,
+a single round of arbitration results.
+If this arbitration fails, 
+both \fInchess\fP processes exit, 
+awaiting a less contentious session.
+.SH "HUMAN VS. MACHINE"
+.LP
+Human vs. machine games are started by 
+invoking \fInchess\fP with one of 
+the \fI-m\fP or \fI-n\fP arguments.
+The existence of the daemon is not required.
+The chess program used is expected to conform to 
+the interface protocol described below.
+.SH "MACHINE VS. MACHINE"
+.LP
+Machine vs. machine games are started by 
+invoking \fInchess\fP with both of 
+the \fI-m\fP and \fI-n\fP arguments.
+The existence of the daemon is not required.
+Both chess programs used are expected to conform to 
+the interface protocol described below.
+.SH "MESSAGE SUBWINDOW"
+.LP
+During the course of the game, 
+various messages appear in a one-line subwindow
+directly over the button panel.
+These messages may direct you to press certain buttons
+to confirm various actions (e.g., resigning, allowing an undo).
+The cursor must be positioned in the board subwindow
+when buttons are pressed in response to a message.
+.SH "NORMAL PLAY"
+.LP
+In normal play, pieces are moved by positioning the cursor
+over the square a piece resides on,
+depressing the left mouse button,
+moving the piece to the desired square,
+and releasing the button.
+After moving, activity in the board subwindow is 
+suppressed until a move is made by the opponent.
+.LP
+Certain move types deserve special mention.
+En passant pawn captures are performed by moving the 
+capturing pawn to the third rank square;
+i.e., the square it will reside on after the move.
+\fINchess\fP enforces the restriction that en passant
+capturing rights expire after the move immediately 
+following the pawn advance.
+Castling to either side is performed by moving the
+king two squares in the appropriate direction.
+Finally, pawn "queening" is a three-step process:
+First, the pawn is moved to the eighth rank, where
+it is initially polymorphed to a queen.
+Second, the pawn is rotated through the set of legal
+pawn morphs for every left mouse button click (the legal
+pawn morphs are queen, bishop, knight, and rook).
+Finally, the move is sent to the opponent when the middle 
+button is pressed.
+(Note: If the opponent is a machine,
+pawns may only be promoted to queens
+and step two is skipped.)
+.LP
+At any time during the game,
+clicking the left mouse button on one of
+several buttons above the board subwindow 
+will have the following effects:
+.IP "(Resign)"
+Resignation is final; and after confirming
+that you really wanted to resign,
+it's curtains...
+.IP "(Undo)"
+Against a human opponent, this button causes \fInchess\fP
+to forward a request to your opponent to undo your last move.
+Assuming your opponent agrees, your last move will no longer
+haunt you and it will be your turn again.
+If it was your turn to play, 
+your opponent's last move will be undone as well.
+Against a machine opponent, 
+acquiescence is implicit.
+Undos can be repeated,
+constrained only by reaching the initial game state and
+the limits of your opponent's compassion.
+.IP "(Last Play)"
+The last play made by either side will be illustrated by
+briefly undoing the move in the board subwindow.
+.IP "(Transcript)"
+A transcript of the game is written to the transcript file
+specified on the command line; if no file was specified,
+"nchess.transcript" is used.
+.IP "(Save)"
+The game state (including the move history) is saved in the
+file specified on the command line; if no file was specified,
+"nchess.save" is used.
+.LP
+When both players are machines, the "Resign" and "Undo"
+buttons are omitted from the window.
+.SH "EDITING THE BOARD"
+.LP
+When \fInchess\fP is invoked with the \fB-e\fP flag,
+the tool starts up as a board editor with initial play suspended.
+Pieces are deleted by positioning the cursor over the 
+square the piece resides on and clicking the middle button.
+Pieces are created by positioning the mouse over the square
+a piece of the desired type and color would reside on at the 
+beginning of a normal game, 
+depressing the left button, 
+moving the piece to the destination square,
+and releasing the button.
+When editing is complete and play is about to commence, 
+the right button is clicked,
+followed by another mouse click
+to confirm exiting the board editor (once the board editor is
+exited, it cannot be re-entered).
+If this is a human vs. human game, the user is then asked
+to specify which side moves first (via yet another mouse click).
+Following that, the game is afoot.
+.LP
+Boards can be edited for any of the { human, machine } combinations
+described above.
+After setting up a board for a machine vs. machine session, 
+the human is reduced to being a mere spectator.
+Also, in any combination involving machines the white pieces
+always move first, due to a deficiency in the existing 
+Unix chess program.
+.SH "BADGERING YOUR OPPONENT"
+.LP
+\fINchess\fP provides a one-line talk subwindow in human vs. human
+games for sending pithy messages to your opponent.
+To send a message, position the cursor to the right of the "\fBSend:\fP"
+field, type the message, and hit carriage return.
+The message will not be sent until you've typed the carriage return,
+allowing you to use the normal Unix line editing features.
+.SH "CREATING YOUR OWN PIECES"
+.LP 
+\fINchess\fP allows you to supplant any or all of the pictorial piece 
+representations (icons) with pieces of your own design.
+A few guidelines concerning icon creation are outlined below.
+For starters, you might want to take a look at the 
+icons used by \fInchess\fP.
+.LP
+All icons used by \fInchess\fP are drawn using \fIicontool(1)\fP,
+and are (\fIicontool\fP's default) 64 pixels wide, 64 pixels high,
+and 1 pixel deep.
+Only the black pieces are drawn - the white pieces are created
+by \fInchess\fP by inverting the black pieces.
+You must leave a blank border of at 
+least three pixels around the piece,
+and the piece should be centered in \fIicontool's\fP drawing subwindow.
+.LP
+After you have drawn the piece, you need to create the 
+corresponding "stencil" image.
+The stencil is used by \fInchess\fP to limit drawing the piece on
+the board to only those areas within the 64 by 64 square that
+actually represent the piece image.
+Also, in order to create the white pieces correctly, the stencil
+border needs to be grown one pixel past the piece image border - this
+gives the white piece a thin black line border.
+An easy way to create the stencil is to use the
+following procedure:
+.IP
+Load the piece image
+.IP
+Select "Fill: black" and "Fill: xor" modes.
+.IP
+Fill the entire drawing subwindow.  You should now have a reverse
+video image of the piece.
+.IP
+Select "Fill: white" and "Fill: src" modes, and get rid of all 
+black pixels except for a one-line border 
+around the white piece image.
+.IP
+Select "Fill: black" mode and fill inside the border.
+.LP
+You should now have a solid black image of the piece which is one
+pixel bigger in all directions than the image you drew earlier.  
+Store this image as the stencil.
+If you want any parts of the piece to be transparent 
+(e.g., windows in the rook),
+simply leave those parts white in the stencil.
+.LP
+The file names to use for the various pieces and stencils are listed
+below in the "FILES" section.
+Both the piece and stencil images must be accessible in the 
+specified icon directory before \fInchess\fP will attempt to use them.
+.LP
+In case you are concerned,
+using your own pieces does not cause \fInchess\fP to use any more
+memory than it already does.
+.SH "CHESS PROGRAM INTERFACE PROTOCOL"
+.LP
+The protocol for communication with chess programs is derived
+in bottom-up fashion from the syntax and semantics
+used by the existing Unix chess program.
+When the program starts up, 
+it is expected to make a short one-line announcement (e.g., "Chess"),
+which \fInchess\fP simply throws away.
+Next, \fInchess\fP sends a single line consisting of the keyword "alg",
+which informs the chess program that algebraic notation is desired.
+.LP
+If \fInchess\fP was invoked with the \fB-e\fP flag,
+the next communication with the chess program is to deliver the 
+setup information.
+This is done by sending a single line consisting 
+of the keyword "setup",
+followed by eight lines of eight characters each.
+Each character represents the piece on a square, 
+with space characters representing empty squares.
+For the white pieces, 
+the characters used are { p, n, b, r, q, k } for 
+pawn, knight, bishop, rook, queen, and king, respectively.
+Black pieces are represented by the upper case equivalent.
+Lines are transmitted starting with the eighth rank (i.e., a8-h8).
+After receiving the eighth setup line (a1-h1),
+the chess program is expected to respond with a single line 
+consisting of either the key 
+phrase "Setup successful" or "Illegal setup".
+.LP
+Next, the chess program will be sent either the first move by
+its opponent (which will be white), 
+or a single line consisting of the keyword "first",
+which it should interpret to mean that it should play the white pieces
+and that it should make the first move.
+Moves sent to the chess program will always be in the format
+implied by the printf string "%c%d%c%d\\n",
+where the character specifications describe the file [a-h]
+and the decimal digit specifications describe the rank [1-8].
+En passant captures are encoded as a horizontal move; e.g., d5e5.
+Castling moves are encoded as the king move; e.g., e1g1.
+Pawns implicitly turn into queens; thus, d7d8 implies P-Q8(Q).
+.LP
+After receiving a move, the chess program must echo a single line.
+The standard Unix chess program uses this line to re-format and 
+echo the move it received; 
+however, \fInchess\fP does not interpret the echo and thus 
+places no restrictions on its format.
+
+.SH "FILES"
+.br
+bishop.icon
+.br
+bishopStencil.icon
+.br
+king.icon
+.br
+kingStencil.icon
+.br
+knight.icon
+.br
+knightStencil.icon
+.br
+pawn.icon
+.br
+pawnStencil.icon
+.br
+queen.icon
+.br
+queenStencil.icon
+.br
+rook.icon
+.br
+rookStencil.icon
+.br
+.SH "SEE ALSO"
+chess(6), chesstool(6), nchessd(6)
+.SH "BUGS"
+.LP
+There aren't any clocks (yet).
+.LP
+The board editor cannot be re-entered.  This is intentional, in order
+to keep the middle of the game orderly.  However, some of the author's
+cohorts think it is a bad idea.
+.LP
+Transcript files do not show the initial board state, which makes
+it necessary to separately document non-standard initial positions.
+This will be corrected in a future release.
+.LP
+The algebraic notation used for transcripts is not really what you
+might expect.
+.LP
+When either player is a machine, pawns may be promoted only to queens.
+This bug is inherited from the existing Unix chess program.
+.LP
+When either player is a machine, the white pieces must always make 
+the first move in a game.
+This is another bug inherited from the existing Unix chess program.
+.LP
+Saved games must be re-started with the same configuration of human
+and machine players.
+This bug is due to the unknown format of the existing Unix chess
+program's save files and to the lack of any known standard for 
+the format of such files.
+.LP
+The talk subwindow has no facility for queueing lines for paced
+review by the receiver (as in games like rogue and hack).
+Also, there is no way to shut the door if the opponent's messages
+are a source of irritation instead of amusement or enlightenment.
+.LP
+The rules for offering, accepting, and detecting draws are not
+implemented.  These apparently have ramifications with regard to 
+handling clocks, and are the principal reason clocks are not 
+implemented yet.  All this will be implemented in a future release.
+For now, the talk subwindow is expected to suffice.
+.LP
+Checkmate and stalemate are not explicitly detected 
+by \fInchess\fP, since it doesn't have an internal 
+legal move generator.
+Again, the talk subwindow is expected to suffice.
+.LP
+There is currently no way to play Blitz chess rules (e.g., don't 
+announce check, not forced to alleviate check, etc.).
+.LP
+Multiple kings are allowed in human vs. human setups; however,
+only the first one found is examined for being in check.
+.LP
+In order to guarantee the ability to write background
+chess process save files,
+\fInchess\fP changes its working directory to /tmp following
+the call to fork() and before the call to execvp().
+Thus, chess programs in the former working directory
+which were executable only via the '.'
+component in the PATH environment variable 
+will not be found by execvp().
+This bug can be traced to the Unix chess program, which (apparently)
+does not allow one to specify an alternative file name for its
+save file.
+

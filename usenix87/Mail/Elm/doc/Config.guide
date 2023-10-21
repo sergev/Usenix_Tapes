@@ -1,0 +1,383 @@
+.PH ""
+\"
+\"  A guide to the configuration of the Elm mail system
+\"  format with 'troff -mm Config.guide > Config.format'
+\"  or something similar.
+\"  (C) Copyright 1986 Dave Taylor
+\"
+\"  Last modification: January 19th, 1987
+\"
+.SA 1
+.nr Hy 1
+.nr Pt 1
+.nr Pi 8
+.lg
+.HM 1 1
+.rs
+.ds HF 3  3
+.ds HP 12 12 10 10 10
+.PF ""
+.ce 99
+.sp 13
+.ps 20
+\fBElm Configuration Guide\fR
+.sp 4
+.ps 12
+\fIHow to install and customize the Elm mail system\fR
+.sp 2
+Dave Taylor
+.sp
+Hewlett-Packard Laboratories
+1501 Page Mill Road
+Palo Alto CA
+94304
+.sp 
+email: taylor@hplabs.HPL.HP.COM or hplabs!taylor
+.sp 7
+.ps 18
+\fB\(co\fR\s12 Copyright 1986,1987 by Dave Taylor
+.ps 10
+.SK
+.sp 5
+.ps 14
+\fBElm Configuration Guide\fR
+.PH "'Elm Configuration Guide''version 1.5'
+.PF "''Page \\\\nP''"
+.nr P 1
+.sp
+.ps 10
+(version 1.5)
+.sp 2
+Dave Taylor
+.sp
+Hewlett-Packard Laboratories
+1501 Page Mill Road
+Palo Alto CA
+94304
+.sp 
+email: taylor@hplabs.HPL.HP.COM or hplabs!taylor
+.sp 2
+\*(DT
+.ce 0
+.sp 3
+.P
+This document is intended as a supplement to the \fIElm Users Guide\fR
+and is only of interest to those people at a site either installing
+or maintaining the source code to the \fBElm\fR mail system.
+.sp 2
+.P
+It's \fIhighly\fR recommended that installation be done by using the
+\fIConfigure.sh\fR script supplied with the system.  Please see the
+file \fIInstructions\fR for further information.
+.sp 2
+The remainder of this document will discuss the 
+options available via direct editing of various files and
+parameters.  As indicated above, 99.9% of the sites that install
+\fBElm\fR should find the \fIConfigure.sh\fR script sufficient.
+.sp 2
+.P
+The first thing that needs to be decided when you're ready to install
+the program is what sort of operating system you're running on...
+currently the choices are;
+.VL 14 3
+.LI "System V"
+This is the default configuration, and should work on all Bell 
+System V Unix
+.FS ' '
+.br
+Unix is a Trademark of AT&T Bell Laboratories.
+.br
+HP-UX and Spectrum are Trademarks of Hewlett-Packard Company.
+.br
+UTS is a Trademark of Amdahl Corporation.
+.FE
+systems, including HP-UX (and the \fISpectrum\fR series!) or 
+simulations thereof.
+.LI "BSD"
+This is for the Berkeley breed of Unix.
+.LI "UTS"
+This is for the Amdahl version of Unix.
+.LI "SUN"
+This is for the Sun workstations (This is a superset of the BSD
+definition as the Sun appears to have some major crises when it
+is asked to perform string functions and handed \fInull\fR addresses,
+as opposed to a \fIpointer\fR to a \fInull\fR...)
+.LI "PYRAMID"
+This is for the Pyramid 90x machines (This is the same as the
+BSD definition)
+.LE
+.sp
+Once you've decided which is appropriate, edit the Makefile file
+in the top level directory and alter the "DEFINE" there (about
+line 33 or so) accordingly.  (Note: also use the associated
+"LIB2" define that's associated with each of the systems to ensure
+that the program uses the correct libraries when linking together!)
+.sp
+An analogous change should be made in the Makefile in 'src' and 'utils'
+too if you're planning on actually working on the programs rather than
+just installing them...
+.sp
+While you're at it, if you happen to be running \fIACSNET\fR, then
+you need to add the relevent define in the main Makefile and the
+Makefile in directory `src' too!
+.sp 2
+Once that's done, all of the other installation dependent definitions
+are contained in the file \fIhdrs/sysdefs.h\fR and are;
+.sp
+.VL 15 0
+.LI "USE_EMBEDDED_ADDRESSES"
+This controls the mailers response to messages that contain 
+"Reply-To:" or "From:" lines that actually contain a return
+address.  If it's defined, the mailer will attempt to use
+the address specified (overriding the return address built from the path that
+the mail took).  It will look the address up in the pathalias
+database (see the documentation on the alias system) for 
+incomplete paths, but it is still recommended that this be left
+undefined.  
+.P
+This will, of course, make the mailer not be a standard 'RFC-822' 
+mailer, since the mail system is defined to use the reply-to
+if included rather than the return address, but, at least for
+addresses on the Internet, it ain't going to work a lot of the time!
+.LI "FIND_DELTA"
+This is the delta that the binary search of the pathalias database
+will use to determine when it's slicing up a single line, rather than
+a multitude of lines.   Ideally, this should be set to 1 byte less
+than the shortest line in the file...the default is 10 bytes.
+.LI MAX_SALIASES        
+The number of system aliases allowed.  (It is recommended that
+this be a prime number to improve the performance of the 
+hashing function (it's a complicated proof!))
+.LI MAX_UALIASES
+The number of user aliases allowed.  (should be a prime number -
+see the comment above)
+.LI MAX_IN_WEEDLIST 
+The maximum number of headers that can be specified in the weedout
+list of the .elmrc file.  A suggested alternative approach if this
+number is too small is to specify initial substrings in the file
+rather than increasing the number.  For example, say you want to 
+weedout the headers "Latitude:" and "Latitudinal-Coords:", you
+could simply specify "Latitud" and match them both!  Furthermore
+you could also specify headers like "X-" and remove all the user
+defined headers!
+.LI MAX_HOPS
+When replying to a G)roup, this is the maximum number of hops that
+a message can have taken.  This is used to try to optimize the 
+return address (remove cyclic loops and so on) and regular use
+should show that the default of 35 is plenty more than you'll
+ever need!
+.LI MAX_ATTEMPTS
+When reading in the default mailbox (\fI/usr/mail/$username\fR) the mailer
+creates a file called \fI/usr/mail/$username.lock\fR to ensure that no
+mail is added to the file while it's being either read, or replaced
+(ie written to).  Occasionally, this lock file will already be in
+place since someone is currently sending you mail.  If this occurs,
+the mailer will wait a few seconds and try to create the lock file
+again.  This parameter defines the number of tries the mailer should
+take before giving up.
+.LI REMOVE_AT_LAST
+When it does decide to give up after trying to create the lock file,
+(see MAX_ATTEMPTS, above) this will define how to act.  If it's 
+defined, the mailer will attempt to remove the lock file after the
+MAX_ATTEMPTS timeout.  On the other hand, if it's not defined (the
+recommended state) it'll simply quit the mailer, telling the user
+to try again in a few minutes.
+.LI DEFAULT_BATCH_SUBJECT
+What the subject should be on messages that are from redirected input
+but don't have a subject specified...
+.LI NOCHECK_VALIDNAME
+This disables the checking of validnames on the existing machine.
+On machines that run a system such as \fIsendmail\fR and use the
+sendmail alias feature, this should be defined.  On other systems
+this should be left as the default (not defined) to avoid users
+generating \fIdead.letter\fR files...
+.LI NO_VM
+This disables the calls to "vfork()" and replaces them will calls
+to "fork()".  On machines where vfork() is available, this should
+be left undefined, as the virtual call is considerably faster (and
+is only used when the spawned process doesn't need ALL the stuff
+from the calling process!)
+.LI ALLOW_BCC
+If you are running a mail transport agent that can properly deal 
+with the "Bcc" header in messages, you should define this variable.
+Otherwise you'll end up with strange stuff like people \fIknowing\fR
+who got "bcc"s of their mail...
+.LI LOOK_CLOSE_AFTER_SEARCH
+Some systems are set up in such a way as to have direct connections
+to machines, but to have multi-machine hops be preferable for
+routing messages to/through that machine (an example is a connection
+to "nbires" for the monthly mod.map information, but only connected
+to once a month!).  If this option is defined, then the system will
+try to find a suitable path to the machine \fIbefore\fR it checks
+against the \fIL.sys/uuname\fR list of systems that it can connect to.
+.LI USE_UUNAME
+The mailer tries to get the list of machines that's its connected
+to by looking in the \fIL.sys\fR file.  If it fails usually, it will
+then try to do a \fIuuname\fR command and then read the output of
+that command.  If this is defined, however, it will skip the \fIL.sys\fR
+reading and immediately try the \fIuuname\fR call.
+.LI DONT_OPTIMIZE_RETURN
+When saving the return address of a current message, the program will
+attempt to store the minimum possible path.  Oftentimes, however, this
+isn't the ideal behaviour.  If you don't want the program to do this,
+then you should define this.
+.LI DONT_TOUCH_ADDRESSES
+With the slow entrance of various delivery agents that can dynamically
+route things it becomes important that the mailer \fInot\fR touch 
+addresses as entered by the user.  If this is the case at your
+site (for example, if you're running \fIsmail\fR and \fIsendmail\fR as
+a package) then you need to define this.
+.LI AUTO_BACKGROUND
+If this is defined then the \fInewmail\fR program automatically puts 
+itself into background as soon as it's invoked.  Otherwise, the
+user needs to have a trailing ampersand (as in \fBnewmail &\fR) to
+get the same functionality.  (it seems reasonable to assume that
+no-one would ever run the utility as a \fIforeground\fR process!!!)
+.LI DONT_ADD_FROM
+Some mail systems (like my own) add From: lines that are
+actually different than the "default".  That is, the machine
+I send mail from is "hpldat" so my From: line would normally
+be "hpldat!taylor" but it should actually be "taylor@hplabs".
+My sendmail will add this correctly, so this allows \fBElm\fR
+to defer the addition until then.  This should only be used
+if your system is running sendmail in such a way that it will
+add this header as needed ONLY!
+.LI INTERNET_ADDRESS_FORMAT
+For systems that prefer the Internet addressing notation in the 
+From: line, defining this will force that.  The default is
+to use Usenet notation (\fIhostname!username\fR) - this will change
+it to Internet notation (\fIusername@hostname\fR).
+.LI PREFER_UUCP
+On some mail systems, the local host automatically appends their
+identification \fIin Internet format\fR to the addresses you
+receive (e.g. ``ihnp4!snsvax!joe@hplabs.HP.COM'' is an address
+form I see, being directly connection to HPLABS, all too often).
+This will simple ensure that when displaying the return address 
+of the message it will ignore the Internet part if there's also 
+a UUCP part.  (This is a kludge.  One should never have to 
+deal with this in a mail system... *sigh*)
+.LI BOGUS_INTERNET
+After some serious thought, I came to the conclusion that the
+easiest way to deal with the dumb configuration here is to 
+simply strip off the local address part entirely whenever 
+possible.  Hence, this field defines the local address that
+is added to the message addresses needlessly.  This is probably
+the single worst solution imaginable, but it works...
+.LI USE_DOMAIN
+Define if you want to have the \fIDOMAIN\fR field added to the
+\fIhostname\fR in the From: field on outbound mail (note that this
+only makes sense on Internet mail...)
+.LI DOMAIN
+If you choose to have the USE_DOMAIN define set, you
+\fIMUST DEFINE THIS ACCORDINGLY!!!\fR
+A typical entry would be;
+.DS
+#define DOMAINS        ".HP.COM"
+.DE
+.LI SAVE_GROUP_MAILBOX_ID
+If you're running the mailer set group id (usually "setgid mail") then
+this'll ensure that the users mailbox, when altered, will always retain
+its group id (obtained by the "getegid()" call, for those gurus out
+there who care).  
+.LI ENABLE_CALENDAR"
+If you want to have users able to scan their mail for calendar entries
+(see the \fIElm Reference Guide\fR) then define this and the following
+too.  (There is no reason not to have this, but power corrupts, right?)
+.LI "dflt_calendar_file"
+The name of the default "calendar" file if the user doesn't specify
+one in their \fI.elmrc\fR file.
+.LI NOTES_HEADER
+This defines the first "word" of the line that a \fInotes\fR file entry
+would contain.
+.LI NOTES_FOOTER
+This defines the footer line (in it's entirety).
+.LI system_hash_file
+This is the file that contains the hashed version of the system 
+aliases.  It is also used in the \fInewalias\fR command.  (note that
+it is defined differently if you're running on a Berkeley system)
+.LI system_data_file
+This is the other file the \fInewalias\fR command installs in the system
+alias area.  (Note this is defined differently if you're runnnig
+a bsd system)
+.LI pathfile
+This defines the location of the pathalias datafile.  This file is in
+the format that \fIpathalias\fR generates, that is;
+.nf
+   
+    machine <tab> address
+
+.fi
+For further information, please see the \fIElm Alias System\fR documentation.
+.LI domains
+This defines the location of the the domains database file.  The format
+for this file and so on are fully discussed in the \fIElm Alias System\fR
+document.
+.LI Lsys
+This defines where the system \fIL.sys\fR file is kept.  This is used for the
+mailer to quickly know what machines the current machine can talk to
+directly (to avoid trying to search the pathalias database to route mail
+to these machines).  
+.LI DEBUG
+The name of the file to put in the users home directory if they choose to
+use the `-d' debug option. 
+.LI temp_file
+Temporary file for sending outbound messages.
+.LI temp_mbox
+Place to keep copy of incoming mailbox to avoid collisions with newer
+mail.
+.LI temp_print 
+File to use when creating a printout of a message.
+.LI mailtime_file
+File to compare date to to determine if a given message is New
+since the last time the mail was read or not.
+.LI readmsg_file
+File to use when communicating with the \fIreadmsg\fR program (see
+that program for more information)
+.LI signature_file
+The name of the file to search for in the users home directory
+if they have \fIsignature\fR enabled in their \fI.elmrc\fR file.
+.LI default_editor
+If no editor is specified in the users .elmrc file, this is which
+editor to use.  \s12 Ensure it is a valid editor on this machine!!\s10
+(Note that the default home for \fIvi\fR is different on BSD machines)
+.LI mailhome
+Where all the incoming mailboxes are, and also where the 'lock'
+files have to be put for the mailer to know not to add new
+mail while we're reading/writing the mailfile.
+(note that mail is kept in a different directory on Berkeley 
+systems)
+.LI default_pager
+This is the standard pager to use for reading messages.
+.LI sendmail
+Defines where \fIsendmail\fR is (if you have it on your system).
+.LI smflags 
+Defines the flags to hand to \fIsendmail\fR if and when the program
+chooses to use it.
+.LI mailer
+If you don't have \fIsendmail\fR, this is the mailer that'll be used.
+.LI mailx
+If all else fails, this mailer can be used in a rather dumb way.
+.LI helphome
+Where the help file is kept (soon to be help files!)
+.LI helpfile
+The name of the main helpfile (kept in \fIhelphome\fR).
+.LI elmrcfile
+The name of the automatic control file (currently \fI.elmrc\fR)
+.LI mailheaders 
+The name of the optional file that users may have that will be
+included in the headers of each outbound message.
+.LI unedited_mail
+In the strange case when the mailer suddenly finds all the directories
+it uses shut off (like \fI/usr/mail\fR and \fI/tmp\fR) 
+then it'll put the current
+mailbox into this file in the users home directory.
+.LI newalias
+How to install new aliases..(note: you MUST have the '-q' flag!)
+.LI remove
+How to remove a file.
+.LI cat
+How to display a file to stdout.
+.LI uuname
+How to get a \fIuuname\fR listing (ie a listing of the machines that this
+machine connects to)
+.LE

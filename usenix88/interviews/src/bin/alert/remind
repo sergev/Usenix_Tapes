@@ -1,0 +1,83 @@
+: remind - post reminders for today from calendar file
+
+CalendarHelper=/usr/lib/calendar
+MacrosFile=/usr/local/lib/remind/macros
+RemindersFile=$HOME/calendar
+AlerterFile=$HOME/.alerter
+AlerterOptions='font=9x15 button="OK, OK ..."'
+NroffPrefix='.po 0;.ll 50;.pl 50;.nh;.na;'
+NroffPostfix=';.br;.pl 1'
+TrMapIn=';\001\002\003'				# ;  ^A ^B ^C
+TrMapOut='\012\047;\134'			# CR '  ;  \
+
+PATH=.:/bin:/usr/bin:/usr/ucb:/usr/local/bin; export PATH
+
+if test ${ALERTER-none} = none
+then
+    if test -f $AlerterFile
+    then
+	ALERTER=`cat $AlerterFile`
+    fi
+fi
+: ${ALERTER=alert}; export ALERTER
+
+if test ${DISPLAY-none} = none
+then
+    DISPLAY=unix:0
+fi; export DISPLAY
+
+export TESTREMIND
+SHELL=/bin/sh; export SHELL
+
+case $# in
+
+0)  set `date`; day=$1; tmp=/tmp/rem$$
+
+$CalendarHelper | awk '
+    NR==1 || NR==2 { print }
+    END { print "([Ee]very[	 ]*)(" "'"$day"'" "|day)" }
+' > $tmp
+
+cat $MacrosFile $RemindersFile \
+    | /lib/cpp \
+    | egrep -f $tmp \
+    | awk '
+	/[0-9][0-9]?:[0-9][0-9]?/ {
+	    for ( i=1; i<=NF; i++ ) {
+		if ( $i ~ /^[0-9][0-9]?:[0-9][0-9]/ ) {
+		    split( $i, time, ":");
+		    suffix = substr( time[2], 3, 2 );
+		    time[2] = substr( time[2], 1, 2 );
+		    if ( suffix == "pm" || substr( $(i+1), 1, 2 ) == "pm" ) {
+			time[1] = time[1] + 12;
+		    }
+		    print "echo '\''" $0 "'\'' | remind " time[1] time[2];
+		    break;
+		}
+	    }
+	} '\
+    | sh
+    
+rm -f $tmp ;;
+
+1)  read input
+    input="'$input'"
+    while read line
+	do input="$input '$line'"
+    done
+    if test $1 -eq 0 -o ${TESTREMIND-no}test != notest
+    then DO="sh"
+    else DO="at $1"
+    fi
+    echo " \
+	echo '$NroffPrefix'$input'$NroffPostfix' \
+	| tr '$TrMapIn' '$TrMapOut' \
+	| nroff \
+	| $ALERTER $AlerterOptions \
+    " | $DO ;;
+
+2)  echo $2 | remind $1 ;;
+
+*)  echo "usage : $0 [time] [message]" ;;
+
+esac

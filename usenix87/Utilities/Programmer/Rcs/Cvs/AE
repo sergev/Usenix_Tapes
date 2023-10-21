@@ -1,0 +1,158 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: AE,v 1.27 86/06/22 18:08:35 dick Exp $
+
+#
+#		A d d   E n t r y
+#	The call AE [ -... ] filename ... adds new entries to the
+#	present version; the options -... will be passed on
+#	to rcs -i (see RCS manual).  For each file it asks for a
+#	description, in RCS fashion.
+#	The entries will be added to the RCS repository upon the
+#	next call of CM.
+#	The user files must already exist.
+#	AE on a file removed with RM will resurrect the file.
+#
+Name=AE; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+# get possible options
+. $CVSLIB/OP.aux			# sets $Options
+
+case $# in
+0)
+	echo Call is: $Name \<options\> filename ... \
+					to add files to present version >&2
+	exit 1
+	;;
+esac
+
+OK=yes
+for User in $@
+do
+	Rcs=$Repository/$User,v
+	. $CVSLIB/VT.aux	# sets $VN_User, $VN_Rcs, $TS_User, $TS_Rcs
+	
+	# what entry is this?
+	case $VN_User in
+	"")
+		# no entry available, $TS_Rcs is invalid
+		
+		# how is the RCS file?
+		case $VN_Rcs in
+		"")
+			# there is no RCS file either
+			
+			# how is the user file?
+			case "$TS_User" in
+			"")
+				# there is no user file
+				echo $Name: nothing known about $User >&2
+				OK=no
+				;;
+			*)
+				# there is a user file
+				. $CVSLIB/BE.aux	# build entry
+				;;
+			esac
+			;;
+		*)
+			# there is an RCS file
+			
+			# illegal addition
+			echo $Name: $User added independently \
+							by second party >&2
+			OK=no
+			;;
+		esac
+		;;
+	
+	0)
+		# an entry for a new-born file, $TS_Rcs is dummy
+		
+		# but that is inappropriate here
+		echo $Name: $User has already been entered >&2
+		OK=no
+		;;
+	
+	-*)
+		# an entry for a removed file, $TS_Rcs is valid
+		
+		# how is the user file?
+		case "$TS_User" in
+		"")
+			# there is no user file (as it should be)
+			
+			# how is the RCS file?
+			case -$VN_Rcs in
+			-)
+				# there is no RCS file
+			
+				# it has already been removed
+				echo $Name: cannot resurrect $User, \
+					RCS file removed by second party >&2
+				OK=no
+				;;
+			*)
+				# there is an RCS file
+				
+				# resurrection requested
+				# remove initial minus from $VN_User
+				VN_User=`expr $VN_User : '-\(.*\)' `
+				$CVSLIB/RG.aux $User $VN_User \
+							"Resurrected $User"
+				if	# we can restore the copy
+					$CVSBIN/UV $User
+				then
+					echo $Name: $User, version $VN_User, \
+						resurrected >&2
+				else
+					echo $Name: could not \
+							resurrect $User >&2
+					OK=no
+				fi
+				;;
+			esac
+			;;
+		*)
+			# user file shouldn't be there
+			echo $Name: $User should be removed \
+				and is still there >&2
+			OK=no
+			;;
+		esac
+		;;
+	
+	*)
+		# a normal entry, $TS_Rcs is valid
+		
+		# illegal addition
+		echo $Name: $User already exists, \
+			with version number $VN_User >&2
+		OK=no
+		;;
+	esac
+done
+
+$CVSLIB/EF.aux				# update CVS.adm/Files
+
+# did we succeed?
+case $OK in
+no)
+	exit 1
+	;;
+esac
+
+exit 0

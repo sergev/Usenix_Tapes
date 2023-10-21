@@ -1,0 +1,555 @@
+Path: plus5!wucs1!mcdchg!clyde!ima!mirror!xanth!kyle
+From: kyle@xanth.UUCP (kyle jones)
+Newsgroups: comp.bugs.misc,net.sources.bugs
+Subject: mcp 1.0 patch #5
+Summary: a few new features, no bug fixes, low priority
+Keywords: mcp patch
+Message-ID: <898@xanth.UUCP>
+Date: 2 May 87 03:40:01 GMT
+Organization: odu computer science, norfolk, va
+Lines: 543
+Xref: plus5 comp.bugs.misc:46 net.sources.bugs:1173
+
+This patch (#5) makes the following changes in the mcp 1.0 distribution
+
+1)	Mcp now changes tty modes with the TIOCSETN ioctl instead of
+	TIOCSETP.  The net result of this is that mcp no longer gobbles
+	up typeahead when changing tty modes.
+2)	The *-inactives commands will now allow you to specify a range of days
+	inactivity (e.g. list-inactives 30-60 will show users that haven't
+	logged in within 30 days, but have logged in within the last 60 days.)
+	The doucmentation for these command has been updated to reflect this.
+3)	Added ability to reset password back to the value of the ID field
+	via update-user.
+
+This patch will not work if patches #1-4 have not been applied.  Patches #1-2
+were applied by Rich Salz before mod.sources distribution, so no one should
+need these.  All patches may be obtained from me; send requests to my e-mail
+address.
+
+To apply this patch from readnews, vnews or rn, type "s|patch -d -p0 DIR",
+with DIR being the directory where the mcp sources and documentation are kept.
+Alternately you can save this article and later cd to DIR and "patch -p0 <
+thisarticle".  Don't leave off the "-p0".  If you don't have patch (alas!),
+you'll have to apply the context diffs below by hand.
+
+kyle jones, old dominion university computer science
+ARPA: kyle@xanth.cs.odu.edu		CSNET: kyle@odu.csnet
+UUCP: kyle@xanth.uucp	     -or-	{sun,harvard,mit-eddie}!xanth!kyle
+
+Index: src/version.c
+Prereq: (#4)
+*** src/version.c.old	Fri May  1 17:24:38 1987
+--- src/version.c	Fri Apr 24 18:23:29 1987
+***************
+*** 3,9 ****
+  	char	*n_copyright;
+  };
+  static	struct notice Note = {
+! "mcp version 1.0 (#4) ",
+  "(c) 1986 by Kyle E. Jones\n\n\
+  All sources and documentation of this mcp distribution are\n\
+  included in this copyright, but permission is granted to\n\
+--- 3,9 ----
+  	char	*n_copyright;
+  };
+  static	struct notice Note = {
+! "mcp version 1.0 (#5)  5/1/87",
+  "(c) 1986 by Kyle E. Jones\n\n\
+  All sources and documentation of this mcp distribution are\n\
+  included in this copyright, but permission is granted to\n\
+
+Index: src/update.c
+*** src/update.c.old	Fri May  1 17:24:41 1987
+--- src/update.c	Fri May  1 16:17:47 1987
+***************
+*** 37,46 ****
+  static	char *XXXXXX = "/mcpXXXXXX";
+  static	char desc[DESCSIZE+1];
+  
+  /* these are defined in add.c */
+  extern	struct	list idlist;
+  extern	struct	list rnlist;
+- extern	struct	list pwlist;
+  extern	struct	list mdlist;
+  
+  #ifdef SENDMAIL
+--- 37,48 ----
+  static	char *XXXXXX = "/mcpXXXXXX";
+  static	char desc[DESCSIZE+1];
+  
++ static	char *pwl[4] = { "generate", "id", "none", "unused" };
++ static	struct list pwlist = { 4, 4, (addr *)pwl };
++ 
+  /* these are defined in add.c */
+  extern	struct	list idlist;
+  extern	struct	list rnlist;
+  extern	struct	list mdlist;
+  
+  #ifdef SENDMAIL
+***************
+*** 909,914 ****
+--- 911,919 ----
+  			savestr((char **)&ac->ac_passwd, crypt(cp, rsalt()));
+  			(void) printf("password is \"%s\"\n", cp);
+  		}
++ 		else if (eq(*passwdv, "id"))
++ 			savestr((char **)&ac->ac_passwd,
++ 				crypt((char *)ac->ac_id, rsalt()));
+  		else
+  			savestr((char **)&ac->ac_passwd,
+  				crypt((char *)*passwdv, rsalt()));
+
+Index: src/tty.c
+*** src/tty.c.old	Fri May  1 17:24:46 1987
+--- src/tty.c	Fri May  1 16:46:35 1987
+***************
+*** 10,16 ****
+  	(void) ioctl(DevTty, TIOCGETP, (char *)&sg);
+  	sg.sg_flags |= CBREAK;
+  	sg.sg_flags &= ~(CRMOD|ECHO|RAW);
+! 	(void) ioctl(DevTty, TIOCSETP, (char *)&sg);
+  	return;
+  }
+  
+--- 10,16 ----
+  	(void) ioctl(DevTty, TIOCGETP, (char *)&sg);
+  	sg.sg_flags |= CBREAK;
+  	sg.sg_flags &= ~(CRMOD|ECHO|RAW);
+! 	(void) ioctl(DevTty, TIOCSETN, (char *)&sg);
+  	return;
+  }
+  
+***************
+*** 22,27 ****
+  	(void) ioctl(DevTty, TIOCGETP, (char *)&sg);
+  	sg.sg_flags &= ~CBREAK;
+  	sg.sg_flags |= (CRMOD|ECHO);
+! 	(void) ioctl(DevTty, TIOCSETP, (char *)&sg);
+  	return;
+  }
+--- 22,27 ----
+  	(void) ioctl(DevTty, TIOCGETP, (char *)&sg);
+  	sg.sg_flags &= ~CBREAK;
+  	sg.sg_flags |= (CRMOD|ECHO);
+! 	(void) ioctl(DevTty, TIOCSETN, (char *)&sg);
+  	return;
+  }
+
+Index: src/freeze.c
+*** src/freeze.c.old	Fri May  1 17:24:48 1987
+--- src/freeze.c	Thu Apr 30 21:58:04 1987
+***************
+*** 74,105 ****
+  {
+  	struct account *ac;
+  	struct groupmap *gm;
+! 	time_t now, toolong, doomsday;
+  	register int indx;
+  	int frozen = 0;
+  
+  	if (c != 2) {
+! 		err1("usage: %s <user>", (char *)v[0]);
+  		return;
+  	}
+- 	if (!validint((char *)v[1])) {
+- 		err2("%s: %s doesn't make sense as a number", (char *)v[0],
+- 			(char *)v[1]);
+- 		return;
+- 	}
+  	now = time((time_t *)0);
+! 	toolong = atoi((char *)v[1]) * DAY;
+! 	if (toolong <= 0) {
+  		err1("%s: Not bloody likely.", (char *)v[0]);;
+  		return;
+  	}
+! 	doomsday = now - toolong;
+! 	(void) printf("The axe falls %s\n", when(doomsday));
+  
+  	critical();
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if (ac->ac_ll.ll_time > doomsday)
+  			continue;
+  		/*
+  		 * Don't freeze cryos again.
+--- 74,116 ----
+  {
+  	struct account *ac;
+  	struct groupmap *gm;
+! 	time_t now;
+! 	long low, high;
+  	register int indx;
+  	int frozen = 0;
+  
+  	if (c != 2) {
+! 		err1("usage: %s <days|range>", (char *)v[0]);
+  		return;
+  	}
+  	now = time((time_t *)0);
+! 	if (parse_day_range((char *)v[1], &low, &high)) {
+! 	    low *= 86400;
+! 	    high *= 86400;
+! 	}
+! 	else if (validint((char *)v[1])) {
+! 	    low = (long) atoi((char *)v[1]) * 86400;
+! 	    high = now;
+! 	}
+! 	else {
+! 	    err2("%s: %s isn't a number or range", (char *)v[0], (char *)v[1]);
+! 	    return;
+! 	}
+! 	if (low <= 0) {
+  		err1("%s: Not bloody likely.", (char *)v[0]);;
+  		return;
+  	}
+! 	if (high == now)
+! 	  (void) printf("The axe falls %s\n", when(now-low));
+! 	else {
+! 	    (void) printf("Deathdays begin %s\n", when(now-high));
+! 	    (void) printf("        and end %s\n", when(now-low));
+! 	}
+  
+  	critical();
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if (!INRANGE((long)(now - ac->ac_ll.ll_time), low, high))
+  			continue;
+  		/*
+  		 * Don't freeze cryos again.
+
+Index: src/describe.c
+*** src/describe.c.old	Fri May  1 17:24:51 1987
+--- src/describe.c	Thu Apr 30 21:31:06 1987
+***************
+*** 416,424 ****
+  {
+  	struct account *ac;
+  	struct groupmap *gm;
+! 	int indx, inactives = 0, days;
+  	time_t now;
+! 	long toolong;
+  	char errmsg[LONG_BUF];
+  
+  	if ( c > 2 ) {
+--- 416,424 ----
+  {
+  	struct account *ac;
+  	struct groupmap *gm;
+! 	int indx, inactives = 0;
+  	time_t now;
+! 	long low, high;
+  	char errmsg[LONG_BUF];
+  
+  	if ( c > 2 ) {
+***************
+*** 426,446 ****
+  		return;
+  	}
+  	if ( c < 2 ) {
+! 		err1("usage: %s <days>", (char *)v[0]);
+  		return;
+  	}
+- 	if (!validint((char *)v[1])) {
+- 		err2("%s: %s doesn't make sense as a number", (char *)v[0],
+- 			(char *)v[1]);
+- 		return;
+- 	}
+  	now = time((time_t *)0);
+! 	days = atoi((char *)v[1]);
+! 	toolong = days * 86400;
+  
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if ((long)(now - ac->ac_ll.ll_time) < toolong)
+  			continue;
+  		/*
+  		 * Cryos are not inactive.
+--- 426,451 ----
+  		return;
+  	}
+  	if ( c < 2 ) {
+! 		err1("usage: %s <days|range>", (char *)v[0]);
+  		return;
+  	}
+  	now = time((time_t *)0);
+! 	if (parse_day_range((char *)v[1], &low, &high)) {
+! 	    low *= 86400;
+! 	    high *= 86400;
+! 	}
+! 	else if (validint((char *)v[1])) {
+! 	    low = (long) atoi((char *)v[1]) * 86400;
+! 	    high = now;
+! 	}
+! 	else {
+! 	    err2("%s: %s isn't a number or range", (char *)v[0], (char *)v[1]);
+! 	    return;
+! 	}
+  
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if (!INRANGE((long)(now - ac->ac_ll.ll_time), low, high))
+  			continue;
+  		/*
+  		 * Cryos are not inactive.
+***************
+*** 470,481 ****
+  		inactives++;
+  	}
+  	if (inactives)
+! 		(void) printf("\n%d user%s inactive for at least %d day%s.\n",
+! 			inactives, S(inactives),
+! 			days, S(days));
+! 	else
+! 		(void) printf("No users inactive for %d day%s.\n",
+! 			days, S(days));
+  	return;
+  }
+  
+--- 475,481 ----
+  		inactives++;
+  	}
+  	if (inactives)
+! 		(void) printf("\n%d user%s.\n", inactives, S(inactives));
+  	return;
+  }
+  
+
+Index: src/list.c
+*** src/list.c.old	Fri May  1 17:24:55 1987
+--- src/list.c	Fri May  1 17:21:18 1987
+***************
+*** 142,167 ****
+  	struct groupmap *gm;
+  	int indx, count;
+  	time_t now;
+! 	long toolong;
+  	char errmsg[LONG_BUF];
+  
+  	if ( c < 2 ) {
+! 		err1("usage: %s <days> [expr ...]", (char *)v[0]);
+  		return;
+  	}
+! 	if (!validint((char *)v[1])) {
+! 		err2("%s: %s doesn't make sense as a number", (char *)v[0],
+! 			(char *)v[1]);
+! 		return;
+  	}
+! 	toolong = atoi((char *)v[1]) * 86400;
+  
+  	zerolist(&inactives);
+  	tmplistadd(&inactives);
+- 	now = time((time_t *)0);
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if ((long)(now - ac->ac_ll.ll_time) < toolong)
+  			continue;
+  		/*
+  		 * Cryos are not inactive.
+--- 142,173 ----
+  	struct groupmap *gm;
+  	int indx, count;
+  	time_t now;
+! 	long low, high;
+  	char errmsg[LONG_BUF];
+  
+  	if ( c < 2 ) {
+! 		err1("usage: %s <days|range> [expr ...]", (char *)v[0]);
+  		return;
+  	}
+! 	now = time((time_t *)0);
+! 	if (parse_day_range((char *)v[1], &low, &high)) {
+! 	    low *= 86400;
+! 	    high *= 86400;
+  	}
+! 	else if (validint((char *)v[1])) {
+! 	    low = (long) atoi((char *)v[1]) * 86400;
+! 	    high = now;
+! 	}
+! 	else {
+! 	    err2("%s: %s isn't a number or range", (char *)v[0], (char *)v[1]);
+! 	    return;
+! 	}
+  
+  	zerolist(&inactives);
+  	tmplistadd(&inactives);
+  	for (indx=0; indx < AccountList.l_count; indx++) {
+  		ac = (struct account *) AccountList.l_list[indx];
+! 		if (!INRANGE((long)(now - ac->ac_ll.ll_time), low, high))
+  			continue;
+  		/*
+  		 * Cryos are not inactive.
+***************
+*** 194,197 ****
+--- 200,229 ----
+  	if (count)
+  	    (void) printf("%d listed\n", count);
+  	return;
++ }
++ 
++ int
++ parse_day_range(range, low, high)
++     char *range;
++     long *low, *high;
++ {
++     register char *p;
++     extern char *index();
++ 
++     p = index(range, '-');
++     if (!p)
++       return 0;
++     *p = '\0';
++     if (!validint(range) || !validint(p+1))
++       return 0;
++     *low = atoi(range);
++     *high = atoi(p+1);
++     *p = '-';
++     if (*high < *low) {
++ 	register long temp = *low;
++ 
++ 	*low = *high;
++ 	*high = temp;
++     }
++     return 1;
+  }
+
+Index: help/describe-inactives.n
+*** help/describe-inactives.n.old	Fri May  1 17:24:58 1987
+--- help/describe-inactives.n	Thu Apr 30 23:28:26 1987
+***************
+*** 1,6 ****
+  .ce
+  .ul
+! describe-inactives <number>
+  .sp
+  .ul
+  describe-inactives
+--- 1,6 ----
+  .ce
+  .ul
+! describe-inactives <number|range>
+  .sp
+  .ul
+  describe-inactives
+***************
+*** 7,12 ****
+  lists users that have not logged in
+  .ul
+  <number>
+! days, excluding users that are frozen and members of vigs.  The login name
+  is displayed along with the real name, uid, and an asterisk if the user has
+  ever logged in.
+--- 7,20 ----
+  lists users that have not logged in
+  .ul
+  <number>
+! days, excluding users that are frozen or members of vigs.
+! If a
+! .ul
+! <range>
+! of the form
+! .ul
+! m-n
+! is given, then users inactive within this range of days are listed.
+! The login name
+  is displayed along with the real name, uid, and an asterisk if the user has
+  ever logged in.
+
+Index: help/freeze-inactives.n
+*** help/freeze-inactives.n.old	Fri May  1 17:24:59 1987
+--- help/freeze-inactives.n	Thu Apr 30 23:40:08 1987
+***************
+*** 1,6 ****
+  .ce
+  .ul
+! freeze-inactives <number>
+  .sp
+  .ul
+  freeze-inactives
+--- 1,6 ----
+  .ce
+  .ul
+! freeze-inactives <number|range>
+  .sp
+  .ul
+  freeze-inactives
+***************
+*** 7,13 ****
+  changes the shell of users who have not logged in
+  .ul
+  <number>
+! days to FREEZE_SH, exempting members of vigs.  These frozen users are then
+  termed "cryos".
+  .sp
+  This facility is generally used to end a user's access to an account
+--- 7,21 ----
+  changes the shell of users who have not logged in
+  .ul
+  <number>
+! days to FREEZE_SH, exempting members of vigs.
+! If a
+! .ul
+! <range>
+! of the form
+! .ul
+! m-n
+! is given, then users inactive within this range of days are frozen.
+! These frozen users are then
+  termed "cryos".
+  .sp
+  This facility is generally used to end a user's access to an account
+
+Index: help/list-inactives.n
+*** help/list-inactives.n.old	Fri May  1 17:25:03 1987
+--- help/list-inactives.n	Thu Apr 30 23:43:21 1987
+***************
+*** 1,6 ****
+  .ce
+  .ul
+! list-inactives <number> [ regular-expression ... ]
+  .sp
+  .ul
+  list-inactives
+--- 1,6 ----
+  .ce
+  .ul
+! list-inactives <number|range> [ regular-expression ... ]
+  .sp
+  .ul
+  list-inactives
+***************
+*** 8,22 ****
+  users  that  have  not  logged  in within
+  .ul
+  <number>
+! days, and names matching the regular expressions.  If no expressions are
+! given all those inactive for
+  .ul
+! <number>
+! days are listed.
+  .sp
+! The expressions should be of the type described in the
+  .ul
+  regex(3)
+! of the Unix Programmers Manual.  An example usage is "list-inactives 3 ^t"
+! which lists users that haven't logged in for three days and have login names
+! that begin with a 't'.
+--- 8,25 ----
+  users  that  have  not  logged  in within
+  .ul
+  <number>
+! days, and whose names match the regular expressions.
+! If a
+  .ul
+! <range>
+! of the form
+! .ul
+! m-n
+! is given, then users inactive within this range of days are listed.
+  .sp
+! The regular expressions are optional, but if present should be of the type described in the
+  .ul
+  regex(3)
+! of the Unix Programmers Manual.  An example usage is "list-inactives
+! 3 ^t" which lists users that haven't logged in for at least three days and
+! have login names that begin with a 't'.

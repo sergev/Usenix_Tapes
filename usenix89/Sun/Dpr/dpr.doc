@@ -1,0 +1,372 @@
+
+  DPR
+  ---
+
+  Author: Rich Burridge, SUN Australia, 14 Queens Rd, Melbourne 3004.
+
+  Version: 1.1.
+
+  Released: May 1986.
+
+  ----------------------------------------------------------
+
+  FILES
+  -----
+
+  This version of dpr, contains the following files:
+
+     (1) Makefile        - File used by make to produce compiled programs.
+     (2) dpr.1           - Manual page for dpr(1).
+     (3) dpr.doc         - This file, containing the dpr program documentation.
+     (4) dpr.h           - Header file containing global definitions.
+     (5) dpr.manual      - Manual showing how to install and use the software.
+     (6) dpr.ms          - Nroff -ms document describing dpr in detail.
+     (7) dpr_dumpcap.c   - Printer capability routine used by dpr.
+     (8) dpr_filter.c    - Source file of the C filter routines.
+     (9) dpr_main.c      - Main source file of the screendump utility.
+    (10) dpr_pw.c        - Source file of the SUN print window routine.
+    (11) dpr_sun.c       - Source of the SUN dependent routines.
+    (12) dumpcap         - Sample /etc/dumpcap file.
+    (13) dumpcap.5       - Manual page for dumpcap(5).
+    (14) globals.h       - Global variables used by dpr et al.
+    (15) testpw_c.c      - C test program for print_window.
+    (16) testpw_f.f      - Fortran test program for print_window.
+    (17) testpw_p.p      - Pascal test program for print_window.
+
+  There is a sub-directory called release, which can be used to produce a
+  releaseable non-source version.
+
+     (1) dpr             - Binary for dpr program.
+     (2) testpw_c.c      - C test program for print_window.
+     (3) testpw_c        - Binary of the C test program.
+     (4) testpw_f.f      - Fortran test program for print_window.
+     (5) testpw_f        - Binary of the Fortran test program.
+     (6) testpw_p.p      - Pascal test program for print_window.
+     (7) testpw_p        - Binary of the Pascal test program.
+     (8) dpr.1           - Manual page for dpr(1).
+     (9) dumpcap.5       - Manual page for dumpcap(5).
+    (10) libdpr.a        - Library of routines needed for print_window.
+
+  Should you need to make a new release, position yourself in the dpr
+  directory and type:
+
+    make release
+
+  -----------------------------------------------------------
+
+  BREAKDOWN
+  ---------
+
+  KEY: Capitals indicates System calls and Sun library routines.
+       Brackets indicate routines in other dpr source files.
+       Lower case indicates routines within this source file.
+
+  dpr_main.c
+  ----------
+
+  MAIN - (what_video).
+         default_params   - GETLOGIN.
+                            GETPWUID.
+                            GETUID.
+                            STRCPY.
+                            GETENV.
+         get_options      - STRCPY.
+                            ATOI.
+                            FPRINTF.
+                            EXIT.
+         (read_params).
+         open_device      - OPEN.
+                            CREAT.
+                            FPRINTF.
+                            EXIT.
+                            LSEEK.
+         init_handshake   - GTTY.
+                            IOCTL.
+                            init_speed     - FPRINTF.
+                                             EXIT.
+                            STTY.
+         (get_screen_image).
+         check_params     - STRLEN.
+                            STRCPY.
+                            GETHOSTNAME.
+         print_burst_page - output         - STRLEN.
+                                             sendchar   - ok_to_send - IOCTL.
+                                                                       FPRINTF.
+                                                                       EXIT.
+                                                          WRITE.
+                            SPRINTF.
+                            GETTIMEOFDAY.
+                            CTIME.
+                            STRCPY.
+                            sendchar       - ok_to_send - IOCTL.
+                                                          FPRINTF.
+                                                          EXIT.
+                                             WRITE.
+         dump_screen      - output         - STRLEN.
+                                             sendchar   - ok_to_send - IOCTL.
+                                                                       FPRINTF.
+                                                                       EXIT.
+                                                          WRITE.
+                            do_horiz_dump  - h_BW_scan  - output     - STRLEN.
+                                                                       sendchar   - ok_to_send - IOCTL.
+                                                                                                 FPRINTF.
+                                                                                                 EXIT.
+                                                          sendchar   - ok_to_send - IOCTL.
+                                                                                    FPRINTF.
+                                                                                    EXIT.
+                                                                       WRITE.
+                                             h_COL_scan - output     - STRLEN.
+                                                                       sendchar   - ok_to_send - IOCTL.
+                                                                                                 FPRINTF. 
+                                                                                                 EXIT.
+                                                                                    WRITE.
+                                                          sendchar   - ok_to_send - IOCTL.
+                                                                                    FPRINTF.
+                                                                                    EXIT.
+                                                                       WRITE.
+                                         do_ver_dump    - v_BW_scan  - output     - STRLEN.
+                                                                       sendchar   - ok_to_send - IOCTL. 
+                                                                                                 FPRINTF. 
+                                                                                                 EXIT. 
+                                                                                    WRITE.
+                                                          sendchar   - ok_to_send - IOCTL. 
+                                                                                    FPRINTF. 
+                                                                                    EXIT.
+                                                                       WRITE.
+                                                          v_COL_scan - output     - STRLEN.
+                                                                       sendchar   - ok_to_send - IOCTL.  
+                                                                                                 FPRINTF.  
+                                                                                                 EXIT.  
+                                                                                    WRITE.
+                                                          sendchar   - ok_to_send - IOCTL.  
+                                                                                    FPRINTF.  
+                                                                                    EXIT.
+                                                                       WRITE.
+         (make_filter).
+         terminate        - STRLEN.
+                            UNLINK.
+                            STTY.
+                            CLOSE.
+                            STRCPY.
+                            STRCAT.
+                            POPEN.
+                            FPRINTF.
+                            FCLOSE.
+
+
+  dpr_dumpcap.c
+  -------------
+
+  read_params - OPEN.
+                FPRINTF.
+                EXIT.
+                get_next_entry - READ.
+                                 FPRINTF.
+                match_printer.
+                get_flag       - next_field.
+                get_number     - next_field.
+                                 ISDIGIT.
+                get_string     - decode     - STRCPY.
+                                              ISDIGIT.
+                CLOSE.
+
+
+  dpr_filter.c
+  ------------
+
+  make_filter - open_output     - SPRINTF.
+                                  FOPEN.
+                                  FPRINTF.
+                                  EXIT.
+                make_headings   - FPRINTF.
+                make_variables  - FPRINTF.
+                make_read_image - FPRINTF.
+                make_output     - FPRINTF.
+                                  make_string     - STRLEN.
+                                                    FPRINTF.
+                                  make_ver_dump   - FPRINTF.
+                                                    make_string - STRLEN.
+                                                                  FPRINTF.
+                                  make_horiz_dump - FPRINTF.
+                                                    make_string - STRLEN.
+                                                                  FPRINTF.
+                make_main       - FPRINTF.
+                FCLOSE.
+
+
+  dpr_pw.c
+  --------
+
+  print_window  - which_window   - STRCPY.
+                                   GETENV.
+                                   SSCANF.
+                                   OPEN.
+                                   FPRINTF.
+                                   EXIT.
+                                   WIN_GETRECT.
+                                   CLOSE.
+                                   WE_GETPARENTWINDOW.
+                                   WIN_GETLINK.
+                                   WIN_NUMBERTONAME.
+                  expose_window.
+                  save_window    - SPRINTF.
+                                   PR_OPEN
+                                   FPRINTF.
+                                   EXIT.
+                                   FOPEN.
+                                   PR_ROP.
+                                   PR_CLOSE.
+                                   FWRITE.
+                                   FCLOSE.
+                  (read_params).
+                  create_dumpcap - SPRINTF.
+                                   FOPEN.
+                                   FPRINTF.
+                                   EXIT.
+                                   STRLEN.
+                                   dcwrite           - FPRINTF.
+                                                       STRLEN.
+                                   FCLOSE.
+                  fork_dpr       - SPRINTF.
+                                   FORK.
+                                   EXECL.
+ 
+  print_window_ - print_window   - which_window      - STRCPY.
+                                                       GETENV.
+                                                       SSCANF.
+                                                       OPEN.
+                                                       FPRINTF.
+                                                       EXIT.
+                                                       WIN_GETRECT.
+                                                       CLOSE.
+                                                       WE_GETPARENTWINDOW.
+                                                       WIN_GETLINK.
+                                                       WIN_NUMBERTONAME.
+                                   expose_window.
+                                   save_window       - SPRINTF.
+                                                       PR_OPEN
+                                                       FPRINTF.
+                                                       EXIT.
+                                                       FOPEN.
+                                                       PR_ROP.
+                                                       PR_CLOSE.
+                                                       FWRITE.
+                                                       FCLOSE.
+                                   (read_params).
+                                   create_dumpcap    - SPRINTF.
+                                                       FOPEN.
+                                                       FPRINTF.
+                                                       EXIT.
+                                                       STRLEN.
+                                                       dcwrite             - FPRINTF.
+                                                                             STRLEN.
+                                                       FCLOSE.
+                                   fork_dpr          - SPRINTF.
+                                                       FORK.
+                                                       EXECL.
+
+
+  dpr_sun.c
+  ---------
+
+  what_video       - OPEN.
+                     FPRINTF.
+                     EXIT.
+                     IOCTL.
+                     CLOSE.
+  get_screen_image - STRLEN.
+                     PR_OPEN.
+                     FPRINTF.
+                     EXIT.
+                     PR_ROP.
+                     PR_CLOSE.
+                     FOPEN.
+                     FREAD.
+                     FCLOSE.
+
+
+  --------------------------------------------------------------
+
+  OUTLINE
+  -------
+
+  This section contains a one line description on each of the dpr routines:
+
+  dpr_main.c
+  ----------
+
+  default_params:        Set up the default dpr switches.
+  get_options:           Get user options from command line.
+  check_params:          Check validity of dumpcap parameters.
+  open_device:           Open output device for screen dump.
+  init_handshake:        Initialise handshake for output device.
+   init_speed:            Initialise baud rate for output device.
+  print_burst_page:      Print out the header page.
+   output:                Output a string sequence.
+    sendchar:              Send the next character to the output device / file.
+     ok_to_send:            Check it's OK to output the next character.
+  dump_screen:           Dump the required screen portion to the printer.
+   do_horiz_dump:         Do horizontal screen dump to printer.
+    h_BW_scan:             Output next black and white horizontal line to printer.
+    h_COL_scan:            Output next color horizontal line to printer.
+   do_ver_dump:           Do vertical screen dump to printer.
+    v_BW_scan:             Output next black and white vertical "line" to printer.
+    v_COL_scan:            Output next color vertical "line" to printer.
+  terminate:             Terminate operations tidely.
+
+  dpr_dumpcap.c
+  -------------
+
+  read_params:           Read printer capabilities from dumpcap file.
+   get_next_entry:        Get next printer definition from dumpcap file.
+   match_printer:         Compare dumpcap printer entry with current printer.
+   get_flag:              Look for boolean field in dumpcap record.
+    next_field:            Find start of next field in dumpcap record.
+   get_number:            Look for numeric field in dumpcap record.
+   get_string:            Look for string field in dumpcap record.
+    decode:                Decode escape sequences in string field in dumpcap record.
+
+  dpr_filter.c
+  ------------
+
+  make_filter:           Generate screendump C filter code.
+   open_output:           Open file to contain the C code.
+   make_headings:         Write program headings to C file.
+   make_variables:        Declare variables that are needed.
+   make_read_image:       C code for reaing rasterfile image from stdin.
+   make_output:           Generate procedure for dumping screen image.
+   make_main:             Produce main procedure for C filter.
+
+  dpr_pw.c
+  --------
+
+  which_window:          Determine the window, program is running in.
+  expose_window:         Pop to the front if it is not fully exposed.
+  copy_screen:           Copy current screen image to /tmp directory.
+  read_params:           Get dumpcap parameters from /etc/dumpcap file.
+  create_dumpcap:        Create customised dumpcap file for window.
+   dcwrite:               Encode string sequences for dumpcap file.
+  fork_dpr:              Fork dpr with correct command line parameters.
+
+  dpr_sun.c
+  ---------
+
+  what_video:            Extract screen size parameters.
+  get_screen_image:      Get screen image from screen or file.
+
+  ---------------------------------------------------------------
+
+  NOTES
+  -----
+
+  The following improvements will be incorporated in the next version:
+  This will be produced when time and demand allows it.
+
+    (1) Speed up the whole dumping process.
+    (2) Better looking burst page.
+    (3) Amend to allow color version to work.
+    (4) The print_window routine will expose the window or open the iconic
+        form of the window if necessary.
+
+  ***  THIS PROGRAM HAS BEEN ONLY MINIMALLY TESTED. IT IS VITAL THAT  ***
+  ***  A MUCH MORE COMPLETE TESTING BE COMPLETED SOON.                ***

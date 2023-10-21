@@ -1,0 +1,230 @@
+
+                   Directory Repack
+
+     Directory repack is written in 'C' and compiled against
+specifically Supersoft 'C'. Since Supersoft 'C' uses floating
+point functions to perform math, this program will not compile
+on other 'C' packages unless modifications are made to the source.
+Directory repack stored as DSKRPK.ARC contains the following files:
+
+         DSKRPK.DOC ----- DESCRIPTION OF THE PROGRAM
+         DSKRPK.EXE ----- THE EXECUTABLE CODE
+         DSKRPK.C   ----- THE SOURCE CODE
+
+[I've de-ARC'd this thing.]
+
+      This program can be run as follows:
+
+            dskrpk [drive spec] ---- where drive spec is optional.
+
+     The purpose of dskrpk is to pack the root and all subdirectories.
+Packing simply removes all deleted files from the approiate directory
+cluster, moving valid entries up leaving no holes. In effect deleted
+files are scrubbed form the directory. New files are written on
+the end of the directory rather than embedded in previously deleted
+areas.
+
+     I have included the source for this program such that any
+interested parties can update or just learn about file storage using
+the direct method of file access. The source file depicts Supersofts
+method of merging assembly language code into 'C' directly.
+
+     The program has been tested against DSDD floppies, 10mb hard
+disks, and buffers are configured to handle up to 20mb drives.
+The program was developed to gain understanding of the MSDOS file
+structures, FATS, and directory/subdir organization. The experienced
+gained with this code will aid in the creation of another program
+which will analyze and unfragment the disk data area. Unfragmenting
+the data area organizes all files on continous sectors such that
+head movement is kept low leading to faster disk I/O.
+
+     A word about public domain software. Program development is
+a long process taking many hours of research as well as development
+and debug.  I hope you will support our efforts by sending a small
+contribution of $5.00 to :
+
+                  TPGS INC.
+                  14 Wells Road
+                  Flemington,NJ 08822
+                  data 201-782-7640
+                  voice 201-782-0639
+
+* Exploring MSDOS file structures
+Richard a. Karas
+Fido 107/29
+
+          Exploring MSDOS File Structures
+
+Disks (floppy as well as hard's) are formatted or
+initialized under MSDOS Version 2.o to allow  fast and
+convenient access to files. MSDOS supports several methods
+of accessing files. The handle method, the File Control
+Block method, and the direct access method through
+directory and the File Allocation Table (FAT) search. The
+handle and FCB methods require you to access files
+through the operating system and their respective
+function calls, while the direct method enables you
+to access files as it implies, directly. To access
+files directly, a little knowledge of the way MSDOS
+formatts the disk is required.   MSDOS disks after
+formatting contain the following structures in
+sequence:
+
+o  Reserve boot loader area.
+
+o  First copy of the FAT.
+
+o  Second copy of the FAT ( for recovery purposes).
+
+o  Root directory.
+
+o  Data area.
+
+Utility programs read the reserved boot area where
+disk media data may be found. This data provides
+the program with information about the device.
+Typically byte offsets 11 through 29 have been set
+aside to define all the necessary attributes required.
+
+Disk space is allocated in the data area only when
+required and is accomplished in one allocation unit
+at a time. An allocation unit is refered to as a cluster
+and is represented by one or more consecutive sectors.
+A sector is usually 512 bytes. A cluster will contain
+from 1 to x sectors depending upon the media. Some
+typical allocations are:
+
+o  Double sided floppies 2 sectors/cluster.
+
+o  10mb hard 8 sectors/cluster.
+
+o  20mb hard 16 sectors/cluster.
+
+This method of storage presents some problems
+to the  user (especially those running BBS systems)
+who store many small files.  Consider storing 100 files
+of text containing approximately  200 bytes each file
+on a 10mb hard disk (Like Fido stores messages). Figuring
+8 sectors/cluster X 512 bytes/sector = 4096 bytes per
+allocation unit.  100 allocation units would be needed
+(providing each file only needs one allocation unit each)
+at 4K per representing 400K bytes of storage for 100 files.
+You are only actually storing 200 bytes X 100 files or
+20K bytes of data ( a very big waste of space). DOS 3.1
+attempts to solve this problem by allowing the user
+to define the cluster size. Enough about problems,
+back to file storage techniques using the direct method
+(reference back Fido news issue).
+
+When information is written to the disk, the system
+looks for the cluster that is closest to the beginning
+of the data area and available.  This criteria can
+easily be fulfilled by checking the FAT. The FAT maps
+every cluster of the data area and is in fact a large
+linked list to files occupying more than one cluster.
+FAT data is stored 1.5 bytes per cluster, with cluster #2
+defined as the start of the data area. The first two FAT
+entries represent system data, entry 3 through X actually
+map the entire disk.  The value of each FAT entry could be
+one of the following:
+
+o  000H       Unused cluster.
+
+o  002H-ff6H  Next cluster of data.
+
+o  ff7H       Bad cluster.
+
+o  ff8H-fffH  Last cluster of file.
+
+The root directory is initially built at the time of disk
+format. It is a fixed value of clusters depending upon the
+size of the media. Each directory entry is 32 bytes in
+length and contains information required by the system to
+locate files.  Since directories other than the root
+directory are actual files, there is no limit to the
+number of entries they may contain.  Reference the DOS
+manual for a complete description of the fields of
+a directory entry.  For now all that you should know
+is that fields 00-07H contain the file name, 08-0aH
+contain the extension, and 1a-1bH contain the starting
+cluster number.
+
+The following brief discussion describes file access
+using the direct method (assume root directory only):
+
+1.  The media data is read to obtain the necessary
+information as to number of sectors, where the
+root dir starts, how big it is, etc.
+
+2.  The Root directory is read.
+
+3.  Each 32 byte entry is scanned until the correct
+file is located.
+
+4.  The starting cluster number at offset 1a/1bH of
+that directory entry is obtained and converted
+to logical sector number.
+
+5.  X number of sectors per allocation is read to a
+transfer address starting at the sector calculated
+above. (X sect/allocation unit is a function of the
+media).
+
+6.  Next the FAT map is checked to see if additional
+clusters must be read. This is accomplished by
+converting the cluster just read from the directory
+entry to an offset value into the FAT. If the 1.5
+bytes representing the starting cluster contains
+data pointing to addiional clusters, the system
+will read that cluster.  This next mapped cluster
+entry will be checked and the process will continue
+until the last cluster is read.
+
+
+The following visually represents the process:
+
+                  DIRECTORY (Entry #3)
+    ___________________________________________________
+   |     |     | Name.ext      |                   |    |
+   |  1  |  2  | start cluster----                 | X  |
+   |_____|_____|_____etc.______|_|_________________|____|
+                                 |
+                      ___________|______
+                     |                  |
+            _________|  Routine to      |
+           |         |  access data     |
+           |         |__________________|
+           |
+  _________|_
+ |          |
+ |          |         FILE ALLOCATION TABLE
+ |  ______2_|_____________5__________________________X__
+ | |     |     |        |    |                     |    |
+ | | sys |  5  |        | FFF|                     |    |
+ | |_____|_____|________|____|_____________________|____|
+ |           |_____________|
+ |
+ |____             DATA AREA
+ |  _|__________________________________________________
+ | |     |     |           |  _ |                  |    |
+ | |  2  |  3  |           |  5 |                  | X  |
+ | |_____|_____|___________|____|__________________|____|
+ |___________________________|
+
+
+The conversion of cluster number to logical sector and
+determining the byte offest into the FAT is simple. The
+method is written in any DOS manual near the system
+calls section. One trick which is not mentioned is that
+the formula to determine offset into the FAT table
+will only work if you operate on the table as if each
+byte were an entry ( that is if you read the table as
+bytes, and not words).
+techniques of the MSDOS operating system. One example
+of using this method of file access is depected in
+the public domain 'C' program DSKRPK.ARC located on
+Fido 107/29.
+-- 
+# Daniel Rosenberg  (CE)   @   AT&T Bell Labs, Murray Hill 
+# disclaimer: These opinions are necessarily mine, not my employer's.     
+# UUCP: {ihnp4 || research || allegra}!alice!d  AT&T: 201/582-9428 (work)

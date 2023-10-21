@@ -1,0 +1,383 @@
+
+*** ./README	Tue May 27 14:07:10 1986
+--- ../ncpp/README	Tue May 27 15:28:08 1986
+***************
+*** 1,6
+  #
+  # @(#)README 1.2 8/30/82
+  #
+  August 30, 1982
+  Fixed by Kurt Shoens, UCB
+  If the "#line n name" occurs, then all future references
+
+--- 1,12 -----
+  #
+  # @(#)README 1.2 8/30/82
+  #
++ May 27, 1985
++ Modified by Arnold Robbins, Emory University Computing Center.
++ With the -B option, will recognize C++ style start with // and go to
++ the end of the line comments. Also added in code from Doug Gwyn of
++ the Ballistics Research Laboratory to implement #elif.
++ 
+  August 30, 1982
+  Fixed by Kurt Shoens, UCB
+  If the "#line n name" occurs, then all future references
+*** ./cpp.c	Tue May 27 14:07:09 1986
+--- ../ncpp/cpp.c	Tue May 27 15:16:12 1986
+***************
+*** 153,158
+  STATIC	int	nd	= 1;
+  STATIC	int	pflag;	/* don't put out lines "# 12 foo.c" */
+  int	passcom;	/* don't delete comments */
+  STATIC	int rflag;	/* allow macro recursion */
+  STATIC	int	ifno;
+  # define NPREDEF 20
+
+--- 153,159 -----
+  STATIC	int	nd	= 1;
+  STATIC	int	pflag;	/* don't put out lines "# 12 foo.c" */
+  int	passcom;	/* don't delete comments */
++ int eolcom;		/* allow // ... \n comments */
+  STATIC	int rflag;	/* allow macro recursion */
+  STATIC	int	ifno;
+  # define NPREDEF 20
+***************
+*** 185,190
+  STATIC	struct symtab *udfloc;
+  STATIC	struct symtab *incloc;
+  STATIC	struct symtab *ifloc;
+  STATIC	struct symtab *elsloc;
+  STATIC	struct symtab *eifloc;
+  STATIC	struct symtab *ifdloc;
+
+--- 186,192 -----
+  STATIC	struct symtab *udfloc;
+  STATIC	struct symtab *incloc;
+  STATIC	struct symtab *ifloc;
++ STATIC	struct symtab *eliloc;		/* DAG -- added */
+  STATIC	struct symtab *elsloc;
+  STATIC	struct symtab *eifloc;
+  STATIC	struct symtab *ifdloc;
+***************
+*** 196,201
+  STATIC	struct symtab *uflloc;
+  STATIC	int	trulvl;
+  STATIC	int	flslvl;
+  
+  sayline() {
+  	if (pflag==0) fprintf(fout,"# %d \"%s\"\n", lineno[ifno], fnames[ifno]);
+
+--- 198,205 -----
+  STATIC	struct symtab *uflloc;
+  STATIC	int	trulvl;
+  STATIC	int	flslvl;
++ #define MAX_IF_NESTING	64		/* DAG -- added (must be at least 6) */
++ STATIC	int	ifdone[MAX_IF_NESTING];	/* DAG -- added */
+  
+  sayline() {
+  	if (pflag==0) fprintf(fout,"# %d \"%s\"\n", lineno[ifno], fnames[ifno]);
+***************
+*** 379,385
+  		else {++p; break;}
+  	} break;
+  	case '/': for (;;) {
+! 		if (*p++=='*') {/* comment */
+  			if (!passcom) {inp=p-2; dump(); ++flslvl;}
+  			for (;;) {
+  				while (!iscom(*p++));
+
+--- 383,390 -----
+  		else {++p; break;}
+  	} break;
+  	case '/': for (;;) {
+! 		if (*p=='/' && eolcom) {/* C++ style comment to end of line */
+! 			p++;
+  			if (!passcom) {inp=p-2; dump(); ++flslvl;}
+  			for (;;) {
+  				while (*p && *p++ != '\n');
+***************
+*** 382,387
+  		if (*p++=='*') {/* comment */
+  			if (!passcom) {inp=p-2; dump(); ++flslvl;}
+  			for (;;) {
+  				while (!iscom(*p++));
+  				if (p[-1]=='*') for (;;) {
+  					if (*p++=='/') goto endcom;
+
+--- 387,411 -----
+  			p++;
+  			if (!passcom) {inp=p-2; dump(); ++flslvl;}
+  			for (;;) {
++ 				while (*p && *p++ != '\n');
++ 				if (p[-1]=='\n') {
++ 					p--;
++ 					goto endcpluscom;
++ 				} else if (eob(--p)) {
++ 					if (!passcom) {inp=p; p=refill(p);}
++ 					else if ((p-inp)>=BUFSIZ) {/* split long comment */
++ 						inp=p; p=refill(p);
++ 					} else p=refill(p);
++ 				} else ++p; /* ignore null byte */
++ 			}
++ 		endcpluscom:
++ 			if (!passcom) {outp=inp=p; --flslvl;}
++ 			goto newline;
++ 			break;
++ 		}
++ 		else if (*p++=='*') {/* comment */
++ 			if (!passcom) {inp=p-2; dump(); ++flslvl;}
++ 			for (;;) {
+  				while (!iscom(*p++));
+  				if (p[-1]=='*') for (;;) {
+  					if (*p++=='/') goto endcom;
+***************
+*** 430,435
+  		}
+  	} break;
+  	case '\n': {
+  		++lineno[ifno]; if (isslo) {state=LF; return(p);}
+  prevlf:
+  		state=BEG;
+
+--- 454,460 -----
+  		}
+  	} break;
+  	case '\n': {
++ newline:
+  		++lineno[ifno]; if (isslo) {state=LF; return(p);}
+  prevlf:
+  		state=BEG;
+***************
+*** 710,716
+  #define fasscan() ptrtab=fastab+COFF
+  #define sloscan() ptrtab=slotab+COFF
+  
+! char *
+  control(p) register char *p; {/* find and handle preprocessor control lines */
+  	register struct symtab *np;
+  for (;;) {
+
+--- 735,741 -----
+  #define fasscan() ptrtab=fastab+COFF
+  #define sloscan() ptrtab=slotab+COFF
+  
+! void		/* DAG -- bug fix (was (char *)) */
+  control(p) register char *p; {/* find and handle preprocessor control lines */
+  	register struct symtab *np;
+  for (;;) {
+***************
+*** 723,729
+  		if (flslvl==0) {p=doincl(p); continue;}
+  	} else if (np==ifnloc) {/* ifndef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+! 		if (flslvl==0 && np->value==0) ++trulvl;
+  		else ++flslvl;
+  	} else if (np==ifdloc) {/* ifdef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+
+--- 748,758 -----
+  		if (flslvl==0) {p=doincl(p); continue;}
+  	} else if (np==ifnloc) {/* ifndef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+! 		if (flslvl==0)
+! 			if (ifdone[trulvl] = np->value == 0)
+! 				++trulvl;
+! 			else
+! 				++flslvl;
+  		else ++flslvl;
+  	} else if (np==ifdloc) {/* ifdef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+***************
+*** 727,733
+  		else ++flslvl;
+  	} else if (np==ifdloc) {/* ifdef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+! 		if (flslvl==0 && np->value!=0) ++trulvl;
+  		else ++flslvl;
+  	} else if (np==eifloc) {/* endif */
+  		if (flslvl) {if (--flslvl==0) sayline();}
+
+--- 756,766 -----
+  		else ++flslvl;
+  	} else if (np==ifdloc) {/* ifdef */
+  		++flslvl; p=skipbl(p); np=slookup(inp,p,0); --flslvl;
+! 		if (flslvl==0)
+! 			if (ifdone[trulvl] = np->value!=0)
+! 				++trulvl;
+! 			else
+! 				++flslvl;
+  		else ++flslvl;
+  	} else if (np==eifloc) {/* endif */
+  		if (flslvl) {if (--flslvl==0) sayline();}
+***************
+*** 731,737
+  		else ++flslvl;
+  	} else if (np==eifloc) {/* endif */
+  		if (flslvl) {if (--flslvl==0) sayline();}
+! 		else if (trulvl) --trulvl;
+  		else pperror("If-less endif",0);
+  	} else if (np==elsloc) {/* else */
+  		if (flslvl) {
+
+--- 764,770 -----
+  		else ++flslvl;
+  	} else if (np==eifloc) {/* endif */
+  		if (flslvl) {if (--flslvl==0) sayline();}
+! 		else if (trulvl) ifdone[--trulvl] = 0;	/* DAG */
+  		else pperror("If-less endif",0);
+  	} else if (np==elsloc) {/* else */
+  		if (flslvl) {
+***************
+*** 735,741
+  		else pperror("If-less endif",0);
+  	} else if (np==elsloc) {/* else */
+  		if (flslvl) {
+! 			if (--flslvl!=0) ++flslvl;
+  			else {++trulvl; sayline();}
+  		}
+  		else if (trulvl) {++flslvl; --trulvl;}
+
+--- 768,774 -----
+  		else pperror("If-less endif",0);
+  	} else if (np==elsloc) {/* else */
+  		if (flslvl) {
+! 			if (--flslvl!=0 || ifdone[trulvl]) ++flslvl;
+  			else {++trulvl; sayline();}
+  		}
+  		else if (trulvl) {++flslvl; --trulvl;}
+***************
+*** 747,753
+  	} else if (np==ifloc) {/* if */
+  #if tgp
+  		pperror(" IF not implemented, true assumed", 0);
+! 		if (flslvl==0) ++trulvl; else ++flslvl;
+  #else
+  		newp=p;
+  		if (flslvl==0 && yyparse()) ++trulvl; else ++flslvl;
+
+--- 780,786 -----
+  	} else if (np==ifloc) {/* if */
+  #if tgp
+  		pperror(" IF not implemented, true assumed", 0);
+! 		if (flslvl==0) ifdone[trulvl++] = 1; else ++flslvl;
+  #else
+  		newp=p;
+  		if (flslvl==0)
+***************
+*** 750,756
+  		if (flslvl==0) ++trulvl; else ++flslvl;
+  #else
+  		newp=p;
+! 		if (flslvl==0 && yyparse()) ++trulvl; else ++flslvl;
+  		p=newp;
+  #endif
+  	} else if (np==lneloc) {/* line */
+
+--- 783,796 -----
+  		if (flslvl==0) ifdone[trulvl++] = 1; else ++flslvl;
+  #else
+  		newp=p;
+! 		if (flslvl==0)
+! 		{
+! 			if (ifdone[trulvl] = yyparse())	/* DAG */
+! 				++trulvl;
+! 			else
+! 				++flslvl;
+! 		}
+! 		else ++flslvl;
+  		p=newp;
+  #endif
+  	} else if (np==eliloc) {/* elif */	/* DAG -- added */
+***************
+*** 753,758
+  		if (flslvl==0 && yyparse()) ++trulvl; else ++flslvl;
+  		p=newp;
+  #endif
+  	} else if (np==lneloc) {/* line */
+  		if (flslvl==0 && pflag==0) {
+  			char *cp, *cp2, *savestring();
+
+--- 793,839 -----
+  		else ++flslvl;
+  		p=newp;
+  #endif
++ 	} else if (np==eliloc) {/* elif */	/* DAG -- added */
++ #if tgp
++ 		pperror ( " ELIF not implemented, true assumed", (char *) 0, (char *) 0);
++ 		if (flslvl)
++ 		{
++ 			if (--flslvl == 0 && !ifdeone[trulvl])
++ 			{
++ 				ifdone[trulvl++] = 1;
++ 				sayline():
++ 			}
++ 			else
++ 				++flslvl;
++ 		}
++ 		else if (trulvl)
++ 		{
++ 			++flslvl;
++ 			--trulvl;
++ 		}
++ 		else
++ 			pperror ( "If-less elif"< (char *) 0, (char *) 0);
++ #else
++ 		newp = p;
++ 		if (flslvl)
++ 		{
++ 			if (--flslvl == 0 && !ifdone[trulvl] && yyparse())
++ 			{
++ 				ifdone[trulvl++] = 1;
++ 				sayline();
++ 			}
++ 			else
++ 				++flslvl;
++ 		}
++ 		else if (trulvl)
++ 		{
++ 			++flslvl;
++ 			--trulvl;
++ 		}
++ 		else
++ 			pperror ("If-less elif", (char *) 0, (char *) 0);
++ 		p = newp;
++ #endif
+  	} else if (np==lneloc) {/* line */
+  		if (flslvl==0 && pflag==0) {
+  			char *cp, *cp2, *savestring();
+***************
+*** 1067,1072
+  				case 'E': continue;
+  				case 'R': ++rflag; continue;
+  				case 'C': passcom++; continue;
+  				case 'D':
+  					if (predef>prespc+NPREDEF) {
+  						pperror("too many -D options, ignoring %s",argv[i]);
+
+--- 1148,1154 -----
+  				case 'E': continue;
+  				case 'R': ++rflag; continue;
+  				case 'C': passcom++; continue;
++ 				case 'B': eolcom++; continue;
+  				case 'D':
+  					if (predef>prespc+NPREDEF) {
+  						pperror("too many -D options, ignoring %s",argv[i]);
+***************
+*** 1141,1146
+  	ifdloc=ppsym("ifdef");
+  	ifnloc=ppsym("ifndef");
+  	ifloc=ppsym("if");
+  	lneloc=ppsym("line");
+  	for (i=sizeof(macbit)/sizeof(macbit[0]); --i>=0; ) macbit[i]=0;
+  # if unix
+
+--- 1223,1229 -----
+  	ifdloc=ppsym("ifdef");
+  	ifnloc=ppsym("ifndef");
+  	ifloc=ppsym("if");
++ 	eliloc=ppsym("elif");
+  	lneloc=ppsym("line");
+  	for (i=sizeof(macbit)/sizeof(macbit[0]); --i>=0; ) macbit[i]=0;
+  # if unix
+

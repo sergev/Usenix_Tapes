@@ -1,0 +1,302 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!houxm!mtuxo!mtune!akguc!akgua!gatech!seismo!columbia!caip!brl-adm!brl-smoke!smoke!rbj@icst-cmr.ARPA
+From: rbj@icst-cmr.ARPA
+Newsgroups: net.sources
+Subject: More UNIX-like LS in FTP
+Message-ID: <2631@brl-smoke.ARPA>
+Date: 29 Jul 86 03:58:53 GMT
+Sender: news@brl-smoke.ARPA
+Lines: 300
+Posted: Mon Jul 28 22:58:53 1986
+
+I have modified the BSD4.2 FTP client to do the `ls' & `dir' commands
+in a more UNIX-like manner. As currently distributed, you only get
+ONE remote file name argument, with the second taken to be the name of
+the local listing file. Thus, `ls foo bar' is taken to mean `ls foo > bar'.
+This lets you pick between options or a file name, but not both. When
+talking to a UNIX server, it would be nice to have the -FAC options by
+default. My changes are as follows:
+
+	1) Added the `unix' command. Talks to a UNIX server more
+	   intelligently by adding `-FAC' to all `ls' commands,
+	   and `-FAs' to all `dir' commands.
+
+	2) Added recursive versions of the `ls' and `dir' commands,
+	   called `lr' and `dr' respectively. Options added are
+	   `-FACR' and `-FAsR' likewise.
+
+	3) I didn't do anything with `mls' & `mdir' as they appear
+	   to work strangely and I never use them anyway.
+
+	4) This is my first sources posting so I'm not exactly sure
+	   how to combine shars and patches into one nifty string
+	   you can pipe to. So, it's a two step process, first
+	   unshar it, then apply the patches, which are diff -c's.
+
+	(Root Boy) Jim Cottrell		<rbj@icst-cmr.arpa>
+	I request a weekend in Havana with Phil Silvers!
+
+
+# This is a shell archive.  Remove anything before this line,
+# then unpack it by saving it in a file and typing "sh file".
+#
+# Wrapped by jss on Thu Jul 23 14:10:36 CDT 1987
+# Contents:  cmds.c.diff cmdtab.c.diff ftp_var.h.diff
+ 
+echo x - cmds.c.diff
+sed 's/^@//' > "cmds.c.diff" <<'@//E*O*F cmds.c.diff//'
+*** /usr/src/ucb/ftp/cmds.c	Wed Jul 27 00:34:47 1983
+--- cmds.c	Mon Jul 28 20:54:00 1986
+***************
+*** 405,411
+  		printf("Not connected.\n");
+  	printf("Mode: %s; Type: %s; Form: %s; Structure: %s\n",
+  		modename, typename, formname, structname);
+! 	printf("Verbose: %s; Bell: %s; Prompting: %s; Globbing: %s\n", 
+  		onoff(verbose), onoff(bell), onoff(interactive),
+  		onoff(doglob));
+  	printf("Hash mark printing: %s; Use of PORT cmds: %s\n",
+
+--- 405,411 -----
+  		printf("Not connected.\n");
+  	printf("Mode: %s; Type: %s; Form: %s; Structure: %s\n",
+  		modename, typename, formname, structname);
+! 	printf("Verbose: %s; Bell: %s; Prompt: %s; Glob: %s; UNIX: %s\n",/*RBJ*/
+  		onoff(verbose), onoff(bell), onoff(interactive),
+  		onoff(doglob), onoff(udir));				/*RBJ*/
+  	printf("Hash mark printing: %s; Use of PORT cmds: %s\n",
+***************
+*** 407,413
+  		modename, typename, formname, structname);
+  	printf("Verbose: %s; Bell: %s; Prompting: %s; Globbing: %s\n", 
+  		onoff(verbose), onoff(bell), onoff(interactive),
+! 		onoff(doglob));
+  	printf("Hash mark printing: %s; Use of PORT cmds: %s\n",
+  		onoff(hash), onoff(sendport));
+  }
+
+--- 407,413 -----
+  		modename, typename, formname, structname);
+  	printf("Verbose: %s; Bell: %s; Prompt: %s; Glob: %s; UNIX: %s\n",/*RBJ*/
+  		onoff(verbose), onoff(bell), onoff(interactive),
+! 		onoff(doglob), onoff(udir));				/*RBJ*/
+  	printf("Hash mark printing: %s; Use of PORT cmds: %s\n",
+  		onoff(hash), onoff(sendport));
+  }
+***************
+*** 423,428
+  	printf("Bell mode %s.\n", onoff(bell));
+  }
+  
+  /*
+   * Turn on packet tracing.
+   */
+
+--- 423,437 -----
+  	printf("Bell mode %s.\n", onoff(bell));
+  }
+  
++ /*									/*RBJ*/
++ /* Set UNIX directory mode.						/*RBJ*/
++ /*									/*RBJ*/
++ setunix()								/*RBJ*/
++ {									/*RBJ*/
++ 	udir = !udir;							/*RBJ*/
++ 	printf("Unix mode %s.\n", onoff(udir));				/*RBJ*/
++ }									/*RBJ*/
++ 
+  /*
+   * Turn on packet tracing.
+   */
+***************
+*** 665,671
+  		printf("usage: %s remote-directory local-file\n", argv[0]);
+  		return;
+  	}
+! 	cmd = argv[0][0] == 'l' ? "NLST" : "LIST";
+  	if (strcmp(argv[2], "-") && !globulize(&argv[2]))
+  		return;
+  	recvrequest(cmd, argv[2], argv[1], "w");
+
+--- 674,687 -----
+  		printf("usage: %s remote-directory local-file\n", argv[0]);
+  		return;
+  	}
+! /*FTP 	cmd = argv[0][0] == 'l' ? "NLST" : "LIST";			/*RBJ*/
+! 	argv[0][0] += argv[0][1] == 'r'; /* Yow! Am I HACKING yet? */	/*RBJ*/
+! 	switch (argv[0][0]) {						/*RBJ*/
+! 	case 'l': cmd = udir ? "NLST -FAC"	: "NLST";	break;	/*RBJ*/
+! 	case 'm': cmd = udir ? "NLST -FACR"	: "NLST -R";	break;	/*RBJ*/
+! 	case 'd': cmd = udir ? "LIST -FAs"	: "LIST";	break;	/*RBJ*/
+! 	case 'e': cmd = udir ? "LIST -FAsR"	: "LIST -R";	break;	/*RBJ*/
+! 	}								/*RBJ*/
+  	if (strcmp(argv[2], "-") && !globulize(&argv[2]))
+  		return;
+  	recvrequest(cmd, argv[2], argv[1], "w");
+@//E*O*F cmds.c.diff//
+chmod u=rw,g=rw,o= cmds.c.diff
+ 
+echo x - cmdtab.c.diff
+sed 's/^@//' > "cmdtab.c.diff" <<'@//E*O*F cmdtab.c.diff//'
+*** /usr/src/ucb/ftp/cmdtab.c	Wed Jul 27 00:34:47 1983
+--- cmdtab.c	Mon Jul 28 20:14:46 1986
+***************
+*** 17,22
+  int	quit(), renamefile(), status();
+  int	quote(), rmthelp(), shell();
+  int	pwd(), makedir(), removedir();
+  
+  char	appendhelp[] =	"append to a file";
+  char	asciihelp[] =	"set ascii transfer type";
+
+--- 17,23 -----
+  int	quit(), renamefile(), status();
+  int	quote(), rmthelp(), shell();
+  int	pwd(), makedir(), removedir();
++ int	setunix();							/*RBJ*/
+  
+  char	appendhelp[] =	"append to a file";
+  char	asciihelp[] =	"set ascii transfer type";
+***************
+*** 26,31
+  char	connecthelp[] =	"connect to remote tftp";
+  char	deletehelp[] =	"delete remote file";
+  char	debughelp[] =	"toggle/set debugging mode";
+  char	dirhelp[] =	"list contents of remote directory";
+  char	disconhelp[] =	"terminate ftp session";
+  char	formhelp[] =	"set file transfer format";
+
+--- 27,33 -----
+  char	connecthelp[] =	"connect to remote tftp";
+  char	deletehelp[] =	"delete remote file";
+  char	debughelp[] =	"toggle/set debugging mode";
++ char	drhelp[] =	"list RECURSIVELY remote directory";		/*RBJ*/
+  char	dirhelp[] =	"list contents of remote directory";
+  char	disconhelp[] =	"terminate ftp session";
+  char	formhelp[] =	"set file transfer format";
+***************
+*** 33,38
+  char	hashhelp[] =	"toggle printing `#' for each buffer transferred";
+  char	helphelp[] =	"print local help information";
+  char	lcdhelp[] =	"change local working directory";
+  char	lshelp[] =	"nlist contents of remote directory";
+  char	mdeletehelp[] =	"delete multiple files";
+  char	mdirhelp[] =	"list contents of multiple remote directories";
+
+--- 35,41 -----
+  char	hashhelp[] =	"toggle printing `#' for each buffer transferred";
+  char	helphelp[] =	"print local help information";
+  char	lcdhelp[] =	"change local working directory";
++ char	lrhelp[] =	"nlist RECURSIVELY remote directory";		/*RBJ*/
+  char	lshelp[] =	"nlist contents of remote directory";
+  char	mdeletehelp[] =	"delete multiple files";
+  char	mdirhelp[] =	"list contents of multiple remote directories";
+***************
+*** 57,62
+  char	tenexhelp[] =	"set tenex file transfer type";
+  char	tracehelp[] =	"toggle packet tracing";
+  char	typehelp[] =	"set file transfer type";
+  char	userhelp[] =	"send new user information";
+  char	verbosehelp[] =	"toggle verbose mode";
+  
+
+--- 60,66 -----
+  char	tenexhelp[] =	"set tenex file transfer type";
+  char	tracehelp[] =	"toggle packet tracing";
+  char	typehelp[] =	"set file transfer type";
++ char	unixhelp[] =	"toggle UNIX directory mode";			/*RBJ*/
+  char	userhelp[] =	"send new user information";
+  char	verbosehelp[] =	"toggle verbose mode";
+  
+***************
+*** 71,76
+  	{ "close",	disconhelp,	0,	1,	disconnect },
+  	{ "delete",	deletehelp,	0,	1,	delete },
+  	{ "debug",	debughelp,	0,	0,	setdebug },
+  	{ "dir",	dirhelp,	1,	1,	ls },
+  	{ "form",	formhelp,	0,	1,	setform },
+  	{ "get",	receivehelp,	1,	1,	get },
+
+--- 75,81 -----
+  	{ "close",	disconhelp,	0,	1,	disconnect },
+  	{ "delete",	deletehelp,	0,	1,	delete },
+  	{ "debug",	debughelp,	0,	0,	setdebug },
++ 	{ "dr",		drhelp,		1,	1,	ls },		/*RBJ*/
+  	{ "dir",	dirhelp,	1,	1,	ls },
+  	{ "form",	formhelp,	0,	1,	setform },
+  	{ "get",	receivehelp,	1,	1,	get },
+***************
+*** 78,83
+  	{ "hash",	hashhelp,	0,	0,	sethash },
+  	{ "help",	helphelp,	0,	0,	help },
+  	{ "lcd",	lcdhelp,	0,	0,	lcd },
+  	{ "ls",		lshelp,		1,	1,	ls },
+  	{ "mdelete",	mdeletehelp,	1,	1,	mdelete },
+  	{ "mdir",	mdirhelp,	1,	1,	mls },
+
+--- 83,89 -----
+  	{ "hash",	hashhelp,	0,	0,	sethash },
+  	{ "help",	helphelp,	0,	0,	help },
+  	{ "lcd",	lcdhelp,	0,	0,	lcd },
++ 	{ "lr",		lrhelp,		1,	1,	ls },		/*RBJ*/
+  	{ "ls",		lshelp,		1,	1,	ls },
+  	{ "mdelete",	mdeletehelp,	1,	1,	mdelete },
+  	{ "mdir",	mdirhelp,	1,	1,	mls },
+***************
+*** 103,108
+  	{ "tenex",	tenexhelp,	0,	1,	settenex },
+  	{ "trace",	tracehelp,	0,	0,	settrace },
+  	{ "type",	typehelp,	0,	1,	settype },
+  	{ "user",	userhelp,	0,	1,	user },
+  	{ "verbose",	verbosehelp,	0,	0,	setverbose },
+  	{ "?",		helphelp,	0,	0,	help },
+
+--- 109,115 -----
+  	{ "tenex",	tenexhelp,	0,	1,	settenex },
+  	{ "trace",	tracehelp,	0,	0,	settrace },
+  	{ "type",	typehelp,	0,	1,	settype },
++ 	{ "unix",	unixhelp,	0,	0,	setunix },	/*RBJ*/
+  	{ "user",	userhelp,	0,	1,	user },
+  	{ "verbose",	verbosehelp,	0,	0,	setverbose },
+  	{ "?",		helphelp,	0,	0,	help },
+@//E*O*F cmdtab.c.diff//
+chmod u=rw,g=rw,o= cmdtab.c.diff
+ 
+echo x - ftp_var.h.diff
+sed 's/^@//' > "ftp_var.h.diff" <<'@//E*O*F ftp_var.h.diff//'
+*** /usr/src/ucb/ftp/ftp_var.h	Wed Jul 27 00:34:48 1983
+--- ftp_var.h	Mon Jul 28 20:05:28 1986
+***************
+*** 16,21
+  int	interactive;		/* interactively prompt on m* cmds */
+  int	debug;			/* debugging level */
+  int	bell;			/* ring bell on cmd completion */
+  int	doglob;			/* glob local file names */
+  int	autologin;		/* establish user account on connection */
+  
+
+--- 16,22 -----
+  int	interactive;		/* interactively prompt on m* cmds */
+  int	debug;			/* debugging level */
+  int	bell;			/* ring bell on cmd completion */
++ int	udir;			/* UNIX directory mode */		/*RBJ*/
+  int	doglob;			/* glob local file names */
+  int	autologin;		/* establish user account on connection */
+  
+@//E*O*F ftp_var.h.diff//
+chmod u=rw,g=rw,o= ftp_var.h.diff
+ 
+echo Inspecting for damage in transit...
+temp=/tmp/shar$$; dtemp=/tmp/.shar$$
+trap "rm -f $temp $dtemp; exit" 0 1 2 3 15
+cat > $temp <<\!!!
+     88    366   2890 cmds.c.diff
+    121    660   4358 cmdtab.c.diff
+     19    111    689 ftp_var.h.diff
+    228   1137   7937 total
+!!!
+wc  cmds.c.diff cmdtab.c.diff ftp_var.h.diff | sed 's=[^ ]*/==' | diff -b $temp - >$dtemp
+if [ -s $dtemp ]
+then echo "Ouch [diff of wc output]:" ; cat $dtemp
+else echo "No problems found."
+fi
+exit 0

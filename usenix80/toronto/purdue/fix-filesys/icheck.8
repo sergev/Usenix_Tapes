@@ -1,0 +1,138 @@
+.th ICHECK VIII Feb/77
+.sh NAME
+icheck \*- file system storage consistency check
+.sh SYNOPSIS
+.bd icheck
+[
+.bd \*-q
+]
+[
+.bd \*-r
+]
+[
+.bd \*-s
+]  [
+.bd \*-b
+numbers ]
+[ filesystem ]
+.sh DESCRIPTION
+.it Icheck
+examines a file system,
+builds a bit map of used blocks,
+and compares this bit map against
+the free list maintained on the file system.
+If the file system is not specified,
+a set of default file systems
+is checked.
+The normal output of
+.it icheck
+includes a report of
+.s3
+.lp +4 0
+The number of blocks missing; i.e. not in any file
+nor in the free list,
+.lp +4 0
+The number of special files,
+.lp +4 0
+The total number of files,
+.lp +4 0
+The number of large and huge files,
+.lp +4 0
+The number of directories,
+.lp +4 0
+The number of indirect blocks,
+and the number of double-indirect blocks in huge files,
+.lp +4 0
+The number of blocks used in files,
+.lp +4 0
+The number of free blocks.
+.s3
+.i0
+The
+.bd \*-q
+option causes no output to be printed unless something is wrong.
+.s3
+The
+.bd \*-r
+option causes repairs to be attempted.
+Repairs are identical to 
+.it icheck
+.bd \*-s
+and take place only for a bad free list, or blocks missing.
+No other repairs are attempted.
+.s3
+The
+.bd \*-s
+flag causes
+.it icheck
+to ignore the actual free list and reconstruct a new one
+by rewriting the super-block of the file system.
+The file system should be dismounted while this is done;
+if this is not possible (for example if
+the root file system has to be salvaged)
+care should be taken that the system is quiescent and that
+it is rebooted immediately afterwards so that the old, bad in-core
+copy of the super-block will not continue to be used.
+Notice also that
+the words in the super-block
+which indicate the size of the free list and of the
+i-list are believed.
+If the super-block has been curdled
+these words will have to be patched.
+The
+.bd \*-s
+flag
+causes the normal output reports to be suppressed.
+.s3
+Following the
+.bd \-b
+flag is a list of block numbers;
+whenever any of the named blocks turns up in a file,
+a diagnostic is produced.
+.s3
+.it Icheck
+is faster if the raw version of the special file is used,
+since it reads the i-list many blocks at a time.
+.sh FILES
+Currently, /dev/rrk2
+and /dev/rrp0
+are the default file systems.
+.sh "SEE ALSO"
+dcheck (VIII), ncheck (VIII), bootchk (VIII),
+fs (V), clri (VIII), restor(VIII)
+.sh DIAGNOSTICS
+For duplicate blocks
+and bad blocks (which lie outside the file system)
+.it icheck
+announces the difficulty, the i-number, and the kind of block involved.
+If a read error is encountered,
+the block number of the bad block is printed and
+.it icheck
+considers it to contain 0.
+``Bad freeblock'' means that
+a block number outside the available space was encountered in the free list.
+``\fIn\fR dups in free''
+means that \fIn\fR blocks were found in the free list which
+duplicate blocks either in some file or in the earlier part of the free list.
+``Size mismatch'' indicates that the size stored in the inode does not
+correspond to the size implied by the last actual block in the file.
+This is not a serious problem, but it does indicate that something bad
+has happened to the inode in question.
+Also, some programs (e.g. "dump") believe the inode size, so this should
+be looked into if it happens.
+.s3
+.it Icheck
+returns 3 bits of status:
+01 if a minor problem is found (or a major problem is fixed),
+02 if a major problem is found, and 04 if some disastrous error occured.
+.sh "U of T INFO"
+Mike Tilson provided the -q and -r options, and status return,
+as well as the ``size mismatch'' diagnostic.
+.sh BUGS
+Since
+.it icheck
+is inherently two-pass in nature, extraneous diagnostics
+may be produced if applied to active file systems.
+.br
+It believes even preposterous super-blocks and
+consequently can get core images.

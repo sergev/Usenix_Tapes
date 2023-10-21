@@ -1,0 +1,640 @@
+*** man.c.orig	Thu Apr  3 12:15:08 1986
+--- man.c	Fri Dec 20 11:54:43 1985
+***************
+*** 5,13 ****
+  #include <stdio.h>
+  #include <ctype.h>
+  #include <sgtty.h>
+! #include <sys/types.h>
+  #include <sys/stat.h>
+- #include <signal.h>
+  /*
+   * man
+   * link also to apropos and whatis
+--- 5,12 ----
+  #include <stdio.h>
+  #include <ctype.h>
+  #include <sgtty.h>
+! #include <sys/param.h>
+  #include <sys/stat.h>
+  /*
+   * man
+   * link also to apropos and whatis
+***************
+*** 14,26 ****
+   * This version uses more for underlining and paging.
+   */
+  #define	MANDIR	"/usr/man"		/* this is deeply embedded */
+  #define	NROFFCAT "nroff -h -man"	/* for nroffing to cat file */
+  #define	NROFF	"nroff -man"		/* for nroffing to tty */
+! #define	MORE	"more -s"		/* paging filter */
+! #define	CAT	"cat -s"		/* for '-' opt (no more) */
+  
+  #define TROFFCMD \
+! "itroff -man %s"
+  #ifdef notdef
+  "troff -t -man /usr/lib/tmac/tmac.vcat %s | /usr/lib/rvsort |/usr/ucb/vpr -t"
+  #endif
+--- 13,27 ----
+   * This version uses more for underlining and paging.
+   */
+  #define	MANDIR	"/usr/man"		/* this is deeply embedded */
++ #define WHATIS "/usr/lib/whatis"	/* whatis database */
+  #define	NROFFCAT "nroff -h -man"	/* for nroffing to cat file */
+  #define	NROFF	"nroff -man"		/* for nroffing to tty */
+! #define	MORE	"more"			/* paging filter */
+! #define	CAT	"cat"			/* for '-' opt (no more) */
+  
+  #define TROFFCMD \
+! "ditroff -man %s"
+! 
+  #ifdef notdef
+  "troff -t -man /usr/lib/tmac/tmac.vcat %s | /usr/lib/rvsort |/usr/ucb/vpr -t"
+  #endif
+***************
+*** 29,45 ****
+  #define	TROFFCMD "troff -man %s"
+  */
+  
+! #define	ALLSECT	"1nl6823457po"	/* order to look through sections */
+! #define	SECT1	"1nlo"		/* sections to look at if 1 is specified */
+! #define	SUBSEC1	"mcgprv"	/* subsections to try in section 1 */
+! #define	SUBSEC2	"v"
+! #define	SUBSEC3	"jxmsnvcf"
+! #define	SUBSEC4	"pfvsn"
+! #define	SUBSEC8	"vc"
+  
+  int	nomore;
+  int	cflag;
+! char	*manpath = "/usr/man";
+  char	*strcpy();
+  char	*strcat();
+  char	*trim();
+--- 30,63 ----
+  #define	TROFFCMD "troff -man %s"
+  */
+  
+! #define	ALLSECT	"16823457"	/* order to look through sections */
+! #define	SECTS	"nlxpo"		/* additional sections to look at if 1-8 is specified */
+! #define	SUBSEC1	"mcgprvx"	/* subsections to try in section 1 */
+! #define	SUBSEC2	"pvx"
+! #define	SUBSEC3	"jxmsnpvcfx"
+! #define	SUBSEC4	"pfvsnx"
+! #define	SUBSEC8	"vcpx"
+  
+  int	nomore;
++ int	isremote;
+  int	cflag;
+! char	manpath[MAXPATHLEN] = MANDIR;
+! char	whatispath[MAXPATHLEN] = WHATIS;
+! char	*machine = NULL;
+! #if vax
+! #define OURMACHINE	"vax"
+! #else
+! #if sun
+! #define OURMACHINE	"sun"
+! #else
+! #if ns32000
+! #define OURMACHINE	"b8k"
+! #else
+! #define OURMACHINE	"vax"
+! #endif
+! #endif
+! #endif
+! #define DOMAIN ".CS.UTEXAS.EDU"
+  char	*strcpy();
+  char	*strcat();
+  char	*trim();
+***************
+*** 55,61 ****
+--- 73,121 ----
+  	int argc;
+  	char *argv[];
+  {
++ 	char *command, *dot, *rindex(), *index();
+  
++ 	/* check how we are called and append suffix to
++ 	   manual path.  This enables an alternate manual
++ 	   set to be used.  We also have to change the 
++ 	   location of the whatis database by also appending
++ 	   the suffix.  I.e for a sun manual set the path is
++ 	   set to MANDIR.sun and whatis is WHATIS.sun.
++ 	   But don't append .local if called as man.local.
++ 	 */
++ 
++ 	if ((command = rindex(*argv, '/')) != NULL)
++ 		command++;
++ 	else
++ 		command = *argv;
++ 	if ((dot = index(command, '.')) != NULL) {
++ 		*dot++ = '\0';
++ 		if (strcmp(dot, "local") != 0)
++ 			dot = NULL;
++ 		else
++ 			machine = dot;
++ 	}
++ 	if (argv[1] != NULL && strcmp(argv[1], "-m") == 0
++ 	&& argv[2] != NULL) {
++ 		argc--, argv++;
++ 		argc--, argv++;
++ 		machine = *argv;
++ 	}
++ 	if (machine != NULL && strcmp(machine, OURMACHINE) != 0) {
++ 		dot = manpath + strlen(manpath);
++ 		strcat (dot, ".");
++ 		strcat (dot, machine);
++ 		strcat (whatispath, dot);
++ 	}
++ 	{
++ 		struct stat stbuf;
++ 		if (fstat(0, &stbuf) != -1
++ 		&& ((stbuf.st_mode&S_IFMT) == S_IFSOCK
++ 		   || (stbuf.st_mode&S_IFMT) == 0))
++ 			isremote++;
++ 	}
++ 	if (chdir(manpath) < 0 || (chdir("man1") < 0 && chdir("cat1") < 0))
++ 		remoteman(command, ++argv);
+  	if (signal(SIGINT, SIG_IGN) == SIG_DFL) {
+  		signal(SIGINT, remove);
+  		signal(SIGQUIT, remove);
+***************
+*** 62,77 ****
+  		signal(SIGTERM, remove);
+  	}
+  	umask(0);
+! 	if (strcmp(argv[0], "apropos") == 0) {
+  		apropos(argc-1, argv+1);
+  		exit(0);
+  	}
+! 	if (strcmp(argv[0], "whatis") == 0) {
+  		whatis(argc-1, argv+1);
+  		exit(0);
+  	}
+  	if (argc <= 1) {
+! 		fprintf(stderr, "Usage: man [ section ] name ...\n");
+  		exit(1);
+  	}
+  	argc--, argv++;
+--- 122,137 ----
+  		signal(SIGTERM, remove);
+  	}
+  	umask(0);
+! 	if (strcmp(command, "apropos") == 0) {
+  		apropos(argc-1, argv+1);
+  		exit(0);
+  	}
+! 	if (strcmp(command, "whatis") == 0) {
+  		whatis(argc-1, argv+1);
+  		exit(0);
+  	}
+  	if (argc <= 1) {
+! 	fprintf(stderr, "Usage: man [ -m machine ] [ section ] name ...\n");
+  		exit(1);
+  	}
+  	argc--, argv++;
+***************
+*** 96,102 ****
+  
+  		case 'P':
+  			argc--, argv++;
+! 			manpath = *argv;
+  			break;
+  		}
+  		argc--, argv++;
+--- 156,162 ----
+  
+  		case 'P':
+  			argc--, argv++;
+! 			strcpy(manpath, *argv);
+  			break;
+  		}
+  		argc--, argv++;
+***************
+*** 105,111 ****
+  		fprintf(stderr, "Can't chdir to %s.\n", manpath);
+  		exit(1);
+  	}
+! 	if (troffit == 0 && nomore == 0 && !isatty(1))
+  		nomore++;
+  	section = 0;
+  	do {
+--- 165,171 ----
+  		fprintf(stderr, "Can't chdir to %s.\n", manpath);
+  		exit(1);
+  	}
+! 	if (isremote == 0 && troffit == 0 && nomore == 0 && !isatty(1))
+  		nomore++;
+  	section = 0;
+  	do {
+***************
+*** 132,174 ****
+  			}
+  			continue;
+  		}
+! 		manual(section, argv[0]);
+  		argc--, argv++;
+  	} while (argc > 0);
+  	exit(0);
+  }
+  
+! manual(sec, name)
+! 	char sec;
+! 	char *name;
+  {
+! 	char section = sec;
+! 	char work[100], work2[100], cmdbuf[150];
+  	int ss;
+! 	struct stat stbuf, stbuf2;
+  	int last;
+! 	char *sp = ALLSECT;
+  
+  	strcpy(work, "manx/");
+  	strcat(work, name);
+  	strcat(work, ".x");
+  	last = strlen(work) - 1;
+! 	if (section == '1') {
+! 		sp = SECT1;
+! 		section = 0;
+  	}
+! 	if (section == 0) {
+! 		ss = 0;
+! 		for (section = *sp++; section; section = *sp++) {
+! 			work[3] = section;
+  			work[last] = section;
+! 			work[last+1] = 0;
+  			work[last+2] = 0;
+  			if (stat(work, &stbuf) >= 0)
+! 				break;
+! 			if (work[last] >= '1' && work[last] <= '8') {
+  				char *cp;
+- search:
+  				switch (work[last]) {
+  				case '1': cp = SUBSEC1; break;
+  				case '2': cp = SUBSEC2; break;
+--- 192,263 ----
+  			}
+  			continue;
+  		}
+! 		manual(section, subsec, argv[0]);
+  		argc--, argv++;
+  	} while (argc > 0);
+  	exit(0);
+  }
+  
+! manual(sec, subsec, name)
+! char sec;
+! char subsec;
+! char *name;
+  {
+! 	char work[100], work2[100], workZ[100], cmdbuf[150];
+! 	char sects[100], lsects[100];
+! 	char section;
+  	int ss;
+! 	struct stat stbuf, stbuf2, stbufZ;
+  	int last;
+! 	char *sp, *lsp, *secp;
+! 	extern char *index();
+  
+  	strcpy(work, "manx/");
+  	strcat(work, name);
+  	strcat(work, ".x");
+  	last = strlen(work) - 1;
+! 
+! 	/* set up sections to search */
+! 	if (sec == '\0') {
+! 		strcpy(sects, ALLSECT);
+! 		sp = sects;
+! 		strcpy(lsects, SECTS);	/* special sections */
+  	}
+! 	else {
+! 		sects[0] = sec;
+! 		sects[1] = '\0';
+! 		sp = sects;
+! 		if (sec >= '1' && sec <= '8')
+! 			strcpy(lsects, SECTS);	/* special sections */
+! 		else
+! 			strcpy(lsects, "x");	/* only search in specified sectin */
+! 	} 
+! 
+! 	/* do the search */
+! 	secp = index(lsects, 'x');
+! 	ss = 0;
+! 	for (section = *sp++; section; section = *sp++) {
+! #ifdef DEBUG
+! fprintf (stderr, "section = %c\n", section);
+! #endif
+! 		*secp = section;
+! 		/* special section searching 
+! 		   this will search through the specified section plus all
+! 		   the sections in lsect
+! 		   Note that the 'x' entry in lsect is replaced with
+! 		   the specific main section to search */
+! 		for (lsp = lsects; *lsp != NULL; lsp++) {
+! 			work[3] = *lsp;
+  			work[last] = section;
+! 			work[last+1] = subsec;
+  			work[last+2] = 0;
++ #ifdef DEBUG
++ fprintf(stderr, "work - %s\n", work);
++ #endif
+  			if (stat(work, &stbuf) >= 0)
+! 				goto found;
+! 			if (subsec == '\0') { 
+  				char *cp;
+  				switch (work[last]) {
+  				case '1': cp = SUBSEC1; break;
+  				case '2': cp = SUBSEC2; break;
+***************
+*** 176,182 ****
+  				case '4': cp = SUBSEC4; break;
+  				case '8': cp = SUBSEC8; break;
+  				}
+! 				while (*cp) {
+  					work[last+1] = *cp++;
+  					if (stat(work, &stbuf) >= 0) {
+  						ss = work[last+1];
+--- 265,271 ----
+  				case '4': cp = SUBSEC4; break;
+  				case '8': cp = SUBSEC8; break;
+  				}
+! 				while (cp && *cp) {
+  					work[last+1] = *cp++;
+  					if (stat(work, &stbuf) >= 0) {
+  						ss = work[last+1];
+***************
+*** 187,216 ****
+  					work[last+1] = 0;
+  			}
+  		}
+- 		if (section == 0) {
+- 			if (sec == 0)
+- 				printf("No manual entry for %s.\n", name);
+- 			else
+- 				printf("No entry for %s in section %c of the manual.\n", name, sec);
+- 			return;
+- 		}
+- 	} else {
+- 		work[3] = section;
+- 		work[last] = section;
+- 		work[last+1] = subsec;
+- 		work[last+2] = 0;
+- 		if (stat(work, &stbuf) < 0) {
+- 			if ((section >= '1' && section <= '8') && subsec == 0) {
+- 				sp = "\0";
+- 				goto search;
+- 			}
+- 			printf("No entry for %s in section %c", name, section);
+- 			if (subsec)
+- 				putchar(subsec);
+- 			printf(" of the manual.\n");
+- 			return;
+- 		}
+  	}
+  found:
+  	if (troffit)
+  		troff(work);
+--- 276,291 ----
+  					work[last+1] = 0;
+  			}
+  		}
+  	}
++ 	if (sec == 0)
++ 		printf("No manual entry for %s.\n", name);
++ 	else {
++ 		printf("No entry for %s in section %c", name, sec);
++ 		if (subsec != '\0')
++ 			putchar(subsec);
++ 		printf(" of the manual.\n");
++ 	}
++ 	return;
+  found:
+  	if (troffit)
+  		troff(work);
+***************
+*** 229,235 ****
+  				register char *cp = abuf+strlen(".so ");
+  				char *dp;
+  
+! 				while (*cp && *cp != '\n')
+  					cp++;
+  				*cp = 0;
+  				while (cp > abuf && *--cp != '/')
+--- 304,310 ----
+  				register char *cp = abuf+strlen(".so ");
+  				char *dp;
+  
+! 				while (cp && *cp && *cp != '\n')
+  					cp++;
+  				*cp = 0;
+  				while (cp > abuf && *--cp != '/')
+***************
+*** 254,260 ****
+  			if (stat(work2, &stbuf2) < 0)
+  				goto hardway;
+  			strcpy(work2+3, work+3);
+! 			if (stat(work2, &stbuf2) < 0 || stbuf2.st_mtime < stbuf.st_mtime) {
+  				printf("Reformatting page.  Wait...");
+  				fflush(stdout);
+  				unlink(work2);
+--- 329,346 ----
+  			if (stat(work2, &stbuf2) < 0)
+  				goto hardway;
+  			strcpy(work2+3, work+3);
+! 			strcpy(workZ, work2);
+! 			strcat(workZ, ".Z");
+! #ifdef DEBUG
+! fprintf (stderr, "%s %s %s\n", work, work2, workZ);
+! exit(0);
+! #endif
+! 			if (stat(work2, &stbuf2) >= 0) {
+! 				if (stbuf2.st_mtime > stbuf.st_mtime)
+! 					compress(work2, workZ);
+! 				unlink(work2);
+! 			}
+! 			if (stat(workZ, &stbufZ) < 0 || stbufZ.st_mtime < stbuf.st_mtime) {
+  				printf("Reformatting page.  Wait...");
+  				fflush(stdout);
+  				unlink(work2);
+***************
+*** 266,274 ****
+  					remove();
+  					/*NOTREACHED*/
+  				}
+  				printf(" done\n");
+  			}
+! 			strcpy(work, work2);
+  		}
+  hardway:
+  		nroff(work);
+--- 352,361 ----
+  					remove();
+  					/*NOTREACHED*/
+  				}
++ 				compress(work2, workZ);
+  				printf(" done\n");
+  			}
+! 			strcpy(work, workZ);
+  		}
+  hardway:
+  		nroff(work);
+***************
+*** 275,289 ****
+  	}
+  }
+  
+  nroff(cp)
+  	char *cp;
+  {
+  	char cmd[BUFSIZ];
+  
+! 	if (cp[0] == 'c')
+! 		sprintf(cmd, "%s %s", nomore? CAT : MORE, cp);
+! 	else
+! 		sprintf(cmd, nomore? "%s %s" : "%s %s|%s", NROFF, cp, MORE);
+  	system(cmd);
+  }
+  
+--- 362,466 ----
+  	}
+  }
+  
++ compress(cp, z)
++ 	char *cp, *z;
++ {
++ 	char cmdbuf[100];
++ 
++ 	printf("Compressing...");
++ 	fflush(stdout);
++ 	unlink(z);
++ 	sprintf(cmdbuf, "compress -f %s\n", cp);
++ 	if (system(cmdbuf)) {
++ 		printf(" aborted (sorry)\n");
++ 		remove();
++ 		/*NOTREACHED*/
++ 	}
++ 	printf(".");
++ 	
++ }
++ 
++ static
++ char *
++ more()
++ {
++ 	extern char *getenv();
++ 	char *more;
++ 
++ 	if ((more = getenv("PAGER")) == NULL)
++ 		more = MORE;
++ 	return(more);
++ }
++ 
++ remoteman(command, argv)
++ char *command;
++ char **argv;
++ {
++ 	char host[128];
++ 	char *args[32];
++ 	char **ap = args, **tp = &args[sizeof(args)/sizeof(args[0]) - 1];
++ 
++ 	if (machine == NULL)
++ 		machine = OURMACHINE;
++ 	(void)strcpy(host, "man.");
++ 	(void)strcat(host, machine);
++ 	(void)strcat(host, DOMAIN);
++ 	*ap++ = "client";
++ 	*ap++ = host;
++ 	*ap++ = command;
++ 	*ap++ = "-m";
++ 	*ap++ = machine;
++ 	while (*argv && ap < tp)
++ 		*ap++ = *argv++;
++ 	*ap = NULL;
++ 	if (!isremote) {
++ 		int pipefds[2], pid;
++ 		char *filter;
++ 
++ 		if (pipe(pipefds) == -1) {
++ 			perror("pipe");
++ 			exit(1);
++ 		}
++ 		switch (pid = vfork()) {
++ 		case -1:
++ 			perror("vfork");
++ 			exit(1);
++ 			break;
++ 		case 0:
++ 			dup2(pipefds[1], 1);
++ 			close(pipefds[0]);
++ 			close(pipefds[1]);
++ 			break;
++ 		default:
++ 			dup2(pipefds[0], 0);
++ 			close(pipefds[0]);
++ 			close(pipefds[1]);
++ 			filter = nomore ? CAT : more();
++ 			execlp (filter, filter, "-s", NULL);
++ 			perror(filter);
++ 			exit(1);
++ 			break;
++ 		}
++ 	}
++ 	execvp(*args, args);
++ 	perror(*args);
++ 	exit(1);
++ }
++ 
+  nroff(cp)
+  	char *cp;
+  {
+  	char cmd[BUFSIZ];
+  
+! 	if (cp[0] == 'c') {
+! 		if (isremote) {
+! 			execlp ("zcat", "zcat", cp, NULL);
+! 			perror("zcat");
+! 			exit(1);
+! 		} else
+! 			sprintf(cmd, "zcat %s | %s -s", cp, nomore? CAT:more());
+! 	} else
+! 		sprintf(cmd, nomore? "%s %s" : "%s %s|%s -s", NROFF, cp,more());
+  	system(cmd);
+  }
+  
+***************
+*** 329,336 ****
+  		fprintf(stderr, "apropos what?\n");
+  		exit(1);
+  	}
+! 	if (freopen("/usr/lib/whatis", "r", stdin) == NULL) {
+! 		perror("/usr/lib/whatis");
+  		exit (1);
+  	}
+  	gotit = (char *) calloc(1, blklen(argv));
+--- 506,513 ----
+  		fprintf(stderr, "apropos what?\n");
+  		exit(1);
+  	}
+! 	if (freopen(whatispath, "r", stdin) == NULL) {
+! 		perror(whatispath);
+  		exit (1);
+  	}
+  	gotit = (char *) calloc(1, blklen(argv));
+***************
+*** 410,417 ****
+  		fprintf(stderr, "whatis what?\n");
+  		exit(1);
+  	}
+! 	if (freopen("/usr/lib/whatis", "r", stdin) == NULL) {
+! 		perror("/usr/lib/whatis");
+  		exit (1);
+  	}
+  	for (avp = argv; *avp; avp++)
+--- 587,594 ----
+  		fprintf(stderr, "whatis what?\n");
+  		exit(1);
+  	}
+! 	if (freopen(whatispath, "r", stdin) == NULL) {
+! 		perror(whatispath);
+  		exit (1);
+  	}
+  	for (avp = argv; *avp; avp++)

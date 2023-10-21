@@ -1,0 +1,40 @@
+--------------------------------------
+
+1) New RP04 disk layout (new tables in /usr/sys/dev/hp.c)
+   - A new filesystem, hp8, has been added to hold /lib when
+     the root is moved to the rs04.  It is 4 cyl long (1672)
+     blocks and the space was stolen from hp6.  Hp5 (/deadstart)
+     was increased from 1 to 2 cyl (836 blocks).  This caused
+     the positions of hp4, hp5, hp6, hp7, and hp8 to be shuffled
+     around.
+
+   - The new RP04 disk layout as follows:
+
+cylinders  device #of blks fsize  isize primary usage
+---------  ------ -------- -----  ----- ----------------------------------
+ 0 - 1     hp5       836      836     9 SYSTEM BOOT-UP FILES (/deadstart)
+ 2 - 30    hp4     12122    12122   --- Scratch and backup swap (if no rs04)
+ 2 - 24    hp6      7942     7942   --- Subset of hp4 (see note 1)
+21 - 30    hp7      4180     4180   --- Subset of hp4 and backup swap dev
+31 - 34    hp8      1672     1672   608 /lib when root is on RS04
+35 - 191   hp1     65535    65500*  606 General user files (/usr)
+192- 203   hp0      5016     5000*  104 Root filesystem (/)
+204- 360   hp2     65535    65500*  606 Large users' files (/usr2)
+361- 410   hp3     20900    20900   331 Sources (/src)
+
+notes:
+  1  hp6 and hp7 subdivide hp4 into two filesystems.  If either hp6
+     and/or hp7 is inuse, hp4 must not be touched and vice versa as
+     these are overlapping filesystems.  In case of RS04 swapping
+     disk failure, file "/deadstart/no-rs04-unix" may be booted up.
+     This version of unix will use hp7 as a swapping device and will
+     destroy any filesystem on that device.
+
+  *  These filesystems have been rounded back to the previous multiple
+     of 100 blocks inorder to facilitate easy backup/copying via
+     programs such as DD(I).  This is the number of blocks that must
+     be specified when a filesystem is created via mkfs (e.g.
+     /etc/mkfs /dev/hp2 65500).
+
+     All numbers are decimal.  Fsize and Isize are in disk blocks (256 words).
+--ghg

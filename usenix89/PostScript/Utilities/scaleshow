@@ -1,0 +1,115 @@
+#! /bin/sh
+
+# This is a PostScript program wrapped as a shell script.
+
+# copyright 1987 by Peter Greenberg. You may use, copy, or redistribute this
+# work freely so long as this message and the copyright message are retained.
+
+# comments/bug fixes to:
+# Peter Greenberg
+# Swarthmore College
+# Swarthmore, PA 19081
+# (215) 328-8610
+# UUCP: ...!seismo!bpa!swatsun!greenber
+# ARPA: swatsun!greenber@seismo.CSS.GOV
+
+# Usage: scaleshow ShapeString ShapeFont Size Lines 
+# The program will bomb out with an appropriate error message if ther are not
+# exactly four arguments. Otherwise no checking is done. Size must be a
+# real and Lines and integer. If they are not, a PostScript error will result.
+
+# CHANGE THESE LINES TO USE ANTOHER SPOOLER
+spooler=/usr/ucb/lpr
+spoolopts=-PPostScript
+
+emit_header() {
+cat <<End-Of-Header
+%!
+/String ($1) def
+/ShapeFont /$2 def
+/Size $3 def
+/Lines $4 def
+End-Of-Header
+}
+
+emit_main_stuff() {
+cat <<End-Of-Main-Stuff
+/SetFont 
+{
+	findfont Size scalefont setfont
+} def
+
+/CenterShow {
+	/Str exch def
+	/Ycoord currentpoint exch pop def 
+	Right Left sub Str stringwidth pop sub 
+	2 div Left add Ycoord moveto
+	Str show
+} def
+
+/CenterShowPlace { %string     returns proper x-coord for center show
+	/Str exch def
+	Right Left sub Str stringwidth pop sub 
+	2 div Left add 
+} def
+	
+/DrawBox { % boxllx boxlly boxurx boxury
+	/boxury exch def
+	/boxurx exch def
+	/boxlly exch def
+	/boxllx exch def
+	boxllx boxlly moveto
+	boxllx boxury lineto
+	boxurx boxury lineto
+	boxurx boxlly lineto
+	closepath
+	boxurx boxury moveto
+} def
+	
+/HorrizontalScaleShow { % numscales string
+	gsave
+	true charpath closepath flattenpath clip pathbbox
+	/ury exch def
+	/urx exch def
+	/lly exch def
+	/llx exch def
+	newpath
+	1 exch div /Grade exch def
+	/Height ury lly sub def
+	/Incr Grade Height mul def
+	/Oldury lly def
+	
+	0 Grade 1 {
+		setgray
+		llx Oldury urx Oldury Incr add dup
+		/Oldury exch def
+		DrawBox
+		fill
+	} for
+	grestore
+} def	
+	
+/inch { 72 mul } def
+
+/Right 7 inch def
+/Left 1 inch def
+/Top 9.5 inch def
+/Bottom 0.5 inch def
+
+
+0 Top Bottom sub 2 div Bottom add moveto
+ShapeFont SetFont
+Lines String dup CenterShowPlace 3 inch moveto
+HorrizontalScaleShow
+
+showpage
+End-Of-Main-Stuff
+}
+
+case $# in
+	4) ;;
+	*) echo Usage: ; echo $0 ShapeString ShapeFont Size Lines; exit 1 ;;
+esac
+
+(emit_header $@ ; emit_main_stuff) | $spooler $spoolopts
+exit 0

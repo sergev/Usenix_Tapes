@@ -1,0 +1,47 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84 SMI; site sun.uucp
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!decwrl!sun!guy
+From: guy@sun.uucp (Guy Harris)
+Newsgroups: net.sources.bugs,net.bugs.usg
+Subject: Re: bugs in cforth
+Message-ID: <2253@sun.UUCP>
+Date: 1 Jun 85 05:52:44 GMT
+Date-Received: 5 Jun 85 08:27:12 GMT
+References: <139@python.UUCP>
+Distribution: net
+Organization: Sun Microsystems, Inc.
+Lines: 32
+Xref: plus5 net.sources.bugs:364 net.bugs.usg:169
+
+>    Found a couple of small things while getting the code
+> up and running on our Pyramid:
+> 
+>  - Getblocks() wasn't recognizing the existance of
+>    forth.block because fopen(blockfile,"a+") didn't
+>    leave the pointer at the end of the file.  Fixed
+>    it by inserting an fseek(blockfile,0L,2) after
+>    the open.  This is definitely a Pyramid problem,
+>    but I couldn't recreate it in my own tests.
+
+If you do an 'fopen(..., "a+")' in the "att" universe on a Pyramid (or in
+any other circumstance where you'd be using the System V standard I/O
+library), the "fopen" doesn't do an "lseek" to the end - it just sets the
+"forced append" bit on the underlying file descriptor, so that writes will
+get stuck at the end *but* reads will read from the beginning.  Moral of the
+story: if you want to have your code run on System V and non-System V
+systems (V7 and S3 didn't do the "forced append" bit, either), *only* use
+"a", not "a+", and only use that if you're going to append to a log file.
+If you want to open a file for reading and writing without truncation, use
+"open" and "fdopen".
+
+Now for the S5 bug - why does it do the "lseek" when opening in "a" mode but
+not in "a+" mode?  The "lseek" seems semi-pointless when opening in "a"
+mode, since the forced-append mode guarantees that *all* writes go to the
+end of the file, regardless of what seeks you do; you may argue that doing
+the "lseek" makes an "ftell" return an offset indicating the end of the file
+but an "ftell" on such a stream isn't very useful anyway, since all writes
+have an implied seek to the end of the file?  On the other hand, doing the
+"lseek" when you are opening "a+" makes it work more like pre-S5 versions of
+the standard I/O library.
+
+	Guy Harris

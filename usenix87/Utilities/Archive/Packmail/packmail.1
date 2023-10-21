@@ -1,0 +1,140 @@
+.TH PACKMAIL 1 01/29/85
+.UC 4
+.SH NAME
+packmail \- Package a set of files for easy mailing
+.SH SYNOPSIS
+packmail [-nq] [-{host}<value>] 
+.I files
+.SH DESCRIPTION
+.PP
+.I Packmail
+packages a set of files into a smaller number of larger files,
+each smaller than a given size. The resulting files are shell scripts
+(for the
+.I sh
+command) which when run though the shell create the same files (with
+default permission bits).  
+Options allow the user to set
+.I maxsize
+which determines the file length and
+.I outputname
+which is the name of the output shell scripts.
+.PP
+If 
+.I maxchars
+is larger than the total size of the files, then only one file,
+.I outputname
+is created, otherwise, several files,
+.I outputname.01, 
+.I outputname.02, ...
+.I outputname.nn 
+are created.  Since First Fit Decreasing (FFD) bin packing is used,
+the number of mail files used is within 22% of the theoretical limit
+(Garey and Johnson, 1979).
+.PP
+Each file is self contained, 
+.I i.e. 
+no source file is split across mail files.  Files larger than 
+.I maxchars
+are copied into their own mail files.
+No mapping of control characters is done (see uuencode(1)), but an 'X'
+is prepended to each file, and the shell script removes these at the
+receiving end.  This is to prevent troubles with dots in column one
+(for example,
+.I Troff 
+files have dots in column one) which can confuse some mail servers.
+.SH OPTIONS
+.TP
+.B -n
+.I check
+option, doesn't create the output files.  Just gives information on how
+many files the packaging will require and what the output files sizes 
+will be. The default is to create the output.
+.TP
+.B -q
+.I quick
+option, specifies that approximate file sizes are to be used.  
+Since the packaging overhead for a file is dependent on the
+number of lines in that file, the file is read once to determine its
+line count and (if output is generated) once again to do the actual
+packaging.  The -q option ignores the packaging overhead and saves one of
+these two file read operations.  The resulting files will be somewhat
+larger than the limit specified (by 2 to 3 percent). The default is to
+use accurate file sizes.
+.TP
+.B -h
+.I header
+option, specifies a file containing header text to be inserted at the
+front of each distribution file. For example:
+.sp
+	packmail -h'head.txt' f1 f2 f3 f4
+.sp
+specifies that the file
+.I head.txt
+contains header information for packaging the four files listed.
+The default is no header information.
+.TP
+.B -o
+.I outputname
+option, specifies the name of the output file(s).  For example
+.sp
+	packmail -o'dist' f1 f2 f3 f4
+.sp
+specifies that the files are to be packaged in shell archives called
+.I
+dist.01, dist.02, ...
+.sp
+The default is "pack.out".
+.TP
+.B -s
+.I maxsize
+option, specifies the maximum size of each archive file.
+For example:
+.sp
+	packmail -s10000 f1 f2 f3 f4
+.sp
+specifies that files f1 f2 f3 and f4 are to be packed into files not
+more than 10,000 characters each (although no file will be split in
+half, so if f1 were larger than 10,000 characters long it would be put
+in one file by itself).  The default is 31,000 characters, since some
+local networks have limits of 32,767 bytes, and we want to leave 1767
+bytes for mail headers.  Remember that some computers have 16 bit
+words, so files longer than 65,535 will break many site's mailers.
+.TP
+.B -t
+.I title
+option, specifies a title which will be echoed when each file is
+run through the 'sh' command at the receiving end.  For example:
+.sp
+	packmail -t'Junk file mailing' f1 f2 f3 f4
+.sp
+Would give the user at the other end the following output:
+.sp
+	Start of Junk file mailing, part XX of XX:
+.br
+	...
+.br
+	Part XX of Junk file mailing complete.
+.PP
+.SH SEE ALSO
+unshar(1)
+.SH BUGS
+.PP
+The number of input files is limited by maximum size of exec args.  There
+is also a compile time limit of 512 files.  No escaping of control
+characters is performed, and the 'X's are put in column 1 whether they
+are needed or not. Files not ending with newlines have trailing
+newlines added.
+.PP
+Also, since only two digits are used to number the files, there is a
+limit of 100 output files.
+.SH HISTORY
+.TP
+29-Jan-85  Michael Mauldin (mlm) at CMU
+Added header and title options.
+.TP
+27-Jun-83 Michael Mauldin (mlm) at CMU
+Modified to use FFD bin packing algorithm.
+.TP
+20-Jun-83 Michael Mauldin (mlm) at CMU
+Created.

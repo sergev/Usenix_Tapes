@@ -1,0 +1,2918 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA00628; Sun, 21 Dec 86 03:28:56 CST
+Path: plus5!wucs1!cuae2!clyde!rutgers!husc6!seismo!rick
+From: seismo.CSS.GOV!rick (Rick Adams)
+Newsgroups: news.software.b
+Subject: Patch #2 for 2.11 news src
+Message-Id: <43028@beno.seismo.CSS.GOV>
+Date: 18 Dec 86 21:01:22 GMT
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 2906
+Apparently-To: hokey
+
+Description:
+	This is patch #2 for the news 2.11 source distribution. It addresses
+	the following problems:
+
+	Many small changes were made to make lint happy (ok, happier).
+	The code for HOMNAME is fixed (but still not documented).
+	rmgroup.sh now works correctly under Eunice. It also is more efficient
+	when removing lots of groups at a time.
+	checkgroups no longer has the toplevel newsgroup names hard
+	coded. It takes them from the input.
+	More fixes to make the HIDDENNET code work they way it's supposed to.
+	The rmgroup control message now works if you don't have MANUALLY
+	defined.
+	A memory allocation bug in expire was fixed.
+	Distributions of "net" are now aliased into "world".
+	New commands "l" and "L" were added to readnews/vnews. "l" list the
+	from and subject lines of unread articles. "L" does it for all
+	articles.
+	"l" in vnews nolonger redraws the screen. Use "^L" instead.
+	rnews -U no longer runs if the news system is locked.
+	The NICENESS code now works as expected.
+	Several incorrect uses of vfork were replaced with fork.
+	The list of active groups and aliases were updated, so "make update"
+	now prints more reasonable comments.
+	ndir.c was fixed so it will run on an HP9000/500 if HP9K5 is defined.
+	postnews is more rational about default posting distributions. The
+	intuited distribution must be in LIBDIR/distributions or it will
+	use "world". If the line "default foobar" appears in the distributions
+	file, it will use foobar as the default distribution instead of world.
+	virtterm now accepts line lengths >127 on machines with signed chars.
+	The 's' command in vnews now remembers the last saved filename and
+	prompts with it. You can edit the line with your erase/kill chars.
+Fix:
+	cd to the src directory and run the following through patch
+
+Index: batch.c
+Prereq: 1.17
+*** .d/batch.c	Fri Nov 21 16:04:41 1986
+--- batch.c	Tue Dec 16 13:09:52 1986
+***************
+*** 32,38 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)batch.c	1.17	11/21/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+--- 32,38 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)batch.c	1.18	12/16/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+***************
+*** 184,190 ****
+  	logtime[16] = 0;
+  	logtime += 4;
+  
+! #ifdef IHCC
+  	(void) sprintf(lfname, "%s/%s/errlog", logdir(HOME), LIBDIR);
+  #else
+  	(void) sprintf(lfname, "%s/errlog", LIBDIR);
+--- 184,190 ----
+  	logtime[16] = 0;
+  	logtime += 4;
+  
+! #if defined(IHCC) || defined(HOME)
+  	(void) sprintf(lfname, "%s/%s/errlog", logdir(HOME), LIBDIR);
+  #else
+  	(void) sprintf(lfname, "%s/errlog", LIBDIR);
+Index: checkgroups.sh
+Prereq: 1.19
+*** .d/checkgroups.sh	Fri Nov 21 16:05:11 1986
+--- checkgroups.sh	Tue Dec 16 13:09:53 1986
+***************
+*** 1,5 ****
+  : check active file for missing or extra newsgroups
+! : '@(#)checkgroups	1.19	11/21/86'
+  
+  if  test  ! -s LIBDIR/newsgroups
+  then
+--- 1,5 ----
+  : check active file for missing or extra newsgroups
+! : '@(#)checkgroups	1.20	12/16/86'
+  
+  if  test  ! -s LIBDIR/newsgroups
+  then
+***************
+*** 19,29 ****
+  	cat /tmp/$$a - > LIBDIR/newsgroups
+  	;;
+  *)
+! 	group="^net\\.|^mod\\.|^comp\\.|^sci\\.|^rec\\.|^news\\.|^soc\\.|^misc\\.|^talk\\."
+  	egrep -v "${group}" LIBDIR/newsgroups > /tmp/$$a
+  	cat /tmp/$$a > LIBDIR/newsgroups
+! 	echo "${line}" >> LIBDIR/newsgroups
+! 	cat >> LIBDIR/newsgroups
+  	;;
+  esac
+  
+--- 19,44 ----
+  	cat /tmp/$$a - > LIBDIR/newsgroups
+  	;;
+  *)
+! 	# Get the distributions from the checkgroups message itself
+! 	# This allows sites to append their local groups to the distributed
+! 	# checkgroups message and prevents stray checkgroups from other sites
+! 	# from showing all the local groups as being bad groups.
+! 	#
+! 	echo "${line}" > /tmp/$$msg
+! 	cat >> /tmp/$$msg
+! 	cp /dev/null /tmp/$$b
+! 	cat /tmp/$$msg | sed -e "s;[ 	].*;;" -e "s;\..*;;" | sort -u |
+! 		while read dist
+! 		do
+! 			group=`cat /tmp/$$b`
+! 			group="${group}|^$dist\\."
+! 			echo "${group}" > /tmp/$$b
+! 		done
+! 	group=`cat /tmp/$$b`
+  	egrep -v "${group}" LIBDIR/newsgroups > /tmp/$$a
+  	cat /tmp/$$a > LIBDIR/newsgroups
+! 	cat /tmp/$$msg >> LIBDIR/newsgroups
+! 	rm -f /tmp/$$b /tmp/$$msg
+  	;;
+  esac
+  
+Index: checknews.c
+Prereq: 2.26
+*** .d/checknews.c	Fri Nov 21 16:04:45 1986
+--- checknews.c	Tue Dec 16 13:09:54 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.26	11/21/86";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.27	12/16/86";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+***************
+*** 25,31 ****
+  
+  char	bfr[LBUFLEN];			/* general-use scratch area	*/
+  char	optbuf[BUFLEN];			/* NEWSOPTS buffer		*/
+! int	line = -1, y, e, n, q;
+  int	verbose;			/* For debugging.		*/
+  int	nflag;				/* for spec. newsgroup		*/
+  char	narggrp[BUFLEN];		/* spec newsgroup		*/
+--- 25,31 ----
+  
+  char	bfr[LBUFLEN];			/* general-use scratch area	*/
+  char	optbuf[BUFLEN];			/* NEWSOPTS buffer		*/
+! int	y, e, n, q;
+  int	verbose;			/* For debugging.		*/
+  int	nflag;				/* for spec. newsgroup		*/
+  char	narggrp[BUFLEN];		/* spec newsgroup		*/
+***************
+*** 32,37 ****
+--- 32,38 ----
+  FILE	*rcfp, *actfp;
+  char	newsrc[BUFLEN],*rcline[LINES],rcbuf[LBUFLEN],*argvrc[LINES];
+  int	mode = 1;
++ extern int line;
+  #ifndef SHELL
+  char	*SHELL;
+  #endif
+
+Index: compress.c
+Prereq: 1.12
+*** .d/compress.c	Thu Oct 30 16:08:25 1986
+--- compress.c	Tue Dec 16 13:09:57 1986
+***************
+*** 1,6 ****
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)compress.c	1.12	10/29/86";
+! #endif SCCSID
+  static char rcs_ident[] = "Based on compress.c,v 4.0 85/07/30 12:50:00 joe Release";
+  
+  /* 
+--- 1,6 ----
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)compress.c	1.13	12/16/86";
+! #endif /* SCCSID */
+  static char rcs_ident[] = "Based on compress.c,v 4.0 85/07/30 12:50:00 joe Release";
+  
+  /* 
+
+Index: control.c
+Prereq: 2.48
+*** .d/control.c	Fri Nov 21 16:04:47 1986
+--- control.c	Tue Dec 16 13:10:00 1986
+***************
+*** 19,25 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.48	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 19,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.49	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 95,104 ****
+  #ifdef NOTIFY
+  			TELLME = mp->m_who_to;	/* reset whom to tell */
+  #endif /* NOTIFY */
+! 			if(strcmp(mp->m_name, "cancel") == 0) /* special case */
+! 				return (*mp->m_func)(cargc, cargv);
+! 			(*mp->m_func)(cargc, cargv); /* do the function */
+! 			break;
+  		}
+  	}
+  	if( !mp->m_name ) {
+--- 95,101 ----
+  #ifdef NOTIFY
+  			TELLME = mp->m_who_to;	/* reset whom to tell */
+  #endif /* NOTIFY */
+! 			return (*mp->m_func)(cargc, cargv); /* do it */
+  		}
+  	}
+  	if( !mp->m_name ) {
+***************
+*** 168,174 ****
+  	if (argc < 2)
+  		error("ihave: Too few arguments.");
+  	if (strncmp(FULLSYSNAME, argv[argc - 1], SNLN) == 0)
+! 		return;
+  	list[0] = '\0';
+  	if (argc > 2) {
+  		for (i = 1; i < (argc - 1); ++i)
+--- 165,171 ----
+  	if (argc < 2)
+  		error("ihave: Too few arguments.");
+  	if (strncmp(FULLSYSNAME, argv[argc - 1], SNLN) == 0)
+! 		return 0;
+  	list[0] = '\0';
+  	if (argc > 2) {
+  		for (i = 1; i < (argc - 1); ++i)
+***************
+*** 177,183 ****
+  				(void) strcat(list, argv[i]);
+  			}
+  		if (list[0] == '\0')
+! 			return;
+  	} else {
+  		register FILE *	outfp;
+  		register long	outpos, inpos;
+--- 174,180 ----
+  				(void) strcat(list, argv[i]);
+  			}
+  		if (list[0] == '\0')
+! 			return 0;
+  	} else {
+  		register FILE *	outfp;
+  		register long	outpos, inpos;
+***************
+*** 196,202 ****
+  		if (outpos == ftell(outfp)) {	/* if nothing is wanted */
+  			(void) fclose(outfp);
+  			(void) fseek(infp, inpos, 0);
+! 			return;
+  		}
+  		(void) fclose(outfp);
+  		/*
+--- 193,199 ----
+  		if (outpos == ftell(outfp)) {	/* if nothing is wanted */
+  			(void) fclose(outfp);
+  			(void) fseek(infp, inpos, 0);
+! 			return 0;
+  		}
+  		(void) fclose(outfp);
+  		/*
+***************
+*** 230,235 ****
+--- 227,233 ----
+  	** Note that we do *not* change the history line
+  	** so that if the "ihave" message comes in again it gets rejected.
+  	*/
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 241,247 ****
+   * Give it to them with no fuss.
+   */
+  c_sendme(argc, argv)
+! register char **	argv;
+  {
+  	struct srec	srec;
+  
+--- 239,245 ----
+   * Give it to them with no fuss.
+   */
+  c_sendme(argc, argv)
+! register char **argv;
+  {
+  	struct srec	srec;
+  
+***************
+*** 248,254 ****
+  	if (argc < 2)
+  		error("sendme: Too few arguments.");
+  	if (strncmp(FULLSYSNAME, argv[argc - 1], SNLN) == 0)
+! 		return;
+  	if (s_find(&srec, argv[argc - 1]) != TRUE)
+  		error("sendme: Can't find sys record for %s", argv[argc - 1]);
+  	/* Send the articles. */
+--- 246,252 ----
+  	if (argc < 2)
+  		error("sendme: Too few arguments.");
+  	if (strncmp(FULLSYSNAME, argv[argc - 1], SNLN) == 0)
+! 		return 0;
+  	if (s_find(&srec, argv[argc - 1]) != TRUE)
+  		error("sendme: Can't find sys record for %s", argv[argc - 1]);
+  	/* Send the articles. */
+***************
+*** 268,273 ****
+--- 266,272 ----
+  		for (i = 1; i < (argc - 1); ++i)
+  			sendmefunc(argv[i], &srec);
+  	}
++ 	return 0;
+  }
+  
+  static
+***************
+*** 331,338 ****
+  	if (argc < 2)
+  		error("newgroup: Too few arguments.");
+  
+! 	if (header.approved[0] == '\0')
+! 		error("newgroup: %s not approved", argv[1]);
+  
+  	/* see if it already exists */
+  	(void) rewind(actfp); clearerr(actfp);
+--- 330,339 ----
+  	if (argc < 2)
+  		error("newgroup: Too few arguments.");
+  
+! 	if (header.approved[0] == '\0') {
+! 		logerr("newgroup: %s not approved", argv[1]);
+! 		return 1;
+! 	}
+  
+  	/* see if it already exists */
+  	(void) rewind(actfp); clearerr(actfp);
+***************
+*** 349,355 ****
+  			p -= 3;
+  			if (argc > 2 && strcmp(argv[2], "moderated") == 0) {
+  				if (*p == 'm')
+! 					return;
+  # ifdef NONEWGROUPS
+  				if(can_change) {
+  					*p = 'm';
+--- 350,356 ----
+  			p -= 3;
+  			if (argc > 2 && strcmp(argv[2], "moderated") == 0) {
+  				if (*p == 'm')
+! 					return 0;
+  # ifdef NONEWGROUPS
+  				if(can_change) {
+  					*p = 'm';
+***************
+*** 361,367 ****
+  #endif /* NONEWGROUPS */
+  			} else {
+  				if (*p != 'm')
+! 					return;
+  # ifdef NONEWGROUPS
+  				if(can_change)  {
+  					*p = 'y';
+--- 362,368 ----
+  #endif /* NONEWGROUPS */
+  			} else {
+  				if (*p != 'm')
+! 					return 0;
+  # ifdef NONEWGROUPS
+  				if(can_change)  {
+  					*p = 'y';
+***************
+*** 413,419 ****
+  			 * No permission to change
+  			 */
+  			if(!can_change)
+! 				return;
+  # endif /* NONEWGROUPS */
+  			/* The active file was wrong about the state of the
+  			 * group. Rewrite the active file
+--- 414,420 ----
+  			 * No permission to change
+  			 */
+  			if(!can_change)
+! 				return 0;
+  # endif /* NONEWGROUPS */
+  			/* The active file was wrong about the state of the
+  			 * group. Rewrite the active file
+***************
+*** 427,433 ****
+  			else
+  				logerr("Newsgroup %s changed from unmoderated to moderated",
+  				argv[1]);
+! 			return;
+  		}
+  	}
+  
+--- 428,434 ----
+  			else
+  				logerr("Newsgroup %s changed from unmoderated to moderated",
+  				argv[1]);
+! 			return 0;
+  		}
+  	}
+  
+***************
+*** 439,445 ****
+  		fprintf(actfp, "%s 00000 00001 %c\n", argv[1],
+  			(argc > 2 && strcmp(argv[2], "moderated") == 0) 
+  				? 'm' : 'y');
+! #ifdef USG
+  		/*
+  		 * U G L Y   K L U D G E
+  		 * This utter piece of tripe is the only way I know of
+--- 440,446 ----
+  		fprintf(actfp, "%s 00000 00001 %c\n", argv[1],
+  			(argc > 2 && strcmp(argv[2], "moderated") == 0) 
+  				? 'm' : 'y');
+! #if defined(USG) || defined(MG1)
+  		/*
+  		 * U G L Y   K L U D G E
+  		 * This utter piece of tripe is the only way I know of
+***************
+*** 449,454 ****
+--- 450,456 ----
+  		 * on all "real" USG Unix systems, It will probably
+  		 * break on some obscure look alike that doesnt use the
+  		 * real ATT stdio.h
++ 		 * also broken in WCW MG-1 42nix 2.0
+  		 * Don't blame me, blame ATT. stdio should have
+  		 * already done the following line for us, but it didn't
+  		 */
+***************
+*** 487,492 ****
+--- 489,495 ----
+  		(void) mclose(fd);
+  	}
+  # endif /* NOTIFY */
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 505,515 ****
+  	if (argc < 2)
+  		error("rmgroup: Too few arguments.");
+  	if (!validng(argv[1]))
+! 		return;
+! 	if (header.approved[0] == '\0')
+! 		error("rmgroup: %s not approved", argv[1]);
+  
+! #ifndef MANUALLY
+  #ifdef ORGDISTRIB
+  	/*
+  	 * Allow local as well as organizational removals
+--- 508,520 ----
+  	if (argc < 2)
+  		error("rmgroup: Too few arguments.");
+  	if (!validng(argv[1]))
+! 		return 0;
+! 	if (header.approved[0] == '\0') {
+! 		logerr("rmgroup: %s not approved", argv[1]);
+! 		return 1;
+! 	}
+  
+! #ifdef MANUALLY
+  #ifdef ORGDISTRIB
+  	/*
+  	 * Allow local as well as organizational removals
+***************
+*** 519,528 ****
+  #else	/* !ORGDISTRIB */		
+  	if (!strcmp("local", header.distribution))
+  #endif	/* !ORGDISTRIB */		
+  		shouldremove++;
+- #endif /* !MANUALLY */
+  #ifdef NOTIFY
+! 	sprintf(subjline, "Recevied rmgroup for %s", argv[1]);
+  	fd = mailhdr((struct hbuf *)NULL, subjline);
+  	if (fd != NULL) {
+  		if (shouldremove) {
+--- 524,533 ----
+  #else	/* !ORGDISTRIB */		
+  	if (!strcmp("local", header.distribution))
+  #endif	/* !ORGDISTRIB */		
++ #endif /* MANUALLY */
+  		shouldremove++;
+  #ifdef NOTIFY
+! 	sprintf(subjline, "Received rmgroup for %s", argv[1]);
+  	fd = mailhdr((struct hbuf *)NULL, subjline);
+  	if (fd != NULL) {
+  		if (shouldremove) {
+***************
+*** 552,557 ****
+--- 557,563 ----
+  		rc = system(bfr);
+  		log("system(%s) status %d", bfr, rc);
+  	}
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 685,690 ****
+--- 691,697 ----
+  		(void) fclose(u);
+  		(void) mclose(f);
+  	}
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 733,738 ****
+--- 740,746 ----
+  		(void) pclose(u);
+  		(void) mclose(fd);
+  	}
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 751,756 ****
+--- 759,765 ----
+  	fprintf(f, "The header of your message follows:\n\n");
+  	(void) hwrite(&header, f);
+  	(void) mclose(f);
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 773,778 ****
+--- 782,788 ----
+  #endif /* !NOTIFY */
+  	rc = system(bfr);
+  	log("system(%s) status %d", bfr, rc);
++ 	return 0;
+  }
+  
+  /*
+***************
+*** 794,799 ****
+--- 804,810 ----
+  		(void) mclose(f);
+  	}
+  #endif /* NOTIFY */
++ 	return 0;
+  }
+  
+  /* ARGSUSED */
+***************
+*** 811,816 ****
+--- 822,828 ----
+  		(void) mclose(f);
+  	}
+  #endif /* NOTIFY */
++ 	return 0;
+  }
+  
+  /*
+
+Index: expire.c
+Prereq: 2.48
+*** .d/expire.c	Fri Nov 21 16:04:48 1986
+--- expire.c	Tue Dec 16 13:10:01 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.48	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.49	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 491,499 ****
+  			goto checkdate;
+  		}
+  		for(i=0; i<NUNREC; i++)
+! 			if (h.unrec[i] != NULL)
+  				free(h.unrec[i]);
+! 			else
+  				break;
+  		if (!hread(&h, fp, TRUE)) {
+  			printf("Garbled article %s.\n", filename);
+--- 491,500 ----
+  			goto checkdate;
+  		}
+  		for(i=0; i<NUNREC; i++)
+! 			if (h.unrec[i] != NULL) {
+  				free(h.unrec[i]);
+! 				h.unrec[i] = NULL;
+! 			} else
+  				break;
+  		if (!hread(&h, fp, TRUE)) {
+  			printf("Garbled article %s.\n", filename);
+
+Index: funcs.c
+Prereq: 2.34
+*** .d/funcs.c	Fri Nov 21 16:04:55 1986
+--- funcs.c	Tue Dec 16 13:10:02 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs.c	2.34	11/21/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs.c	2.35	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 584,590 ****
+  	 */
+  
+  	(void) strncpy(facgroups, FASCIST, BUFLEN);
+! 	sprintf(factemp, "%s/%s", LIBDIR, "authorized");
+  	facfd = fopen(factemp, "r");
+  
+  	if (facfd != NULL) { /* If no such file, we go with the global default */
+--- 584,590 ----
+  	 */
+  
+  	(void) strncpy(facgroups, FASCIST, BUFLEN);
+! 	sprintf(factemp, "%s/%s", LIB, "authorized");
+  	facfd = fopen(factemp, "r");
+  
+  	if (facfd != NULL) { /* If no such file, we go with the global default */
+***************
+*** 599,605 ****
+  #ifdef DEBUG
+  	fprintf(stderr, "facgroups = %s\n", facgroups);
+  	fprintf(stderr, "newsgroups = %s\n", newsgroups);
+! #endif DEBUG
+  
+  	/* We step through the newsgroups being posted to and check each against
+  	 * the restriction list.  *ALL* posted groups must match the restriction
+--- 599,605 ----
+  #ifdef DEBUG
+  	fprintf(stderr, "facgroups = %s\n", facgroups);
+  	fprintf(stderr, "newsgroups = %s\n", newsgroups);
+! #endif /* DEBUG */
+  
+  	/* We step through the newsgroups being posted to and check each against
+  	 * the restriction list.  *ALL* posted groups must match the restriction
+***************
+*** 625,631 ****
+  	/* must be okay -- return */
+  #ifdef DEBUG
+  	fprintf (stderr, "Newsgroups approved for this poster.\n");
+! #endif DEBUG
+  	return FALSE;
+  }
+! #endif FASCIST
+--- 625,631 ----
+  	/* must be okay -- return */
+  #ifdef DEBUG
+  	fprintf (stderr, "Newsgroups approved for this poster.\n");
+! #endif /* DEBUG */
+  	return FALSE;
+  }
+! #endif /* FASCIST */
+
+Index: funcs2.c
+Prereq: 1.16
+*** .d/funcs2.c	Thu Oct 30 16:10:57 1986
+--- funcs2.c	Tue Dec 16 13:10:03 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.16	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.17	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 384,395 ****
+  	char mbuf[BUFLEN], modadd[BUFLEN];
+  	FILE *mfd;
+  	/* Let's find a path to the backbone */
+! 	sprintf(mbuf, "%s/mailpaths", LIBDIR);
+  	mfd = xfopen(mbuf, "r");
+  	do {
+  		if (fgets(mbuf, sizeof mbuf, mfd) == NULL)
+  			xerror("Can't find internet in %s/mailpaths",
+! 				LIBDIR);
+  	} while (!prefix(mbuf, "internet"));
+  	if (sscanf(mbuf, "%*s %s", modadd) != 1)
+  		xerror("backbone address corrupted");
+--- 384,395 ----
+  	char mbuf[BUFLEN], modadd[BUFLEN];
+  	FILE *mfd;
+  	/* Let's find a path to the backbone */
+! 	sprintf(mbuf, "%s/mailpaths", LIB);
+  	mfd = xfopen(mbuf, "r");
+  	do {
+  		if (fgets(mbuf, sizeof mbuf, mfd) == NULL)
+  			xerror("Can't find internet in %s/mailpaths",
+! 				LIB);
+  	} while (!prefix(mbuf, "internet"));
+  	if (sscanf(mbuf, "%*s %s", modadd) != 1)
+  		xerror("backbone address corrupted");
+
+Index: getdate.y
+Prereq: 2.14
+*** .d/getdate.y	Fri Nov 21 16:05:02 1986
+--- getdate.y	Tue Dec 16 13:10:04 1986
+***************
+*** 3,9 ****
+  	/* 	Originally from: Steven M. Bellovin (unc!smb)	*/ 
+  	/*	Dept. of Computer Science			*/
+  	/*	University of North Carolina at Chapel Hill	*/
+! 	/*	@(#)getdate.y	2.14	11/21/86	*/
+  
+  #include <sys/types.h>
+  #ifdef USG
+--- 3,9 ----
+  	/* 	Originally from: Steven M. Bellovin (unc!smb)	*/ 
+  	/*	Dept. of Computer Science			*/
+  	/*	University of North Carolina at Chapel Hill	*/
+! 	/*	@(#)getdate.y	2.15	12/16/86	*/
+  
+  #include <sys/types.h>
+  #ifdef USG
+***************
+*** 22,30 ****
+  #include "defs.h"
+  #if defined(BSD4_2) || defined (BSD4_1C)
+  #include <sys/time.h>
+! #else sane
+  #include <time.h>
+! #endif sane
+  
+  #define	NULL	0
+  #define daysec (24L*60L*60L)
+--- 22,30 ----
+  #include "defs.h"
+  #if defined(BSD4_2) || defined (BSD4_1C)
+  #include <sys/time.h>
+! #else /* sane */
+  #include <time.h>
+! #endif /* sane */
+  
+  #define	NULL	0
+  #define daysec (24L*60L*60L)
+
+Index: help
+*** .d/help	Thu Oct 30 16:12:10 1986
+--- help	Tue Dec 16 13:10:06 1986
+***************
+*** 20,24 ****
+  K		Mark the rest of the articles in current group as read.
+  x		Exit.  Don't update .newsrc.
+  v		Version.  Print current news version number.
+! 
+  c, f, r, e, h, and s can be followed by -'s to refer to the previous article
+--- 20,25 ----
+  K		Mark the rest of the articles in current group as read.
+  x		Exit.  Don't update .newsrc.
+  v		Version.  Print current news version number.
+! l		List unread articles in newsgroup.
+! L		List all articles in newsgroup.
+  c, f, r, e, h, and s can be followed by -'s to refer to the previous article
+
+Index: ifuncs.c
+Prereq: 2.58
+*** .d/ifuncs.c	Fri Nov 21 16:04:00 1986
+--- ifuncs.c	Tue Dec 16 13:10:07 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.58	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.59	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 62,68 ****
+  extern char firstbufname[];
+  #endif
+  
+! broadcast()
+  {
+  	register char *hptr;
+  	register char *sptr;
+--- 62,69 ----
+  extern char firstbufname[];
+  #endif
+  
+! broadcast(is_rnews)
+! int is_rnews;
+  {
+  	register char *hptr;
+  	register char *sptr;
+***************
+*** 73,78 ****
+--- 74,82 ----
+  	char sentbuf[LBUFLEN];
+  	int nsent = 0;
+  	char *sentsys;
++ #ifdef HIDDENNET
++ 	int len;
++ #endif /* HIDDENNET */
+  
+  	/* h is a local copy of the header we can scribble on */
+  #ifdef VMS
+***************
+*** 86,94 ****
+  
+  	(void) strcpy(sentbuf, h.ident);
+  	(void) strcat(sentbuf, " sent to ");
+! 	sentsys = index(sentbuf, 0);
+  	nsent = 0;
+  	/* break path into list of systems. */
+  	sptr = hptr = h.path;
+  	while ((hptr=strpbrk(hptr, NETCHRS)) != NULL) {
+  		*hptr++ = '\0';
+--- 90,105 ----
+  
+  	(void) strcpy(sentbuf, h.ident);
+  	(void) strcat(sentbuf, " sent to ");
+! 	sentsys = index(sentbuf, '\0');
+  	nsent = 0;
+  	/* break path into list of systems. */
++ 	hptr = h.path;
++ #ifdef HIDDENNET
++ 	if (!is_rnews && 
++ 		strncmp(FULLSYSNAME, h.path, (len = strlen(FULLSYSNAME))) == 0
++ 		&& index(NETCHRS, h.path[len]))
++ 		(void) strcpy(h.path, &(h.path[len+1]));
++ #endif HIDDENNET
+  	sptr = hptr = h.path;
+  	while ((hptr=strpbrk(hptr, NETCHRS)) != NULL) {
+  		*hptr++ = '\0';
+
+Index: inews.c
+Prereq: 2.70
+*** .d/inews.c	Fri Nov 21 16:04:44 1986
+--- inews.c	Tue Dec 16 13:10:09 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.70	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.71	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 131,137 ****
+  	if (flock(fileno(actfp), LOCK_SH|LOCK_NB) < 0 && errno == EWOULDBLOCK)
+  #else	/* !BSD4_2 */
+  #ifdef	LOCKF
+! 	if (lockf(fileno(actfp), F_TLOCK, 0) < 0 && errno == EAGAIN)
+  #else	/* !LOCKF */
+  	sprintf(bfr, "%s.lock", ACTIVE);
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+--- 131,138 ----
+  	if (flock(fileno(actfp), LOCK_SH|LOCK_NB) < 0 && errno == EWOULDBLOCK)
+  #else	/* !BSD4_2 */
+  #ifdef	LOCKF
+! 	if (lockf(fileno(actfp), F_TLOCK, 0) < 0 &&
+! 		(errno == EAGAIN || errno == EACCES))
+  #else	/* !LOCKF */
+  	sprintf(bfr, "%s.lock", ACTIVE);
+  	if (LINK(ACTIVE,bfr) < 0 && errno == EEXIST)
+***************
+*** 152,157 ****
+--- 153,160 ----
+  #endif	/* !BSD4_2 && !LOCKF */
+  	}
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
++ 		if (spool_news)	/* can't unspool while things are locked */
++ 			xxit(0);
+  		dounspool();
+  		/* NOT REACHED */
+  	}
+***************
+*** 163,169 ****
+  			/* NOT REACHED */
+  		}
+  #ifdef NICENESS
+! 		nice(NICENESS);
+  #endif /* NICENESS */
+  	} else
+  		if (argc < 2)
+--- 166,173 ----
+  			/* NOT REACHED */
+  		}
+  #ifdef NICENESS
+! 		if (nice(0) < NICENESS)
+! 			(void) nice(NICENESS);
+  #endif /* NICENESS */
+  	} else
+  		if (argc < 2)
+***************
+*** 504,510 ****
+  	(void) sprintf(buf, "%s/.rnews/%02d%02d%02d%02d%02d%x",
+  #endif /* V7 */
+  #endif /* VMS */
+! 		SPOOLDIR,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+  	sp = xfopen(buf, "w");
+--- 508,514 ----
+  	(void) sprintf(buf, "%s/.rnews/%02d%02d%02d%02d%02d%x",
+  #endif /* V7 */
+  #endif /* VMS */
+! 		SPOOL,
+  		tp->tm_year, tp->tm_mon+1, tp->tm_mday,
+  		tp->tm_hour, tp->tm_min, getpid());
+  	sp = xfopen(buf, "w");
+***************
+*** 653,659 ****
+  	 * This will overflow with 99999 articles.
+  	 */
+  	fprintf(actfp, "%s %05ld", ngname, ngsize+1);
+! #ifdef USG
+  	/*
+  	 * U G L Y   K L U D G E
+  	 * This utter piece of tripe is the only way I know of to get
+--- 657,663 ----
+  	 * This will overflow with 99999 articles.
+  	 */
+  	fprintf(actfp, "%s %05ld", ngname, ngsize+1);
+! #if defined(USG) || defined(MG1)
+  	/*
+  	 * U G L Y   K L U D G E
+  	 * This utter piece of tripe is the only way I know of to get
+***************
+*** 664,669 ****
+--- 668,674 ----
+  	 * real ATT stdio.h
+  	 * Don't blame me, blame ATT. stdio should have already done the
+  	 * following line for us, but it doesn't
++ 	 * also broken in WCW MG-1 42nix 2.0
+  	 */
+  	 actfp->_flag |= _IOWRT;
+  #endif /* USG */
+***************
+*** 726,732 ****
+  	}
+  
+  #ifdef ZAPNOTES
+! 	if (strcmp(header.title, "Re: Orphaned Response") == 0) {
+  		logerr("Orphaned Response, moved to junk");
+  		if (localize("junk"))
+  			savehist(histline);
+--- 731,737 ----
+  	}
+  
+  #ifdef ZAPNOTES
+! 	if (strncmp(header.title, "Re: Orphaned Response", 21) == 0) {
+  		logerr("Orphaned Response, moved to junk");
+  		if (localize("junk"))
+  			savehist(histline);
+***************
+*** 763,774 ****
+  		fprintf(stderr," directly.\nYour article is being mailed to");
+  		fprintf(stderr," the moderator who will post it for you.\n");
+  		/* Let's find a path to the backbone */
+! 		sprintf(bfr, "%s/mailpaths", LIBDIR);
+  		mfd = xfopen(bfr, "r");
+  		do {
+  			if (fscanf(mfd, "%s %s", bfr, modadd) != 2)
+  				xerror("Can't find backbone in %s/mailpaths",
+! 					LIBDIR);
+  		} while (strcmp(bfr, "backbone") != 0 && !ngmatch(is_mod, bfr));
+  		(void) fclose(mfd);
+  		/* fake a header for mailhdr */
+--- 768,779 ----
+  		fprintf(stderr," directly.\nYour article is being mailed to");
+  		fprintf(stderr," the moderator who will post it for you.\n");
+  		/* Let's find a path to the backbone */
+! 		sprintf(bfr, "%s/mailpaths", LIB);
+  		mfd = xfopen(bfr, "r");
+  		do {
+  			if (fscanf(mfd, "%s %s", bfr, modadd) != 2)
+  				xerror("Can't find backbone in %s/mailpaths",
+! 					LIB);
+  		} while (strcmp(bfr, "backbone") != 0 && !ngmatch(is_mod, bfr));
+  		(void) fclose(mfd);
+  		/* fake a header for mailhdr */
+***************
+*** 866,883 ****
+  	(void) fclose(tfp);
+  	(void) fclose(infp);
+  	if(exitcode == 0) {
+- 		int pid;
+  		/* article has passed all the checks, so work in background */
+! 		if (mode != PROC)
+! 			if ((pid=vfork()) < 0)
+  				xerror("Can't fork");
+  			else if (pid > 0)
+  				exit(0);
+  #ifdef SIGTTOU
+  		signal(SIGTTOU, SIG_IGN);
+  #endif /* SIGTTOU */
+  		savehist(histline);
+! 		broadcast();
+  	}
+  	xxit(mode == PROC ? 0 : exitcode);
+  }
+--- 871,889 ----
+  	(void) fclose(tfp);
+  	(void) fclose(infp);
+  	if(exitcode == 0) {
+  		/* article has passed all the checks, so work in background */
+! 		if (mode != PROC) {
+! 			int pid;
+! 			if ((pid=fork()) < 0)
+  				xerror("Can't fork");
+  			else if (pid > 0)
+  				exit(0);
++ 		}
+  #ifdef SIGTTOU
+  		signal(SIGTTOU, SIG_IGN);
+  #endif /* SIGTTOU */
+  		savehist(histline);
+! 		broadcast(mode==PROC);
+  	}
+  	xxit(mode == PROC ? 0 : exitcode);
+  }
+***************
+*** 1099,1107 ****
+  	register struct direct *dir;
+  	register int foundsome;
+  #ifdef VMS
+! 	sprintf(bfr, "%s/+rnews", SPOOLDIR);
+  #else /* !VMS */
+! 	sprintf(bfr, "%s/.rnews", SPOOLDIR);
+  #endif /* !VMS */
+  
+  	if (chdir(bfr) < 0)
+--- 1105,1113 ----
+  	register struct direct *dir;
+  	register int foundsome;
+  #ifdef VMS
+! 	sprintf(bfr, "%s/+rnews", SPOOL);
+  #else /* !VMS */
+! 	sprintf(bfr, "%s/.rnews", SPOOL);
+  #endif /* !VMS */
+  
+  	if (chdir(bfr) < 0)
+***************
+*** 1117,1123 ****
+  			if (dir->d_name[0] == '.')
+  				continue;
+  			sprintf(bfr,"%s -S -p %s", RNEWS, dir->d_name);
+! 			system(bfr);
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+  		}
+--- 1123,1134 ----
+  			if (dir->d_name[0] == '.')
+  				continue;
+  			sprintf(bfr,"%s -S -p %s", RNEWS, dir->d_name);
+! 			if (system(bfr) != 0) {
+! 				sprintf(bfr, "../%s", dir->d_name);
+! 				(void) LINK(dir->d_name, bfr);
+! 				logerr("rnews failed. Batch saved in %s/%s",
+! 					SPOOLDIR, dir->d_name);
+! 			}
+  			(void) unlink(dir->d_name);
+  			foundsome++;
+  		}
+
+Index: install.sh
+Prereq: 1.16
+*** .d/install.sh	Thu Oct 30 16:16:49 1986
+--- install.sh	Tue Dec 16 13:10:09 1986
+***************
+*** 1,4 ****
+! : '@(#)install.sh	1.16	10/29/86'
+  
+  if test "$#" != 6
+  then
+--- 1,4 ----
+! : '@(#)install.sh	1.17	12/16/86'
+  
+  if test "$#" != 6
+  then
+***************
+*** 110,128 ****
+  fi
+  
+  cat >$LIBDIR/aliases.new <<EOF
+! net.chess		net.games.chess
+! net.trivia		net.games.trivia
+! net.rec.radio		net.ham-radio
+! net.term		net.info-terms
+! net.joke		net.jokes
+! net.vlsi		net.lsi
+! net.micro.16k		net.micro.ns32k
+! net.music.gdea		net.music.gdead
+! net.notes		net.news.notes
+! net.periph		net.periphs
+! net.puzzles		net.puzzle
+! net.unix.wizards	net.unix-wizards
+! net.sources.wanted	net.wanted.sources
+  net.consumers		misc.consumers
+  net.consumers.house	misc.consumers.house
+  net.house		misc.consumers.house
+--- 110,258 ----
+  fi
+  
+  cat >$LIBDIR/aliases.new <<EOF
+! net.audio	rec.audio
+! net.auto	rec.autos
+! net.auto.tech	rec.autos.tech
+! net.aviation	rec.aviation
+! net.bicycle	rec.bicycles
+! net.rec.birds	rec.birds
+! net.rec.boat	rec.boats
+! net.cooks	rec.food.cooking
+! net.wines	rec.food.drink
+! net.veg		rec.food.veg
+! net.games	rec.games.misc
+! net.games.board	rec.games.board
+! net.rec.bridge	rec.games.bridge
+! net.games.chess	rec.games.chess
+! net.games.emp	rec.games.empire
+! net.games.frp	rec.games.frp
+! net.games.go	rec.games.go
+! net.games.hack	rec.games.hack
+! net.games.pbm	rec.games.pbm
+! net.games.rogue	rec.games.rogue
+! net.games.trivia	rec.games.trivia
+! net.games.video	rec.games.video
+! net.garden	rec.gardens
+! net.ham-radio	 rec.ham-radio
+! net.ham-radio.packet rec.ham-radio.packet
+! net.jokes	rec.humor
+! net.jokes.d	rec.humor.d
+! mod.mag		rec.mag
+! net.mag		rec.mag
+! net.books	rec.arts.books
+! net.comics	rec.arts.comics
+! net.tv.drwho	rec.arts.drwho
+! mod.movies	rec.arts.movies
+! net.movies	rec.arts.movies
+! net.sf-lovers	rec.arts.sf-lovers
+! net.startrek	rec.arts.startrek
+! net.tv		rec.arts.tv
+! net.tv.soaps	rec.arts.tv.soaps
+! net.wobegon	rec.arts.wobegon
+! net.rec		rec.misc
+! net.cycle	rec.motorcycles
+! net.music.classical	rec.music.classical
+! net.music.folk	rec.music.folk
+! net.music.gdead	rec.music.gdead
+! net.music.makers	rec.music.makers
+! net.music	rec.music.misc
+! net.music.synth	rec.music.synth
+! net.rec.nude	rec.nude
+! net.pets	rec.pets
+! net.rec.photo	rec.photo
+! net.poems	rec.arts.poems
+! net.puzzle	rec.puzzles
+! net.railroad	rec.railroad
+! net.rec.scuba	rec.scuba
+! net.rec.ski	rec.skiing
+! net.rec.skydive	rec.skydiving
+! net.sport	rec.sport.misc
+! net.sport.baseball	rec.sport.baseball
+! net.sport.hoops	rec.sport.basketball
+! net.sport.football	rec.sport.football
+! net.sport.hockey	rec.sport.hockey
+! net.travel	rec.travel
+! net.video	rec.video
+! net.rec.wood	rec.woodworking
+! net.ai	comp.ai
+! net.arch	comp.arch
+! net.bugs.2bsd	comp.bugs.2bsd
+! net.bugs.4bsd	comp.bugs.4bsd
+! net.bugs.usg	comp.bugs.sys5
+! net.bugs.uucp	comp.bugs.misc
+! net.bugs.v7	comp.bugs.misc
+! net.bugs	comp.bugs.misc
+! net.cog-eng	comp.cog-eng
+! net.cse		comp.edu
+! net.database	comp.databases
+! net.dcom	comp.dcom.modems
+! net.decus	comp.org.decus
+! net.emacs	comp.emacs
+! net.eunice	comp.os.eunice
+! net.graphics	comp.graphics
+! net.info-terms	comp.terminals
+! net.internat	comp.std.internat
+! net.lan		comp.dcom.lans
+! net.lang	comp.lang.misc
+! net.lang.ada	comp.lang.ada
+! net.lang.apl	comp.lang.apl
+! net.lang.c	comp.lang.c
+! net.lang.c++	comp.lang.c++
+! net.lang.f77	comp.lang.fortran
+! net.lang.forth	comp.lang.forth
+! net.lang.lisp	comp.lang.lisp
+! net.lang.mod2	comp.lang.modula2
+! net.lang.pascal	comp.lang.pascal
+! net.lang.prolog	comp.lang.prolog
+! net.lang.st80	comp.lang.smalltalk
+! net.lsi		comp.lsi
+! net.mail	comp.mail.uucp
+! net.mail.headers	comp.mail.headers
+! net.micro	comp.sys.misc
+! net.micro.6809	comp.sys.m6809
+! net.micro.68k	comp.sys.m68k
+! net.micro.apple	comp.sys.apple
+! net.micro.amiga	comp.sys.amiga
+! net.micro.atari16	comp.sys.atari.st
+! net.micro.atari8	comp.sys.atari.8bit
+! net.micro.att	comp.sys.att
+! net.micro.cbm	comp.sys.cbm
+! net.micro.cpm	comp.os.cpm
+! net.micro.hp	comp.sys.hp
+! net.micro.mac	comp.sys.mac
+! net.micro.ns32k	comp.sys.nsc.32k
+! net.micro.pc	comp.sys.ibm.pc
+! net.micro.ti	comp.sys.ti
+! net.micro.trs-80	comp.sys.tandy
+! net.news	news.misc
+! net.news.adm	news.admin
+! net.news.b	news.software.b
+! net.news.config	news.config
+! net.news.group	news.groups
+! net.news.newsite	news.newsites
+! net.news.notes	news.software.notes
+! net.news.sa	news.sysadmin
+! net.news.stargate	news.stargate
+! net.periphs	comp.periphs
+! net.sources.d	comp.sources.d
+! net.text	comp.text
+! net.unix	comp.unix.questions
+! net.unix-wizards	comp.unix.wizards
+! net.usenix	comp.org.usenix
+! net.wanted.sources	comp.sources.wanted
+! net.chess		rec.games.chess
+! net.trivia		rec.games.trivia
+! net.rec.radio		rec.ham-radio
+! net.term		comp.terminals
+! net.joke		rec.humor
+! net.vlsi		comp.lsi
+! net.micro.16k		comp.sys.nsc.32k
+! net.music.gdea		rec.music.gdead
+! net.notes		news.software.notes
+! net.periph		comp.periphs
+! net.puzzles		rec.puzzles
+! net.unix.wizards	comp.unix.wizards
+! net.sources.wanted	comp.sources.wanted
+  net.consumers		misc.consumers
+  net.consumers.house	misc.consumers.house
+  net.house		misc.consumers.house
+***************
+*** 187,192 ****
+--- 317,327 ----
+  talk.religion		talk.religion.misc
+  net.rumor		talk.rumors
+  talk.rumor		talk.rumors
++ rec.skydive		rec.skydiving
++ comp.sources.games	net.sources.games
++ comp.sources.bugs	net.sources.bugs
++ comp.sources.unix	net.sources
++ comp.sources.mac	net.sources.mac
+  EOF
+  : if no aliases file, make one
+  if test ! -f $LIBDIR/aliases
+
+Index: ndir.c
+Prereq: 1.8
+*** .d/ndir.c	Thu Oct 30 16:12:02 1986
+--- ndir.c	Tue Dec 16 13:10:10 1986
+***************
+*** 4,10 ****
+  #include "ndir.h"
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ndir.c	1.8	4/26/85";
+  #endif /* SCCSID */
+  
+  /*
+--- 4,10 ----
+  #include "ndir.h"
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ndir.c	1.9	12/16/86";
+  #endif /* SCCSID */
+  
+  /*
+***************
+*** 48,58 ****
+--- 48,68 ----
+  #else /* V7 file system */
+  #define	ODIRSIZ	14
+  
++ #if HP9K5
++ /* HP 9000/500 has a weird directory format */
++ struct olddirect {
++ 	char	od_name[DIRSIZ+2];	/* filename */
++ 	short	od_object_type;
++ 	short	od_file_code;
++ 	short	od_ino; 		/* inode */
++ };
++ #else /* normal V7 */
+  struct	olddirect {
+  	short	od_ino;
+  	char	od_name[ODIRSIZ];
+  };
+  #endif /* V7 */
++ #endif /* !pyr */
+  
+  /*
+   * get next entry in a directory.
+Index: pathinit.c
+Prereq: 1.18
+*** .d/pathinit.c	Thu Oct 30 16:09:55 1986
+--- pathinit.c	Tue Dec 16 13:10:11 1986
+***************
+*** 34,40 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.18	10/23/86";
+  #endif /* SCCSID */
+  
+  #if defined(INEW) || defined(EXP)
+--- 34,40 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)pathinit.c	1.19	12/16/86";
+  #endif /* SCCSID */
+  
+  #if defined(INEW) || defined(EXP)
+***************
+*** 116,123 ****
+  pathinit()
+  {
+  #if defined(INEW) && defined(NOTIFY)
+- 	FILE *nfd;		/* notify file descriptor */
+- 	char *p;
+  #endif /* INEW && NOTIFY */
+  #ifndef ROOTID
+  	struct passwd	*pw;	/* struct for pw lookup	*/
+--- 116,121 ----
+Index: postnews.c
+Prereq: 1.29
+*** .d/postnews.c	Fri Nov 21 16:05:06 1986
+--- postnews.c	Tue Dec 16 13:10:12 1986
+***************
+*** 16,24 ****
+   * script, and does more intelligent prompting and filtering than possible
+   * in a shell script.
+   */
+- 
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)postnews.c	1.29	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 16,23 ----
+   * script, and does more intelligent prompting and filtering than possible
+   * in a shell script.
+   */
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)postnews.c	1.30	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 57,62 ****
+--- 56,62 ----
+  	char descr[128];
+  } distr[MAXDISTR];
+  
++ char def_distr[24] = "";	/* default distribution */
+  FILE *xfopen();
+  
+  main(argc, argv)
+***************
+*** 253,258 ****
+--- 253,259 ----
+  #endif /* !PAGE */
+  			}
+  			printf("These are the currently active groups:\n");
++ 			(void) fflush(stdout);
+  			sprintf(buf, "exec %s %s/newsgroups", pager, LIB);
+  			(void) system(buf);
+  			continue;
+***************
+*** 310,315 ****
+--- 311,322 ----
+  		(void) strcpy(def, deflt);
+  	if (ngmatch("misc.test", newsgroups))
+  		(void) strcpy(def, "local");
++ 	for (i=0; distr[i].abbr[0]; i++) {
++ 		if (strcmp(distr[i].abbr, def) == 0)
++ 			break;
++ 	}
++ 	if (distr[i].abbr[0] == '\0')
++ 		strcpy(def, def_distr);
+  	for(;;) {
+  		do {
+  			(void) sprintf(buf, "Distribution (default='%s', '?' for help) : ", def);
+***************
+*** 419,424 ****
+--- 426,432 ----
+  				fprintf(tf, "> %s", buf);
+  			(void) fclose(of);
+  			printf("OK, but please edit it to suppress unnecessary verbiage, signatures, etc.\n");
++ 			(void) fflush(stdout);
+  		}
+  	}
+  
+***************
+*** 732,739 ****
+--- 740,752 ----
+  		if (fscanf(fd, "%s %[^\n]", distr[i].abbr, distr[i].descr)
+  			!= 2)
+  			break;
++ 		if (strcmp(distr[i].abbr, "default") == 0)
++ 			strcpy(def_distr, distr[i--].descr);
+  	}
+  	(void) fclose(fd);
++ 	distr[i].abbr[0] = '\0';
++ 	if (def_distr[0] == '\0')
++ 		strcpy(def_distr, "world");	/* maybe "local" is better? */
+  }
+  
+  /*
+***************
+*** 886,892 ****
+  					*canpost = 'n';
+  					return FALSE;
+  				}
+! #endif FASCIST
+  				return TRUE;
+  			} else
+  				return FALSE;
+--- 899,905 ----
+  					*canpost = 'n';
+  					return FALSE;
+  				}
+! #endif /* FASCIST */
+  				return TRUE;
+  			} else
+  				return FALSE;
+***************
+*** 1047,1052 ****
+--- 1060,1066 ----
+  
+  	(void) sprintf(buf,"exec %s/%s 13 < %s >> %s\n", LIB, "caesar", codedfile, article);
+  	printf("Encoding article -- please stand by\n");
++ 	(void) fflush(stdout);
+  	if (system(buf)) {
+  		printf("encoding failed");
+  		exit(2);
+
+Index: process.c
+Prereq: 2.16
+*** .d/process.c	Fri Nov 21 16:04:39 1986
+--- process.c	Tue Dec 16 13:10:13 1986
+***************
+*** 16,28 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)process.c	2.16	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+  
+  char	coptbuf[LBUFLEN], datebuf[LBUFLEN];
+- struct hbuf header;
+  
+  #define OPTION	0	/* pick up an option string */
+  #define STRING	1	/* pick up a string of arguments */
+--- 16,27 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)process.c	2.17	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+  
+  char	coptbuf[LBUFLEN], datebuf[LBUFLEN];
+  
+  #define OPTION	0	/* pick up an option string */
+  #define STRING	1	/* pick up a string of arguments */
+
+Index: readr.c
+Prereq: 2.59
+*** .d/readr.c	Fri Nov 21 16:04:38 1986
+--- readr.c	Tue Dec 16 13:10:14 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)readr.c	2.59	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)readr.c	2.60	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+***************
+*** 221,226 ****
+--- 221,233 ----
+  
+  	switch (*bptr++) {
+  
++ 	/* display list of articles in current group */
++ 	case 'l':
++ 	case 'L':
++ 		list_group(groupdir, atoi(bptr),
++ 			(*(bptr - 1) == 'l') ? FALSE : TRUE, pngsize);
++ 		break;
++ 	
+  	/* No.  Go on to next article. */
+  	case 'n':
+  		EOL();
+***************
+*** 516,522 ****
+  			*ptr2 = '\0';
+  		ptr2 = index(ptr3, '/');
+  		if (!ptr2) {
+- 			*ptr3 = '\0';
+  			if (strcmp(ptr3, "cancelled") == 0) {
+  				fprintf(ofp, "Article %s has been cancelled.\n",
+  					bptr);
+--- 523,528 ----
+
+Index: rfuncs2.c
+Prereq: 1.32
+*** .d/rfuncs2.c	Thu Oct 30 16:10:44 1986
+--- rfuncs2.c	Tue Dec 16 13:10:16 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs2.c	1.32	10/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs2.c	1.33	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 24,29 ****
+--- 24,30 ----
+  #include "rparams.h"
+  
+  static char	lbuf[LBUFLEN];
++ extern char *replyname();
+  
+  FILE *popen();
+  
+Index: uname.c
+Prereq: 2.12
+*** .d/uname.c	Fri Nov 21 16:04:50 1986
+--- uname.c	Tue Dec 16 13:10:17 1986
+***************
+*** 21,27 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.12	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 21,27 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.13	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 36,42 ****
+  {
+  	char *cp;
+  	gethostname(uptr->nodename, sizeof (uptr->nodename));
+! 	if (MYDOMAIN[0] == '\0') /* get domain name from hostname */
+  		return;
+  	cp = index(uptr->nodename, '.');
+  	if (cp)
+--- 36,43 ----
+  {
+  	char *cp;
+  	gethostname(uptr->nodename, sizeof (uptr->nodename));
+! 	cp = MYDOMAIN;	/* Gould compiler can't handle ""[0] */
+! 	if (*cp == '\0') /* get domain name from hostname */
+  		return;
+  	cp = index(uptr->nodename, '.');
+  	if (cp)
+
+Index: unbatch.c
+Prereq: 1.23
+*** .d/unbatch.c	Fri Nov 21 16:04:53 1986
+--- unbatch.c	Tue Dec 16 13:10:17 1986
+***************
+*** 13,19 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.23	11/21/86";
+  #endif /* SCCSID */
+  
+  #define	MAXARGS		32
+--- 13,19 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.24	12/16/86";
+  #endif /* SCCSID */
+  
+  #define	MAXARGS		32
+***************
+*** 161,167 ****
+--- 161,171 ----
+  	if (cp++ == NULL)
+  		cp = args[0];
+  
++ # ifdef HOME
++ 	sprintf(path, "%s/%s/%s", logdir(HOME), LIBDIR, cp);
++ # else /* !HOME */
+  	sprintf(path, "%s/%s", LIBDIR, cp);
++ # endif /* HOME */
+  
+  	/*
+  	 * "path" is absolute, no searching is needed,  we use
+
+Index: virtterm.c
+Prereq: 1.12
+*** .d/virtterm.c	Thu Oct 30 16:08:32 1986
+--- virtterm.c	Tue Dec 16 13:10:19 1986
+***************
+*** 5,11 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)virtterm.c	1.12	10/29/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 5,11 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)virtterm.c	1.13	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 89,95 ****
+  int     COLS;			/* width of screen */
+  
+  struct line {
+! 	char    len;
+  	char    flags;
+  	char    *l;		/* pointer to actual line text, NO NULL @ end */
+  };
+--- 89,95 ----
+  int     COLS;			/* width of screen */
+  
+  struct line {
+! 	short    len;		/* should really be u_char */
+  	char    flags;
+  	char    *l;		/* pointer to actual line text, NO NULL @ end */
+  };
+***************
+*** 1006,1009 ****
+  
+  	winch_upd();
+  }
+! #endif TIOCGWINSZ
+--- 1006,1009 ----
+  
+  	winch_upd();
+  }
+! #endif /* TIOCGWINSZ */
+
+Index: visual.c
+Prereq: 1.33
+*** .d/visual.c	Fri Nov 21 16:04:36 1986
+--- visual.c	Tue Dec 16 13:10:21 1986
+***************
+*** 4,10 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.33	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+--- 4,10 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.34	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+***************
+*** 324,330 ****
+  	secpr[0] = '\0';
+  	if (countset == 0)
+  		count = 1;
+! 	docmd(c, count);
+  	if (c != '?' && c != 'H')		/* UGGH */
+  		prflags &=~ HELPMSG;
+  	if (dlinno > hdrstart)
+--- 324,330 ----
+  	secpr[0] = '\0';
+  	if (countset == 0)
+  		count = 1;
+! 	docmd(c, count, countset);
+  	if (c != '?' && c != 'H')		/* UGGH */
+  		prflags &=~ HELPMSG;
+  	if (dlinno > hdrstart)
+***************
+*** 335,343 ****
+  /*
+   * Process one command, which has already been typed in.
+   */
+! docmd(c, count)
+  int c;
+  long count;
+  {
+  	int i;
+  	long nart, Hoffset;
+--- 335,344 ----
+  /*
+   * Process one command, which has already been typed in.
+   */
+! docmd(c, count, countset)
+  int c;
+  long count;
++ int countset;
+  {
+  	int i;
+  	long nart, Hoffset;
+***************
+*** 345,350 ****
+--- 346,363 ----
+  
+  	switch (c) {
+  
++ 	/* display list of articles in current group */
++ 	case 'l':
++ 	case 'L':
++ 		botscreen();
++ 		ttycooked();
++ 		list_group(groupdir, countset ? count : 0,
++ 			(c == 'l') ? FALSE : TRUE, pngsize);
++ 		ttyraw();
++ 		clearok(curscr, 1);
++ 		updscr();
++ 		break;
++ 
+  	/* Show more of current article, or advance to next article */
+  	case '\n':
+  	case ' ':
+***************
+*** 432,438 ****
+  		break;
+  
+  	/* Turn displaying of article back on */
+- 	case 'l':
+  	case 'd':
+  		prflags &=~ NOPRT;
+  		break;
+--- 445,450 ----
+***************
+*** 496,528 ****
+  
+  		/* write out the article someplace */
+  		/* w writes out without the header */
+! 	case 's':
+! 	case 'w': {
+! 		char *grn = groupdir;
+  		int wflags;
+  
+! 		msg("file: ");
+! 		curflag = CURP2;
+! 		while ((wflags = vgetc()) == ' ');
+! 		if (wflags == cintr) {
+! 			secpr[0] = '\0';
+! 			break;
+  		}
+! 		if (wflags == '|') {
+! 			linebuf[0] = '|';
+! 			if (prget("| ", linebuf+1))
+! 				break;
+! 		} else {
+! 			pushback(wflags);
+! 			if (prget("file: ", linebuf))
+! 				break;
+! 		}
+  		wflags = 0;
+  		if (c == 's')
+  			wflags |= SVHEAD;
+  		if (count != 1)
+  			wflags |= OVWRITE;
+! 		bptr = linebuf;
+  		while( *bptr == ' ')
+  			bptr++;	/* strip leading spaces */
+  
+--- 508,550 ----
+  
+  		/* write out the article someplace */
+  		/* w writes out without the header */
+! 		/* | defaults to pipeing */
+! 	{
+! 		static char savebuf[BUFLEN];
+  		int wflags;
+  
+! 	case '|':
+! 		if (savebuf[0] != '|') {
+! 			savebuf[0] = '|';
+! 			savebuf[1] = '\0';
+  		}
+! 		c = 's';
+! 	case 's':
+! 	case 'w':
+! 		/* We loop back to here each time user types ^U to prompt */
+! 		do {
+! 			if (savebuf[0] == 0) {
+! 				/* No saved default.  Ask. */
+! 				msg("file: ");
+! 				curflag = CURP2;
+! 				while ((wflags = vgetc()) == ' ');
+! 				if (wflags == cintr) {
+! 					secpr[0] = '\0';
+! 					break;
+! 				}
+! 				savebuf[0] = wflags;
+! 				savebuf[1] = 0;
+! 			}
+! 			wflags = prget( (savebuf[0] == '|') ? "": "file: ",
+! 					savebuf);
+! 		} while (wflags == 2);
+! 		if (wflags) break;	/* Interrupted out */
+  		wflags = 0;
+  		if (c == 's')
+  			wflags |= SVHEAD;
+  		if (count != 1)
+  			wflags |= OVWRITE;
+! 		bptr = savebuf;
+  		while( *bptr == ' ')
+  			bptr++;	/* strip leading spaces */
+  
+***************
+*** 536,542 ****
+  			} else if (boxptr = getenv("NEWSBOX")) {
+   				if (index(boxptr, '%')) {
+  					struct stat stbf;
+!  					sprintf(bptr, boxptr, grn);
+   					if (stat(bptr,&stbf) < 0) {
+   						if (mkdir(bptr, 0777) < 0) {
+  							msg("Cannot create directory %s", bptr);
+--- 558,564 ----
+  			} else if (boxptr = getenv("NEWSBOX")) {
+   				if (index(boxptr, '%')) {
+  					struct stat stbf;
+!  					sprintf(bptr, boxptr, groupdir);
+   					if (stat(bptr,&stbf) < 0) {
+   						if (mkdir(bptr, 0777) < 0) {
+  							msg("Cannot create directory %s", bptr);
+***************
+*** 633,638 ****
+--- 655,661 ----
+  		int flags;
+  
+  		p = linebuf;
++ 		*p = 0;
+  		if (prget("!", p))
+  			break;
+  		flags = CWAIT;
+***************
+*** 763,770 ****
+  	/* specific message ID. */
+  	case '<':
+  		/* could improve this */
+! 		linebuf[0] = '<';
+! 		if (prget("<", linebuf+1))
+  			break;
+  searchid:	secpr[0] = '\0';
+  		if (index(linebuf, '@') == NULL && index(linebuf, '>') == NULL) {
+--- 786,793 ----
+  	/* specific message ID. */
+  	case '<':
+  		/* could improve this */
+! 		linebuf[0] = '<'; linebuf[1] = 0;
+! 		if (prget("", linebuf))
+  			break;
+  searchid:	secpr[0] = '\0';
+  		if (index(linebuf, '@') == NULL && index(linebuf, '>') == NULL) {
+***************
+*** 1033,1038 ****
+--- 1056,1062 ----
+  next_ng_command()
+  {
+  	obit = -1;
++ 	linebuf[0] = 0;
+  	if (prget("group? ", linebuf))
+  		return FALSE;
+  	bptr = linebuf;
+***************
+*** 1530,1556 ****
+  	maxcol = linebuf;
+  }
+  
+  prget(prompter, buf)
+  char *prompter, *buf;
+  {
+! 	char *p, *q, *r;
+! 	int c, lastc;
+  
+  	curflag = CURP2;
+! 	r = buf;
+  	lastc = '\0';
+  	for (;;) {
+- 		*r = '\0';
+  		p = secpr;
+  		for (q = prompter ; *q ; q++)
+  			*p++ = *q;
+  		for (q = buf ; *q ; q++) {
+! 			if (p < &secpr[SECPRLEN-1] && *q >= ' ' && *p <= '~')
+  				*p++ = *q;
+  		}
+  		*p = '\0';
+  		c = vgetc();
+! 		if (c == '\n' || c == cintr) {
+  			break;
+  		}
+  		if (c == cerase || c == '\b' || c == '\177') {
+--- 1554,1595 ----
+  	maxcol = linebuf;
+  }
+  
++ 
++ /*
++  * Prompt the user and get a line.
++  * "prompter" is the prompt.  "buf" contains a string which
++  * will be used as the initial user response (which may be edited
++  * by the user with backspace, ^U, etc).  The resulting line is
++  * returned in "buf".  The result of prget() is:
++  *	 0 if the line was terminated by NL or CR
++  *	 1 if it was terminated by the interrupt character.
++  *	 2 if it was terminated by erasing all the characters, including
++  *	   one or more that were prompted initially in "buf".  (If "buf"
++  * 	   was empty, this will never occur.)
++  */
++ int
+  prget(prompter, buf)
+  char *prompter, *buf;
+  {
+! 	register char *p, *q, *r;
+! 	register char c;
+! 	char lastc;
+! 	char hadprompt = buf[0];
+  
+  	curflag = CURP2;
+! 	r = buf + strlen(buf);
+  	lastc = '\0';
+  	for (;;) {
+  		p = secpr;
+  		for (q = prompter ; *q ; q++)
+  			*p++ = *q;
+  		for (q = buf ; *q ; q++) {
+! 			if (p < &secpr[SECPRLEN-1] && *q >= ' ' && *q <= '~')
+  				*p++ = *q;
+  		}
+  		*p = '\0';
+  		c = vgetc();
+! 		if (c == '\n' || c == '\r' || c == cintr) {
+  			break;
+  		}
+  		if (c == cerase || c == '\b' || c == '\177') {
+***************
+*** 1578,1583 ****
+--- 1617,1625 ----
+  			*r++ = c;
+  		}
+  		lastc = c;
++ 		*r = '\0';
++ 		if ((r == buf) && hadprompt)
++ 			return 2;
+  	}
+  	curflag = CURHOME;
+  	secpr[0] = '\0';
+***************
+*** 1620,1626 ****
+  		(void) signal(SIGTTOU, SIG_DFL);
+  #endif
+  	}
+! #ifdef BSD4_2
+  	while ((pid = vfork()) == -1)
+  #else /* !BSD4_2 */
+  	/* 4.1 BSD (at least) can't handle this vfork with -ljobs */
+--- 1662,1668 ----
+  		(void) signal(SIGTTOU, SIG_DFL);
+  #endif
+  	}
+! #if defined(BSD4_2) && !defined(sun)
+  	while ((pid = vfork()) == -1)
+  #else /* !BSD4_2 */
+  	/* 4.1 BSD (at least) can't handle this vfork with -ljobs */
+***************
+*** 1811,1817 ****
+  	if(UPDATING)	/* concurrency.  wow! */
+  		WINCH++;
+  	else if((WINCH == 0) && (savelinno >= 0)) {
+! 		int saveline = dlinno, saveflag = curflag;
+  
+  		/* reread the article */
+  		FCLOSE(fp);
+--- 1853,1859 ----
+  	if(UPDATING)	/* concurrency.  wow! */
+  		WINCH++;
+  	else if((WINCH == 0) && (savelinno >= 0)) {
+! 		int  saveflag = curflag;
+  
+  		/* reread the article */
+  		FCLOSE(fp);
+Index: vnews.help
+*** .d/vnews.help	Thu Oct 30 16:12:04 1986
+--- vnews.help	Tue Dec 16 13:10:22 1986
+***************
+*** 17,22 ****
+  ESC-r  Reply directly using mailer      m   Move on to next item in a digest
+  f   Post a followup article             s   Save article in file
+  N   Go to newsgroup (next is default)   w   Save without header
+! l   Display article (use after !, r, f, or ?)
+  
+! [Press l to see article again]
+--- 17,22 ----
+  ESC-r  Reply directly using mailer      m   Move on to next item in a digest
+  f   Post a followup article             s   Save article in file
+  N   Go to newsgroup (next is default)   w   Save without header
+! l   List unread articles in group	L   List all articles in group
+  
+! [Press ^L to see article again]
+
+Index: header.c
+Prereq: 2.44
+*** .d/header.c	Fri Nov 21 16:18:38 1986
+--- header.c	Wed Dec 17 11:36:27 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.44	11/21/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.46	12/17/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+***************
+*** 38,44 ****
+--- 38,46 ----
+  FILE *fp;
+  int wholething;
+  {
++ #ifndef HIDDENNET
+  	register int	len;
++ #endif /* HIDDENNET */
+  	register int	i;
+  #ifdef OLD
+  	char *p;
+***************
+*** 94,102 ****
+--- 96,106 ----
+  #endif /* OLD */
+  
+  strip:	/* strip off sys! from front of path. */
++ #ifndef HIDDENNET
+  	if (strncmp(FULLSYSNAME, hp->path, (len = strlen(FULLSYSNAME))) == 0
+  		&& index(NETCHRS, hp->path[len]))
+  		(void) strcpy(hp->path, &(hp->path[len+1]));
++ #endif /* HIDDENNET */
+  	lcase(hp->nbuf);
+  
+  	/* Intuit the From: line if only a path was given. */
+***************
+*** 214,219 ****
+--- 218,225 ----
+  			break;
+  		case DISTRIBUTION:
+  			getfield(hp->distribution, sizeof(hp->distribution));
++ 			if (strcmp(hp->distribution, "net") == 0)
++ 				hp->distribution[0] = '\0';
+  			break;
+  		case ORGANIZATION:
+  			getfield(hp->organization, sizeof(hp->organization));
+Index: rfuncs.c
+Prereq: 2.31
+*** .d/rfuncs.c	Thu Oct 30 16:10:23 1986
+--- rfuncs.c	Wed Dec 17 00:09:42 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.31	10/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.38	12/16/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 186,193 ****
+   * we write it out.
+   */
+  	if ((ngsize-minartno) > BITMAPSIZE) {
+! 		/* This should never happen */
+! 		(void) xerror("Bitmap not large enough for newsgroup %s", groupdir);
+  	}
+  
+  	cur = 0;
+--- 186,197 ----
+   * we write it out.
+   */
+  	if ((ngsize-minartno) > BITMAPSIZE) {
+! 		/* resize the bitmap array */
+! 		(void) free (bitmap);
+! 		BITMAPSIZE = 8 * (((ngsize - minartno) + 7) / 8);
+! 		bitmap = malloc((unsigned)BITMAPSIZE/8);
+! 		if (bitmap == NULL)
+! 			xerror("Can't malloc bitmap");
+  	}
+  
+  	cur = 0;
+***************
+*** 698,701 ****
+--- 702,844 ----
+  	}
+  	(void) fclose(nfp);
+  #endif /* SORTACTIVE */
++ }
++ 
++ #if defined(BSD4_2) || defined(BSD4_1C)
++ #include <sys/dir.h>
++ # else
++ #include "ndir.h"
++ #endif
++ #include <errno.h>
++ 
++ /*
++  * Routine to display header lines for all articles in newsgroup. If the flag
++  * argument is FALSE then only articles which are not marked as read in the
++  * bitmap will be displayed. This routine makes no attempt to determine if
++  * the article is in multiple groups and therefore should not be displayed at
++  * this time. 
++  */
++ 
++ static int *lg_array = NULL;
++ static int *lg_entry;
++ static int lg_max = 0;
++ static int int_sig;
++ extern int errno;
++ 
++ lg_cmp(p1, p2)
++ int *p1, *p2;
++ {
++ 	return *p1 > *p2;
++ }
++ 
++ list_group(lgroup, displines, flag, pngsize)
++ char *lgroup;
++ int displines, flag;
++ long pngsize;
++ {
++ 	char *briefdate();
++ 	struct hbuf hh;
++ 	register DIR *dirp;
++ 	register struct direct *dir;
++ 	register FILE *fp_art;
++ 	int i;
++ 	int entries;
++ 	unsigned int alloc_size;
++ 	int (*old_sig) ();
++ 	extern lg_trap();
++ 	char *gets();
++ 
++ 	/* This should get the numbers from the active file XXX */
++ 	if ((dirp = opendir(dirname(lgroup))) == NULL) {
++ 		printf("Can't open %s\r\n", dirname(lgroup));
++ 		return;
++ 	}
++ 	entries = 0;
++ 	if (lg_array == NULL) {
++ 		lg_max = 50;
++ 		alloc_size = lg_max * sizeof(int);
++ 		lg_array = (int *) malloc(alloc_size);
++ 	}
++ 	while ((dir = readdir(dirp)) != NULL) {
++ 		if (dir->d_ino == 0)
++ 			continue;
++ 		i = atoi(dir->d_name);
++ 		if ((i < 1) || (i > pngsize))
++ 			continue;
++ 		if (flag == FALSE) {
++ 			if (get(i) == 0)
++ 				continue;
++ 		}
++ 		if (++entries > lg_max) {
++ 			lg_max += 50;
++ 			alloc_size = lg_max * sizeof(int);
++ 			lg_array = (int *) realloc((char *) lg_array, alloc_size);
++ 		}
++ 		lg_array[entries - 1] = i;
++ 	}
++ 	if (entries == lg_max) {
++ 		lg_max++;
++ 		alloc_size = lg_max * sizeof(int);
++ 		lg_array = (int *) realloc((char *) lg_array, alloc_size);
++ 	}
++ 	qsort(lg_array, entries, sizeof *lg_array, lg_cmp);
++ 	lg_array[entries] = 0;
++ 	int_sig = 0;
++ 	old_sig = signal(SIGINT, lg_trap);
++ 	hh.unrec[0] = NULL;
++ 	for (lg_entry = lg_array; *lg_entry != 0 && int_sig == 0; lg_entry++) {
++ 		(void) sprintf(filename, "%s/%d", dirname(lgroup), *lg_entry);
++ 		fp_art = fopen(filename, "r");
++ 		if (fp_art == NULL)
++ 			continue;
++ 		if (hread(&hh, fp_art, TRUE) == NULL) {
++ 			(void) fclose(fp_art);
++ 			continue;
++ 		}
++ 		printf("%5d %-20.20s %-13s  %s\r\n",
++ 		       *lg_entry, hh.from,
++ 		       briefdate(hh.subdate), hh.title);
++ 		for (i = 0; i < displines;) {
++ 			if (fgets(bfr, LBUFLEN, fp_art) == NULL) {
++ 				break;
++ 			}
++ 			if ((bfr[0] == '\n') || (bfr[0] == '>')) {
++ 				continue;
++ 			}
++ 			printf("%s", bfr);
++ 			i++;
++ 		}
++ 		(void) fclose(fp_art);
++ 	}
++ 	(void) fflush(stdout);
++ 
++ 	closedir(dirp);
++ 	(void) signal(SIGINT, old_sig);	/* restore to old value */
++ 
++ 	printf("[Press RETURN to continue]");
++ 	(void) fflush(stdout);
++ 
++ 	while (TRUE) {
++ 		errno = 0;
++ 		i = getchar();
++ 		if (errno == EINTR)
++ 			continue;
++ 		if (i == '\n' || i == '\r')
++ 			break;
++ 		if (i == EOF)
++ 			break;
++ 		if (i == '\4')
++ 			break;
++ 	}
++ 	(void) free(lg_array);
++ 
++ }
++ 
++ lg_trap(code)
++ int code;
++ {
++ 
++ 	int_sig = 1;
++ 	(void) signal(code, lg_trap);	/* reset signal */
++ 
+  }
+
+Index: Makefile.dst
+Prereq: 1.19
+*** .d/Makefile.dst	Fri Nov 21 16:05:09 1986
+--- Makefile.dst	Tue Dec 16 17:47:05 1986
+***************
+*** 1,4 ****
+! # '@(#)Makefile.dst	1.19	11/21/86'
+  # Generic Makefile.
+  # This is converted to USG/v7/etc by localize.sh
+  # which should at least be a copy of localize.v7 or localize.usg
+--- 1,4 ----
+! # '@(#)Makefile.dst	1.21	12/16/86'
+  # Generic Makefile.
+  # This is converted to USG/v7/etc by localize.sh
+  # which should at least be a copy of localize.v7 or localize.usg
+***************
+*** 57,62 ****
+--- 57,63 ----
+  #BSD4_1 LIBS = -ldbm -ljobs
+  
+  TERMLIB = -ltermlib
++ FIXACTIVE =
+  
+  #VMS TERMLIB = -ltrmlib
+  #VMS LIBS = -ldbm
+***************
+*** 64,69 ****
+--- 65,71 ----
+  #VMS MISC = uname.o
+  #VMS LINTFLAGS = -chba -DDBM -DVMS ${DEFS}
+  #VMS VFORK=
++ #VMS FIXACTIVE = /etc/vmstounix $(LIBDIR)/active
+  
+  #V7 MISC = uname.o
+  #USG MISC = ftime.o
+***************
+*** 182,188 ****
+  	$(CC) $(CFLAGS) $(HOMENAME) -c ifuncs.c
+  
+  iextern.o:  iextern.c iparams.h defs.h params.h Makefile header.h
+! 	$(CC) $(CFLAGS) -c iextern.c
+  
+  postnews: $(POBJECTS)
+  	$(CC) $(CFLAGS) $(LFLAGS) $(POBJECTS) -o postnews
+--- 184,190 ----
+  	$(CC) $(CFLAGS) $(HOMENAME) -c ifuncs.c
+  
+  iextern.o:  iextern.c iparams.h defs.h params.h Makefile header.h
+! 	$(CC) $(CFLAGS) $(HOMENAME) -c iextern.c
+  
+  postnews: $(POBJECTS)
+  	$(CC) $(CFLAGS) $(LFLAGS) $(POBJECTS) -o postnews
+***************
+*** 271,278 ****
+  process.o:  process.c rparams.h defs.h params.h header.h Makefile
+  	$(CC) $(CFLAGS) -c process.c
+  
+! checknews:  checknews.o process.o cpathinit.o
+! 	$(CC) $(LFLAGS) checknews.o process.o cpathinit.o -o checknews
+  #VMS 	mv checknews.exe checknews
+  
+  sendbatch: sendbatch.sh Makefile
+--- 273,280 ----
+  process.o:  process.c rparams.h defs.h params.h header.h Makefile
+  	$(CC) $(CFLAGS) -c process.c
+  
+! checknews:  checknews.o process.o cpathinit.o rextern.o
+! 	$(CC) $(LFLAGS) checknews.o process.o cpathinit.o rextern.o -o checknews
+  #VMS 	mv checknews.exe checknews
+  
+  sendbatch: sendbatch.sh Makefile
+***************
+*** 283,288 ****
+--- 285,291 ----
+  
+  rmgroup: rmgroup.sh Makefile
+  	sed -e "s%LIBDIR%$(LIBDIR)%g" \
++ 	 -e "s%FIXACTIVE%$(FIXACTIVE)%g" \
+  	 -e "s%SPOOLDIR%$(SPOOLDIR)%g" rmgroup.sh > rmgroup
+  #VMS 	/etc/unixtovms rmgroup
+  
+Index: makeactive.sh
+Prereq: 1.22
+*** .d/makeactive.sh	Thu Oct 30 16:10:33 1986
+--- makeactive.sh	Wed Dec 17 00:09:41 1986
+***************
+*** 1,6 ****
+  : "Create active file and newsgroup hierarchy for new machine"
+  : "Usage: sh makeactive.sh LIBDIR SPOOLDIR NEWSUSR NEWSGRP"
+! : '@(#)makeactive	1.22	10/29/86'
+  LIBDIR=$1
+  SPOOLDIR=$2
+  NEWSUSR=$3
+--- 1,6 ----
+  : "Create active file and newsgroup hierarchy for new machine"
+  : "Usage: sh makeactive.sh LIBDIR SPOOLDIR NEWSUSR NEWSGRP"
+! : '@(#)makeactive	1.23	12/16/86'
+  LIBDIR=$1
+  SPOOLDIR=$2
+  NEWSUSR=$3
+***************
+*** 7,144 ****
+  NEWSGRP=$4
+  cat <<"E_O_F" > /tmp/$$groups
+  general	Articles that should be read by everyone on your local system
+- net.ai			Artificial intelligence discussions.
+- net.announce.arpa-internet	Announcements from the Arpa world
+- net.arch		Computer architecture.
+- net.audio		High fidelity audio.
+- net.auto		Automobiles, automotive products and laws.
+- net.auto.tech		Technical aspects of automobiles, et. al.
+- net.aviation		Aviation rules, means, and methods.
+- net.bicycle		Bicycles, related products and laws.
+- net.books		Books of all genres, shapes, and sizes.
+- net.bugs		General bug reports and fixes.
+- net.bugs.2bsd		Reports of UNIX* version 2BSD related bugs.
+- net.bugs.4bsd		Reports of UNIX version 4BSD related bugs.
+- net.bugs.usg		Reports of USG (System III, V, etc.) bugs.
+- net.bugs.uucp		Reports of UUCP related bugs.
+- net.bugs.v7		Reports of UNIX V7 related bugs.
+- net.cog-eng		Cognitive engineering.
+- net.comics		The funnies, old and new.
+- net.cooks		Food, cooking, cookbooks, and recipes.
+- net.cse			Computer science education.
+- net.cycle		Motorcycles and related products and laws.
+- net.database		Database and data management issues and theory.
+- net.dcom		Data communications hardware and software.
+- net.decus		DEC* Users' Society newsgroup.
+- net.emacs		EMACS editors of different flavors.
+- net.eunice		The SRI Eunice system.
+- net.games		Games and computer games.
+- net.games.board		Discussion and hints on board games.
+- net.games.chess		Chess & computer chess.
+- net.games.emp		Discussion and hints about Empire.
+- net.games.frp		Discussion about Fantasy Role Playing games.
+- net.games.go		Discussion about Go.
+- net.games.hack		Discussion, hints, etc. about the Hack game.
+- net.games.pbm		Discussion about Play by Mail games.
+- net.games.rogue		Discussion and hints about Rogue.
+- net.games.trivia	Discussion about trivia.
+- net.games.video		Discussion about video games.
+- net.garden		Gardening, methods and results.
+- net.graphics		Computer graphics, art, animation, image processing,
+- net.ham-radio		Amateur Radio practices, contests, events, rules, etc.
+- net.ham-radio.packet	Discussion about packet radio setups.
+- net.info-terms		All sorts of terminals.
+- net.internat		Discussion about international standards
+- net.jokes		Jokes and the like.  May be somewhat offensive.
+- net.jokes.d		Discussions on the content of net.jokes articles
+- net.lan			Local area network hardware and software.
+- net.lang		Different computer languages.
+- net.lang.ada		Discussion about Ada*.
+- net.lang.apl		Discussion about APL.
+- net.lang.c		Discussion about C.
+- net.lang.c++		The object-oriented C++ language.
+- net.lang.f77		Discussion about FORTRAN.
+- net.lang.forth		Discussion about Forth.
+- net.lang.lisp		Discussion about LISP.
+- net.lang.mod2		Discussion about Modula-2.
+- net.lang.pascal		Discussion about Pascal.
+- net.lang.prolog		Discussion about PROLOG.
+- net.lang.st80		Discussion about Smalltalk 80.
+- net.lsi			Large scale integrated circuits.
+- net.mag			Magazine summaries, tables of contents, etc.
+- net.mail		Proposed new mail/network standards.
+- net.mail.headers	Gatewayed from the ARPA header-people list.
+- net.micro		Micro computers of all kinds.
+- net.micro.6809		Discussion about 6809's.
+- net.micro.68k		Discussion about 68k's.
+- net.micro.apple		Discussion about Apple micros.
+- net.micro.amiga		Talk about the new Amiga micro.
+- net.micro.atari8	Discussion about 8 bit Atari micros.
+- net.micro.atari16	Discussion about 16 bit Atari micros.
+- net.micro.att		Discussions about AT&T microcomputers 
+- net.micro.cbm		Discussion about Commodore micros.
+- net.micro.cpm		Discussion about the CP/M operating system.
+- net.micro.hp		Discussion about Hewlett/Packard's.
+- net.micro.mac		Material about the Apple Macintosh & Lisa
+- net.micro.ns32k		National Semiconductor 32000 series chips
+- net.micro.pc		Discussion about IBM personal computers.
+- net.micro.ti		Discussion about Texas Instruments.
+- net.micro.trs-80	Discussion about TRS-80's.
+- net.movies		Reviews and discussions of movies.
+- net.music		Music lovers' group.
+- net.music.classical	Discussion about classical music.
+- net.music.folk		Folks discussing folk music of various sorts
+- net.music.gdead		A group for (Grateful) Dead-heads
+- net.music.makers	For performers and their discussions.
+- net.music.synth		Synthesizers and computer music
+- net.news		Discussions of USENET itself.
+- net.news.adm		Comments directed to news administrators.
+- net.news.b		Discussion about B news software.
+- net.news.config		Postings of system down times and interruptions.
+- net.news.group		Discussions and lists of newsgroups
+- net.news.newsite	Postings of new site announcements.
+- net.news.notes		Notesfile software from the Univ. of Illinois.
+- net.news.sa		Comments directed to system administrators.
+- net.news.stargate	Discussion about satellite transmission of news.
+- net.periphs		Peripheral devices.
+- net.pets		Pets, pet care, and household animals in general.
+- net.poems		For the posting of poems.
+- net.puzzle		Puzzles, problems, and quizzes.
+- net.railroad		Real and model train fans' newsgroup.
+- net.rec			Recreational/participant sports.
+- net.rec.birds		Hobbyists interested in bird watching.
+- net.rec.boat		Hobbyists interested in boating.
+- net.rec.bridge		Hobbyists interested in bridge.
+- net.rec.nude		Hobbyists interested in naturist/nudist activities.
+- net.rec.photo		Hobbyists interested in photography.
+- net.rec.scuba		Hobbyists interested in SCUBA diving.
+- net.rec.ski		Hobbyists interested in skiing.
+- net.rec.skydive		Hobbyists interested in skydiving.
+- net.rec.wood		Hobbyists interested in woodworking.
+- net.sf-lovers		Science fiction lovers' newsgroup.
+  net.sources		For the posting of software packages & documentation.
+  net.sources.bugs	For bug fixes and features discussion
+- net.sources.d		For any discussion on net.sources postings.
+  net.sources.games	Postings of recreational software
+  net.sources.mac		Software for the Apple Macintosh
+- net.sport		Spectator sports.
+- net.sport.baseball	Discussion about baseball.
+- net.sport.football	Discussion about football.
+- net.sport.hockey	Discussion about hockey.
+- net.sport.hoops		Discussion about basketball.
+- net.startrek		Star Trek, the TV show and the movies.
+- net.text		Text processing.
+- net.travel		Traveling all over the world.
+- net.tv			The boob tube, its history, and past and current shows.
+- net.tv.drwho		Discussion about Dr. Who.
+- net.tv.soaps		Postings about soap operas.
+- net.unix		UNIX neophytes group.
+- net.unix-wizards	Discussions, bug reports, and fixes on and for UNIX.
+- net.usenix		USENIX Association events and announcements.
+- net.veg			Vegetarians.
+- net.video		Video and video components.
+- net.wines		Wines and spirits.
+- net.wobegon		"A Prairie Home Companion" radio show discussion.
+  mod.announce		General announcements of interest to all. (Moderated)
+  mod.announce.newusers	Explanatory postings for new users. (Moderated)
+  mod.ai			Discussions about Artificial Intelligence (Moderated)
+--- 7,16 ----
+***************
+*** 162,175 ****
+  mod.comp-soc		Discussion on the impact of technology on society. (Moderated)
+  mod.graphics		Graphics software, hardware, theory, etc. (Moderated)
+  mod.human-nets		Computer aided communications digest. (Moderated)
+- mod.legal		Discussions of computers and the law. (Moderated)
+  mod.mac			Apple Macintosh micros -- info, uses, but no programs. (Moderated)
+  mod.mac.binaries	Encoded public domain programs in binary form. (Moderated)
+  mod.mac.sources		Public domain software in source code format. (Moderated)
+- mod.mag			Discussions on electronicly published "magazines" (Moderated)
+  mod.mag.otherrealms	Edited science fiction and fantasy "magazine". (Moderated)
+  mod.map			Various maps, including UUCP maps (Moderated)
+- mod.movies		Reviews and discussion of movies (Moderated)
+  mod.music		Reviews and discussion of things musical (Moderated)
+  mod.music.gaffa		Progressive music discussions (e.g., Kate Bush). (Moderated)
+  mod.newprod		Announcements of new products of interest to readers (Moderated)
+--- 34,44 ----
+***************
+*** 201,211 ****
+  mod.std.unix		Discussion for the P1003 committee on UNIX (Moderated)
+  mod.techreports		Announcements and lists of technical reports. (Moderated)
+  mod.telecom		Telecommunications digest. (Moderated)
+! mod.test		Testing of moderated newsgroups -- no moderator (Moderated)
+! mod.vlsi		Very large scale integrated circuits. (Moderated)
+  misc.consumers		Consumer interests, product reviews, etc.
+  misc.consumers.house	Discussion about owning and maintaining a house.
+! misc.forsale		Items for sale.
+  misc.headlines		Current interest: drug testing, terrorism, etc.
+  misc.invest		Investments and the handling of money.
+  misc.jobs		Job announcements, requests, etc.
+--- 70,139 ----
+  mod.std.unix		Discussion for the P1003 committee on UNIX (Moderated)
+  mod.techreports		Announcements and lists of technical reports. (Moderated)
+  mod.telecom		Telecommunications digest. (Moderated)
+! comp.ai			Artificial intelligence discussions.
+! comp.arch		Computer architecture.
+! comp.bugs.2bsd		Reports of UNIX* version 2BSD related bugs.
+! comp.bugs.4bsd		Reports of UNIX version 4BSD related bugs.
+! comp.bugs.misc		General bug reports and fixes (includes V7 & uucp).
+! comp.bugs.sys5		Reports of USG (System III, V, etc.) bugs.
+! comp.cog-eng		Cognitive engineering.
+! comp.databases		Database and data management issues and theory.
+! comp.dcom.lans		Local area network hardware and software.
+! comp.dcom.modems	Data communications hardware and software.
+! comp.edu		Computer science education.
+! comp.emacs		EMACS editors of different flavors.
+! comp.graphics		Computer graphics, art, animation, image processing,
+! comp.lang.ada		Discussion about Ada*.
+! comp.lang.apl		Discussion about APL.
+! comp.lang.c		Discussion about C.
+! comp.lang.c++		The object-oriented C++ language.
+! comp.lang.forth		Discussion about Forth.
+! comp.lang.fortran	Discussion about FORTRAN.
+! comp.lang.lisp		Discussion about LISP.
+! comp.lang.misc		Different computer languages not specifically listed.
+! comp.lang.modula2	Discussion about Modula-2.
+! comp.lang.pascal	Discussion about Pascal.
+! comp.lang.prolog	Discussion about PROLOG.
+! comp.lang.smalltalk	Discussion about Smalltalk 80.
+! comp.lsi		Large scale integrated circuits.
+! comp.mail.headers	Gatewayed from the ARPA header-people list.
+! comp.mail.misc		General discussions about computer mail.
+! comp.mail.uucp		Mail in the uucp network environment.
+! comp.misc		General topics about computers not covered elsewhere.
+! comp.org.decus		DEC* Users' Society newsgroup.
+! comp.org.usenix		USENIX Association events and announcements.
+! comp.os.cpm		Discussion about the CP/M operating system.
+! comp.os.eunice		The SRI Eunice system.
+! comp.os.misc		General OS-oriented discussion not carried elsewhere.
+! comp.periphs		Peripheral devices.
+! comp.sources.d		For any discussion of source postings.
+! comp.sources.wanted	Requests for software and fixes.
+! comp.std.internat	Discussion about international standards
+! comp.sys.amiga		Discussion about the Amiga micro.
+! comp.sys.apple		Discussion about Apple micros.
+! comp.sys.atari.8bit	Discussion about 8 bit Atari micros.
+! comp.sys.atari.st	Discussion about 16 bit Atari micros.
+! comp.sys.att		Discussions about AT&T microcomputers 
+! comp.sys.cbm		Discussion about Commodore micros.
+! comp.sys.dec		Discussions about DEC computer systems.
+! comp.sys.hp		Discussion about Hewlett/Packard's.
+! comp.sys.ibm.pc		Discussion about IBM personal computers.
+! comp.sys.intel		Disucussions about Intel systems and parts.
+! comp.sys.m6809		Discussion about 6809's.
+! comp.sys.m68k		Discussion about 68k's.
+! comp.sys.mac		Discussions about the Apple Macintosh & Lisa.
+! comp.sys.misc		Micro computers of all kinds.
+! comp.sys.nsc.32k	National Semiconductor 32000 series chips
+! comp.sys.tandy		Discussion about TRS-80's.
+! comp.sys.ti		Discussion about Texas Instruments.
+! comp.terminals		All sorts of terminals.
+! comp.text		Text processing.
+! comp.unix.questions	UNIX neophytes group.
+! comp.unix.wizards	Discussions, bug reports, and fixes on and for UNIX.
+! comp.unix.xenix		Discussion about the Xenix OS.
+  misc.consumers		Consumer interests, product reviews, etc.
+  misc.consumers.house	Discussion about owning and maintaining a house.
+! misc.forsale		Short, tasteful postings about items for sale.
+  misc.headlines		Current interest: drug testing, terrorism, etc.
+  misc.invest		Investments and the handling of money.
+  misc.jobs		Job announcements, requests, etc.
+***************
+*** 215,220 ****
+--- 143,220 ----
+  misc.taxes		Tax laws and advice.
+  misc.test		For testing of network software.  Very boring.
+  misc.wanted		Requests for things that are needed (NOT software).
++ news.admin		Comments directed to news administrators.
++ news.config		Postings of system down times and interruptions.
++ news.groups		Discussions and lists of newsgroups
++ news.lists		News-related statistics and lists (Moderated)
++ news.misc		Discussions of USENET itself.
++ news.newsites		Postings of new site announcements.
++ news.software.b		Discussion about B news software.
++ news.software.notes	Notesfile software from the Univ. of Illinois.
++ news.stargate		Discussion about satellite transmission of news.
++ news.sysadmin		Comments directed to system administrators.
++ rec.arts.books		Books of all genres, shapes, and sizes.
++ rec.arts.comics		The funnies, old and new.
++ rec.arts.drwho		Discussion about Dr. Who.
++ rec.arts.movies		Reviews and discussions of movies.
++ rec.arts.poems		For the posting of poems.
++ rec.arts.sf-lovers	Science fiction lovers' newsgroup.
++ rec.arts.startrek	Star Trek, the TV show and the movies.
++ rec.arts.tv		The boob tube, its history, and past and current shows.
++ rec.arts.tv.soaps	Postings about soap operas.
++ rec.arts.wobegon	"A Prairie Home Companion" radio show discussion.
++ rec.audio		High fidelity audio.
++ rec.autos		Automobiles, automotive products and laws.
++ rec.autos.tech		Technical aspects of automobiles, et. al.
++ rec.aviation		Aviation rules, means, and methods.
++ rec.bicycles		Bicycles, related products and laws.
++ rec.birds		Hobbyists interested in bird watching.
++ rec.boats		Hobbyists interested in boating.
++ rec.food.cooking	Food, cooking, cookbooks, and recipes.
++ rec.food.drink		Wines and spirits.
++ rec.food.veg		Vegetarians.
++ rec.games.board		Discussion and hints on board games.
++ rec.games.bridge	Hobbyists interested in bridge.
++ rec.games.chess		Chess & computer chess.
++ rec.games.empire	Discussion and hints about Empire.
++ rec.games.frp		Discussion about Fantasy Role Playing games.
++ rec.games.go		Discussion about Go.
++ rec.games.hack		Discussion, hints, etc. about the Hack game.
++ rec.games.misc		Games and computer games.
++ rec.games.pbm		Discussion about Play by Mail games.
++ rec.games.rogue		Discussion and hints about Rogue.
++ rec.games.trivia	Discussion about trivia.
++ rec.games.video		Discussion about video games.
++ rec.gardens		Gardening, methods and results.
++ rec.ham-radio		Amateur Radio practices, contests, events, rules, etc.
++ rec.ham-radio.packet	Discussion about packet radio setups.
++ rec.humor		Jokes and the like.  May be somewhat offensive.
++ rec.humor.d		Discussions on the content of rec.humor articles
++ rec.mag			Magazine summaries, tables of contents, etc.
++ rec.misc		General topics about recreational/participant sports.
++ rec.motorcycles		Motorcycles and related products and laws.
++ rec.music.classical	Discussion about classical music.
++ rec.music.folk		Folks discussing folk music of various sorts
++ rec.music.gdead		A group for (Grateful) Dead-heads
++ rec.music.makers	For performers and their discussions.
++ rec.music.misc		Music lovers' group.
++ rec.music.synth		Synthesizers and computer music
++ rec.nude		Hobbyists interested in naturist/nudist activities.
++ rec.pets		Pets, pet care, and household animals in general.
++ rec.photo		Hobbyists interested in photography.
++ rec.puzzles		Puzzles, problems, and quizzes.
++ rec.railroad		Real and model train fans' newsgroup.
++ rec.scuba		Hobbyists interested in SCUBA diving.
++ rec.skiing		Hobbyists interested in skiing.
++ rec.skydiving		Hobbyists interested in skydiving.
++ rec.sport.baseball	Discussion about baseball.
++ rec.sport.basketball	Discussion about basketball.
++ rec.sport.football	Discussion about football.
++ rec.sport.hockey	Discussion about hockey.
++ rec.sport.misc		Spectator sports.
++ rec.travel		Traveling all over the world.
++ rec.video		Video and video components.
++ rec.woodworking		Hobbyists interested in woodworking.
+  sci.astro		Astronomy discussions and information.
+  sci.bio			Biology and related sciences.
+  sci.crypt		Different methods of data en/decryption.
+***************
+*** 234,240 ****
+  soc.culture.celtic	Group about Celtics (*not* basketball!)
+  soc.culture.greek	Group about Greeks.
+  soc.culture.indian	Group for discussion about India & things Indian
+! soc.culture.jewish	Group for discussion about Jewish culture
+  soc.culture.misc	Group for discussion about other cultures
+  soc.misc		Socially-oriented topics not in other groups.
+  soc.motss		Issues pertaining to homosexuality.
+--- 234,240 ----
+  soc.culture.celtic	Group about Celtics (*not* basketball!)
+  soc.culture.greek	Group about Greeks.
+  soc.culture.indian	Group for discussion about India & things Indian
+! soc.culture.jewish	Group for discussion about Jewish culture & religion
+  soc.culture.misc	Group for discussion about other cultures
+  soc.misc		Socially-oriented topics not in other groups.
+  soc.motss		Issues pertaining to homosexuality.
+Index: rmgroup.sh
+Prereq: 1.6
+*** .d/rmgroup.sh	Thu Oct 30 16:12:15 1986
+--- rmgroup.sh	Tue Dec 16 17:47:07 1986
+***************
+*** 1,23 ****
+! : '@(#)rmgroup.sh	1.6	9/19/86'
+  for group
+  do
+- 	echo "Removing newsgroup $group"
+  	qgrp="`echo $group | sed 's/\./\\\./g'`"
+  	if
+  		grep -s "^$qgrp " LIBDIR/active
+  	then
+! 		cat << E_O_F >/tmp/$$
+! /^$qgrp[ 	]/d
+! w
+! q
+! E_O_F
+! 		ed - LIBDIR/active < /tmp/$$
+! 		ed - LIBDIR/newsgroups < /tmp/$$
+  		dir=SPOOLDIR/"`echo $group | sed 's/\./\//g'`"
+! 		if [ -d $dir ]
+  		then
+! 			rm $dir/*
+! 			rmdir $dir
+  		else
+  			echo "$0: $dir: no spool directory" 2>&1
+  		fi
+--- 1,17 ----
+! : '@(#)rmgroup.sh	1.8	12/16/86'
+  for group
+  do
+  	qgrp="`echo $group | sed 's/\./\\\./g'`"
+  	if
+  		grep -s "^$qgrp " LIBDIR/active
+  	then
+! 		echo "Removing newsgroup $group"
+! 		echo "/^$qgrp[ 	]/d" >>/tmp/,edit$$
+  		dir=SPOOLDIR/"`echo $group | sed 's/\./\//g'`"
+! 		if test  -d $dir
+  		then
+! 			rm $dir/* >/dev/null 2>&1
+! 			echo "rmdir $dir >/dev/null 2>&1" >>/tmp/,rmdir$$
+  		else
+  			echo "$0: $dir: no spool directory" 2>&1
+  		fi
+***************
+*** 25,29 ****
+  		echo "$0: $group: no such newsgroup" 2>&1
+  	fi
+  done
+! rm -f /tmp/$$
+  exit 0
+--- 19,36 ----
+  		echo "$0: $group: no such newsgroup" 2>&1
+  	fi
+  done
+! echo w >>/tmp/,edit$$
+! echo q >>/tmp/,edit$$
+! echo "Editing LIBDIR/active..."
+! ed - LIBDIR/active < /tmp/,edit$$
+! FIXACTIVE
+! echo "Editing LIBDIR/newsgroups..."
+! ed - LIBDIR/newsgroups < /tmp/,edit$$
+! echo "Removing directories..."
+! if test -s /tmp/,rmdir$$
+! then
+! 	sort +1r -o /tmp/,rmdir$$ /tmp/,rmdir$$
+! 	. /tmp/,rmdir$$
+! fi
+! rm -f /tmp/,edit$$ /tmp/,rmdir$$
+  exit 0
+Index: patchlevel.h
+Prereq: 1
+*** .d/patchlevel.h	Fri Nov 21 16:06:03 1986
+--- patchlevel.h	Tue Dec 16 17:47:05 1986
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	1
+  
+! #define NEWS_VERSION   "B 2.11 11/15/86"
+--- 1,3 ----
+! #define	PATCHLEVEL	2
+  
+! #define NEWS_VERSION   "B 2.11 12/17/86"

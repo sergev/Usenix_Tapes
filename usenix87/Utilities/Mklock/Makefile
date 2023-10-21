@@ -1,0 +1,2 @@
+ALL=	mklock
+all: $(ALL)

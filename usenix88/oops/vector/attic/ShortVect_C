@@ -1,0 +1,87 @@
+/* ShortVect.c -- Data type-specific functions for class ShortVec
+
+Author:
+	K. E. Gorlen
+	Bg. 12A, Rm. 2017
+	Computer Systems Laboratory
+	Division of Computer Research and Technology
+	National Institutes of Health
+	Bethesda, Maryland 20892
+	Phone: (301) 496-5363
+	uucp: {decvax!}seismo!elsie!cecil!keith
+	June, 1986
+
+Function:
+	
+Data type -specific functions for class ShortVec.
+
+Modification History:
+	
+*/
+
+#include "ShortVec.h"
+#include "oopsconfig.h"
+//#include <libc.h>		// cfront bug
+extern void qsort(void*,int,int,int(*)());
+
+#define	THIS	ShortVec
+#define	BASE	Vector
+
+static int typeCmp(short& a, short& b)
+{
+	return a-b;
+}
+
+static union hash_short_mask {
+	int in[sizeof(int)/sizeof(short)];
+	short sh[sizeof(int)/sizeof(short)*sizeof(int)/sizeof(short)];
+	hash_short_mask();
+} mask;
+
+hash_short_mask::hash_short_mask()
+{
+	for (register int i=0; i<sizeof(int)/sizeof(short); i++) {
+		for (register int j=0; j<sizeof(int)/sizeof(short); j++) sh[sizeof(int)*i+j] = j<i ? -1 : 0;
+	}
+}
+
+int THIS::hash()
+{
+	register int h = n;
+#ifdef LOG2_INT
+	register int i = n >> (LOG2_INT-LOG2_SHORT);
+#else
+	register int i = n/(sizeof(int)/sizeof(short));
+#endif
+	register int* vv = (int*)v;
+	while (i--) h ^= *vv++;
+#ifdef LOG2_INT
+	if ((i = n&((sizeof(int)/sizeof(short))-1)) != 0)
+#else
+	if ((i = n%(sizeof(int)/sizeof(short))) != 0)
+#endif
+		h ^= *vv & mask.in[i];
+	return h;
+}
+
+void THIS::printOn(ostream& strm)
+{
+	for (register int i=0; i<n; i++) {
+		if (i>0 && (i%10 == 0)) strm << "\n\t";
+		strm << dec(v[i],8);
+	}
+}
+
+THIS::THIS(istream& strm, THIS& where)
+{
+	this = &where;
+	strm >> n;
+	v = new short[n];
+	for (register int i =0; i<n; i++) strm >> v[i];
+}
+
+void THIS::storer(ostream& strm)
+{
+	Object::storer(strm);
+	for (register int i=0; i<n; i++) strm << v[i] << " ";
+}

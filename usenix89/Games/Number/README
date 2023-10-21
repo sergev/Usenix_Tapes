@@ -1,0 +1,210 @@
+	::::	Description	::::
+
+This version of number was inspired from the standard
+version in /usr/games, but with a big difference:  It
+knows how to count in a *lot* of languages, and can
+be taught almost anything that it doesn't already know.
+The information on how to count in a given language
+is given in a grammar, written in a meta-language described
+a little later.  Grammars exist, as of this moment, for:
+
+Cantonese		French		Japanese	Spanish
+Chinese (Mandarin)	Gaellic (Irish)	Malinke		Susu
+English			German		Pular		Vietnamese
+Esperanto		Italian		Romanian
+
+It takes about twenty minutes with a native speaker to
+write a grammar, once you understand how to do so.  Instructions
+on how to write a grammar are included at the end of this
+file.  It is also highly recommended that you study some
+of the existing grammars before attempting your own.
+
+	::::	Installation	::::
+
+- Make a directory for this package, and cd to it.
+- Run 'sh' on the file that you put this shell archive
+  in in order to extract all of the files in it.
+- Edit the Makefile to indicate where you want the
+  executable, and the grammar files to be kept.
+
+** Important: THIS MUST BE DONE BEFORE YOU COMPILE NUMBER!
+
+- Type 'make install'
+
+	::::	Adding languages	::::
+
+** Note:  If all you want to do is use number, you can skip the
+	  rest of this file.
+
+The grammar files used by number contain rules that
+number uses to translate numbers into words.  The
+rules are generally of the form:
+
+n	rules
+
+where 'n' is the "base" number, separated by a single tab from
+the rule per se.  The rules must be in ascending order of
+base number.  The basic algorithm that number uses to
+translate a number to words is to find the rule with
+the largest base that is smaller than the number, and
+evaluate the rule for that base, given the number.  For
+example, one might have the rule:
+
+5	"five"
+
+which, if the number being translated were 5, would cause
+the rule "five" to be evaluated.  In this case, the rule
+is a simple string, which would be printed.  Rules may
+contain:
+
+- Strings, delimited by double quotes, which are simply printed.
+- Spaces, which are printed as well.
+- A number, which causes the number to be spelled.
+- The following special characters, with the meanings:
+  /  Spell the number divided by the base.
+  %  Spell the number modulus the base.
+- A conditional, described below.
+- A single character macro.
+- A comma, which functions as a no-op.
+
+In addition, grammars contain macro definitions, and may
+contain lines of comments, which have a '#' in the first
+column.  Rules may be continued across multiple lines by
+terminating the line with a '\'.  The next line must
+begin with a tab character.
+
+Conditionals have the following syntax:
+
+(L C R	rule)
+
+with a tab separating the 'R' from the rule.  L and R
+are either numbers, or one of the characters:
+
+/	Number divided by base.
+%	Number modulus base.
+B	Base.
+#	Number.
+L	Recursion level.
+
+C is one of '<', '>', '=' or '~', meaning less than,
+greater than, equal to, or not equal to, respectively.
+The following (common) rule, taken from the grammar
+for Esperanto, expresses the fact that for units
+of 10, the number divided by 10 is only added before
+the word for 10 if is greater than 1:
+
+10	(/ > 1	/)"dek" %
+
+Thus, if 23 were being evaluated, the conditional would
+check to see if 23 / 10 is greater than 1, and, since it
+is, evaluate the rule '/' causing 2 to be spelled.  Given
+the following grammar:
+
+0	"zero"
+1	"unu"
+2	"du"
+3	"tri"
+4	"kvar"
+5	"kvin"
+6	"ses"
+7	"sep"
+8	"ok"
+9	"na[bre]u"
+10	(/ > 1	/)"dek" %
+100	(/ > 1	/) "cent" %
+
+and the number 23, the following would happen:
+
+- Select rule for base 10, number 23, since 10 is the largest
+  base that is smaller than 23.
+  - Evaluate the conditional '(/ > 1	/)'.
+    - Evaluate / -> 23 / 10 -> 2.
+    - Evaluate 2 > 1 -> TRUE.
+    - Evaluate / -> 23 / 10 -> 2.
+      - Evaluate rule for base 2, number 2.
+	- Print "du".
+  - Print "dek".
+  - Print " ".
+  - Evaluate % -> 23 % 10 -> 3.
+    - Evaluate rule for base 3, number 3.
+      - Print "tri"
+
+The net result is that "dudek tri" is printed.
+
+	::::	Macros	::::
+
+A macro is defined by the following syntax:
+
+/	c	rule
+
+where c is any letter except L and B.  (Other characters
+are allowed as well, but don't bump into special characters...)
+In the grammar given above, for Esperanto, we could have
+used a macro to simplify the rules for 10 and 100, thus:
+
+/	d	(/ > 1	/)
+10	d"dek" %
+100	d "cent" %
+
+The following is about the most complicated piece of
+code in a grammar, and illustrates most of the features
+of the grammar metalanguage.
+
+10	(/ > 1	/) "m'u~'"(/ = 1	"[`]")"'o~'i" a
+/	a	(/ > 1	(% = 1	"m[^']ot")(% > 1	c))(/ = 1	c)
+/	c	(% = 5	"l[)]am")(% ~ 5	%)
+100	...
+
+It expresses the following:
+
+- For any number greater than or equal to 10, but less
+  than 100, first spell the number divided by ten, if
+  the quotient is greater than one.
+- Print the string "m'u~'".
+- If the quotient is 1, then print the string "[`]".
+- Print the string "'o~'i".
+- Expanding the macro 'a', if the quotient is greater
+  than 1:
+  - If the number modulus the base is 1, print the string "m[^']ot".
+  - If the modulus is greater than 1, expanding macro c:
+    - If the modulus is 5, print "l[)]am".
+    - If the modulus is not 5, evaluate the modulus.
+- If the quotient is 1, expanding macro c:
+  - If the modulus is 5, print "l[)]am".
+  - If the modulus is not 5, evaluate the modulus.
+
+The essence of all of this is that if, in Vietnamese, something
+comes before the word "m'u~'[`]'o~'i", which means 10, it
+loses its tone ("[`]").  Further, the word for 1 (normally
+"m[^.]ot" changes its tone in some circumstances, and the
+word for 5 ("n[)]am") changes its initial letter to an "l"
+in still other situations.  Whew.
+
+Macros can be handy for making very short rules.  For example,
+in German, 30, 40, etc. are spelled by adding the letters "zig"
+to the word for the number divided by 10.  Thus, with the
+following macro:
+
+/	z	"zig"
+
+the rule for 30 can be reduced from:
+
+30	"dreizig"
+
+to:
+
+30	3z
+
+	::::	Conclusion	::::
+
+If you write any grammars, I'd greatly appreciate having
+them.  My permanent net address is:
+
+	scott@cerberus.uchicago.edu
+
+USnail address:
+
+	Scott Deerwester
+	1100 E. 57th, GLS
+	University of Chicago
+	Chicago, Illinois 60637

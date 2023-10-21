@@ -1,0 +1,112 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site umcp-cs.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!umcp-cs!chris
+From: chris@umcp-cs.UUCP (Chris Torek)
+Newsgroups: net.sources.bugs
+Subject: Re: Retraction (matrix routine)
+Message-ID: <2268@umcp-cs.UUCP>
+Date: 20 Nov 85 07:02:01 GMT
+Date-Received: 21 Nov 85 21:48:42 GMT
+References: <267@h.cs.cmu.edu>
+Organization: U of Maryland, Computer Science Dept., College Park, MD
+Lines: 99
+
+Your routine may not work on machines with severe alignment
+constraints.  More important, however, is your use of `valloc'.
+`valloc'ed memory is page aligned, normally only used in cases
+where a virtual memory system wants to move it around by changing
+PTEs rather than by copying; moreover, this memory cannot be given
+back on a standard system (I consider this a bug in valloc, but it
+is there.)
+
+Here is a `portable' matrix allocator that uses `malloc', along
+with a matrix destroyer.  The remaining routines are left as an
+exercise to the reader....
+
+/*
+ * matalloc.c - matrix allocation and freeing routines.
+ */
+
+#define	NULL	0		/* standard, portable, and correct! */
+
+char	*malloc();		/* eventually `char *malloc(int n);' */
+void	free();			/* eventually `void free(char *p);' */
+
+/*
+ * This type belongs in mat.h, but I am creating this on the fly
+ * and want a self-contained example.  Separate this out before
+ * using these routines in `real live code'.
+ */
+typedef struct matrix {
+	int	m_rows;		/* number of rows */
+	int	m_cols;		/* number of columns */
+	double	**m_data;	/* the base of the row set */
+} MATRIX;
+
+/*
+ * Create a matrix of size `rows' by `cols', and initialize
+ * it to contain all `init' values.  Return a pointer to the
+ * new matrix, or NULL for failure.
+ */
+MATRIX *
+mat_alloc(rows, cols, init)
+	int rows, cols;
+	double init;
+{
+	register int j, i;
+	register double *cp, **rp;
+	register MATRIX *m;
+
+	/*
+	 * Allocate the matrix descriptor.
+	 */
+	if ((m = (MATRIX *)malloc(sizeof *m)) == NULL)
+		return (NULL);
+
+	/*
+	 * Allocate the row vector.
+	 */
+	if ((rp = (double **)malloc(rows * sizeof (double *))) == NULL) {
+		free((char *)m);
+		return (NULL);
+	}
+	m->m_data = rp;
+
+	/*
+	 * Allocate each of the column vectors.  It is safe to allocate
+	 * one large array now and break it up into pieces; indeed, this
+	 * uses less memory and makes error recovery simpler here.
+	 *
+	 * (Pardon my `count down to zero' style; I use it when only the
+	 * number of trips through the loop is of interest, not the index
+	 * itself.  It generates better code on many machines....)
+	 */
+	if ((cp = (double *)malloc(rows * cols * sizeof (double))) == NULL) {
+		free((char *)rp);
+		free((char *)m);
+		return (NULL);
+	}
+	for (i = rows; --i >= 0;) {
+		*rp++ = cp;		/* record position of this column */
+		for (j = cols; --j >= 0;)
+			*cp++ = init;	/* and initialize it */
+	}
+	return (m);
+}
+
+/*
+ * Free the matrix `m'.
+ */
+void
+mat_free(m)
+	register MATRIX *m;
+{
+
+	free((char *)*m->m_data);	/* free the column array */
+	free((char *)m->m_data);	/* and the row vector */
+	free((char *)m);		/* and finally the descriptor */
+}
+-- 
+In-Real-Life: Chris Torek, Univ of MD Comp Sci Dept (+1 301 454 4251)
+UUCP:	seismo!umcp-cs!chris
+CSNet:	chris@umcp-cs		ARPA:	chris@mimsy.umd.edu

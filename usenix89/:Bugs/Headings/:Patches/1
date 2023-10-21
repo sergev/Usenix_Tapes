@@ -1,0 +1,106 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site utcsri.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!burl!clyde!watmath!utzoo!utcsri!tom
+From: tom@utcsri.UUCP (Tom Nadas)
+Newsgroups: net.sources.bugs
+Subject: Re: headings: print headings outline of troff input file
+Message-ID: <1504@utcsri.UUCP>
+Date: 16 Oct 85 21:27:26 GMT
+Date-Received: 18 Oct 85 14:27:20 GMT
+References: <1211@wanginst.UUCP>
+Distribution: net
+Organization: CSRI, University of Toronto
+Lines: 92
+
+I found a couple of bugs in headings.  To explaining what the bugs are
+and when they happen, here is an example which illustrates the problem.
+
+    headings -n -h NH << !EOF!
+    .NH
+    Testing
+    .NH 2
+    More
+    !EOF!
+
+If you try this, then you will not get the proper second heading,
+and the second heading number will be incorrect.  This is actually due
+to three different bugs, which you can discover yourself if you wish.
+Hints are, a) we are not using the default header, b) there is only one
+header, c) the heading appears on the following line, and d) the first
+header is not followed by the number 1.
+
+I have made a few small changes that will make the above example run
+correctly as well as still run the headings.test file correctly.
+
+Here is my condensed version of the patches:
+
+*** headings.old	Wed Oct 16 14:39:54 1985
+--- headings.c	Wed Oct 16 16:04:39 1985
+***************
+*** 56,63 (move 2 lines out of if statement) *****
+
+	if (Nheaders < 1) /* assume -me macros for no particular reason */
+		{
+  		Header[0] = "sh";
+  		Nheaders = 1;
+- 		if (Mindent == 0)
+- 			Mindent = 1;
+  		}
+  	return (optind);
+
+--- 56,63 -----
+	if (Nheaders < 1) /* assume -me macros for no particular reason */
+		{
+  		Header[0] = "sh";
+  		Nheaders = 1;
+  		}
++ 	if (Mindent == 0)
++ 		Mindent = 1;
+  	return (optind);
+  
+***************
+*** 78,80 (add a variable) *****
+
+  	char	*ptr;          /* work pointer in line */
+! 	int 	i;
+  
+--- 78,80 -----
+  	char	*ptr;          /* work pointer in line */
+! 	int 	i,j;
+  
+***************
+*** 102,111 (change 2 lines, and add 2 lines) *****
+
+  			if (begins (Header[i], ptr))
+  				{
+  				ptr += strlen (Header[i]);
+! 				if ((Nheaders == 1) && (i = atoi (ptr))) /* numbered section */
+  					{
+  					while (isspace (*ptr)) ptr++;
+! 					while (!isspace (*ptr)) ptr++;
+					}
+  				while (*ptr == '"' || isspace (*ptr)) ptr++;
+  				if (*ptr == NULL) /* section heading is on next line */
+
+--- 102,113 -----
+  			if (begins (Header[i], ptr))
+  				{
+  				ptr += strlen (Header[i]);
+! 				if ((j = atoi(ptr)) != 0) /* numbered section */
+  					{
++ 					i += j;
+  					while (isspace (*ptr)) ptr++;
+! 					while (!isspace (*ptr) && *ptr != NULL) ptr++;
+  					}
++ 				else i++;
+  				while (*ptr == '"' || isspace (*ptr)) ptr++;
+  				if (*ptr == NULL) /* section heading is on next line */
+
+-------------------------------------------------------------------------------
+That's all folks!
+-- 
+
+					Tom Nadas
+
+UUCP:   {decvax,linus,ihnp4,uw-beaver,allegra,utzoo}!utcsri!tom
+CSNET:  tom@toronto

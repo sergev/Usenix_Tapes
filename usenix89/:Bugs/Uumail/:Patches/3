@@ -1,0 +1,169 @@
+Path: plus5!wucs1!mcdchg!clyde!rutgers!pyrnj!mirror!xanth!john
+From: john@xanth.UUCP (John Owens)
+Newsgroups: net.sources.bugs
+Subject: Re: UUMAIL 4.2 bug fixes
+Summary: changes for use with smail
+Message-ID: <781@xanth.UUCP>
+Date: 2 Apr 87 15:46:33 GMT
+References: <762@xanth.UUCP>
+Organization: Old Dominion University, Norfolk Va.
+Lines: 158
+
+I've had a few responses to my previous article asking for my changes
+to uumail to just use uupath and address in an smail environment, so
+I'm posting them here.  Be sure to apply the patches I gave in the
+parent article.  (They apply to separate files, so the order doesn't
+matter.)  Patch will probably complain about the RCS comments, but (a)
+this isn't an official patch, (b) it's just an independent hunk, and
+(c) the diffs to that file are so short you might as well do them by
+hand.
+
+*** /tmp/,RCSt1008588	Thu Apr  2 10:05:26 1987
+--- address.1.SH	Fri Mar 27 15:51:17 1987
+***************
+*** 33,39 ****
+  machine.
+  
+  On our system, the presently
+! valid <domains>s are EDU, COM, GOV, ORG, NET, UUCP, and ARPA.
+  Omitting
+  the <domain> causes the network to default to UUCP.  The <hostname>
+  should be the name of a remote machine to which the message is
+--- 33,40 ----
+  machine.
+  
+  On our system, the presently
+! valid <domains>s are EDU, COM, GOV, MIL, ORG, NET, AU, CAN, FR, IL, JP, KR,
+! NL, NZ, SE, UK, MAILNET, BITNET, UUCP, and ARPA.
+  Omitting
+  the <domain> causes the network to default to UUCP.  The <hostname>
+  should be the name of a remote machine to which the message is
+***************
+*** 82,88 ****
+  .SH FILES
+  $database - Pathalias database
+  .SH "SEE ALSO"
+! uupath(1), uumail(8), pathalias(1)
+  .br
+  .B RFC 822 "Standard for the Format of ARPA Internet Text Messages"
+  .br
+--- 83,89 ----
+  .SH FILES
+  $database - Pathalias database
+  .SH "SEE ALSO"
+! uupath(1), smail(8), pathalias(1)
+  .br
+  .B RFC 822 "Standard for the Format of ARPA Internet Text Messages"
+  .br
+
+*** /dev/null	Thu Apr  2 09:50:22 1987
+--- uupath.1	Fri Mar 27 12:13:37 1987
+***************
+*** 0 ****
+--- 1,36 ----
++ .RL "Baylor College of Medicine"
++ .TH UUPATH 1
++ .fi
++ .ad b
++ .SH NAME
++ uupath \- print the uucp path to a host
++ .SH SYNOPSIS
++ .B uupath \fIhostname\fR
++ .SH DESCRIPTION
++ .B Uupath
++ prints the path that will be taken to get to the uucp host indicated
++ by \fIhostname\fP.
++ 
++ To find the path that will be taken to a domain (an address containing
++ one or more dots), see \fBaddress\fP(1).
++ .SH FILES
++ .IP "/usr/lib/mail/paths{.pag|.dir}" 20
++ Path file produced by pathalias.
++ .SH "SEE ALSO"
++ pathalias(1), address(1), smail(8), sendmail(8), uux(1), uuname(1)
++ .br
++ .B RFC 822 "Standard for the Format of ARPA Internet Text Messages"
++ .br
++ .B RFC 976 "UUCP Mail Interchange Format Standard"
++ 
++ .SH AUTHORS
++ .br
++ Stan Barber, Baylor College of Medicine
++ .br
++ Getpath routine by John Donnelly, University of Illinois
++ .br
++ Gethostname routine by Peter Honeyman, Princeton
++ .br
++ Resolve routine written by the UUCP project
++ .br
++ Aliasing scheme borrowed from the MH mail handling system
+
+*** /tmp/,RCSt1009758	Thu Apr  2 10:23:34 1987
+--- uumail.c	Fri Mar 27 11:58:26 1987
+***************
+*** 20,31 ****
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
+!  * Revision 4.2  87/03/27  11:52:56  john
+!  * *** empty log message ***
+   * 
+-  * Revision 1.1  87/03/27  11:50:16  john
+-  * Initial revision
+-  * 
+   * Revision 4.2  87/02/02  15:43:50  sob
+   * Added fix for lost line at the beginning of the message problems
+   * 
+--- 20,31 ----
+  or any damage it may cause to any data of any kind anywhere.
+  ***************************************************************************
+   * $Log:	uumail.c,v $
+!  * Revision 4.2.1.1  87/03/27  11:57:37  john
+!  * reverse default of nghborflag - now it doesn't use uuname to
+!  * determine neighbors *unless* you say -N.
+!  * This is because we actually use smail as our delivery agent, and
+!  * want uupath and address to agree with it.
+   * 
+   * Revision 4.2  87/02/02  15:43:50  sob
+   * Added fix for lost line at the beginning of the message problems
+   * 
+***************
+*** 269,275 ****
+  	for (i = 3; i < 20; i++)
+  		(void) close(i);
+  	errno = 0;
+! 	nghborflag = TRUE;	/* use uuname if possible */
+  	gethostname(Myname,32);
+  	paths=DATABASE;
+  #ifdef LOG
+--- 269,275 ----
+  	for (i = 3; i < 20; i++)
+  		(void) close(i);
+  	errno = 0;
+! 	nghborflag = FALSE;	/* don't uuname unless asked for */
+  	gethostname(Myname,32);
+  	paths=DATABASE;
+  #ifdef LOG
+***************
+*** 340,347 ****
+  		  case 'h':	/* don't add a From line */
+  			noheader = TRUE;
+  			break;
+! 		  case 'N':	/* don't use uuname to get neighbors */
+! 			nghborflag = FALSE;
+  			break;
+  		  case 'n':     /* don't alias any addresses */
+  			NoAlias = TRUE;
+--- 340,347 ----
+  		  case 'h':	/* don't add a From line */
+  			noheader = TRUE;
+  			break;
+! 		  case 'N':	/* use uuname to get neighbors */
+! 			nghborflag = TRUE;
+  			break;
+  		  case 'n':     /* don't alias any addresses */
+  			NoAlias = TRUE;
+-- 
+John Owens		Old Dominion University - Norfolk, Virginia, USA
+john@ODU.EDU		old arpa: john%odu.edu@RELAY.CS.NET
++1 804 440 4529		old uucp: {seismo,harvard,sun,hoptoad}!xanth!john

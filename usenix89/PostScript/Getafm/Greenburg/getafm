@@ -1,0 +1,169 @@
+#!/bin/sh
+# Getafm by Peter Greenberg at Swarthmore College. February 13, 1987.
+# This program gets Adobe Font Metric (AFM) files from a PostScript device.
+# Enables enscript and other programs to know about every font on your
+# PostScript device. See afm(7) and other Adobe docs for more info.
+#
+# copyright 1987 by Peter Greenberg. May be used and copied without charge so
+# long as credit is given to the author and this message is retained.
+# PostScript and LaserWriter are trademarks of Adobe Systems Inc. and Apple
+# Computer, Inc. respectively. 
+#
+#	SEE THE MANUAL PAGE FOR GETAFM FOR FULL INSTRUCTIONS ON HOW TO
+#	USE THIS PROGRAM.
+#
+# bugs? questions? contact
+# Peter Greenberg, Swarthmore College, Swarthmore, PA 19081
+# Tel. (215) 328-8384
+# UUCP: ...!seismo!bpa!swatsun!greenber 
+#
+#			HOW TO WORK THIS THING 
+# 
+# This file is a hybrid between a PostScript and a Bourne shell program.
+# It takes an arbitrary number of command line arguments giving names of
+# PostScript fonts. It spools a PostScript program that extracts font metric
+# information from the PostScript fonts. The PostScript program sends this
+# information in the format of a standard Adobe Font Metric file to its idea
+# of standard output, which is definitely NOT its raster device. On the Apple
+# LaserWriter, standard output is the same serial line on which it gets data
+# from the host. This program was developed on a net of Sun3's, one of which
+# is hooked up to an Apple LaserWriter Plus. We ran this program with lpr set
+# as the spooler and extracted the resultant afm files from the log file kept
+# by the lpd program. This file contains all messages sent back from the
+# printer over the tty, so the afm file may be buried amongst other stuff.
+# They are easy to find, however, since they are between distinctive GETAFM
+# banner lines. Extract these files, getting rid of the ctrl-M characters. Our
+# log file is /usr/spool/laser/laser-log. Install these extracted files (without
+# banner lines) in the directory /usr/local/lib/lw, or wherever your software
+# looks for afm files. Naming is important; call them [fullfontname].afm.
+
+# NOTE: The Bourne shell part of this program does little other than spool the
+# PostScript program, so it won't know if any of the fonts you give it are
+# not recognized by your PostScript device. The PostScript program will indicate
+# the error by writing an appropriate message instead of the table to its 
+# standard output.  
+
+# CHANGE THIS LINE IF YOUR SPOOLER IS OTHER THAN LPR. 
+spooler=/usr/ucb/lpr 
+
+#CHANGE THIS LINE IF YOUR PRINTER IS OTHER THAN POSTSCRIPT.
+spoolopts=-PPostScript
+
+emit_header () {
+echo '%!'
+echo "/Font /$1 def" 
+} 
+
+emit_rest () {
+cat <<End-Of-PostScript-Code  
+% This is the PostScript code that extracts font metric info from font 
+% dictionaries known to PostScript.
+/output { print flush } def %change this routine for raster output, etc.
+/PrintByName
+{
+	dup
+	80 string cvs output ( ) output
+	currentdict exch 2 copy known
+		{get 255 string cvs output (\n) output}
+		{ pop pop } %if name is not in currentdict, do nothing
+	ifelse
+} def
+/Chr 1 string def
+/DoIt {
+FontDirectory Font 2 copy known not 
+{pop pop (GETAFM: Font not found -- aborting!\n) output} 
+{get dup setfont begin
+	currentdict /FontInfo 2 copy known {
+	get begin % stuff in FontInfo
+		/Notice PrintByName
+		/FullName PrintByName
+		/FamilyName PrintByName
+		/Weight PrintByName
+		/version PrintByName
+		/isFixedPitch PrintByName
+		/UnderlinePosition PrintByName
+		/UnderlineThickness PrintByName
+		/ItalicAngle PrintByName
+	end  
+	}
+	{ pop pop } %FontInfo not there
+	ifelse
+	%stuff in toplevel of font dictionary. All this stuff *must* be there
+	%by PostScript convention or standard.
+	/FontName PrintByName
+	(FontBBox ) output
+	currentdict /FontBBox get dup dup dup 
+		0 1 3 { get 10 string cvs output ( ) output } for
+	(\n) output	
+	newpath 0 0 moveto
+	% CapHeight: top of capital H.
+	(CapHeight ) output
+	(H) false charpath flattenpath pathbbox 1000 mul round cvi 
+	20 string cvs output pop pop pop
+	(\n) output closepath newpath 0 0 moveto
+	%XHeight: top of lowercase x.
+	(XHeight ) output
+	(x) false charpath flattenpath pathbbox 1000 mul round cvi 
+	20 string cvs output pop pop pop
+	(\n) output closepath newpath 0 0 moveto	
+	%Ascender: top of lowercase d.
+	(Ascender ) output 
+	(d) false charpath flattenpath pathbbox 1000 mul round cvi 
+	20 string cvs output pop pop pop
+	(\n) output closepath newpath 0 0 moveto	
+	%Descender: Bottom of lowercase p.
+	(Descender ) output 
+	(p) false charpath flattenpath pathbbox pop pop 1000 mul round cvi 
+	20 string cvs output pop 
+	(\n) output closepath newpath 0 0 moveto
+	%FontMetrics Stuff
+	(StartCharMetrics\n) output
+	32 1 255 {
+		(C ) output
+		dup dup 5 string cvs output 
+		( ; WX ) output
+		Chr exch 0 exch put
+		Chr stringwidth pop 1000 mul round cvi 5 string cvs output
+		( ; N ) output
+		currentdict /Encoding get % 256 elt. array
+		exch get %now the PS name of the char is on op stack
+		40 string cvs output
+		( ; B ) output
+		newpath 0 0 moveto
+		[ Chr false charpath flattenpath pathbbox ] dup dup dup
+		closepath
+		0 get 1000 mul round cvi 5 string cvs output ( ) output
+		1 get 1000 mul round cvi 5 string cvs output ( ) output
+		2 get 1000 mul round cvi 5 string cvs output ( ) output
+		3 get 1000 mul round cvi 5 string cvs output ( ) output
+		(; \n) output
+	} for
+	(EndCharMetrics\n) output
+end
+(EndFontMetrics\n) output
+} ifelse
+} def % end of DoIt
+(=====================GETAFM OUTPUT BEGIN========================\n) output
+(StartFontMetrics 1.0\n) output
+(Comment Adobe Font Metric table for font ) output Font 255 string cvs output 
+(\n) output	
+(Comment Font metric table computed from PostScript device\n) output
+(Comment by getafm program.\n) output
+DoIt
+(====================GETAFM OUTPUT END===========================\n) output
+
+End-Of-PostScript-Code
+} # end of emit_rest shell subroutine
+# Back in Bourne shell.
+
+if [ $# = 0 ]
+then
+	echo "$0: usage: $0 fontname ..." 
+	exit 1
+fi
+
+for font in $@
+do
+	(emit_header $font ; emit_rest ) |  $spooler $spoolopts
+done
+exit 0

@@ -1,0 +1,50 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B UNSW 1.1 19 Sep 1984; site elecvax.eecs.unsw.oz
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!panda!talcott!harvard!seismo!munnari!basser!cadvaxoz!elecvax!stephenf
+From: stephenf@elecvax.eecs.unsw.oz (Stephen Frede)
+Newsgroups: net.sources.bugs
+Subject: Re: How do I compile ttype?
+Message-ID: <1929@elecvax.eecs.unsw.oz>
+Date: 6 Dec 85 09:41:11 GMT
+Date-Received: 9 Dec 85 05:17:38 GMT
+References: <965@turtlevax.UUCP> <13500001@hpspkla.UUCP> <1752@teddy.UUCP>
+Organization: EE and CS, Uni of NSW, Sydney, Australia
+Lines: 37
+
+>If your system does not have timeb.h, then it also doesn't have ftime(),
+>the function that uses the type "struct timeb".  If you don't have this
+>function, then you need a total rewrite of the program (if that is even
+>possible)!  ftime returns time in units SMALLER than one second.  System III/V
+>do not support this functionality (a major flaw, in my opinion) making
+>timing tasks such as in ttype much more difficult.
+
+V7/SysV times(2) system call returns a value in tics (1/60 or 1/100 sec in
+the US, usually 1/50 sec in Australia)
+The ttype program does not use the value for anything very crucial.
+The following routine will probably be close enough.
+
+
+#ifdef BSD
+#include <sys/timeb.h>
+#else
+	struct timeb	/* only two elements used */
+	{
+		time_t		time;
+		unsigned long	millitm;
+	};
+#define	index	strchr
+#define	rindex	strrchr
+#endif	/* BSD */
+
+	/* ... */
+
+#ifndef BSD
+ftime(t)
+struct timeb *t;
+{
+	struct tm	tbuf;
+
+	time(&t->time);
+	t->millitm = (times(&tbuf) % HZ) * (1000/HZ);
+}
+#endif	/* BSD */

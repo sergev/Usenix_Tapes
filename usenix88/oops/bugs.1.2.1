@@ -1,0 +1,335 @@
+-----
+CC#01
+
+Following declaration causes syntax error:
+
+	extern void seterrtrap(int(*)(),int);
+
+Work-around:
+
+	typedef int(*error_handler)();
+	extern void seterrtrap(error_handler,int);
+
+[new in cfront 8/20/85]
+[not fixed in Release 1.0]
+[not fixed in Release 1.1]
+[not fixed in Release 1.2.1]
+
+-----
+CC#03
+
+Following program produces C code containing errors:
+
+#include <string.h>
+
+class String;
+
+class SubString {
+	char* sp;	/* substring pointer */
+	int sl;		/* substring length */
+	SubString(String& s, unsigned pos, unsigned lgt);
+	friend String;
+public:
+	void operator=(SubString& from);
+	void operator=(String& from);
+};
+
+class String {
+	char* v;
+	int sz;
+	String(char* cs, unsigned lgt);
+	friend SubString;
+public:
+	String(char* cs="");
+	String(String& s);
+	String(SubString& ss);
+	SubString operator()(unsigned pos, unsigned lgt);
+	void operator=(String& s);
+};
+
+inline SubString String::operator()(unsigned pos, unsigned lgt)
+{
+	return SubString(*this, pos, lgt);
+}
+	
+main()
+{
+	String a("abcdef");
+	String b = "012345";
+	a(0,2) = b(0,3);
+}
+
+/*
+On MASSCOMP:
+##F-cc(005)"CC_03.c",line 37: Invalid operand type with '&'
+Refers to "&_String__call( ... )".  Function call is not an lvalue, so "&"
+cannot be applied.  cfront was compiled with -DBSD
+
+On Sun-3:
+"CC_03.c", line 24: redeclaration of _String__call
+Declared both as:
+	struct SubString _String__call ();
+and:
+	static struct SubString _String__call ();
+*/
+
+[not fixed in Release 1.0]
+[not fixed in Release 1.1]
+[not fixed in Release 1.2.1]
+
+-----
+CC#12
+
+Following program causes cfront to get bus error:
+
+	class foo;
+	typedef double Double;
+	void Double::operator=(foo& f) {}
+
+-----
+CC#14
+
+Following program gets "line 39: struct BitRef operand of =" error
+
+#define bool char
+typedef unsigned char bitVecByte;
+
+class BitRef {
+	bitVecByte* p;	// pointer to byte containing bit
+	bitVecByte m;	// mask for bit
+	BitRef(bitVecByte* v, int i) {
+		p = v + (i>>3);
+		m = 1 << (i&7);
+	}
+	friend BitVec;
+public:
+	operator bool()		{ return ((*p & m) != 0); }
+	bool operator=(bool b) {
+		if (b) *p |= m;
+		else *p &= ~m;
+		return b;
+	}
+};
+
+class BitVec {
+	bitVecByte* v;	// pointer to data, NULL if empty vector
+	unsigned n;
+public:
+	BitVec(register /*unsigned*/ int len =0);
+	BitVec(register /*unsigned*/ int len, bool init);
+	BitVec(const BitVec&);
+	~BitVec()			{ delete v; }
+	operator bitVecByte*()		{ return v; }
+	BitRef		operator[](int i);
+};
+
+class BitPick;
+
+class BitPickIstream {
+	BitVec* V;		// pointer to input BitVec
+	int* p;			// pointer to current index element
+	BitPickIstream(BitPick&);
+	operator bool() 	{ return (*V)[*p++]; }
+};
+
+main()
+{
+}
+
+[new in Release 1.1]
+[not fixed in Release 1.2.1]
+
+-----
+CC#20
+
+overload ABS;
+inline short	ABS(short x)	{ return x >= 0 ? x : -x; }
+inline int	ABS(int x)	{ return x >= 0 ? x : -x; }
+inline long	ABS(long x)	{ return x >= 0 ? x : -x; }
+inline float	ABS(float x)	{ return x >= 0 ? x : -x; }
+inline double	ABS(double x)	{ return x >= 0 ? x : -x; }
+overload MAX;
+inline short	MAX(short a,short b)	{ return a >= b ? a : b; }
+inline int	MAX(int a,int b)	{ return a >= b ? a : b; }
+inline long	MAX(long a,long b)	{ return a >= b ? a : b; }
+inline float	MAX(float a,float b)	{ return a >= b ? a : b; }
+inline double	MAX(double a,double b)	{ return a >= b ? a : b; }
+
+// cfront Release 1.2
+//"CC_20.c", line 3: warning: the overloading mechanism cannot tell a short (short ) from a int (int )
+//"CC_20.c", line 6: warning: the overloading mechanism cannot tell a float (float ) from a double (double )
+
+Why aren't warnings also issued for the overloaded MAX functions?
+
+-----
+CC#21
+
+The following program gets a compilation error:
+
+#include <stream.h>
+
+typedef int fileDescTy;
+class Object;
+class Class;
+
+class Object {
+public:
+	Object() {}
+};
+
+typedef void (*initorTy)(const Class&);
+
+class Class : public Object {	// class descriptor object 
+public:
+	Class(const Class& super, const char* name,
+		unsigned version, unsigned size,
+		void (*reader)(istream&,Object&), 
+		void (*binreader)(fileDescTy&,Object&), 
+		initorTy initor1 =0, initorTy initor2 =0);
+	Class(fileDescTy&,Class&) {}	// removing these two constructors
+	Class(istream&,Class&) {}	// eliminates the error
+};
+
+extern Class class_Object;
+
+overload Class_reader;
+static void Class_reader(istream& strm, Object& where);
+static void Class_reader(fileDescTy& fd, Object& where);
+
+Class class_Class = Class( class_Object, "Class",
+	1, sizeof(Class),Class_reader, Class_reader,
+	NULL, NULL);
+
+//"bug.c", line 33: error: bad argument list for overloaded Class::Class()
+//"bug.c", line 37: error: bad argument list for overloaded Class::Class()
+
+
+-----
+CC#22
+
+Following program gets C++ error:
+
+class IntVec {
+	int* v;
+public:
+//	IntVec(register unsigned len =0);
+	IntVec(const int*, unsigned len);
+};
+
+typedef int Int;
+
+IntVec::IntVec(const Int* src, unsigned lngth) : (lngth) {}
+
+
+"IntVec.c", line 10: error:  IntVec::IntVec() type mismatch: struct IntVec *IntVec::(const int *, unsigned int ) and struct IntVec *IntVec::(int *, unsigned int )
+
+-----
+LIB#3
+
+Problem with stream.h:
+
+There seems to be no way to read a single line of characters from an
+interactive input stream such as a terminal.  Something like:
+
+	char line[512];
+	char term;
+	cin.get(line,512);	/* read to '\n' */
+	cin.get(term);		/* skip the '\n' */
+
+doesn't work because the second get tries to read another line of input.
+Tricks such as reversing the order of the gets have other problems, like
+not working for the first line or not working for empty lines.  It seems
+that there should be an easy way provided to do something as common as
+this.
+
+-----
+LIB#8
+
+Bug in void eatwhite(istream& is) in file in.c:
+
+is:
+	register char c = nbp->sgetc();
+	while (isspace(c&0377)) c = nbp->snextc();
+	if (c == EOF) is.state |= _eof;
+
+should be:
+	register c = nbp->sgetc();
+	while (isspace(c&0377)) c = nbp->snextc();
+	if (c == EOF) is.state |= _eof;
+
+-----
+LIB#9
+
+In filebuf.c:
+
+filebuf::open(char* name, open_mode om) should be:
+
+filebuf::open(const char* name, open_mode om)
+
+and open() and create() should be declared as:
+
+extern int open (const char*, int);
+extern int creat (const char*, int);
+
+-----
+INC#2
+
+In stdio.h:
+
+extern int sscanf(char*, const char* ...);
+
+should be:
+
+extern int sscanf(const char*, const char* ...);
+
+-----
+INC#3
+
+In osfcn.h:
+
+	extern int      open (const char*, int, int=0644);
+
+should be:
+
+	extern int      open (const char*, int, ...);
+
+for portability, since some systems could push the arguments on the
+stack from left-to-right.
+
+-----
+MISC#1
+
+In the CC script:
+
+basename *.[cC] not implemented on all systems.  Suggest using:
+
+	case $A in
+		*.c) B=`basename $A .c` ;;
+		*.C) B=`basename $A .C` ;;
+	esac
+
+-----
+MISC#2
+
+"munch" doesn't work on the IBM RT PC under AIX because AIX generates
+two symbols for each static constructor/destructor: __STIxxx and
+._STIxxx.  "munch" accepts both of these and causes each static
+constructor/destructor to be called twice.  I changed "munch" to only
+accept names of the form: <whitespace>_STIxxx, <whitespace>__STIxxx,
+<start of line>_STIxxx, and <start of line>__STIxxx.  Here is the
+pertinent piece of code from munch.c:
+
+			p = buf;
+			while (*p!='_') if (*p++ == 0) goto newline;	// find first '_'
+			if (p != buf && !isspace(*(p-1))) goto newline;	// '_' not first character of symbol name
+			if (*++p != '_') p--;	// accept "_ST" or "__ST"
+			register char* st = p;
+			if (st[0]!='_' || st[1]!='S' || st[2]!='T') goto newline;
+
+-----
+DOC#1
+
+Result of log((complex(1,2.718)/3) = (-0.035240,1.218249) not
+(0.706107,1.10715) as given in article "Complex Arithmetic in C++".
+
+-----

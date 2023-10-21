@@ -1,0 +1,155 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/5/84; site rna.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!think!harvard!seismo!cmcl2!rna!dan
+From: dan@rna.UUCP (Dan Ts'o)
+Newsgroups: net.sources
+Subject: VSH 7 of 6
+Message-ID: <424@rna.UUCP>
+Date: 17 Jul 85 22:22:36 GMT
+Date-Received: 19 Jul 85 05:13:16 GMT
+Organization: Rockefeller Neurobiology
+Lines: 413
+
+Hi,
+	This article contains a tiny bug fix for the recently distributed VSH.
+Basically the feature where the parameter MAIL with a value like
+
+	/usr/spool/mail/~
+
+	was to replace the ~ with the current login name, didn't work, its
+code was misplaced.
+
+	Also included is an additional sample VSH configuration for very
+naive users. A menu is presented and very basic commands are given.
+It complements (but doesn't require) a simple configuration for the JOVE
+EMACS editor which allows the naive user to enter text in a very simple
+minded way. (Let me know if you want the .joverc and .jovemac files).
+
+
+					Cheers,
+					Dan Ts'o
+					Dept. Neurobiology
+					Rockefeller Univ.
+					1230 York Ave.
+					NY, NY 10021
+					212-570-7671
+					...cmcl2!rna!dan
+
+
+*** /usr/spool/uucppublic/main.c	Tue Jul 16 03:42:49 1985
+--- main.c	Mon Jul 15 03:54:47 1985
+***************
+*** 79,96
+  	/* Give root a different arrow */
+  	arrow = i ? "->" : "#>";
+  
+- 	if (MAIL && *MAIL) {
+- 		i = strlen(MAIL);
+- 		if (MAIL[i-1] == '~') {
+- 			s = (char *) malloc(i+1+USERSIZE);
+- 			if (s != NULL) {
+- 				strcpy(s, MAIL);
+- 				strcpy(&s[i-1], username);
+- 				MAIL = s;
+- 			}
+- 		}
+- 	}
+- 
+  	if (signal(SIGHUP, leave) == SIG_IGN)
+  		signal(SIGHUP, SIG_IGN);
+  	if (signal(SIGTERM, leave) == SIG_IGN)
+
+--- 79,84 -----
+  	/* Give root a different arrow */
+  	arrow = i ? "->" : "#>";
+  
+  	if (signal(SIGHUP, leave) == SIG_IGN)
+  		signal(SIGHUP, SIG_IGN);
+  	if (signal(SIGTERM, leave) == SIG_IGN)
+***************
+*** 118,124
+  	if (!fflag && i) {
+  #endif
+  		fprintf(stderr, "Not a screen terminal");
+! 		if (c > 1 && (**v == '-' || strcmp(v[j], "-") == 0)) {
+  			fprintf(stderr, ", exec'ing %s...\r\n", SHELL);
+  			signal(SIGINT, oi);
+  			signal(SIGQUIT, oq);
+
+--- 106,113 -----
+  	if (!fflag && i) {
+  #endif
+  		fprintf(stderr, "Not a screen terminal");
+! 		if ((c > 0 && **v == '-')
+! 			|| (c > 1 && strcmp(v[j], "-") == 0)) {
+  			fprintf(stderr, ", exec'ing %s...\r\n", SHELL);
+  			signal(SIGINT, oi);
+  			signal(SIGQUIT, oq);
+***************
+*** 131,136
+  
+      erase (); printf ("Vsh %s\r\n", VERSION);
+      cmdldrc ();
+      wdfile = -1;
+      if (curdir () || enterdir (DOT) == NOREPLOT)
+  	leave ();
+
+--- 120,138 -----
+  
+      erase (); printf ("Vsh %s\r\n", VERSION);
+      cmdldrc ();
++ 
++ 	if (MAIL && *MAIL) {
++ 		i = strlen(MAIL);
++ 		if (MAIL[i-1] == '~') {
++ 			s = (char *) malloc(i+1+USERSIZE);
++ 			if (s != NULL) {
++ 				strcpy(s, MAIL);
++ 				strcpy(&s[i-1], username);
++ 				MAIL = s;
++ 			}
++ 		}
++ 	}
++ 
+      wdfile = -1;
+      if (curdir () || enterdir (DOT) == NOREPLOT)
+  	leave ();
+*** /usr/spool/uucppublic/xeq.c	Tue Jul 16 03:43:55 1985
+--- xeq.c	Mon Jul 15 01:47:23 1985
+***************
+*** 78,83
+  			else if (query || !NOARG) {
+  				tty_push(COOKEDMODE);
+  				if (argcnt == 0) {
+  					hilite(1);
+  					printf("\r(");
+  					for (i = 0;;) {
+
+--- 78,85 -----
+  			else if (query || !NOARG) {
+  				tty_push(COOKEDMODE);
+  				if (argcnt == 0) {
++ 					if (pflag)
++ 						sleep(1);
+  					hilite(1);
+  					printf("\r(");
+  					for (i = 0;;) {
+***************
+*** 97,103
+  					argcnt++;
+  				}
+  				else
+! 					hilite("Arg%d:", ++argcnt);
+  				putch(' ');
+  				i = xgetline(stdin, s, (&argbuf[STRMAX]-s));
+  				tty_pop();
+
+--- 99,105 -----
+  					argcnt++;
+  				}
+  				else
+! 					hilite("Argument%d:", ++argcnt);
+  				putch(' ');
+  				i = xgetline(stdin, s, (&argbuf[STRMAX]-s));
+  				tty_pop();
+

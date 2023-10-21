@@ -1,0 +1,210 @@
+.TH MAILAWAY 1 "HFVR"
+.SH NAME
+.\" name \- one-line description for in permuted index
+mailaway \- Unix mail answering service
+.SH SYNOPSIS
+.\" bnf on command syntax
+.B mailaway
+[
+.B \-dVH
+] [
+.B \-f
+.I file
+] [
+.B \-m
+.I mailfile
+] [
+.B \-o
+.I options
+] [
+.B \-x
+.I pgrm
+]
+.SH DESCRIPTION
+.\" semantics
+Mailaway will determine for each electronic message waiting for
+you, the following facts:
+.IP SUBJECT \w'NROFLINES\ \ 'u
+The subject of this message (if any) (leading spaces stripped)
+.IP SENDER
+The login name of the sender
+.IP NROFLINES
+The length of the message in lines
+.IP SIZE
+The size of the message in characters
+.IP VIA
+The full path (including
+.BR SENDER )
+used to send this message
+.IP MESSAGE
+The name of the file containing a copy of the message
+.IP DEMON
+Either
+.SM
+.B TRUE
+or
+.SM
+.B FALSE
+if sender is a known demon
+.IP LAST
+Either
+.SM
+.B TRUE
+or
+.SM
+.B FALSE
+if this was last message or not
+.PP
+These facts are stored into shell variables of the same name. After
+doing so this information is passed on to the executor (default:
+.BR /bin/sh )
+for execution. After the executor stops the message is deleted.
+.SH OPTIONS
+.IP \-f 5n
+Takes as argument the name of a file which will also be passed
+to the executor (default is
+.IR $HOME/.mailawayrc ).
+.IP \-m
+Takes as argument the name of the file which contains the mail to be processed
+instead of the system mailbox file.
+.IP \-x
+Takes as argument the name of an alternative for the executor.
+(default is
+.BR /bin/sh ).
+.IP \-o
+Takes one argument which will be passed to the executor as
+command line option. Default is empty.
+.SH EXAMPLES
+To append all your messages to a file
+.I $HOME/x
+you can use:
+.PP
+.RS
+mailaway \-f append
+.RE
+.PP
+Where
+.I append
+is a shell script containing the line:
+.PP
+.RS
+cat $MESSAGE >> $HOME/x
+.RE
+.PP
+To append messages to files depending on the sender of the message
+use:
+.PP
+.RS
+mailaway \-f append2
+.RE
+.PP
+Where
+.I append2
+is a shell script containing the line:
+.PP
+.RS
+cat $MESSAGE >> $HOME/mail/$SENDER
+.RE
+.PP
+To automatically answer your mail while away:
+.PP
+.RS
+mailaway \-f answerit
+.RE
+.PP
+Where
+.I answerit
+could contains the lines:
+.PP
+.RS
+.ta
+.ta 4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n +4n
+.nf
+if test "$DEMON" = "TRUE"
+then
+	exit	# ignore them
+fi
+
+# reply to sender
+
+/bin/mail $VIA <<!!
+Subject: Auto answering service
+Dear $SENDER,
+I am away right now but received your message at `date`
+I will answer it as soon as a return on 1 April.
+!!
+
+cat $MESSAGE >> $HOME/mail/.stack_of_mail	# save it
+if test "$SENDER" = "myboss"	# see if needs forwarding
+then
+	TMP=/usr/tmp/$$
+	cat > $TMP <<!!
+Dear representative,
+Could you treat the following message?
+
+bvd, $LOGIN
+
+!!
+	cat $MESSAGE >> $TMP
+	/bin/mail friend < $TMP
+	rm \-f $TMP
+fi
+.fi
+.RE
+.PP
+The following script can be used for those logins that are yours to
+maintain but usually you do not login there. However you do want
+mail forwarded to you that looks like it is personal.
+.PP
+.RS
+mailaway \-f getpersonal
+.RE
+.PP
+Where
+.I getpersonal
+contains:
+.PP
+.RS
+.nf
+if test "$DEMON" = "TRUE"
+then
+	exit # just ignore these
+fi
+
+# save all mail that are used as updates (have 'update' in
+# subject)
+
+echo $SUBJECT | grep \-i 'update' >/dev/null 2>&1
+if test "$?" = "0"
+then
+	cat $MESSAGE >> $HOME/todo/updates
+fi
+
+# forward all other stuff
+/bin/mail yourlogin < $MESSAGE
+.RE
+.fi
+.SH FILES
+.RI /usr/spool/mail/ login-name
+.I or
+$MAIL
+.br
+$HOME/.mailawayrc
+.SH "BE AWARE"
+Be aware that if you use
+.IR cron (8)
+to execute
+.BR mailaway ,
+the output is
+sent as mail, it is therefore best to redirect
+.I stdout
+and
+.I stderr
+to some log file as follows:
+.PP
+.RS
+mailaway ..... >$HOME/log 2>&1
+.RE
+.PP
+.SH SEE ALSO
+mail(1), answer(1), crontab(1)

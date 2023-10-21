@@ -1,0 +1,118 @@
+.TH shdir 1-gsg "14 Oct 1986"
+.SH NAME
+shdir, lsdir - C shell directory manipulation package
+.SH SYNOPSIS
+Most of the followings are C-shell aliases:
+.IP "s                  switch directory"
+.IP "to [dir]           push to a new directory"
+.IP "po [n]             pop out an old directory"
+.IP "lsdir [filename]   load/save directory stack"
+.SH DESCRIPTION
+.I Shdir
+is actually a set of C program, shell scripts and aliases which
+will assist you to use BSD directory stack feature easily.
+.PP
+The main program "shdir" is a C program which take C-shell dirs output
+and display it graphically on the output with VT100 graphic chars.  It
+also allow you to move the cursor to the desired directory and change
+to it with one keystroke.  The following is a list of commands to
+shdir:
+.sp
+.DS 
+    space, j, J, l, L       move cursor down one line
+    backspace, k, K, h, H   move cursor up one line
+    n, p                    search for next/previous string
+    0-9                     go to the next 0-9
+    return                  select the entry
+.sp
+    Options to shdir:
+.sp
+    -s     or               select mode
+    -sxxx                   search string xxx in dir stack
+    -r                      use scroll if possible
+    -bx                     set box style to x (see below)
+    -v                      display version number
+.DE
+.PP
+Option '-s' tells shdir to enter select mode, i.e., displays directory
+stack on the tube and allows user to select an entry.  If any argument
+is supplied after the -s option to shdir,  it will be used as the
+string to search thru the directory stack.  If exactly one entry
+matches, shdir will echo that directory name and exit without
+displaying the directory stack.  If more than one entry found, the
+stack will be displayed on the tube with the cursor at the first entry
+containing the string, type 'n' or 'p' will find the next/previous
+match entry.
+.PP
+An option '-r' to shdir will make the stack rotate on the tube, this
+way you will not have to imagine what the stack looks like after it
+rotates.  However, this feature can not be done by termcap
+description, and currently only works for VT100 type of terminals.
+.PP
+Shdir also allows you to choose your own box style by supplying -b
+option.  If the char after 'b' is 'h', shdir will try to use highlite
+blanks for the box. If it is 'r', shdir will use reverse-video blanks
+for the box.  If it is 'g', shdir will use graphical chars for the
+box.  The default style sequence is (1) graphic chars, (2) highlite
+blanks, (3) reverse video blanks, and (4) regular dashes.  If the
+style you selected does not exist for your terminal in the termcap
+database, the next one in the style list will be used.
+.PP
+Lsdir is a script which allow you to switch the entire directory stack
+to a new environment.  For example, you may work on two projects, one
+project uses 8 directories and the other projects uses 5 different
+directories.
+.PP
+.I s,
+.I to,
+and
+.I po
+are actually aliases, it means Switch to a new directory, push TO a new
+directory, and POp up a given entry on the stack.
+You may want to change them to whatever you like.
+The definition looks like:
+.sp
+.DS
+    alias lsdir 'source ${dir}/lsdir'
+    alias po    'popd +\\!* > /dev/null; shdir \`dirs\`'
+    alias s     'shdir -s\\!* \`dirs\` ; \\
+                if (${status}) pushd +${status}>/dev/null'
+    alias to    'pushd \\!* > /dev/null ; shdir \`dirs\`'
+.DE
+.PP
+Script useshdir will modify your (1) .login to restore previously
+saved directory stack, so the environment can be preserved. (2) .cshrc
+to define aliases (lsdir, po, s, to), so shdir can be invoke. (3) .logout
+to save directory stack to a file.
+.PP
+.SH FILES
+.br
+/usr/local/bin/restdir, /usr/local/bin/lsdir, /usr/local/bin/useshdir
+.SH AUTHOR
+Paul Lew
+.br
+General Systems Group, Salem NH
+.SH BUGS
+This version uses termcap "ac" feature to draw graphic box. It may not
+exist in your /etc/termcap file.
+.PP
+There is output flushing problem when run shdir over Enet, sometimes
+the output did not seem to get flushed before switching to RAW mode.
+Current resolution is to add a one second delay if stdout is a
+pseudo-terminal. Better solution should be investigated.
+.PP
+If you select scrolling option (-r), shdir will poll the terminal for
+its cursor position in order to decide the proper scrolling region.
+It ASSUMED the return device cursor status report (DSR) to be string
+like: "ESC [ line; column R", this will only works for VT100 type
+terminals.
+.PP
+This program will not work if you have a directory name contains space(s).
+This is because the output of dirs command uses spaces to separate
+directory names.
+.PP
+Shdir uses tabs to fill the end of line, this may cause little problem
+on your terminal it terminal tab stops is not 8.
+.PP
+For hackers: How about add features to termcap/terminfo so that all
+the  (DSR) operations can be done?

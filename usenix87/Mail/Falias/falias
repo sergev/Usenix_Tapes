@@ -1,0 +1,126 @@
+
+#!/bin/sh
+#   Shell script to create a forwarding full name database
+#   for use with sendmail.
+ALIASES=${ALIASES-/usr/lib/aliases}
+
+if [ $# -lt 1 ]
+then
+	echo "Usage:	"$0 "files
+
+	Where files are passwd files in the current directory
+	named after their host systems: eg
+
+	"$0 `hostname` "host2 host3
+
+	where "`hostname`"'s users are prefered to host2's etc
+"
+	exit 1
+fi
+
+for i in $*
+do
+	if [ ! -f $i -o ! -r $i ] 
+	then
+		echo ${0}: $i " - no file."
+		exit 1
+	fi
+done
+
+if [ ! -w $ALIASES ]
+then
+	echo ${0}: $ALIASES " - not writable."
+	exit 1
+fi
+
+awk -F: ' BEGIN { sysname = "xxx" ; count = 0 }
+	( $2 < "#" || $2 >= "$" ) && $7 ~ /sh/ && $2 != "*" {
+	if ( sysname != FILENAME ) {
+		sysname = FILENAME
+		count ++
+	}
+	if ( $3 >= 10 || $3 == 2 || $3 == 3 ) {
+		printf "%s:%d@%s@%s.UUCP\n", $1, count, $1, FILENAME
+		printf "%s:%s\n", $5, $1 }
+	}'    $*                         | \
+sed -e 's/(.*)//g' \
+	-e 's/ /./g' \
+	-e 's/\.\.*/./g' \
+	-e 's/[\.]*,.*:/:/' \
+	-e 's/\.\.*:/:/' \
+	-e '/^:/d' \
+	-e '/:field/d' \
+	-e '/[Ff]actory/d' \
+	-e '/[Ww]ho/d' \
+	-e '/^field:/d' \
+	-e '/demosmf/d' \
+	-e '/games/d' \
+	-e '/guest/d' \
+	-e '/hack/d' \
+	-e '/jes/d' \
+	-e '/jokes/d' \
+	-e '/news/d' \
+	-e '/qman/d' \
+	-e '/ucdemo/d' \
+	-e '/updates/d' \
+	-e '/workshop/d' \
+	-e s/\'//g          | \
+	sort -u | \
+awk -F: 'BEGIN { last = xxx } 
+	{ if ( $1 != last && $1 != $2 ) print $0; last = $1 }' | \
+	tr A-Z a-z > /tmp/nm$$
+
+#	We have disposed of duplicates, and unwanted users
+#	now expand those "&"s in the finger entry
+
+awk -F: ' /&/ { printf "s/%s/%s:%s/\n", $2, $1, $2}' /tmp/nm$$  > /tmp/spt
+awk -F: ' /&/ {	print $2 }' /tmp/nm$$ > /tmp/nms
+echo "s/ //g" >> /tmp/spt
+sed -f /tmp/spt /tmp/nms > /tmp/na$$
+grep -v '&' /tmp/nm$$ >> /tmp/na$$
+rm /tmp/spt /tmp/nms /tmp/nm$$
+
+#	Now make as many real name entries as we reasonably can
+
+sed -e 's/uucp$/UUCP/' \
+	-e '/uucp/d' \
+	-e '/:[ 	]*$/d' \
+	-e '/^[0-9]*:/d' \
+	-e '/./p' \
+	-e 's/^[a-z]\.\([a-z][a-z][a-z]*[\.a-z]*:\)/\1/p' \
+	-e 's/\..\(\.[^\.]*:\)/\1/p' \
+	-e 's/\.\([a-z]\)[a-z]*\.\([a-z]*:\)/.\1.\2/p' \
+	-e 's/\..\(\.[^\.]*:\)/\1/p' \
+	-e 's/\.\([a-z]\)[a-z]*\.\([^\.]\.[^.]*:\)/.\1.\2/p' \
+	-e 's/\([a-z]\)[a-z]*\.\(.*:\)/\1.\2/gp' \
+	-e 's/\..\(\.[^\.]*:\)/\1/p' \
+	-e 's/\..\(\.[^\.]*:\)/\1/p' \
+	-e 's/.*\.\(.*:\)/\1/p' -e '/./d' /tmp/na$$ | \
+	sort -u | \
+	awk -F: 'BEGIN { last = XXX } 
+	{ if ( $1 != last && $1 != $2 && $2 >= " " )
+		printf "%s: %s\n", $1, $2; last = $1 }' | \
+	sed -e '/: 1@/d' -e 's/: [0-9]*@/: /' -e '/^[0-9]/d' > /tmp/nm$$
+
+#	And get rid of the temporary files
+
+rm /tmp/na$$
+
+#	Now update $ALIASES
+
+fgrep -s "DO NOT DELETE THIS LINE" $ALIASES || \
+echo "# DO NOT DELETE THIS LINE
+
+" >> $ALIASES
+
+ed - $ALIASES << E-O-F
+/DO NOT DELETE THIS LINE/+1
+.,\$d
+\$r /tmp/nm$$
+w
+q
+E-O-F
+
+rm /tmp/nm$$
+echo $ALIASES "updated, now rebuilding database, might be slow"
+newaliases

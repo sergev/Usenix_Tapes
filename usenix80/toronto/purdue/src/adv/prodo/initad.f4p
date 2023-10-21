@@ -1,0 +1,594 @@
+c  adventures
+	subroutine init
+c
+c modified by kent blackett
+c             engineering systems group
+c             digital equipment corp.
+c             15-jul-77
+c modified by	bob supnik
+c		disk engineering
+c		21-oct-77
+c original version was for decsystem-10
+c next version was for fortran iv-plus under
+c the ias operating system on the pdp-11/70
+c this version is for fortran iv (v01c or later)
+c under rt-11 on *any* pdp-11
+c
+c
+c  current limits:
+c	750 travel options (travel, trvsiz).
+c	300 vocabulary words (ktab, atab, tabsiz).
+c	150 locations (ltext, stext, key, cond, abb, atloc, locsiz).
+c	100 objects (plac, place, fixd, fixed, link (twice), ptext, prop).
+c	 35 "action" verbs (actspk, vrbsiz).
+c	205 random messages (rtext, rtxsiz).
+c	 12 different player classifications (ctext, cval, clsmax).
+c	 20 hints, less 3 (hintlc, hinted, hints, hntsiz).
+c	[magic messages have been decommitted]
+c	 35 magic messages (mtext, magsiz).
+c  there are also limits which cannot be exceeded due to the structure of
+c  the database.  (e.g., the vocabulary uses n/1000 to determine word type,
+c  so there can't be more than 1000 words.)  these upper limits are:
+c	1000 non-synonymous vocabulary words
+c	300 locations
+c	100 objects
+c
+	implicit integer (a-z)
+	logical*1 blklin,noinpt
+	logical dseen,hinted
+	logical bitset,lmwarn,closng,panic,
+	1       closed,gaveup,scorng
+c
+	common /txtcom/ rtext,lines,ascvar
+	common /blkcom/ blklin,noinpt
+	common /voccom/ ktab,atab,a2tab,tabsiz
+	common /placom/ atloc,link,place,fixed,holdng
+c	common /mtxcom/ mtext
+	common /ptxcom/ ptext
+	common /abbcom/ abb
+	common /miscom/ linuse,trvs,clsses,oldloc,loc,cval,tk,newloc,
+	1key,plac,fixd,actspk,cond,hints,hntmax,prop,tally,tally2,
+	2hintlc,chloc,chloc2,dseen,dflag,dloc,daltlc,keys,lamp,grate,
+	3cage,rod,rod2,steps,bird,door,pillow,snake,fissur,tablet,
+	4clam,oyster,magzin,dwarf,knife,food,bottle,water,oil,plant,
+	5plant2,axe,mirror,dragon,chasm,troll,troll2,bear,messag,vend,
+	6batter,nugget,coins,chest,eggs,tridnt,vase,emrald,pyram,
+	7pearl,rug,chain,back,look,cave,null,entrnc,dprssn,say,lock,
+	8throw,find,invent,turns,lmwarn,knfloc,detail,abbnum,
+	9numdie,maxdie,dkill,foobar,bonus,clock1,clock2,
+	1closng,panic,closed,gaveup,scorng,odloc,stream
+	common /misc2/ i,rtxsiz,clsmax,magsiz,locsiz,ctext,stext,ltext,
+	1sect,travel,trvcon,trvloc,trvsiz,tabndx,obj,j,k,verb,hntsiz,
+	2maxtrs,hinted,hntloc,kk
+c
+	dimension lines(36)
+	dimension travel(750),trvcon(750),trvloc(750)
+	dimension ktab(300),atab(300),a2tab(300)
+	dimension ltext(150),stext(150),key(150),cond(150),abb(150),
+	1	atloc(150)
+	dimension plac(100),place(100),fixd(100),fixed(100),link(200),
+	1	ptext(100),prop(100)
+	dimension actspk(35)
+	dimension rtext(205)
+	dimension ctext(12),cval(12)
+	dimension hintlc(20),hinted(20),hints(20,4)
+c	dimension mtext(35)
+	dimension tk(20),dseen(6),dloc(6),odloc(6)
+c
+	byte zzzbuf(36)
+c
+	bitset(l,n)=(cond(l).and.ishft(1,n)).ne.0
+c  description of the database format
+c
+c
+c  the data file contains several sections.  each begins with a line containing
+c  a number identifying the section, and ends with a line containing "-1".
+c
+c  section 1: long form descriptions.  each line contains a location number,
+c	a comma, and a line of text.  the set of (necessarily adjacent) lines
+c	whose numbers are x form the long description of location x.
+c  section 2: short form descriptions.  same format as long form.  not all
+c	places have short descriptions.
+c  section 3: travel table.  each line contains a location number (x), a second
+c	location number (y), and a list of motion numbers (see section 4).
+c	each motion represents a verb which will go to y if currently at x.
+c	y, in turn, is interpreted as follows.  let m=y/1000, n=y mod 1000.
+c		if n<=300	it is the location to go to.
+c		if 300<n<=500	n-300 is used in a computed goto to
+c					a section of special code.
+c		if n>500	message n-500 from section 6 is printed,
+c					and he stays wherever he is.
+c	meanwhile, m specifies the conditions on the motion.
+c		if m=0		it's unconditional.
+c		if 0<m<100	it is done with m% probability.
+c		if m=100	unconditional, but forbidden to dwarves.
+c		if 100<m<=200	he must be carrying object m-100.
+c		if 200<m<=300	must be carrying or in same room as m-200.
+c		if 300<m<=400	prop(m mod 100) must *not* be 0.
+c		if 400<m<=500	prop(m mod 100) must *not* be 1.
+c		if 500<m<=600	prop(m mod 100) must *not* be 2, etc.
+c	if the condition (if any) is not met, then the next *different*
+c	"destination" value is used (unless it fails to meet *its* conditions,
+c	in which case the next is found, etc.).  typically, the next dest will
+c	be for one of the same verbs, so that its only use is as the alternate
+c	destination for those verbs.  for instance:
+c		15	110022	29	31	34	35	23	43
+c		15	14	29
+c	this says that, from loc 15, any of the verbs 29, 31, etc., will take
+c	him to 22 if he's carrying object 10, and otherwise will go to 14.
+c		11	303008	49
+c		11	9	50
+c	this says that, from 11, 49 takes him to 8 unless prop(3)=0, in which
+c	case he goes to 9.  verb 50 takes him to 9 regardless of prop(3).
+c
+c	in this implementation, the second location number y has been
+c	split into m, conditions, and n, location.
+c
+c  section 4: vocabulary.  each line contains a number (n), a tab, and a
+c	five-letter word.  call m=n/1000.  if m=0, then the word is a motion
+c	verb for use in travelling (see section 3).  else, if m=1, the word is
+c	an object.  else, if m=2, the word is an action verb (such as "carry"
+c	or "attack").  else, if m=3, the word is a special case verb (such as
+c	"dig") and n mod 1000 is an index into section 6.  objects from 50 to
+c	(currently, anyway) 79 are considered treasures (for pirate, closeout).
+c  section 5: object descriptions.  each line contains a number (n), a tab,
+c	and a message.  if n is from 1 to 100, the message is the "inventory"
+c	message for object n.  otherwise, n should be 000, 100, 200, etc., and
+c	the message should be the description of the preceding object when its
+c	prop value is n/100.  the n/100 is used only to distinguish multiple
+c	messages from multi-line messages; the prop info actually requires all
+c	messages for an object to be present and consecutive.  properties which
+c	produce no message should be given the message ">$<".
+c  section 6: arbitrary messages.  same format as sections 1, 2, and 5, except
+c	the numbers bear no relation to anything (except for special verbs
+c	in section 4).
+c  section 7: object locations.  each line contains an object number and its
+c	initial location (zero (or omitted) if none).  if the object is
+c	immovable, the location is followed by a "-1".  if it has two locations
+c	(e.g. the grate) the first location is followed with the second, and
+c	the object is assumed to be immovable.
+c  section 8: action defaults.  each line contains an "action-verb" number and
+c	the index (in section 6) of the default message for the verb.
+c  section 9: liquid assets, etc.  each line contains a number (n) and up to 20
+c	location numbers.  bit n (where 0 is the units bit) is set in cond(loc)
+c	for each loc given.  the cond bits currently assigned are:
+c		0	light
+c		1	if bit 2 is on: on for oil, off for water
+c		2	liquid asset, see bit 1
+c		3	pirate doesn't go here unless following player
+c	other bits are used to indicate areas of interest to "hint" routines:
+c		4	trying to get into cave
+c		5	trying to catch bird
+c		6	trying to deal with snake
+c		7	lost in maze
+c		8	pondering dark room
+c		9	at witt's end
+c	cond(loc) is set to 2, overriding all other bits, if loc has forced
+c	motion.
+c  section 10: class messages.  each line contains a number (n), a tab, and a
+c	message describing a classification of player.  the scoring section
+c	selects the appropriate message, where each message is considered to
+c	apply to players whose scores are higher than the previous n but not
+c	higher than this n.  note that these scores probably change with every
+c	modification (and particularly expansion) of the program.
+c  section 11: hints.  each line contains a hint number (corresponding to a
+c	cond bit, see section 9), the number of turns he must be at the right
+c	loc(s) before triggering the hint, the points deducted for taking the
+c	hint, the message number (section 6) of the question, and the message
+c	number of the hint.  these values are stashed in the "hints" array.
+c	hntmax is set to the max hint number (<= hntsiz).  numbers 1-3 are
+c	unusable since cond bits are otherwise assigned, so 2 is used to
+c	remember if he's read the clue in the repository, and 3 is used to
+c	remember whether he asked for instructions (gets more turns, but loses
+c	points).
+c  section 12: magic messages. identical to section 6 except put in a separate
+c	section for easier reference.  magic messages are used by the startup,
+c	maintenance mode, and related routines.
+c  section 0: end of database.
+c  read the database if we have not yet done so
+c
+	filsiz=2100
+	tabsiz=300
+	locsiz=150
+	vrbsiz=35
+	blklin=.true.
+	noinpt=.true.
+	rtxsiz = 205
+	hntsiz = 20
+	magsiz = 35
+	trvsiz = 750
+	clsmax = 12
+d	vcount = 0
+d	type 1000
+d1000	format(' initialising...')
+c
+c  clear out the various text-pointer arrays.  all text is stored in disk
+c  file (random access on unit 2).  the text-pointer arrays contain record
+c  numbers in the file.  stext(n) is short description of location n.
+c  ltext(n) is long description.  ptext(n) points to message for prop(n)=0.
+c  successive prop messages are found by chasing pointers.  rtext contains
+c  section 6's stuff.  ctext(n) points to a player-class message.  mtext is for
+c  section 12.  we also clear cond.  see description of section 9 for details.
+c
+	do 1001 i=1,tabsiz
+	ktab(i)=0
+	atab(i)=0
+	a2tab(i)=0
+	if(i.gt.100) go to 1990
+	ptext(i)=0
+	prop(i)=0
+	plac(i)=0
+	place(i)=0
+	fixd(i)=0
+	fixed(i)=0
+	link(i)=0
+	link(i+100)=0
+1990	if(i.le.rtxsiz)rtext(i)=0
+	if(i.le.clsmax)ctext(i)=0
+c	if(i.le.magsiz)mtext(i)=0
+	if(i.le.vrbsiz)actspk(i)=0
+	if(i.gt.locsiz)goto 1001
+	key(i)=0
+	abb(i)=0
+	atloc(i)=0
+	stext(i)=0
+	ltext(i)=0
+	cond(i)=0
+1001	continue
+c
+	zzzold = 1
+	if(ustat('/usr2/wizard/advent.ran',zzzbuf).eq.-1) zzzold = 0
+	open(unit=1,name='/usr2/wizard/advent.txt',type='old',readonly)
+	if(zzzold.eq.0) open(unit=2,name='/usr2/wizard/advent.ran',
+	1 type='new',access='direct',recordsize=37,maxrec=filsiz)
+	if(zzzold.ne.0) open(unit=2,name='/usr2/wizard/advent.ran',
+	1 type='old',access='direct',recordsize=37,maxrec=filsiz,readonly)
+	ascvar = 1
+	linuse=1
+	trvs=1
+	clsses=1
+c
+c  start new data section.  sect is the section number.
+c
+1002	read(1,1003)sect
+1003	format(i5)
+d	type 930,sect
+d930	format(' now loading section',i3)
+	oldloc=-1
+	goto(1100,1004,1004,1030,1040,1004,1004,1050,1060,1070,1004,
+	1    1080,1004) (sect+1)
+c	      (0)  (1)  (2)  (3)  (4)  (5)  (6)  (7)  (8)  (9)  (10)
+c	     (11) (12)
+	call bug(9)
+c
+c  sections 1, 2, 5, 6, 10, 12.  read messages and set up pointers.
+c
+1004	read(1,1005) loc,lines
+1005	format(i4,36a2)
+	if(zzzold.eq.0) write(2'ascvar) loc,lines
+	ascvar = ascvar + 1
+	linuse = ascvar-1
+	if(loc .eq. -1) go to 1002
+	if(loc .eq. oldloc) go to 1020
+	if(sect.eq.12)goto 1013
+	if(sect.eq.10)goto 1012
+	if(sect.eq.6)goto 1011
+	if(sect.eq.5)goto 1010
+	if(sect.eq.1)goto 1008
+c
+	stext(loc)=linuse
+	goto 1020
+c
+1008	ltext(loc)=linuse
+	goto 1020
+c
+1010	if(loc.gt.0.and.loc.le.100)ptext(loc)=linuse
+	goto 1020
+c
+1011	if(loc .gt. rtxsiz) call bug(6)
+	rtext(loc)=linuse
+	goto 1020
+c
+1012	ctext(clsses)=linuse
+	cval(clsses)=loc
+	clsses=clsses+1
+	goto 1020
+c
+1013	continue
+c	if(loc.gt.magsiz)call bug(6)
+c	mtext(loc)=linuse
+c
+1020	oldloc = loc
+	if(linuse .ge. filsiz) call bug(2)
+	goto 1004
+c
+c  the stuff for section 3 is encoded here.  each "from-location" gets a
+c  contiguous section of the "travel" array.  each entry in travel is
+c  keyword (from section 4, motion verbs), and is negated if
+c  this is the last entry for this location.  key(n) is the index in travel
+c  of the first option at location n.
+c
+c  special conditions on travel are encoded in the corresponding
+c  entries of trvcon.  the new location is in trvloc.
+c
+c
+1030	read(1,1031)loc,j,newloc,tk
+1031    format(99i6)
+	if(loc.eq.-1)goto 1002
+	if(key(loc).ne.0)goto 1033
+	key(loc)=trvs
+	goto 1035
+1033	travel(trvs-1)=-travel(trvs-1)
+1035	do 1037 l=1,20
+	if(tk(l).eq.0)goto 1039
+	travel(trvs)=tk(l)
+	trvloc(trvs)=newloc
+	trvcon(trvs)=j
+	trvs=trvs+1
+	if(trvs.eq.trvsiz)call bug(3)
+1037	continue
+1039	travel(trvs-1)=-travel(trvs-1)
+	goto 1030
+c
+c  here we read in the vocabulary.  ktab(n) is the word number, atab(n) is
+c  the corresponding word.  the -1 at the end of section 4 is left in ktab
+c  as an end-marker.
+c
+1040	do 1042 tabndx=1,tabsiz
+1043	read(1,1041)ktab(tabndx),atab(tabndx),a2tab(tabndx)
+1041	format(i6,2a2)
+	if(ktab(tabndx).eq.-1)goto 1002
+1042	continue
+	call bug(4)
+c
+c  read in the initial locations for each object.  also the immovability info.
+c  plac contains initial locations of objects.  fixd is -1 for immovable
+c  objects (including the snake), or = second loc for two-placed objects.
+c
+1050	read(1,1031)obj,j,k
+	if(obj.eq.-1)goto 1002
+	plac(obj)=j
+	fixd(obj)=k
+	goto 1050
+c
+c  read default message numbers for action verbs, store in actspk.
+c
+1060	read(1,1031)verb,j
+	if(verb.eq.-1)goto 1002
+	actspk(verb)=j
+	vcount=max0(verb,vcount)
+	goto 1060
+c
+c  read info about available liquids and other conditions, store in cond.
+c
+1070	read(1,1031)k,tk
+	if(k.eq.-1)goto 1002
+	do 1071 i=1,20
+	loc=tk(i)
+	if(loc.eq.0)goto 1070
+	if(bitset(loc,k))call bug(8)
+1071	cond(loc)=cond(loc)+ishft(1,k)
+	goto 1070
+c
+c  read data for hints.
+c
+1080	hntmax=0
+1081	read(1,1031)k,tk
+	if(k.eq.-1)goto 1002
+	if(k.lt.0.or.k.gt.hntsiz)call bug(7)
+	do 1083 i=1,4
+1083	hints(k,i)=tk(i)
+	hntmax=max0(hntmax,k)
+	goto 1081
+c  finish constructing internal data format
+c
+1100	continue
+c
+c  having read in the database, certain things are now constructed.  props are
+c  set to zero.  we finish setting up cond by checking for forced-motion travel
+c  entries.  the plac and fixd arrays are used to set up atloc(n) as the first
+c  object at location n, and link(obj) as the next object at the same location
+c  as obj.  (obj>100 indicates that fixed(obj-100)=loc; link(obj) is still the
+c  correct link to use.)  abb is zeroed; it controls whether the abbreviated
+c  description is printed.  counts mod 5 unless "look" is used.
+c
+c
+c  if the first motion verb is 1 (illegal), then this is a forced
+c  motion entry.
+c
+	do 1102 i=1,locsiz
+	if(ltext(i).eq.0.or.key(i).eq.0)goto 1102
+	k=key(i)
+	if(iabs(travel(k)).eq.1)cond(i)=2
+1102	continue
+c
+c  set up the atloc and link arrays as described above.  we'll use the drop
+c  subroutine, which prefaces new objects on the lists.  since we want things
+c  in the other order, we'll run the loop backwards.  if the object is in two
+c  locs, we drop it twice.  this also sets up "place" and "fixed" as copies of
+c  "plac" and "fixd".  also, since two-placed objects are typically best
+c  described last, we'll drop them first.
+c
+	do 1106 i=1,100
+	k=101-i
+	if(fixd(k).le.0)goto 1106
+	call drop(k+100,fixd(k))
+	call drop(k,plac(k))
+1106	continue
+c
+	do 1107 i=1,100
+	k=101-i
+	fixed(k)=fixd(k)
+1107	if(plac(k).ne.0.and.fixd(k).le.0)call drop(k,plac(k))
+c
+c  treasures, as noted earlier, are objects 50 through maxtrs (currently 79).
+c  their props are initially -1, and are set to 0 the first time they are
+c  described.  tally keeps track of how many are not yet found, so we know
+c  when to close the cave.  tally2 counts how many can never be found (e.g. if
+c  lost bird or bridge).
+c
+	maxtrs=79
+	tally=0
+	tally2=0
+	do 1200 i=50,maxtrs
+	if(ptext(i).ne.0)prop(i)=-1
+1200	tally=tally-prop(i)
+c
+c  clear the hint stuff.  hintlc(i) is how long he's been at loc with cond bit
+c  i.  hinted(i) is true iff hint i has been used.
+c
+	do 1300 i=1,hntmax
+	hinted(i)=.false.
+1300	hintlc(i)=0
+c
+d	type 931,tabndx,tabsiz,vcount,vrbsiz,clsses,clsmax,
+d	1	hntmax,hntsiz,trvs,trvsiz,linuse,filsiz
+d931	format(' used vs max table values:'/
+d	1	1x,i5,' of ',i5,' vocab entries'/
+d	2	1x,i5,' of ',i5,' verb entries'/
+d	3	1x,i5,' of ',i5,' class entries'/
+d	4	1x,i5,' of ',i5,' hint entries'/
+d	5	1x,i5,' of ',i5,' travel entries'/
+d	6	1x,i5,' of ',i5,' file records'/
+d	9	)
+c
+c  define some handy mnemonics.  these correspond to object numbers.
+c
+	call vocab('ke','ys',1,keys)
+	call vocab('la','mp',1,lamp)
+	call vocab('gr','at',1,grate)
+	call vocab('ca','ge',1,cage)
+	call vocab('ro','d ',1,rod)
+	rod2=rod+1
+	call vocab('st','ep',1,steps)
+	call vocab('bi','rd',1,bird)
+	call vocab('do','or',1,door)
+	call vocab('pi','ll',1,pillow)
+	call vocab('sn','ak',1,snake)
+	call vocab('fi','ss',1,fissure)
+	call vocab('ta','bl',1,tablet)
+	call vocab('cl','am',1,clam)
+	call vocab('oy','st',1,oyster)
+	call vocab('ma','ga',1,magzin)
+	call vocab('dw','ar',1,dwarf)
+	call vocab('kn','if',1,knife)
+	call vocab('fo','od',1,food)
+	call vocab('bo','tt',1,bottle)
+	call vocab('wa','te',1,water)
+	call vocab('oi','l ',1,oil)
+	call vocab('pl','an',1,plant)
+	plant2=plant+1
+	call vocab('ax','e ',1,axe)
+	call vocab('mi','rr',1,mirror)
+	call vocab('dr','ag',1,dragon)
+	call vocab('ch','as',1,chasm)
+	call vocab('tr','ol',1,troll)
+	troll2=troll+1
+	call vocab('be','ar',1,bear)
+	call vocab('me','ss',1,messag)
+	call vocab('ve','nd',1,vend)
+	call vocab('ba','tt',1,batter)
+c
+c  objects from 50 through whatever are treasures.  here are a few.
+c
+	call vocab('go','ld',1,nugget)
+	call vocab('co','in',1,coins)
+	call vocab('ch','es',1,chest)
+	call vocab('eg','gs',1,eggs)
+	call vocab('tr','id',1,tridnt)
+	call vocab('va','se',1,vase)
+	call vocab('em','er',1,emrald)
+	call vocab('py','ra',1,pyram)
+	call vocab('pe','ar',1,pearl)
+	call vocab('ru','g ',1,rug)
+	call vocab('ch','ai',1,chain)
+c
+c  these are motion-verb numbers.
+c
+	call vocab('ba','ck',0,back)
+	call vocab('lo','ok',0,look)
+	call vocab('ca','ve',0,cave)
+	call vocab('nu','ll',0,null)
+	call vocab('en','tr',0,entrnc)
+	call vocab('de','pr',0,dprssn)
+	call vocab('st','re',0,stream)
+c
+c  and some action verbs.
+c
+	call vocab('sa','y ',2,say)
+	call vocab('lo','ck',2,lock)
+	call vocab('th','ro',2,throw)
+	call vocab('fi','nd',2,find)
+	call vocab('in','ve',2,invent)
+c
+c  initialise the dwarves.  dloc is loc of dwarves, hard-wired in.  odloc is
+c  prior loc of each dwarf, initially garbage.  daltlc is alternate initial loc
+c  for dwarf, in case one of them starts out on top of the adventurer.  (no 2
+c  of the 5 initial locs are adjacent.)  dseen is true if dwarf has seen him.
+c  dflag controls the level of activation of all this:
+c	0	no dwarf stuff yet (wait until reaches hall of mists)
+c	1	reached hall of mists, but hasn't met first dwarf
+c	2	met first dwarf, others start moving, no knives thrown yet
+c	3	a knife has been thrown (first set always misses)
+c	3+	dwarves are mad (increases their accuracy)
+c  sixth dwarf is special (the pirate).  he always starts at his chest's
+c  eventual location inside the maze.  this loc is saved in chloc for ref.
+c  the dead end in the other maze has its loc stored in chloc2.
+c
+	chloc=114
+	chloc2=140
+	do 1700 i=1,6
+1700	dseen(i)=.false.
+	dflag=0
+	dloc(1)=19
+	dloc(2)=27
+	dloc(3)=33
+	dloc(4)=44
+	dloc(5)=64
+	dloc(6)=chloc
+	daltlc=18
+c
+c  other random flags and counters, as follows:
+c	turns	tallies how many commands he's given (ignores yes/no)
+c	limit	lifetime of lamp (not set here)
+c	knfloc	0 if no knife here, loc if knife here, -1 after caveat
+c	detail	how often we've said "not allowed to give more detail"
+c	abbnum	how often we should print non-abbreviated descriptions
+c	maxdie	number of reincarnation messages available (up to 5)
+c	numdie	number of times killed so far
+c	holdng	number of objects being carried
+c	dkill	number of dwarves killed (unused in scoring, needed for msg)
+c	foobar	current progress in saying "fee fie foe foo".
+c	bonus	used to determine amount of bonus if he reaches closing
+c	clock1	number of turns from finding last treasure till closing
+c	clock2	number of turns from first warning till blinding flash
+c	logicals were explained earlier
+c
+	turns=0
+	lmwarn=.false.
+	knfloc=0
+	detail=0
+	abbnum=5
+	do 1800 i=0,4
+1800	if(rtext(2*i+81).ne.0)maxdie=i+1
+	numdie=0
+	holdng=0
+	dkill=0
+	foobar=0
+	bonus=0
+	clock1=30
+	clock2=50
+	closng=.false.
+	panic=.false.
+	closed=.false.
+	gaveup=.false.
+	scorng=.false.
+c
+c
+c
+c  finally, since we're clearly setting things up for the first time...
+c
+d	pause 'init done'
+1	call close (1)
+	return
+	end

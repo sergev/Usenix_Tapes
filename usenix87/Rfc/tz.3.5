@@ -1,0 +1,193 @@
+Volume-Number: Volume 6, Number 31
+
+[ This is part of RFC.001 and is a reposting of V5N65. -mod ]
+
+Date: 02 Mar 86 05:47:32 +1100 (Sun)
+From: Robert Elz <munnari!kre@SEISMO.CSS.GOV>
+>Subject: localtime(), ctime() and timezones
+
+It seems to me that this discussion is getting a bit overblown,
+as far as P1003 is concerned, it doesn't really seem to be
+as difficult or complex as some people are making out.
+
+So, I'm going to propose something that could be inserted into
+P1003 (with the obvious extra definitions that I'm going to
+leave out on the assumption that everyone knows what they are,
+like the definition of a "struct tm").
+
+In some words of other, it would go like this (with hopefully
+a lot of cleaning up of the typography to get rid of quotes
+and things like that where I would really prefer to use italics
+or bold):
+
+Implementations shall provide the following functions:
+
+	struct tm *gmttime(t) time_t *t;
+	struct tm *localtime(t) time_t *t;
+	int settz(p) char *p;
+	char *asctime(tp) struct tm *tp;
+	char *ctime(t) time_t *t;
+
+gmttime: converts the time_t "*t" to a "struct tm" representing
+the same time (in Universal Co-ordinated Time).  (waffle about
+the returned value being in a static area, etc, goes here).
+
+localtime: converts the time_t "*t" to a "struct tm" representing
+the given time adjusted to represent some local time difference.
+"local time" will be specified by a call to "settz", if no such
+call has preceded the call to localtime(), localtime() will call
+"settz(getenv("TZ"));".  Implementors should note that for any defined
+past time (from midnight January 1, 1970 until the time the call is made)
+the local time returned should be accurate (taking into account the effects
+of daylight saving, if any).  For future times, the local time returned
+should be as likely to be accurate as current projections of
+future timezone rules and daylight saving time changes allow.
+
+settz: enables users to specify the local time conversion to be
+used by localtime.  The string is an implementation specific
+representation of the timezone offset desired, with 2 special
+cases..  The null pointer (t == (char *)0) will always select
+the appropriate local time offset for the host executing the call.
+A null string (t != (char *)0 && *t == '\0') will select
+no local time transformations (making localtime() equivalent
+to gmttime()).  Implementations should provide, and document,
+some mechanism to allow users to select another timezone.
+This mechanism is beyond the scope of the standard.  Implementors
+should, if possible, allow users to define their own timezones,
+and not restrict them to use one of some standard set.
+If settz is called with an unrecognisable argument, the effect
+is implementation defined.  (Users might expect any of three
+"reasonable"? actions could be taken here -- use GMT, use local time,
+or use local time in the area where the implementation was performed).
+settz returns 0 if the timezone selected could be obtained, and
+-1 otherwise.  settz can be called as many times as needed, each
+call affects future calls of localtime, until another call to settz.
+
+acstime: returns a 25 character string representing the time
+specified by "*tp".  The format of the string is ... (you all know it).
+
+ctime: is defined to be "asctime(localtime(t))".
+
+...................
+
+Notes: this is (about) the right level of detail for the standard.
+There is no need to specify what the form of the argument to
+settz() is.  This enables things like the Sys V "EST5EDT" string,
+and Arthur Olson's (elsie!ado) "localtime" "Eastern" etc, to all
+be used with impunity - the implementor gets to choose whatever
+is appropriate to him - just provided that he can satisfy the
+needs of his customers (implementors who provide no means of getting
+daylight saving right in the Southern hemisphere can probably
+expect not to sell many copies there - but that's their choice).
+
+In particular - this discourages programmers from writing programs
+which "know" what the local time should be - there's no reason at
+all why a program should ever need to do more than select GMT,
+host local time, or a user specified time zone.  (nb: while localtime
+uses the TZ environment variable in cases where the program has made
+no call to settz(), there's nothing to stop a program getting the
+argument to settz() from anywhere it pleases, including from several
+different environment variables if it chooses, and needs to operate
+in several timezones, or from an external configuration file, or
+wherever is appropriate).
+
+This works for existing programs (in general) - localtime() performs
+the required call to settz() the first time it is called (directly
+or via ctime()).  There's no need to worry about who sets TZ, if
+its not set, getenv("TZ") will return (char *)0 and settz() will
+then use the appropriate local time for the host.  How settz()
+gets that information is an implementation matter.  The security
+problems (people faking local time for programs that expect it
+to be host local time, by setting TZ before running the program)
+can easily solved by causing those (comparatively few) programs
+to do "settz((char *)0)" before their first call to localtime().
+
+What's missing:  So far here there is no mention of the "timezone name".
+None of the standard mechanisms is really adequate here.  The V7
+(and 4.xbsd) "timezone" function is clearly inadequate (although
+4.2 bsd allows users to set the environment variable TZNAME to anything
+they like) since there can clearly be several possible names for the
+same offset, and "timezone" has no way to discover which one is wanted.
+Requiring the name to resice in the environment somewhere (Sys V) is also
+inadequate (there are too many problems about making sure it is set
+in all the right places).
+
+Arthur Olson's scheme causes "localtime" to set a global variable
+"tz_abbr" to the correct string name for the timezone just used.
+I can't think of any cases where anything more than this is needed,
+but it is less flexible then "timezone()" and it would require
+programs that currently call timezone() to have to be altered.
+(He also has his version of "ctime" (but not "asctime") include
+the timezone in its output - I doubt if that is feasible for P1003,
+too many existing programs know what every byte in the returned
+string from ctime() contains.)
+
+I solicit suggestions for what to do here - one might be to
+retain "timezone" but not require that it be capable of returning
+anything except the zone name corresponding to the last call of
+localtime() - then with ado's implementation it could simply
+ignore its arguments and return tz_abbr - I suspect that would
+satisfy all existing uses (and the ones it doesn't are quite
+likely not to work in general anyway).  Opinions?
+
+There's also no discussion of how this relates to processes
+and images.  Not because there's anything doubtful here,
+but just because the necessary words take a lot of space.
+(informally, "the first call to localtime" is intended to
+be "the first after the program is exec'd, ignoring any
+fork()'s it may have since performed, as long as there
+has been no subsequent exec).  Getting this kind of thing
+right is essential for a standatds document, its not essential
+here.
+
+...................
+
+A justification for all this ...  Today, just about 2 1/2 hours ago
+(it's early on a Sun morning as I write this) the daylight saving
+rules changed in at least 2 Australian states (no-one really seems
+very sure of what happened, or really why).  The politicians gave
+us less than a month's warning that it was coming (and the month
+was February, which isn't a long month...).
+
+If there's anyone who doesn't believe that some form of dynamic
+timezone setting is required, they're welcome to come to Australia
+and suffer our local politicians (this isn't the first time: a
+couple of years ago New South Wales decided to extend daylight
+saving for a month to try and save on power bills - the amount of
+notice given was about the same - at that time, at least one local
+site decided to scrap running on GMT and run on localtime (ala VMS)
+instead.  They're still doing that, I think, and suffering because
+of it).
+
+I'm extremely grateful that Arthur Olson decided to try an implementation,
+and donate it to the community - he made the task of converting things here
+much easier than it otherwise would have been.  His implementation
+meets the above specs (in fact, it inspired them...), and will work
+for all the contorted exampes that people have been proposing (multiple
+shifts in a year, multi-hour saving, even daylight wasting).
+
+But note - there's no need for the standard to require this
+generality, market pressures will do that - all the standard
+needs to do is supply a suitable interface.  Arthur Olson's
+implementation proves that the above reccomendation is
+implementable (munnari is running his code, in libc, right now)
+and effecient enough.
+
+[ Your last sentence gives the reason that I've encouraged
+discussions of implementations in the newsgroup:  it's good
+to know that a proposed standard is implementable and handles
+actual cases.  But you're right, of course, that the
+P1003 standard doesn't need implementation details.  -mod ]
+
+Jack Jansen's (mcvax!jack) somewhat similar, but slightly different scheme
+would probably work just as well.
+
+Bob Devine's (hao!asgb!devine) "I don't think its needed" attitude
+can also fit the standard - if he's right then he's probably going
+to have a very fast localtime() which will serve him well.
+If he's wrong, then he's not going to get many customers.
+
+That's good - the more the better - that gives us users (or us system
+implementors perhaps) a wide choice of methods.
+
+Robert Elz		kre%munnari.oz@seismo.css.gov	seismo!munnari!kre

@@ -1,0 +1,181 @@
+.ll+10
+>>> May  19, 1981 (klyce) rips     --> Reference Info Program for Scientists.
+
+USE:  rips
+.br
+
+	RIPS is an interactive, user friendly system for the storage,
+maintenance and retrieval of personal collections of references on
+a minicomputer operating under UNIX (Bell Labs).  It was written for
+academicians by an academician; UNIX hacks and information scientists
+will turn their noses up over the lack of inverted file structures, for
+example, but the ordinary user will care not at all that big system niceties
+are absent.  Nearly all the chores associated with user implementation
+of a computerized file for a personal reference collection can be
+accomplished with very little computer experience.
+.br
+	The current version of RIPS is running on a PDP 11/34 (DEC) on
+the LSU/Lions Eye Research Computer Facility with inexpensive CRT's for
+interactive use and a line printer for hard copy.
+Disk storage requirements average 660 blocks (330 Kbytes) per 1000 references.
+For systems with limited free space, half the space can be recovered by 
+eliminating the automatic disk backup.
+
+.br
+	This program will store references in a file along with keywords.
+This file can then be searched for keywords (including title words, author
+names,
+time periods, etc) with easily used boolean commands.  The search is a root type
+exclusively; any cued pattern found in a reference will be flagged true.
+After each editing session
+systems programs are called to maintain the reference and keyword lists in a
+sensible order.  Identical entries are reduced to a single occurrence per file.
+In addition, a file of un-keywords is maintained which is used to eliminate
+obnoxious or trivial entries from blemishing your keyword list.
+.br
+	While the program is generally self-instructional and a great deal of
+effort was made to make its use totally transparent to new users,
+some knowledge of the UNIX Operating System is assumed.  A short
+tutorial session should be arranged before using rips.
+
+.nf
+SUBROUTINES:
+
+	getdb()		get file name, offer help
+
+	getmode()	what to do today ?
+
+	edit()		rips editor
+
+	ed_append()	add new references
+
+	ed_delete()	make corrections using ED(I)
+
+	ed_correct()	ed_delete()
+
+	check_db()	checks the structure of a file
+
+	retrieve()	begin a search, offer help, parse command line,
+			call search()
+
+	search(keywords,#keywords,open_parens,close_parens,search_depth,
+		syntax)
+			does the dirty work in a retrieval
+
+	save(reference,#auths,mode,kws?,where?)
+			called by various routines to save a reference
+			in an appropriate format and place
+
+	kwlist(mode)	list out the keywords somewhere (mode)
+
+	check(string)	replace null reference fields with '?'
+
+	putline(string,max_chars)
+			rips version of putline()
+
+	squeeze(string,char)
+			ala Kernighan & Ritchie
+
+	refpr(reference, mode, where)
+			print reference in a specified field width
+
+	lower(char)	convert to lower case (K&R)
+
+	backup()	backs up the file prior to edit session
+
+	error(subroutine,mesg,type)
+			error handler - type is FATAL or NONFATAL
+
+	pr_refs(where)	driver for reference printing
+
+	pr_cards()	Sets things up for printing file cards
+
+	gen_kwl()	regenerates the keyword list, checks for bad fields
+
+	closeup(string,c)
+			reduce multi occurrences of c in string to one
+
+	issalpha(c)	true for a-z, 0-9
+
+	index(string,pattern)
+			return the index of pattern in string, -1 for fail
+
+	replace(string,old,new,how_many_times)
+			replaces old pattern with new pattern in string
+			for how_many_times
+
+	strinp(string,svariable,limit)
+			prompts user with string and inputs svariable with
+			strict type checking and reprompt on fail.  Rips
+			variant of a local routine.
+
+	slen(string)	K&R-like strlen()
+
+
+	lock()		busy out unbusy file or fail
+
+	ulock()		remove lockfile except when coming from ed_append()
+
+	date(c)		return time and date in c
+
+
+
+FILES:  /usr/bin/rips			executable file
+	/usr/bin/rips_chk		checks file for structural faults
+	/usr/bin/unkwds			file containing "unkeywords"
+	/usr/bin/refsort		shell program to resort reference list
+	/usr/bin/kwsort			shell program to resort keyword list
+	/usr/bin/files/{user id}	place where databases live
+	/usr/bin/files/{user id}.kwl  place where associated keyword lists live
+	/usr/bin/files/{user id}.new  place for new entries
+	/usr/bin/dbbak/{user id}.bak	place where backup files stay
+	/usr/bin/dbbak/{user id}.kwl.bak  "     "     "     "     "
+	/tmp/rtm
+	/tmp/busy_{db_name}		locks a file against editing
+	/tmp/stmlock			locks out the sorter
+	/usr/klyce/RIPS/rips.c		source
+	/usr/klyce/RIPS/README.nr	doc
+	/usr/klyce/RIPS/RIPSBLURB.nr	doc
+
+		SYSTEM CALLS
+
+	ACOL
+	CAT(I)
+	ECHO(I)
+	ED(I)
+	LPR(I)
+	LSS
+	MV(I)
+	PG
+	PR(I)
+	RM(I)
+	SH(I)
+	SORT(I)
+	UNIQ(I)
+	WC(I)
+
+.fi
+BUGS:  rips has received fairly rigorous testing, but report problems
+to <mail klyce>.  The UNIX standard sort routine is used for sorting
+the files and keyword lists.  refsort and kwsort (part of the rips
+package) will busy out if they read /tmp/stmlock which could inadvertently
+be left by other users who bomb out of other tasks which leave (at LSU)
+/tmp/stmlock.  If a background refsort or keysort seems to sleep forever
+, the non-novice UNIX user needs to look around at what's going on in
+the system and remove /tmp/stmlock only if its creator is dead.  A similar
+situation exists with the rips routine that busies out a reference list.
+Look for /tmp/busy_????? where ????? is the name of the reference list.
+
+.br
+	Since currently the UNIX editor, ED(I), is used for making
+corrections to the file (not true for appended references), novices
+should be aware of the structure of the file so that the number
+of fields is unaltered (# fields = # auths + # associated keywords + 5).
+All is not lost, however, since the user at his option can run the
+file checker which generally points out the violations.
+
+.br
+.sp1
+	RIPS and SORT(I) are currently dimensioned to handle references
+up to 1024 characters long.  If, UNIX forbid, this not be big enough,
+increase RLEN in rips.c and L in sort.c.

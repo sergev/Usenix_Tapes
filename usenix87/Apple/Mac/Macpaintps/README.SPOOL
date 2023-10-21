@@ -1,0 +1,133 @@
+
+   Paintps depends on the "Mac environment" being present in the LaserWriter
+at the time its Postscript output is processed.  This environment is setup
+by the laser-prep prolog file which is prepended by the Mac print drivers
+when a Mac prints directly to a LaserWriter.  Since paintps basically
+mimics what MacPaint does when it prints a file on a LW, something needs
+to be done to provide the Mac environment in the LW with the Unix system.
+
+   The same applies to any "Mac PostScript" file produced on a Mac and
+captured with the Command-F sequence and then uploaded to a Unix machine.
+The remaining discussion concerns printing Mac files to a LaserWriter
+being driven by a Unix (4.2 or 4.3 BSD) spooler and which is primarily
+used for general text processing, not for Mac output.  The output of
+paintps is considered a "Mac file", even though it's produced on a
+Unix system, and is included in the general discussion below.
+
+   The first step is to get the laser-prep prolog file, so that it can be
+sent to the LW via the spooler.  The laser-prep file must be modified
+for use with the spooler.  There are two reasons why.
+	1) The standard laser-prep installs itself permanently, on the
+	   assumption that the LW is living in a Mac-only universe.  The
+	   amount of memory it consumes is substantial and we aren't
+	   willing to give it away to accomodate the occasional Mac
+	   job sent via the Unix spooler.  Removing a few specific lines
+	   at the beginning which escape from the server loop is
+	   sufficient to prevent permanent residency.
+	2) The encrypted smoothing function in the laser-prep is fed
+	   as stdin to an eexec command which will read until eof.  Since
+	   what we're trying to accomplish is to have the laser-prep only
+	   live for the duration of a single job, this presents a problem.
+	   Luckily the eexec command will also accept a string argument
+	   on the stack, so by placing hex quotes (<>) around the smoothing
+	   code and calling eexec after it has been placed on the stack,
+	   we get the same effect plus the ability to continue sending
+	   PostScript code afterwards.  Hence, we can simply concatenate
+	   the modified laser-prep and the Mac PostScript file and send
+	   it to the printer, the Mac environment will be there for the
+	   job and will be flushed afterwards.  [We recently learned that
+	   there are ways to work around this.  We don't understand how they
+	   work; they just do.  You might examine the version 49 Prep to see
+	   the solution there. -- BHP]
+   This also allow us to support more than one version of the LaserWriter
+driver.  Since the laser-prep won't be in the LW RAM, we can prepend any
+laser-prep without causing a conflict.
+
+   Now, there are a couple of ways to handle a Mac PostScript job via
+the Unix spooler.
+	1) On the front end of the spooler thru lpr, such as:
+		paintps foo.mp > foo.ps
+		cat /usr/local/lib/laser-prep-40.pro foo.ps | ps8 | lpr -Plw
+	   This is the most generic and doesn't require anything special
+	   be done on the unix system.  The drawbacks are that a current
+	   copy of the laser-prep must be present on every system that might
+	   spool a job, that users know where it is, and that they know
+	   the proper incantations.  A shell script could be written to
+	   hide the above commands, but that still requires multiple
+	   copies of the laser-prep file.
+	2) In the back end of the spooler, by having a filter automatically
+	   prepend the laser-prep to all Mac PostScript jobs.  This is 
+	   the most elegant way to handle it, since only one copy of the
+	   laser-prep need exist on the system where the printer is, and
+	   the details of handling Mac specific files are hidden from
+	   the user.  This method requires selecting a "file type" for
+	   spooling Mac jobs and specifying the proper handlers on the
+	   system where the printer is.  At UT we chose the "Fortran"
+	   file type, since it was unused.  Others could be used but
+	   there aren't many candidates, especially if you already
+	   support ditroff and/or TeX.  We handle spooling of Mac files
+	   with a shell script which simply calls lpr and adds the -f
+	   file type flag.
+
+   The discussion below assumes the reader is familiar with how the 
+Berkeley spooler works and knows how to setup filters.  The person
+who does this must have super-user access anyway.  Once again there
+are two ways to go about setting up your spooler to handle Mac PostScript
+files:
+	1) If you're using the standard Transcript setup, use the psmac
+	   shell script included.  Put it in /usr/local/lib, or where
+	   you keep the rest of your filters, and put its name in the
+	   printcap slot for whichever file type you use (the rf field
+	   is for the Fortran type, go figure).  You also need to put the
+	   macfilter shell script in the same directory.
+	2) If you're using an Imagen-style shell script which is called
+	   by several different names, use our psfilter (included) as
+	   a guide and include a case for handling Mac files as shown.
+	   This approach is kind of odd, and can lead to various problems,
+	   but allows more flexibility and enables you to do things
+	   like complex pipelines and problem notification.  Psfilter
+	   is what we use at UT, you may or may not find it useful.
+	   In any case you can ignore the local hacks for dealing
+	   with LaserWriters on Bridges (unless you have some; I might
+	   be able to help).  The macfilter shell script should reside in
+	   the same directory.
+
+   The program ps8, named in macfilter, does nothing more than convert any
+non-printable characters in the data stream to the octal equivalent.  Apple
+broke the rules and used non-printable characters (specifically non-ascii >
+128) for certain symbols.  These don't survive the unix device driver (they
+lose the high bit) and raw mode is not possible because the LW needs to use
+flow control.
+
+   Here is the /etc/printcap we use here at UT:
+#
+#
+# Apple LaserWriter
+# sb MUST be specified, psof depends on it.  psof prints job header page.
+# rw must be specified, printer talks back to psif
+
+lw-generic|Apple Laserwriter:\
+	:rw:br#9600:ff=:tr=^D:sc:sb:\
+	:of=/usr/local/lib/psof:\
+	:df=/usr/local/lib/psdvi:\
+	:nf=/usr/local/lib/psditroff:\
+	:tf=/usr/local/lib/pscat:\
+	:if=/usr/local/lib/psasc:\
+	:cf=/usr/local/lib/psbad:\
+	:gf=/usr/local/lib/psbad:\
+	:vf=/usr/local/lib/psbad:\
+	:rf=/usr/local/lib/psmac:
+
+Lazarus|lw1|lw|lazarus|LW connected to im4u:\
+	:lp=/dev/lw:sd=/usr/spool/lw1:\
+	:xs#040400:fc#070:fs#00302:\
+	:lf=/usr/adm/log-lw1:\
+	:af=/usr/adm/lw.acct/lw1:\
+	:tc=lw-generic:
+-------------------
+Ron Hitchens	University of Texas at Austin, Computer Science
+hitchens@sally.utexas.edu
+hitchens@ut-sally.UUCP
+
+Updated April 9, 1987:
+Brian H. Powell		brian@sally.utexas.edu

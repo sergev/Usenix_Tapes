@@ -1,0 +1,89 @@
+:
+: utaddto - add to a utree conference
+:
+
+trap 'stty eofc "^D"; rm /tmp/ut[ab]$$ >/dev/null 2>&1; exit 0' 2
+trap '' 15 3
+
+if [ $# -eq 0 ]
+then	echo "Missing conference name."
+	exit
+fi
+
+CONF=`echo $1 | tr 'a-z' 'A-Z' | tr -cd 'A-Za-z-_@0-9'`
+CDIR=`find $UTREE -name $CONF -print 2>/dev/null | sh -c 'read a junk; echo $a'`
+
+if [ "$CDIR" = "" ]
+then	echo "No such conference - $CONF"
+	exit
+fi
+
+cat <<%%%
+
+Enter the lines of your message; press the ESCAPE key to exit.
+
+%%%
+stty eofc '^['
+cat >/tmp/uta$$
+while true
+do	echo
+	echo -n "Editor command (L, C, E, S, A, ?): "
+	read cmd junk
+	case "$cmd" in
+	L | l )
+		linelist /tmp/uta$$ ;;
+	C | c )
+		echo
+		echo 'Enter your lines; press ESCAPE to exit.'
+		echo
+		cat >>/tmp/uta$$ ;;
+	E | e )
+		while true
+		do	echo -n "Enter the line # to replace, or ENTER to exit: "
+			read cmd junk
+			if [ "$cmd" = "" ]
+			then	break
+			fi
+			echo "Enter the replacement line, or ENTER to abort:"
+			read line
+			if [ "$line" != "" ]
+			then	sed "${cmd}c\\\
+$line\\\
+." </tmp/uta$$ > /tmp/utb$$
+				mv /tmp/utb$$ /tmp/uta$$
+			fi
+		done ;;
+	A | a )
+		rm /tmp/uta$$
+		break ;;
+	S | s )
+		echo -n "Enter the name of this conference, or ENTER to abort: "
+		read conf junk
+		if [ "$conf" != "" ]
+		then	conf=`echo $conf | tr 'a-z' 'A-Z' | tr -cd 'A-Z0-9-_@'`
+			newc=`find $UTREE -type d -name $conf -print`
+			if [ "$newc" != "" ]
+			then	echo "Sorry, that name's in use."
+			else	mkdir $CDIR/$conf
+				mv /tmp/uta$$ $CDIR/$conf/.message
+				echo 0 >$CDIR/$conf/.users
+				break
+			fi
+		fi ;;
+	'?' )
+		cat <<%%%
+
+Editor commands
+---------------
+L	List message
+E	Edit message
+S	Save message
+A	Abort without saving message
+C	Continue entering message
+
+%%%
+		echo ;;
+	esac
+done
+stty eofc '^D'
+exit

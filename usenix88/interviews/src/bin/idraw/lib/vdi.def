@@ -1,0 +1,291 @@
+(*
+ * Modula-2 interface to InterViews images.
+ *)
+
+definition module vdi;
+
+from system import
+    Byte, Word;
+
+export qualified
+    XCoord, YCoord, RenderingFunction, PolyAlg, ColorValue,
+    BLACK, RED, GREEN, BLUE, MAGENTA, CYAN, YELLOW, ORANGE, DGREEN,
+    PINK, PLUM, LBLUE, LORANGE, PURPLE, OGREEN, WHITE,
+    Pattern, PatternData, LineStyle, Font, Pixmap, XMAXSCREEN, YMAXSCREEN,
+    solidLine, solidPattern, clearPattern, vertPattern, horizPattern,
+    majorDiagPattern, minorDiagPattern, thickVertPattern, thickHorizPattern,
+    thickMajorDiagPattern, thickMinorDiagPattern, stipplePattern1,
+    stipplePattern2, stipplePattern3, stipplePattern4,
+    stipplePattern5, stipplePattern6,
+    Initialize, InitPlace, InitSize, Finishup, Sync,
+    Clear, MoveTo, GetPosition, MapColor, SetColors, GetColors,
+    SetForegroundColor, GetForegroundColor,
+    SetBackgroundColor, GetBackgroundColor,
+    SetRendering, GetRendering, Writable, AllWritable,
+    DefLineStyle, SetLineStyle, GetLineStyle,
+    DefPattern, SetPattern, GetPattern,
+    Line, LineTo, Point, PointList, LineList, Circle, FilledCircle,
+    Ellipse, FilledEllipse,
+    Rectangle, FilledRectangle, InvertArea, Polygon, SetPolygonAlg,
+    BezierArc, BezierArcTo, BSpline, ClosedBSpline, FilledBSpline,
+    CopyArea, ReadArea, WriteArea, SaveArea, RestoreArea, PixelsToBytes,
+    CreatePixmap, DestroyPixmap, ReadPixmap, WritePixmap,
+    CharStr, LoadFont, GetFont, SetFont, GetHeight, GetFontHeight,
+    StrWidth, FontStrWidth;
+
+(*
+ * Default color map.
+ *)
+const
+    BLACK = 0; RED = 1; GREEN = 2; BLUE = 3;
+    MAGENTA = 4; CYAN = 5; YELLOW = 6; ORANGE = 7;
+    DGREEN = 8; PINK = 9; PLUM = 10; LBLUE = 11;
+    LORANGE = 12; PURPLE = 13; OGREEN = 14; WHITE = 15;
+
+(*
+ * Patterns are 16x32 bitmaps, line styles are 32 bit masks.
+ *)
+    patternHeight = 16;
+    patternWidth = 32;
+    lineStyleWidth = 32;
+
+type
+    XCoord = @size 16 @align 1 integer;
+    YCoord = @size 16 @align 1 integer;
+
+(*
+ * There are 4 ways of drawing, called rendering functions.
+ * INVERT means draw in such a way that drawing the same pixel twice
+ * leaves it the same as before drawing.  PAINTFG only paints foreground
+ * bits in a pattern, PAINTBG only paints background, and PAINTFGBG
+ * paints both.  For example, PAINTFG will draw in the current foreground color
+ * whereever the fill pattern is 1 and not draw at all elsewhere.  PAINTFGBG
+ * will draw foreground color where the fill pattern is 1 and draw background
+ * color where the fill pattern is 0.
+ *)
+    RenderingFunction = (
+	INVERT, PAINTFG, PAINTBG, PAINTFGBG
+    );
+
+(*
+ * If polygons are known to be convex, then CONVEXPOLY can be used
+ * to make polygon drawing faster.
+ *)
+    PolyAlg = (COMPLEXPOLY, CONVEXPOLY);
+
+(*
+ * Colors are represented as integers.
+ *)
+    ColorValue = integer;
+
+    PatternData = array [1..patternHeight] of integer;
+    Pattern = integer;
+    LineStyle = integer;
+    Font = integer;
+    Pixmap = integer;
+
+(*
+ * The target image is [0..XMAXSCREEN] by [0..YMAXSCREEN].
+ *)
+var XMAXSCREEN : XCoord;
+    YMAXSCREEN : YCoord;
+(*
+ * These patterns are built-in.
+ *)
+    @external solidLine : LineStyle;
+    @external solidPattern : Pattern;
+    @external clearPattern : Pattern;
+    @external vertPattern : Pattern;
+    @external horizPattern : Pattern;
+    @external majorDiagPattern : Pattern;
+    @external minorDiagPattern : Pattern;
+    @external thickVertPattern : Pattern;
+    @external thickHorizPattern : Pattern;
+    @external thickMajorDiagPattern : Pattern;
+    @external thickMinorDiagPattern : Pattern;
+    @external stipplePattern1 : Pattern;
+    @external stipplePattern2 : Pattern;
+    @external stipplePattern3 : Pattern;
+    @external stipplePattern4 : Pattern;
+    @external stipplePattern5 : Pattern;
+    @external stipplePattern6 : Pattern;
+
+(*
+ * One of Initialize, InitPlace, or InitSize must be called before
+ * any other routine to create the target image.  If InitSize is used
+ * the user places the image on the screen; if Initialize is used
+ * the user both places and sizes the image.
+ *)
+procedure Initialize();
+procedure InitPlace(left : XCoord; top : YCoord; width, height : integer);
+procedure InitSize(width, height : integer);
+
+(*
+ * Finishup closes the image.
+ *)
+procedure Finishup();
+
+(*
+ * Wait for any graphics commands that are "in progress" to complete.
+ *)
+procedure Sync();
+
+(*
+ * Fill the entire image with the background color.
+ *)
+procedure Clear();
+
+(*
+ * Set (return) the current drawing position.  This position is used
+ * for text drawing and the LineTo operation.
+ *)
+procedure MoveTo(x : XCoord; y : YCoord);
+procedure GetPosition(var x : XCoord; var y : YCoord);
+
+(*
+ * Define the given pixel number to be as close as possible to the
+ * given combination of red, blue, and green.
+ *)
+procedure MapColor(pixel, red, blue, green : integer);
+
+(*
+ * Set or return the current foreground and background colors.
+ *)
+procedure SetColors(fg, bg : ColorValue);
+procedure GetColors(var fg, bg : ColorValue);
+procedure SetForegroundColor(fg : ColorValue);
+procedure GetForegroundColor() : ColorValue;
+procedure SetBackgroundColor(bg : ColorValue);
+procedure GetBackgroundColor() : ColorValue;
+
+(*
+ * Set (return) the current rendering function.
+ *)
+procedure SetRendering(r : RenderingFunction);
+procedure GetRendering() : RenderingFunction;
+
+(*
+ * Clip subsequent drawing operations to the given box.
+ * AllWritable resets clipping to be the entire image.
+ * This clipping is independent of any overlapped images;
+ * the actual clipped area is the intersection of the two.
+ *)
+procedure Writable(x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord);
+procedure AllWritable();
+
+(*
+ * Define line styles and patterns, and set or return them
+ * as the current one for the image.
+ *)
+procedure DefLineStyle(pat : integer) : LineStyle;
+procedure SetLineStyle(ls : LineStyle);
+procedure GetLineStyle() : LineStyle;
+procedure DefPattern(var p : PatternData) : Pattern;
+procedure SetPattern(p : Pattern);
+procedure GetPattern() : Pattern;
+
+procedure SetPolygonAlg(alg : PolyAlg);
+
+procedure Line (x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord);
+procedure LineTo (x : XCoord; y : YCoord);
+procedure Point (x : XCoord; y : YCoord);
+procedure PointList (const x : array of XCoord; const y : array of YCoord);
+procedure LineList (const x : array of XCoord; const y : array of YCoord);
+procedure Circle (x : XCoord; y : YCoord; r : integer);
+procedure FilledCircle (x : XCoord; y : YCoord; r : integer);
+procedure Ellipse (x : XCoord; y : YCoord; r1, r2 : integer);
+procedure FilledEllipse (x : XCoord; y : YCoord; r1, r2 : integer);
+procedure Rectangle (x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord);
+procedure FilledRectangle (x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord);
+procedure InvertArea (x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord);
+procedure Polygon (const x : array of XCoord; const y : array of YCoord);
+procedure BezierArc(
+    x0 : XCoord; y0 : YCoord; x1 : XCoord; y1 : YCoord;
+    x2 : XCoord; y2 : YCoord; x3 : XCoord; y3 : YCoord
+);
+procedure BezierArcTo(
+    x0 : XCoord; y0 : YCoord; x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord
+);
+procedure BSpline (const x : array of XCoord; const y : array of YCoord);
+procedure ClosedBSpline (const x : array of XCoord; const y : array of YCoord);
+procedure FilledBSpline (const x : array of XCoord; const y : array of YCoord);
+
+(*
+ * Copy an area of the image to another part of the image.
+ *)
+procedure CopyArea (
+    x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord;
+    dstx1 : XCoord; dsty1 : YCoord
+);
+
+(*
+ * Read an area of the image into memory.  If the area is clipped,
+ * then the corresponding destination is not set.
+ *)
+procedure ReadArea (
+    x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord;
+    var dst : array of Byte
+);
+
+(*
+ * Write an area of the image from memory.
+ *)
+procedure WriteArea (
+    x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord;
+    const src : array of Byte
+);
+
+(*
+ * Pixmaps are storage areas within the server for images.
+ *)
+procedure CreatePixmap (width, height : integer) : Pixmap;
+procedure DestroyPixmap (p : Pixmap);
+
+(*
+ * Copy an area to (from) a pixmap.
+ *)
+procedure SaveArea (
+    p : Pixmap; x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord
+);
+procedure RestoreArea (
+    p : Pixmap; x1 : XCoord; y1 : YCoord; x2 : XCoord; y2 : YCoord
+);
+
+(*
+ * Read/write a pixmap.
+ *)
+procedure ReadPixmap (p : Pixmap; var dst : array of Byte);
+procedure WritePixmap (p : Pixmap; const src : array of Byte);
+
+(*
+ * Return the number of bytes needed to store a given area of pixels.
+ *)
+procedure PixelsToBytes (width, height : integer) : integer;
+
+(*
+ * Draw a string of text with the lower left corner of the first character
+ * at the current output position.
+ *)
+procedure CharStr (const s : array of char);
+
+(*
+ * Define, set, and return the current font for text drawing.
+ *)
+procedure LoadFont (const fontname : array of char) : Font;
+procedure SetFont (f : Font);
+procedure GetFont () : Font;
+
+(*
+ * Return the height in pixels of characters in the current or given font.
+ *)
+procedure GetHeight () : integer;
+procedure GetFontHeight (f : Font) : integer;
+
+(*
+ * Return the width in pixels of a string of characters
+ * in the current or given font.
+ *)
+procedure StrWidth (const s : array of char) : integer;
+procedure FontStrWidth (f : Font; const s : array of char) : integer;
+
+end vdi.

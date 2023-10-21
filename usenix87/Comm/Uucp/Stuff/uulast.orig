@@ -1,0 +1,95 @@
+
+# Shell script to find the last time of successful uucp startup for
+# each remote nodename in all LOG* files (since uustat doesn't work!),
+# and report on missing and unknown nodenames.
+
+# Assumes all $log files have the correct format:
+#
+#	username nodename (month/date-hour:min-pid) message
+#
+# The algorithm will always produce the latest startup DATE in any year
+# represented, there is no information about years in the logfiles.
+
+
+# Initialize:
+
+	PATH=/bin:/usr/bin
+	log=/usr/spool/uucp/LOG*
+
+	temp1=/tmp/uul$$a
+	temp2=/tmp/uul$$b
+	trap "rm -f $temp1 $temp2; trap '' 0; exit" 0 1 2 3
+
+	echo "nodename   last startup   total\n"
+
+# Find startup lines and add a last (dummy) line for awk:
+
+{	grep "OK (startup)" $log
+	echo "zzzzzzzzzz"			# must sort out last!
+}	|					# note pipe.
+
+
+# Stream edit as follows:
+#	- strip usernames;
+#	- put in a default nodename if the original was null (e.g. the file
+#	  contained two blanks in a row);
+#	- add leading zeroes before 1-digit months;
+#	- add leading zeroes before 1-digit days;
+#	- add leading zeroes before 3-digit times;
+#	- strip the leading "(";
+#	- strip the trailing "-pid) message".
+
+	sed	-e 's/[^ ]* //'		\
+		-e 's/^ /<blank> /'	\
+		-e 's;(\(.\)/;(0\1/;'	\
+		-e 's;/\(.\)-;/0\1-;'	\
+		-e 's/-\(.\):/-0\1:/'	\
+		-e 's/(//'		\
+		-e 's/-[^-]*).*//'	|	# note pipe.
+
+
+# Select last entry for each nodename:
+# Note that the first line is skipped, and the last line is the dummy line
+# (from above) so the last true data line IS printed.
+
+	sort				|
+	awk '	node != $1 {
+			if (length (node))
+				printf ("%-12s%11s%8d\n", node, time, count);
+			count = 0;
+		}
+		{node = $1; time = $2; count++}
+	'				|	# note pipe.
+
+# Sort by age, oldest first, and dump the results to stdout and temp file:
+
+	sort -b +1			|
+	tee $temp1
+
+
+# Print totals as a separate step (so temp file is pure for later use):
+
+	awk <$temp1 '
+			{count += $3}
+		END	{printf ("total%26d\n", count)}
+	'
+
+
+# Reduce the known systems to sorted nodenames only:
+
+	awk  <$temp1 '{print $1}'	|
+	sort >$temp2
+
+
+# Compare against known systems, less junk lines:
+
+	echo "\nKnown systems with no startup ('<') and unknown systems ('>'):"
+
+	uuname				|	# known system nodenames.
+	sed	-e '/^</d'		\
+		-e '/^$/d'		|	# less "<" and null lines.
+	sort				|
+	uniq				|	# just in case.
+	diff - $temp2			|	# get comparison.
+	sed '/^[<>]/!d'			|	# toss except "<" and ">" lines.
+	sort					# group by type.

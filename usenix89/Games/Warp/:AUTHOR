@@ -1,0 +1,2038 @@
+Path: plus5!wucs1!mcdchg!clyde!rutgers!ames!ucbcad!ucbvax!decvax!tektronix!tekgen!tekred!games-request
+From: games-request@tekred.TEK.COM
+Newsgroups: comp.sources.games
+Subject: v01i045:  warp7 - space war game, Part01/07
+Message-ID: <1294@tekred.TEK.COM>
+Date: 10 Jun 87 20:38:29 GMT
+Sender: billr@tekred.TEK.COM
+Lines: 2028
+Approved: billr@tekred.TEK.COM
+
+Submitted by: Larry Wall <lwall%sdcrdcf.UUCP@jove.cam.unisys.com>
+Comp.sources.games: Volume 1, Issue 45
+Archive-name: warp7/Part01
+
+	[This is the latest version of Larry Wall's space war
+	 game "warp".  I haven't tried running this, but knowing
+	 Larry's reputation I wouldn't expect any problems.  -br]
+
+
+#! /bin/sh
+
+# Make a new directory for the warp sources, cd to it, and run kits 1
+# thru 7 through sh.  When all 7 kits have been run, read README.
+
+echo "This is warp 7.0 kit 1 (of 7).  If kit 1 is complete, the line"
+echo '"'"End of kit 1 (of 7)"'" will echo at the end.'
+echo ""
+export PATH || (echo "You didn't use sh, you clunch." ; kill $$)
+echo Extracting README
+sed >README <<'!STUFFY!FUNK!' -e 's/X//'
+X			Warp Kit, Version 7.0
+X
+X		    Copyright (c) 1986, Larry Wall
+X
+XYou may copy the warp kit in whole or in part as long as you don't try to
+Xmake money off it, or pretend that you wrote it.
+X--------------------------------------------------------------------------
+X
+XWarp is a real-time space war game that doesn't get boring very quickly.
+XRead warp.doc and the manual page for more information.
+X
+XWarp will probably not run on V7 systems that don't have a non-blocking read,
+Xor on machines with a small address space like the PDP-11.  Caveat Emptor.
+X
+XPlease read all the directions below before you proceed any further, and
+Xthen follow them carefully.  Failure to do so may void your warranty. :-)
+X
+XAfter you have unpacked your kit, you should have all the files listed
+Xin MANIFEST.
+X
+X			    IMPORTANT
+X
+XYou must choose the uid that you want warp to run under, since warp runs
+Xsetuid to protect its files.  Choose a uid (not root) that is used only
+Xby trustworthy persons.  If you do your make install as root, the installed
+Xversion will be chowned to this uid.  Otherwise, you should login to your
+Xselected uid before proceeding.  The Configure script will ask you which
+Xuid you want warp to run under.
+X
+XInstallation
+X
+X1)  Run Configure.  This will figure out various things about your system.
+X    Some things Configure will figure out for itself, other things it will
+X    ask you about.  It will then proceed to make config.h, config.sh, and
+X    Makefile.
+X
+X    You might possibly have to trim # comments from the front of Configure
+X    if your sh doesn't handle them, but all other # comments will be taken
+X    care of.
+X
+X    (If you don't have sh, you'll have to copy the sample file config.H to
+X    config.h and edit the config.h to reflect your system's peculiarities.)
+X
+X2)  Glance through config.h to make sure system dependencies are correct.
+X    Most of them should have been taken care of by running the Configure script.
+X
+X    If you have any additional changes to make to the C definitions, they
+X    can be done in the Makefile, or in config.h.  Bear in mind that they will
+X    get undone next time you run Configure.
+X
+X3)  make depend
+X
+X    This will look for all the includes and modify Makefile accordingly.
+X    Configure will offer to do this for you.
+X
+X4)  make
+X
+X    This will attempt to make warp in the current directory.
+X
+X5)  make install
+X
+X    This will put warp into a public directory (normally /usr/games).
+X    It will also try to put the man pages in a reasonable place.  It will not
+X    nroff the man page, however.  You may need to be root to do this.  If
+X    you are not root, you must own the directories in question and you should
+X    ignore any messages about chown not working.
+X
+X6)  Read the manual entry before running warp.
+X
+X7)  Feel free to edit warp.news.
+X
+X8)  IMPORTANT!  Help save the world!  Communicate any problems and
+X    suggested patches to me, lwall@sdcrdcf.UUCP (Larry Wall), so we can
+X    keep the world in sync.  If you have a problem, there's someone else
+X    out there who either has had or will have the same problem.
+X
+X    If possible, send in patches such that the patch program will apply them.
+X    Context diffs are the best, then normal diffs.  Don't send ed scripts--
+X    I've probably changed my copy since the version you have.
+X
+X    Watch for warp patches in comp.sources.bugs.  Patches will generally be
+X    in a form usable by the patch program.  If you are just now bringing up
+X    warp and aren't sure how many patches there are, write to me and I'll
+X    send any you don't have.  Your current patch level is shown in patchlevel.h.
+X
+X
+XNEW FEATURES IN THIS RELEASE
+X
+XUses a Configure script for greater portability.
+XSpace Amoebas!!!
+XPirates
+XFriendly Freighters
+XHarry Mudd
+XDamage
+XKeyboard mapping
+!STUFFY!FUNK!
+echo Extracting score.c
+sed >score.c <<'!STUFFY!FUNK!' -e 's/X//'
+X/* $Header: score.c,v 7.0.1.2 86/10/20 12:06:56 lwall Exp $ */
+X
+X/* $Log:	score.c,v $
+X * Revision 7.0.1.2  86/10/20  12:06:56  lwall
+X * Made all exits reset tty.
+X * 
+X * Revision 7.0.1.1  86/10/16  10:52:47  lwall
+X * Added Damage.  Fixed random bugs.
+X * 
+X * Revision 7.0  86/10/08  15:13:14  lwall
+X * Split into separate files.  Added amoebas and pirates.
+X * 
+X */
+X
+X#include "EXTERN.h"
+X#include "warp.h"
+X#include "intrp.h"
+X#include "object.h"
+X#include "play.h"
+X#include "sig.h"
+X#include "term.h"
+X#include "us.h"
+X#include "util.h"
+X#include "weapon.h"
+X#include "INTERN.h"
+X#include "score.h"
+X
+Xvoid
+Xscore_init()
+X{
+X    Reg1 char *s;
+X    Reg2 int i;
+X    FILE *savfil;
+X
+X    if (stat(SAVEDIR,&filestat)) {
+X	printf("Cannot access %s\r\n",SAVEDIR);
+X	finalize(1);
+X    }
+X    if (filestat.st_uid != geteuid()) {
+X#ifdef GETPWENT
+X	printf("Warp will not run right without being setuid.\r\n");
+X#else
+X	getpw(filestat.st_uid, spbuf);
+X	s = index(spbuf, ':');
+X	*s = '\0';
+X	printf("Warp will not run right without being setuid to %s.\r\n",spbuf);
+X#endif
+X	finalize(1);
+X    }
+X    if ((filestat.st_mode & 0605) != 0605) {
+X	printf("%s is not protected correctly (must be u+rw o+rx).\r\n",SAVEDIR);
+X	finalize(1);
+X    }
+X    
+X#ifdef SCOREFULL
+X    interp(longlognam, sizeof longlognam, "%N");
+X    for (i=strlen(longlognam); i<24; i++)
+X	longlognam[i] = ' ';	/* make sure it is 24 long for strncmp */
+X    longlognam[24] = '\0';
+X#else
+X    interp(longlognam, sizeof longlognam, "%L");
+X    for (i=strlen(longlognam); i<8; i++)
+X	longlognam[i] = ' ';	/* make sure it is 8 long for strncmp */
+X    longlognam[8] = '\0';
+X#endif
+X    
+X    if (scorespec)
+X	wscore();
+X
+X    Sprintf(savefilename, "save.%s", logname);
+X
+X    savfil = experimenting ? NULL : fopen(savefilename,"r");
+X    if (savfil != NULL && fgets(spbuf,100,savfil) != NULL) {
+X	char tmpbuf[80];
+X
+X	spbuf[strlen(spbuf)-1] = '\0';
+X	if (fgets(tmpbuf,80,savfil) != NULL) {
+X	    int processnum;
+X
+X	    tmpbuf[strlen(tmpbuf)-1] = '\0';
+X	    printf("You seem to have left a game %s.\r\n",tmpbuf+9);
+X	    s = index(tmpbuf+9, ',');
+X	    *s = '\0';
+X	    processnum = atoi(s+11);
+X	    if (kill(processnum, SIGINT)) {
+X					/* does process not exist? */
+X					/* (warp ignores SIGINT) */
+X		printf("\r\n\
+XThat process does not seem to exist anymore, so you'll have to start the\r\n");
+X		printf(
+X"last wave over.\r\n\n");
+X		printf(
+X"                      [type anything to continue]");
+X		Fflush(stdout);
+X		eat_typeahead();
+X		getcmd(tmpbuf);
+X		if (*tmpbuf == INTRCH)
+X		    finalize(0);
+X		printf("\r\n");
+X	    }
+X	    else {
+X		if (strcmp(term+8,tmpbuf+23)) {
+X		    printf(
+X"That is not your current terminal--you are on %s.\r\n", term+5);
+X		    printf("\r\nYour options:\r\n");
+X		    printf("   1) Exit and find the terminal it's running on\r\n");
+X		}
+X		else {
+X		    printf("\r\nYour options:\r\n");
+X		    printf("   1) Exit and try to foreground it\r\n");
+X		}
+X		printf("   2) Let me terminate the other game\r\n\n");
+X		printf("What do you want to do? ");
+X		Fflush(stdout);
+X		eat_typeahead();
+X		getcmd(tmpbuf);
+X		printf("\r\n");
+X		if (*tmpbuf == INTRCH)
+X		    finalize(0);
+X		if (*tmpbuf == '1') {
+X		    printf(
+X"If you don't succeed, come back and do option 2 instead.  Good luck.\r\n");
+X		    finalize(0);
+X		}
+X		printf(
+X"Ok, hang on a few moments \r\n");
+X		Fclose(savfil);
+X		if (kill(processnum, SIGQUIT)) {
+X		    printf("Unable to kill process #%d!\r\n",processnum);
+X		    roundsleep(2);
+X		}
+X		else {
+X#ifdef SIGCONT
+X		    kill(processnum, SIGCONT);
+X#endif
+X		    for (i=15; i; --i) {
+X			sleep(1);
+X			if (kill(processnum,SIGINT))
+X					/* does process not exist? */
+X					/* (warp ignores SIGINT) */
+X			    break;
+X		    }
+X		    didkill++;
+X		}
+X		savfil = fopen(savefilename,"r");
+X		if (savfil != NULL) {
+X		    Fgets(spbuf,100,savfil);
+X		}
+X	    }
+X	}
+X    }
+X    else
+X	savfil = NULL;
+X    if (savfil == NULL) {
+X	totalscore = smarts = cumsmarts = wave = 0;
+X	numents = 5;
+X	numbases = 3;
+X    }
+X    else {
+X	totalscore = atol(spbuf+9);
+X	smarts = atoi(spbuf+20);
+X	cumsmarts = atoi(spbuf+24);
+X	numents = atoi(spbuf+30);
+X	numbases = atoi(spbuf+33);
+X	wave = atoi(spbuf+36);
+X	apolspec = (spbuf[40] == 'a');
+X	beginner   = (spbuf[41] == 'b');
+X	crushspec  = (spbuf[42] == 'c');
+X	gornspec   = (spbuf[43] == 'g');
+X	massacre   = (spbuf[44] == 'm');
+X	romspec    = (spbuf[45] == 'r');
+X	tholspec   = (spbuf[46] == 't');
+X	lowspeed   = (spbuf[47] == 'l') || lowspeed;
+X	amoebaspec = (spbuf[48] == '&');
+X	Fclose(savfil);
+X    }
+X
+X    if (!ismarts) {
+X	ismarts = 1;
+X	clear();
+X	page(NEWSFILE,FALSE);
+X	if (smarts) {
+X	    printf("\r\nSaved game: SCORE DIFF CUMDIFF ENTERPRISES BASES WAVE");
+X	    printf("\r\n          %7ld  %2d   %4d        %1d        %1d   %3d",
+X		totalscore,smarts,cumsmarts,numents,numbases,wave);
+X	}
+X	printf("\r\nWould you like instructions? ");
+X	Fflush(stdout);
+X	eat_typeahead();
+X	getcmd(buf);
+X	printf("\r\n");
+X	if (*buf == INTRCH)
+X	    finalize(0);
+X	if (*buf == 'Y' || *buf == 'y') {
+X	    page(HELPFILE,FALSE);
+X	    printf("\r\nWould you like to play easy games for a while? ");
+X	    Fflush(stdout);
+X	    eat_typeahead();
+X	    getcmd(buf);
+X	    printf("\r\n");
+X	    if (*buf == 'Y' || *buf == 'y') {
+X		beginner = TRUE;
+X		lowspeed = TRUE;
+X	    }
+X	}
+X    }
+X    if (!smarts)
+X	smarts = ismarts;
+X}
+X
+Xvoid
+Xwscore()
+X{
+X    clear();
+X    printf("                             TOP WARPISTS\r\n\n");
+X    printf("RANK  WHO                     AKA        SCORE DIFF  CUMDIFF  WHEN\r\n");
+X    page(SCOREBOARD,TRUE);
+X    printf("                     [Type anything to continue]");
+X    Fflush(stdout);
+X    getcmd(spbuf);
+X    if (*spbuf == INTRCH)
+X	finalize(0);
+X    clear();
+X    printf("                        TOP LOW-SPEED WARPISTS\r\n\n");
+X    printf("RANK  WHO                     AKA        SCORE DIFF  CUMDIFF  WHEN\r\n");
+X    page(LSCOREBOARD,TRUE);
+X    printf("                     [Type anything to continue]");
+X    Fflush(stdout);
+X    getcmd(spbuf);
+X    if (*spbuf == INTRCH)
+X	finalize(0);
+X    clear();
+X    printf("                          TOP FUNNY WARPISTS\r\n\n");
+X    printf("RANK  WHO                     AKA        SCORE DIFF  CUMDIFF  WHEN\r\n");
+X    page(FSCOREBOARD,TRUE);
+X    printf("                     [Type anything to continue]");
+X    Fflush(stdout);
+X    getcmd(spbuf);
+X    if (*spbuf == INTRCH)
+X	finalize(0);
+X    clear();
+X    printf("          GAMES SAVED OR IN PROGRESS\r\n\n");
+X    printf("WHO           SCORE  DF   CDF  E  B  WV  FLAGS\r\n");
+X    resetty();
+X    Sprintf(spbuf,"/bin/cat %ssave.*",SAVEDIR);
+X#ifndef lint
+X    execl("/bin/sh", "sh", "-c", spbuf, 0);
+X#endif
+X    finalize(1);
+X}
+X
+X
+Xvoid
+Xdisplay_status()
+X{
+X    Reg1 int tmp;
+X    static char *status_names[] = {"Impl", "Warp", "Base", "****" };
+X
+X    if (oldstatus != status) {
+X	Sprintf(spbuf,"%-4s",status_names[status]);
+X	mvaddstr(0,0, spbuf);
+X	oldstatus = status;
+X    }
+X    if (ent) {
+X	if (ent->energy != oldeenergy) {
+X	    oldeenergy = ent->energy;
+X	    Sprintf(spbuf,"%4d",oldeenergy);
+X	    mvaddstr(0,8, spbuf);
+X	}
+X	if (etorp != oldetorp) {
+X	    Sprintf(spbuf,"%2d",etorp);
+X	    mvaddstr(0,13, spbuf);
+X	    oldetorp = etorp;
+X	}
+X    }
+X    else {
+X	if (etorp >= 0) {
+X	    etorp = -1;
+X	    mvaddstr(0,8,"*******");
+X	    damage = 0;
+X	}
+X    }
+X    if (base) {
+X	if (base->energy != oldbenergy) {
+X	    oldbenergy = base->energy;
+X	    Sprintf(spbuf,"%5d",oldbenergy);
+X	    mvaddstr(0,19, spbuf);
+X	}
+X	if (btorp != oldbtorp) {
+X	    Sprintf(spbuf,"%3d",btorp);
+X	    mvaddstr(0,25, spbuf);
+X	    oldbtorp = btorp;
+X	}
+X    }
+X    else {
+X	if (btorp >= 0) {
+X	    btorp = -1;
+X	    mvaddstr(0,19,"*********");
+X	}
+X    }
+X    if (damage) {
+X	if (!olddamage)
+X	    mvaddstr(0,42,"*** ");
+X	if (damage > 1 || !damflag[dam]) {
+X	    do {
+X		if (++dam == MAXDAMAGE)
+X		    dam = 0;
+X	    } while (!damflag[dam]);
+X	}
+X	if (!--damflag[dam]) {
+X	    olddamage = damage;
+X	    damage--;
+X	    Sprintf(spbuf,"%s OK ***       ",dammess[dam]);
+X	    spbuf[15] = '\0';
+X	    mvaddstr(0,46,spbuf);
+X	}
+X	else if (dam == NOSHIELDS) {
+X	    olddamage = damage;
+X	    tmp = (34 - damflag[dam]) * 3 - rand_mod(3);
+X	    if (tmp < 0)
+X		tmp = 0;
+X	    Sprintf(spbuf,"%d%% %s ***       ",tmp,dammess[dam]);
+X	    spbuf[15] = '\0';
+X	    mvaddstr(0,46,spbuf);
+X	}
+X	else if (dam != lastdam || !olddamage) {
+X	    olddamage = damage;
+X	    Sprintf(spbuf,"NO %s ***       ",dammess[dam]);
+X	    spbuf[15] = '\0';
+X	    mvaddstr(0,46,spbuf);
+X	}
+X	if (status < 2) {
+X	    if (dam == NOIMPULSE && !entmode)
+X		status = entmode = 1;
+X	    if (dam == NOWARP && entmode)
+X		status = entmode = 0;
+X	}
+X	tmp = damflag[dam] * damage;
+X	Sprintf(spbuf,"%3d.%1d ETR",tmp/10,tmp%10);
+X	mvaddstr(0,69,spbuf);
+X	lastdam = dam;
+X    }
+X    else {
+X	if (olddamage) {
+X	    Sprintf(spbuf,"Stars: %-3d Stardate",numstars);
+X	    mvaddstr(0,42,spbuf);
+X	    lastdam = -1;
+X	    olddamage = 0;
+X	    oldcurscore = -1;
+X	}
+X	else if (numstars != oldstrs) {
+X	    Sprintf(spbuf,"%-3d",numstars);
+X	    mvaddstr(0,49, spbuf);
+X	}
+X	oldstrs = numstars;
+X    }
+X    if (numenemies != oldenemies) {
+X	Sprintf(spbuf,"%-3d",numenemies);
+X	mvaddstr(0,38, spbuf);
+X	oldenemies = numenemies;
+X    }
+X    if (tmp = timer%10) {
+X	Sprintf(spbuf,"%1d",tmp);
+X	mvaddstr(0,67, spbuf);
+X    }
+X    else {
+X	Sprintf(spbuf,"%5d.%1d",timer/10+smarts*100,tmp);
+X	mvaddstr(0,61, spbuf);
+X    }
+X    if ((!damage || !damflag[dam]) && curscore != oldcurscore) {
+X	Sprintf(spbuf,"%9ld",curscore);
+X	mvaddstr(0,69, spbuf);
+X	oldcurscore = curscore;
+X    }
+X}
+X
+Xvoid
+Xwavescore()
+X{
+X    double power, effectscore, starscore, pi_over_2;
+X    long bonuses;
+X    long tmp;
+X    FILE *mapfp;
+X    int row;
+X    double pow();
+X#ifndef lint
+X    double atan2();
+X#endif
+X
+X    clear();
+X    if (curscore > possiblescore)
+X	curscore = possiblescore;
+X    pi_over_2 = 3.14159265 / 2.0;
+X    power = pow((double)inumenemies+     /* total number of enemies */
+X			inumroms*2+      /* count roms 3 times */
+X			inumgorns+       /* count gorns 2 times */
+X			inumthols+       /* count thols 2 times */
+X			inumapollos*4+   /* count apollo 5 times */
+X			inumcrushes*3+   /* count crushers 4 times */
+X			inumamoebas*5	 /* count amoebas 6 times */
+X	    , 0.50) *                    /* skew it a little */
+X	    (double)smarts;              /* average energy and intelligence */
+X    if (inumstars < 350 && inumenemies > 5)
+X	    power += (350.0 - (double)inumstars) * ((double)inumenemies - 5.0);
+X    if (inumstars > 850 && inumenemies > 2)
+X	    power += ((double)inumstars - 850.0) * ((double)inumenemies - 2.0);
+X#ifndef lint
+X    effectscore = ((double)curscore / possiblescore) *
+X	atan2(power, (double) timer + 1.0) / pi_over_2;
+X#else
+X    effectscore = pi_over_2;
+X#endif
+X    if (inumstars)
+X	starscore = (double) numstars / (double) inumstars;
+X    else
+X	starscore = 1.0;
+X    wave++;
+X    Sprintf(spbuf,"Wave = %d, Difficulty = %d, cumulative difficulty = %d",
+X	 wave, smarts, cumsmarts);
+X    mvaddstr(1, 13+(smarts<10), spbuf);
+X    mvaddstr( 4, 68, " BONUS");
+X    Sprintf(spbuf,"Efficiency rating:       %1.8f (diff=%0.2f,time=%d)",
+X	 effectscore, power, timer + 1);
+X    mvaddstr( 5,5, spbuf);
+X    if (effectscore < 0.8)
+X	bonuses = tmp = 0;
+X    else
+X	bonuses = tmp = (long) ((effectscore-0.8) * smarts * 1000);
+X    Sprintf(spbuf, "%6ld", tmp);
+X    mvaddstr( 5, 68, spbuf);
+X    Sprintf(spbuf,"Star save ratio:         %1.8f (%d/%d)",
+X	starscore, numstars, inumstars);
+X    mvaddstr( 6,5, spbuf);
+X#ifndef lint
+X    bonuses += tmp = (long) (((double)curscore / possiblescore) *
+X	(starscore*starscore) * smarts * 20);
+X#endif
+X    Sprintf(spbuf, "%6ld", tmp);
+X    mvaddstr( 6, 68, spbuf);
+X    row = 7;
+X    if (inuminhab != numinhab) {
+X	Sprintf(spbuf, "Inhabited stars depopulated:  %5d", inuminhab-numinhab);
+X	mvaddstr(row,5, spbuf);
+X	bonuses += tmp = (long) (inuminhab-numinhab) * -500;
+X	Sprintf(spbuf, "%6ld", tmp);
+X	mvaddstr(row, 68, spbuf);
+X	row++;
+X    }
+X    if (inumfriends != numfriends) {
+X	Sprintf(spbuf, "Friendly craft destroyed:     %5d",
+X	    inumfriends-numfriends);
+X	mvaddstr(row,5, spbuf);
+X	bonuses += tmp = (long) (inumfriends-numfriends) * -250;
+X	Sprintf(spbuf, "%6ld", tmp);
+X	mvaddstr(row, 68, spbuf);
+X	row++;
+X    }
+X    if (deadmudds) {
+X	mvaddstr(row,5,"For destroying Harry Mudd:");
+X	bonuses += tmp = (long) rand_mod(deadmudds * 20 + 1) - deadmudds*10;
+X	Sprintf(spbuf, "%6ld", tmp);
+X	mvaddstr(row, 68, spbuf);
+X	row++;
+X    }
+X    if (bombed_out) {
+X	mvaddstr(row,5, "For running away from reality:");
+X	bonuses += tmp = (long) -possiblescore/2;
+X	Sprintf(spbuf, "%6ld", tmp);
+X	mvaddstr(row, 68,  spbuf);
+X	row++;
+X    }
+X    if (row < 9)
+X	row++;
+X    Sprintf(spbuf, "Enterprise: %-9s%5d remaining",
+X	!ient?"":ent?"saved":"destroyed", numents);
+X    mvaddstr(row,5, spbuf);
+X    bonuses += tmp = ent && !bombed_out ? (smarts+1)*15 : 0;
+X    Sprintf(spbuf, "%6ld", tmp);
+X    mvaddstr(row, 68, spbuf);
+X    row++;
+X    Sprintf(spbuf, "Base: %-9s      %5d remaining",
+X	!ibase?"":base?"saved":"destroyed", numbases);
+X    mvaddstr(row,5, spbuf);
+X    bonuses += tmp = base && !bombed_out ? (smarts+1)*10 : 0;
+X    Sprintf(spbuf, "%6ld", tmp);
+X    mvaddstr(row, 68,  spbuf);
+X    if (beginner) {
+X	mvaddstr(13+(row>11),19, "(Special games count only a tenth as much)");
+X	curscore /= 10;
+X	bonuses /= 10;
+X    }
+X    Sprintf(spbuf, "Previous point total:%10ld",lastscore);
+X    mvaddstr(15,24, spbuf);
+X    Sprintf(spbuf, "Points this round:   %10ld",curscore);
+X    mvaddstr(16,24, spbuf);
+X    Sprintf(spbuf, "Bonuses:             %10ld",bonuses);
+X    mvaddstr(17,24, spbuf);
+X    totalscore = lastscore + curscore + bonuses;
+X    Sprintf(spbuf, "New point total:     %10ld",totalscore);
+X    mvaddstr(18,24, spbuf);
+X    if (lastscore / ENTBOUNDARY < totalscore / ENTBOUNDARY) {
+X	mvaddstr(row-1,42,"+ 1 new");
+X	numents++;
+X    }
+X    else if (numents>0 &&
+X	lastscore / ENTBOUNDARY > totalscore / ENTBOUNDARY) {
+X	mvaddstr(row-1,42,"- 1 obsolete");
+X	numents--;
+X    }
+X    if (lastscore / BASEBOUNDARY < totalscore / BASEBOUNDARY) {
+X	mvaddstr(row,42,"+ 1 new");
+X	numbases++;
+X    }
+X    else if (numbases>0 &&
+X	lastscore / BASEBOUNDARY > totalscore / BASEBOUNDARY) {
+X	mvaddstr(row,42,"- 1 obsolete");
+X	numbases--;
+X    }
+X    if (starscore < 0.8 && inumstars > 200 && numstars > 50) {
+X	Sprintf(spbuf, "smap.%d",rand_mod(MAPS-PERMMAPS)+PERMMAPS);
+X	if ((mapfp = fopen(spbuf,"w")) != NULL) {
+X	    Reg1 OBJECT *obj;
+X
+X	    fprintf(mapfp,"%d\n",numstars);
+X	    for (obj = root.next; obj != &root; obj = obj->next) {
+X		if (obj->type == Star) {
+X		    fprintf(mapfp,"%d %d\n",obj->posy,obj->posx);
+X		}
+X	    }
+X	    Fclose(mapfp);
+X	}
+X    }
+X}
+X
+Xvoid
+Xscore()
+X{
+X    char tmp, *retval, cdate[30];
+X    Reg1 FILE *logfd;
+X    Reg2 FILE *outfd;
+X    Reg3 int i;
+X    long nowtime, time();
+X    char *scoreboard;
+X
+X    for (i=0; link(LOGFILE, LOCKFILE) == -1 && i<10; i++)
+X	sleep(1);
+X    nowtime = time((long *)0);
+X    strcpy(cdate,ctime(&nowtime));
+X    if ((logfd = fopen(LOGFILE,"a")) != NULL) {
+X	fprintf(logfd,
+X	    "%-24s%-9s%7ld%c%2d %4d %s",
+X	    realname, logname, totalscore, c,smarts, cumsmarts, cdate);
+X	Fclose(logfd);
+X    }
+X    strcpy(cdate+11,cdate+20);
+X    if (beginner)
+X	scoreboard = FSCOREBOARD;
+X    else if (lowspeed)
+X	scoreboard = LSCOREBOARD;
+X    else
+X	scoreboard = SCOREBOARD;
+X    if (eaccess(scoreboard,0)) {
+X	if ((logfd = fopen(scoreboard,"w")) != NULL)
+X	    Fclose(logfd);
+X    }
+X    if ((logfd = fopen(scoreboard,"r")) != NULL &&
+X	(outfd = fopen(TMPSCOREBOARD,"w")) != NULL) {
+X	for (i=0; i<20; i++) {
+X	    if ((retval = fgets(buf, 100, logfd)) == NULL)
+X		break;
+X	    if (atol(buf+32) < totalscore)
+X		break;
+X	    if (strnEQ(buf+COMPOFF,COMPNAME,COMPLEN)) {
+X		i = 100;
+X		break;
+X	    }
+X	    fprintf(outfd, "%s", buf);
+X	}
+X	if (i == 100) {
+X	    mvaddstr(20,21, "You did not better your previous score");
+X	    Fclose(outfd);
+X	    unlink(TMPSCOREBOARD);
+X	}
+X	else if (i < 20) {
+X	    fprintf(outfd, "%-24s%-8s%8ld%c %2d    %4d    %s",
+X		realname, logname, totalscore, c,smarts, cumsmarts, cdate);
+X	    i++;
+X	    Sprintf(spbuf, "    Congratulations--you've placed %d%s",
+X	      i, i==1?"st":(i==2?"nd":(i==3?"rd":"th")));
+X	    if (retval != NULL) {
+X		if (strnNE(buf+COMPOFF,COMPNAME,COMPLEN)) {
+X		    fprintf(outfd, "%s", buf);
+X		    i++;
+X		}
+X		else
+X		    strcpy(spbuf,"Congratulations--you've bettered your score");
+X		while (i<20) {
+X		    if (fgets(buf, 100, logfd) == NULL)
+X			break;
+X		    if (strnNE(buf+COMPOFF,COMPNAME,COMPLEN)) {
+X			fprintf(outfd, "%s", buf);
+X			i++;
+X		    }
+X		}
+X	    }
+X	    mvaddstr(20,19, spbuf);
+X	    Fclose(logfd);
+X	    Fclose(outfd);
+X	    while (unlink(scoreboard) == 0)
+X		;
+X	    link(TMPSCOREBOARD,scoreboard);
+X	    unlink(TMPSCOREBOARD);
+X	    logfd = fopen(scoreboard,"r");
+X	}
+X	else {
+X	    mvaddstr(20,22,"You did not place within the top 20");
+X	    Fclose(outfd);
+X	}
+X    }
+X    else {
+X	Sprintf(spbuf,"(Cannot access %s file, error %d)",
+X	    (logfd==NULL?"log":"tmp"),errno);
+X	mvaddstr(20,22,spbuf);
+X    }
+X    move(23,0,0);
+X    erase_eol();
+X    mvaddstr(23,11,
+X	"[Hit space for scoreboard, 'r' for new game, 'q' to quit]");
+X    unlink(LOCKFILE);
+X    Fflush(stdout);
+X    eat_typeahead();
+X    do {
+X	getcmd(&tmp);
+X    } while (tmp != INTRCH && tmp != BREAKCH && !index(" rqQ",tmp));
+X    if (index("qQr",tmp)) {
+X	justonemoretime = (tmp == 'r');
+X	if (logfd != NULL)
+X	    Fclose(logfd);
+X    }
+X    else {
+X	clear();
+X	if (logfd != NULL) {
+X	    fseek(logfd, 0, 0);
+X	    if (beginner)
+X		mvaddstr(0,31,"TOP FUNNY WARPISTS");
+X	    else if (lowspeed)
+X		mvaddstr(0,29,"TOP LOW-SPEED WARPISTS");
+X	    else
+X		mvaddstr(0,33,"TOP WARPISTS");
+X	    mvaddstr(2,0,"RANK  WHO                     AKA        SCORE DIFF  CUMDIFF  WHEN");
+X	    for (i=1; i<=20; i++) {
+X		if (fgets(buf, 100, logfd) == NULL)
+X		    break;
+X		buf[strlen(buf)-1] = '\0';
+X		Sprintf(spbuf, " %2d   %s", i, buf);
+X		mvaddstr(i+2,0, spbuf);
+X	    }
+X	    Fclose(logfd);
+X	}
+X	roundsleep(1);
+X	mvaddstr(23,25,"Would you like to play again?");
+X	eat_typeahead();
+X	do {
+X	    getcmd(&tmp);
+X	} while (tmp != INTRCH && tmp != BREAKCH && !index("nNyY \n\r",tmp));
+X	if (tmp == 'n' || tmp == 'N' || tmp == INTRCH || tmp == BREAKCH)
+X	    justonemoretime = FALSE;
+X    }
+X
+X    smarts = ismarts;
+X    totalscore = cumsmarts = wave = 0;
+X    numents = 5;
+X    numbases = 3;
+X    apolspec = FALSE;
+X    beginner   = FALSE;
+X    crushspec  = FALSE;
+X    gornspec   = FALSE;
+X    massacre   = (ismarts >= 40);
+X    romspec    = FALSE;
+X    tholspec   = FALSE;
+X}
+X
+Xvoid
+Xsave_game()
+X{
+X    FILE *savfil;
+X
+X    if (experimenting)
+X	return;
+X    if ((savfil = fopen(savefilename,"w")) == NULL) {
+X	resetty();
+X	printf("Cannot save game\r\n");
+X	finalize(1);
+X    }
+X    fprintf(savfil, "%-8s %10ld, %2d,%5d,%2d,%2d,%3d %c%c%c%c%c%c%c%c\n",
+X	logname, totalscore, smarts, cumsmarts, numents, numbases, wave,
+X	apolspec ? 'a' : ' ',
+X	beginner   ? 'b' : ' ',
+X	crushspec  ? 'c' : ' ',
+X	gornspec   ? 'g' : ' ',
+X	massacre   ? 'm' : ' ',
+X	romspec    ? 'r' : ' ',
+X	tholspec   ? 't' : ' ',
+X	lowspeed   ? 'l' : ' ',
+X	amoebaspec ? '&' : ' '
+X    );
+X    Fclose(savfil);
+X    resetty();
+X    if (panic)
+X	finalize(0);
+X    clear();
+X    finalize(0);
+X}
+!STUFFY!FUNK!
+echo Extracting term.c
+sed >term.c <<'!STUFFY!FUNK!' -e 's/X//'
+X/* $Header: term.c,v 7.0.1.2 86/12/12 17:04:09 lwall Exp $ */
+X
+X/* $Log:	term.c,v $
+X * Revision 7.0.1.2  86/12/12  17:04:09  lwall
+X * Baseline for net release.
+X * 
+X * Revision 7.0.1.1  86/10/16  10:53:20  lwall
+X * Added Damage.  Fixed random bugs.
+X * 
+X * Revision 7.0  86/10/08  15:14:02  lwall
+X * Split into separate files.  Added amoebas and pirates.
+X * 
+X */
+X
+X#include "EXTERN.h"
+X#include "warp.h"
+X#include "bang.h"
+X#include "intrp.h"
+X#include "object.h"
+X#include "play.h"
+X#include "score.h"
+X#include "sig.h"
+X#include "us.h"
+X#include "util.h"
+X#include "weapon.h"
+X#include "INTERN.h"
+X#include "term.h"
+X
+Xint typeahead = FALSE;
+X
+Xchar tcarea[TCSIZE];	/* area for "compiled" termcap strings */
+X
+X/* guarantee capability pointer != Nullch */
+X/* (I believe terminfo will ignore the &tmpaddr argument.) */
+X
+X#define Tgetstr(key) ((tstr = tgetstr(key,&tmpaddr)) ? tstr : nullstr)
+X
+X#ifdef PUSHBACK
+Xstruct keymap {
+X    char km_type[128];
+X    union km_union {
+X	struct keymap *km_km;
+X	char *km_str;
+X    } km_ptr[128];
+X};
+X
+X#define KM_NOTHIN 0
+X#define KM_STRING 1
+X#define KM_KEYMAP 2
+X#define KM_BOGUS 3
+X
+X#define KM_TMASK 3
+X#define KM_GSHIFT 4
+X#define KM_GMASK 7
+X
+Xtypedef struct keymap KEYMAP;
+X
+XKEYMAP *topmap INIT(Null(KEYMAP*));
+X
+Xvoid mac_init();
+XKEYMAP *newkeymap();
+Xvoid pushstring();
+X#endif
+X
+X/* terminal initialization */
+X
+Xvoid
+Xterm_init()
+X{
+X    savetty();				/* remember current tty state */
+X
+X#ifdef TERMIO
+X    ospeed = _tty.c_cflag & CBAUD;	/* for tputs() */
+X    ERASECH = _tty.c_cc[VERASE];	/* for finish_command() */
+X    KILLCH = _tty.c_cc[VKILL];		/* for finish_command() */
+X#else
+X    ospeed = _tty.sg_ospeed;		/* for tputs() */
+X    ERASECH = _tty.sg_erase;		/* for finish_command() */
+X    KILLCH = _tty.sg_kill;		/* for finish_command() */
+X#endif
+X
+X    /* The following could be a table but I can't be sure that there isn't */
+X    /* some degree of sparsity out there in the world. */
+X
+X    switch (ospeed) {			/* 1 second of padding */
+X#ifdef BEXTA
+X        case BEXTA:  just_a_sec = 1920; break;
+X#else
+X#ifdef B19200
+X        case B19200: just_a_sec = 1920; break;
+X#endif
+X#endif
+X        case B9600:  just_a_sec =  960; break;
+X        case B4800:  just_a_sec =  480; break;
+X        case B2400:  just_a_sec =  240; break;
+X        case B1800:  just_a_sec =  180; break;
+X        case B1200:  just_a_sec =  120; break;
+X        case B600:   just_a_sec =   60; break;
+X	case B300:   just_a_sec =   30; break;
+X	/* do I really have to type the rest of this??? */
+X        case B200:   just_a_sec =   20; break;
+X        case B150:   just_a_sec =   15; break;
+X        case B134:   just_a_sec =   13; break;
+X        case B110:   just_a_sec =   11; break;
+X        case B75:    just_a_sec =    8; break;
+X        case B50:    just_a_sec =    5; break;
+X        default:     just_a_sec =  960; break;
+X					/* if we are running detached I */
+X    }					/*  don't want to know about it! */
+X}
+X
+X/* set terminal characteristics */
+X
+Xvoid
+Xterm_set(tcbuf)
+Xchar *tcbuf;		/* temp area for "uncompiled" termcap entry */
+X{
+X    char *tmpaddr;			/* must not be register */
+X    Reg1 char *tstr;
+X    char *tgetstr();
+X    char *s;
+X    int retval;
+X
+X#ifdef PENDING
+X#ifndef FIONREAD
+X#ifndef RDCHK
+X    /* do no delay reads on something that always gets closed on exit */
+X
+X    devtty = open("/dev/tty",0);
+X    if (devtty < 0) {
+X	printf(cantopen,"/dev/tty");
+X	finalize(1);
+X    }
+X    fcntl(devtty,F_SETFL,O_NDELAY);
+X#endif
+X#endif
+X#endif
+X    
+X    /* get all that good termcap stuff */
+X
+X#ifdef HAVETERMLIB
+X    retval = tgetent(tcbuf,getenv("TERM"));	/* get termcap entry */
+X    if (retval < 1) {
+X#ifdef VERBOSE
+X	printf("No termcap %s found.\n", retval ? "file" : "entry");
+X#else
+X	fputs("Termcap botch\n",stdout);
+X#endif
+X	finalize(1);
+X    }
+X    tmpaddr = tcarea;			/* set up strange tgetstr pointer */
+X    s = Tgetstr("pc");			/* get pad character */
+X    PC = *s;				/* get it where tputs wants it */
+X    if (!tgetflag("bs")) {		/* is backspace not used? */
+X	BC = Tgetstr("bc");		/* find out what is */
+X	if (BC == nullstr) 		/* terminfo grok's 'bs' but not 'bc' */
+X	    BC = Tgetstr("le");
+X    } else
+X	BC = "\b";			/* make a backspace handy */
+X    UP = Tgetstr("up");			/* move up a line */
+X    ND = Tgetstr("nd");			/* non-destructive move cursor right */
+X    DO = Tgetstr("do");			/* move cursor down */
+X    if (!*DO)
+X	DO = Tgetstr("nl");
+X    CL = Tgetstr("cl");			/* get clear string */
+X    CE = Tgetstr("ce");			/* clear to end of line string */
+X    CM = Tgetstr("cm");			/* cursor motion - PWP */
+X    HO = Tgetstr("ho");			/* home cursor if no CM - PWP */
+X    CD = Tgetstr("cd");			/* clear to end of display - PWP */
+X    SO = Tgetstr("so");			/* begin standout */
+X    SE = Tgetstr("se");			/* end standout */
+X    if ((SG = tgetnum("sg"))<0)
+X	SG = 0;				/* blanks left by SG, SE */
+X    US = Tgetstr("us");			/* start underline */
+X    UE = Tgetstr("ue");			/* end underline */
+X    if ((UG = tgetnum("ug"))<0)
+X	UG = 0;				/* blanks left by US, UE */
+X    if (*US)
+X	UC = nullstr;			/* UC must not be NULL */
+X    else
+X	UC = Tgetstr("uc");		/* underline a character */
+X    if (!*US && !*UC) {			/* no underline mode? */
+X	US = SO;			/* substitute standout mode */
+X	UE = SE;
+X	UG = SG;
+X    }
+X    LINES = tgetnum("li");		/* lines per page */
+X    COLS = tgetnum("co");		/* columns on page */
+X    AM = tgetflag("am");		/* terminal wraps automatically? */
+X    XN = tgetflag("xn");		/* then eats next newline? */
+X    VB = Tgetstr("vb");
+X    if (!*VB)
+X	VB = "\007";
+X    CR = Tgetstr("cr");
+X    if (!*CR) {
+X	if (tgetflag("nc") && *UP) {
+X	    CR = safemalloc((MEM_SIZE)strlen(UP)+2);
+X	    Sprintf(CR,"%s\r",UP);
+X	}
+X	else
+X	    CR = "\r";
+X    }
+X#else
+X    ??????				/* Roll your own... */
+X#endif
+X    if (LINES <= 0)
+X	LINES = 24;
+X    if (COLS <= 0)
+X	COLS = 80;
+X
+X    BCsize = comp_tc(bsptr,BC,1);
+X    BC = bsptr;
+X
+X    if (!*ND)				/* not defined? */
+X	NDsize = 1000;			/* force cursor addressing */
+X    else {
+X	NDsize = comp_tc(cmbuffer,ND,1);
+X	myND = malloc((unsigned)NDsize);
+X	movc3(NDsize,cmbuffer,myND);
+X	if (debugging) {
+X	    int scr;
+X
+X	    printf("ND");
+X	    for (scr=0; scr<NDsize; scr++)
+X		printf(" %d",myND[scr]);
+X	    printf("\n");
+X	}
+X    }
+X
+X    if (!*UP)				/* not defined? */
+X	UPsize = 1000;			/* force cursor addressing */
+X    else {
+X	UPsize = comp_tc(cmbuffer,UP,1);
+X	myUP = malloc((unsigned)UPsize);
+X	movc3(UPsize,cmbuffer,myUP);
+X	if (debugging) {
+X	    int scr;
+X
+X	    printf("UP");
+X	    for (scr=0; scr<UPsize; scr++)
+X		printf(" %d",myUP[scr]);
+X	    printf("\n");
+X	}
+X    }
+X
+X    if (!*DO) {				/* not defined? */
+X	myDO = DO = "\n";		/* assume a newline */
+X	DOsize = 1;
+X    }
+X    else {
+X	DOsize = comp_tc(cmbuffer,DO,1);
+X	myDO = malloc((unsigned)DOsize);
+X	movc3(DOsize,cmbuffer,myDO);
+X	if (debugging) {
+X	    int scr;
+X
+X	    printf("DO");
+X	    for (scr=0; scr<DOsize; scr++)
+X		printf(" %d",myDO[scr]);
+X	    printf("\n");
+X	}
+X    }
+X    if (debugging)
+X	Fgets(cmbuffer,(sizeof cmbuffer),stdin);
+X
+X    CMsize = comp_tc(cmbuffer,tgoto(CM,20,20),0);
+X    if (PC != '\0') {
+X	char *p;
+X
+X	for (p=filler+(sizeof filler)-1;!*p;--p)
+X	    *p = PC;
+X    }
+X    charsperhalfsec = ospeed >= B9600 ? 480 :
+X		      ospeed == B4800 ? 240 :
+X		      ospeed == B2400 ? 120 :
+X		      ospeed == B1200 ? 60 :
+X		      ospeed == B600 ? 30 :
+X	      /* speed is 300 (?) */   15;
+X
+X    gfillen = ospeed >= B9600 ? (sizeof filler) :
+X	      ospeed == B4800 ? 13 :
+X	      ospeed == B2400 ? 7 :
+X	      ospeed == B1200 ? 4 :
+X				1+BCsize;
+X    if (ospeed < B2400)
+X	lowspeed = TRUE;
+X
+X    strcpy(term,ttyname(2));
+X
+X    if (!*CM || !BCsize)
+X	no_can_do("dumb");
+X    if (!scorespec && (LINES < 24 || COLS < 80))
+X	no_can_do("puny");
+X
+X    crmode();
+X    raw();
+X    noecho();				/* turn off echo */
+X    nonl();
+X
+X#ifdef PUSHBACK
+X    mac_init(tcbuf);
+X#endif
+X}
+X
+X#ifdef PUSHBACK
+Xvoid
+Xmac_init(tcbuf)
+Xchar *tcbuf;
+X{
+X    char tmpbuf[1024];
+X
+X    tmpfp = fopen(filexp(getval("WARPMACRO",WARPMACRO)),"r");
+X    if (tmpfp != Nullfp) {
+X	while (fgets(tcbuf,1024,tmpfp) != Nullch) {
+X	    mac_line(tcbuf,tmpbuf,(sizeof tmpbuf));
+X	}
+X	Fclose(tmpfp);
+X    }
+X}
+X
+Xvoid
+Xmac_line(line,tmpbuf,tbsize)
+Xchar *line;
+Xchar *tmpbuf;
+Xint tbsize;
+X{
+X    Reg1 char *s;
+X    Reg2 char *m;
+X    Reg3 KEYMAP *curmap;
+X    Reg4 int ch;
+X    Reg5 int garbage = 0;
+X    static char override[] = "\r\nkeymap overrides string\r\n";
+X
+X    if (topmap == Null(KEYMAP*))
+X	topmap = newkeymap();
+X    if (*line == '#' || *line == '\n')
+X	return;
+X    if (line[ch = strlen(line)-1] == '\n')
+X	line[ch] = '\0';
+X    m = dointerp(tmpbuf,tbsize,line," \t");
+X    if (!*m)
+X	return;
+X    while (*m == ' ' || *m == '\t') m++;
+X    for (s=tmpbuf,curmap=topmap; *s; s++) {
+X	ch = *s & 0177;
+X	if (s[1] == '+' && isdigit(s[2])) {
+X	    s += 2;
+X	    garbage = (*s & KM_GMASK) << KM_GSHIFT;
+X	}
+X	else
+X	    garbage = 0;
+X	if (s[1]) {
+X	    if ((curmap->km_type[ch] & KM_TMASK) == KM_STRING) {
+X		puts(override);
+X		free(curmap->km_ptr[ch].km_str);
+X		curmap->km_ptr[ch].km_str = Nullch;
+X	    }
+X	    curmap->km_type[ch] = KM_KEYMAP + garbage;
+X	    if (curmap->km_ptr[ch].km_km == Null(KEYMAP*))
+X		curmap->km_ptr[ch].km_km = newkeymap();
+X	    curmap = curmap->km_ptr[ch].km_km;
+X	}
+X	else {
+X	    if ((curmap->km_type[ch] & KM_TMASK) == KM_KEYMAP)
+X		puts(override);
+X	    else {
+X		curmap->km_type[ch] = KM_STRING + garbage;
+X		curmap->km_ptr[ch].km_str = savestr(m);
+X	    }
+X	}
+X    }
+X}
+X
+XKEYMAP*
+Xnewkeymap()
+X{
+X    Reg1 int i;
+X    Reg2 KEYMAP *map;
+X
+X#ifndef lint
+X    map = (KEYMAP*)safemalloc(sizeof(KEYMAP));
+X#else
+X    map = Null(KEYMAP*);
+X#endif /* lint */
+X    for (i=127; i>=0; --i) {
+X	map->km_ptr[i].km_km = Null(KEYMAP*);
+X	map->km_type[i] = KM_NOTHIN;
+X    }
+X    return map;
+X}
+X
+X#endif
+X
+X/* print out a file, stopping at form feeds */
+X
+Xvoid
+Xpage(filename,num)
+Xchar *filename;
+Xbool num;
+X{
+X    int linenum = 1;
+X
+X    tmpfp = fopen(filename,"r");
+X    if (tmpfp != NULL) {
+X	while (fgets(spbuf,(sizeof spbuf),tmpfp) != NULL) {
+X	    if (*spbuf == '\f') {
+X		printf("[Type anything to continue] ");
+X		Fflush(stdout);
+X		getcmd(spbuf);
+X		printf("\r\n");
+X		if (*spbuf == INTRCH)
+X		    finalize(0);
+X		if (*spbuf == 'q' || *spbuf == 'Q')
+X		    break;
+X	    }
+X	    else {
+X		if (num)
+X		    printf("%3d   %s\r",linenum++,spbuf);
+X		else
+X		    printf("%s\r",spbuf);
+X	    }
+X	}
+X	Fclose(tmpfp);
+X    }
+X}
+X
+Xvoid
+Xmove(y, x, chadd)
+Xint y, x;
+Xint chadd;
+X{
+X    Reg1 int ydist;
+X    Reg2 int xdist;
+X    Reg3 int i;
+X    Reg4 char *s;
+X
+X    ydist = y - real_y;
+X    xdist = x - real_x;
+X    i = ydist * (ydist < 0 ? -UPsize : DOsize) +
+X        xdist * (xdist < 0 ? -BCsize : NDsize);
+X    beg_qwrite();
+X    if (i <= CMsize) {
+X	if (ydist < 0)
+X	    for (; ydist; ydist++)
+X		for (i=UPsize,s=myUP; i; i--)
+X		    qaddch(*s++);
+X	else
+X	    for (; ydist; ydist--)
+X		for (i=DOsize,s=myDO; i; i--)
+X		    qaddch(*s++);
+X	if (xdist < 0)
+X	    for (; xdist; xdist++)
+X		for (i=BCsize,s=BC; i; i--)
+X		    qaddch(*s++);
+X	else
+X	    for (; xdist; xdist--)
+X		for (i=NDsize,s=myND; i; i--)
+X		    qaddch(*s++);
+X    }
+X    else {
+X	tputs(tgoto(CM,x,y),0,cmstore);
+X    }
+X    real_y = y;
+X    real_x = x;
+X    if (chadd) {
+X	qaddch(chadd);
+X    }
+X    if (maxcmstring != cmbuffer)
+X	end_qwrite();
+X}
+X
+Xvoid
+Xdo_tc(s,l)
+Xchar *s;
+Xint l;
+X{
+X    beg_qwrite();
+X    tputs(s,l,cmstore);
+X    end_qwrite();
+X}
+X
+Xint
+Xcomp_tc(dest,s,l)
+Xchar *dest;
+Xchar *s;
+Xint l;
+X{
+X    maxcmstring = dest;
+X    tputs(s,l,cmstore);
+X    return(maxcmstring-dest);
+X}
+X
+Xvoid
+Xhelper()
+X{
+X    clear();
+X    mvaddstr(0,4,"h or 4          left");
+X    mvaddstr(1,4,"j or 2          down                Use with SHIFT to fire torpedoes.");
+X    mvaddstr(2,4,"k or 8          up                  Use with CTRL or FUNCT to fire");
+X    mvaddstr(3,4,"l or 6          right                   phasers or turbolasers.");
+X    mvaddstr(4,4,"b or 1          down and left       Use preceded by 'a' or 'r' for");
+X    mvaddstr(5,4,"n or 3          down and right          attractors or repulsors.");
+X    mvaddstr(6,4,"y or 7          up and left         Use normally for E or B motion.");
+X    mvaddstr(7,4,"u or 9          up and right");
+X    mvaddstr(8,4,"");
+X    mvaddstr(9,4,"del or %        fire photon torpedoes in every (reasonable) direction.");
+X    mvaddstr(10,4,"s               stop all torpedoes.");
+X    mvaddstr(11,4,"S or 0          stop the Enterprise when in warp mode.");
+X    mvaddstr(12,4,"d/D             destruct all torpedoes/current vessel.");
+X    mvaddstr(13,4,"i/w             switch to Enterprise & put into impulse/warp mode.");
+X    mvaddstr(14,4,"c/v             switch to Enterprise & make cloaked/visible.");
+X    mvaddstr(15,4,"p               switch to Base.");
+X    mvaddstr(16,4,"o               toggle to other vessel (from E to B, or vice versa.)");
+X    mvaddstr(17,4,"z               zap (suppress) blasts near Enterprise next cycle");
+X    mvaddstr(18,4,"");
+X    mvaddstr(19,4,"^R      refresh the screen.              ^Z      suspend the game.");
+X    mvaddstr(20,4,"q       exit this round (if you haven't typed q within 10 cycles).");
+X    mvaddstr(21,4,"Q       exit this game.");
+X    mvaddstr(22,4,"");
+X    mvaddstr(23,4,"                   [Hit space to continue]");
+X    Fflush(stdout);
+X    do {
+X	getcmd(spbuf);
+X    } while (*spbuf != ' ');
+X    rewrite();
+X    
+X}
+X
+Xvoid
+Xrewrite()
+X{
+X    Reg1 int x;
+X    Reg2 int y;
+X    Reg3 OBJECT *obj;
+X
+X    clear();
+X    for (y=0; y<YSIZE; y++) {
+X	for (x=0; x<XSIZE; x++) {
+X	    if (numamoebas && amb[y][x] != ' ')
+X		mvaddc(y+1,x*2,amb[y][x]);
+X	    if (obj=occupant[y][x]) {
+X		if (obj->image != ' ')
+X		    mvaddc(y+1,x*2,obj->image);
+X	    }
+X	}
+X    }
+X    Sprintf(spbuf,
+X    "%-4s E: %4d %2d B: %5d %3d Enemies: %-3d Stars: %-3d Stardate%5d.%1d %9ld",
+X	"   ", 0, 0, 0, 0, 0, 0, timer/10+smarts*100, timer%10, 0L);
+X    mvaddstr(0,0,spbuf);
+X    oldeenergy = oldbenergy = oldcurscore =
+X    oldstatus = oldetorp = oldbtorp = oldstrs = oldenemies = -1;
+X					/* force everything to fill in */
+X    if (damage)
+X	olddamage = 0;
+X    if (!ent)
+X	etorp = 0;
+X    if (!base)
+X	btorp = 0;
+X    display_status();
+X}
+X
+Xchar
+Xcmstore(ch)
+XReg1 char ch;
+X{
+X    *maxcmstring++ = ch;
+X}
+X
+X/* discard any characters typed ahead */
+X
+Xvoid
+Xeat_typeahead()
+X{
+X#ifdef PUSHBACK
+X    if (!typeahead && nextin==nextout)	/* cancel only keyboard stuff */
+X#else
+X    if (!typeahead)
+X#endif
+X    {
+X#ifdef PENDING
+X	while (input_pending())
+X	    Read_tty(buf,sizeof(buf));
+X#else /* this is probably v7, with no rdchk() */
+X	ioctl(_tty_ch,TIOCSETP,&_tty);
+X#endif
+X    }
+X}
+X
+Xvoid
+Xsettle_down()
+X{
+X    dingaling();
+X    Fflush(stdout);
+X    sleep(1);
+X#ifdef PUSHBACK
+X    nextout = nextin;			/* empty circlebuf */
+X#endif
+X    eat_typeahead();
+X}
+X
+X#ifdef PUSHBACK
+X/* read a character from the terminal, with multi-character pushback */
+X
+Xint
+Xread_tty(addr,size)
+Xchar *addr;
+Xint size;	/* ignored for now */
+X{
+X#ifdef lint
+X    size = size;
+X#endif
+X    if (nextout != nextin) {
+X	*addr = circlebuf[nextout++];
+X	nextout %= PUSHSIZE;
+X	return 1;
+X    }
+X    else {
+X	size = read(0,addr,1);
+X	if (size < 0)
+X	    sig_catcher(SIGHUP);
+X	if (metakey) {
+X	    if (*addr & 0200) {
+X		pushchar(*addr & 0177);
+X		*addr = '\001';
+X	    }
+X	}
+X	else
+X	    *addr &= 0177;
+X	return 1;
+X    }
+X}
+X
+X#ifdef PENDING
+X#ifndef FIONREAD
+X#ifndef RDCHK
+Xint
+Xcircfill()
+X{
+X    Reg1 int howmany;
+X    Reg2 int i;
+X
+X    assert (nextin == nextout);
+X    howmany = read(devtty,circlebuf+nextin,metakey?1:PUSHSIZE-nextin);
+X    if (howmany > 0) {
+X	if (metakey) {
+X	    if (circlebuf[nextin] & 0200) {
+X		circlebuf[nextin] &= 0177;
+X		pushchar('\001');
+X	    }
+X	}
+X	else
+X	    for (i = howmany+nextin-1; i >= nextin; i--)
+X		circlebuf[i] &= 0177;
+X	nextin += howmany;
+X	nextin %= PUSHSIZE;	/* may end up 1 if metakey */
+X    }
+X    return howmany;
+X}
+X#endif /* RDCHK */
+X#endif /* FIONREAD */
+X#endif /* PENDING */
+X
+Xvoid
+Xpushchar(ch)
+Xchar ch;
+X{
+X    nextout--;
+X    if (nextout < 0)
+X	nextout = PUSHSIZE - 1;
+X    if (nextout == nextin) {
+X	fputs("\r\npushback buffer overflow\r\n",stdout);
+X	sig_catcher(0);
+X    }
+X    circlebuf[nextout] = ch;
+X}
+X
+X#else /* PUSHBACK */
+X#ifndef read_tty
+X/* read a character from the terminal, with hacks for O_NDELAY reads */
+X
+Xint
+Xread_tty(addr,size)
+Xchar *addr;
+Xint size;
+X{
+X    if (is_input) {
+X	*addr = pending_ch;
+X	is_input = FALSE;
+X	return 1;
+X    }
+X    else {
+X	size = read(0,addr,size);
+X	if (size < 0)
+X	    sig_catcher(SIGHUP);
+X	if (metakey) {
+X	    if (*addr & 0200) {
+X		pending_ch = *addr & 0177;
+X		is_input = TRUE;
+X		*addr = '\001';
+X	    }
+X	}
+X	else
+X	    *addr &= 0177;
+X	return size;
+X    }
+X}
+X#endif /* read_tty */
+X#endif /* PUSHBACK */
+X
+Xint
+Xread_nd(buff, siz)
+Xchar *buff;
+Xint siz;
+X{
+X    if (!input_pending())
+X	return 0;
+X
+X    getcmd(buff);
+X    return 1;
+X}
+X
+X/* get a character into a buffer */
+X
+Xvoid
+Xgetcmd(whatbuf)
+XReg3 char *whatbuf;
+X{
+X#ifdef PUSHBACK
+X    Reg1 KEYMAP *curmap;
+X    Reg2 int i;
+X    bool no_macros; 
+X    int times = 0;			/* loop detector */
+X    char scrchar;
+X
+Xtryagain:
+X    curmap = topmap;
+X/*    no_macros = (whatbuf != buf && nextin == nextout);  */
+X    no_macros = FALSE;
+X#endif
+X    for (;;) {
+X	errno = 0;
+X	if (read_tty(whatbuf,1) < 0 && !errno)
+X	    errno = EINTR;
+X#ifdef read_tty
+X	if (metakey) {
+X	    if (*whatbuf & 0200) {
+X		*what_buf &= 037;	/* punt and hope they don't notice */
+X	    }
+X	}
+X	else
+X	    *whatbuf &= 0177;
+X#endif /* read_tty */
+X	if (errno && errno != EINTR) {
+X	    perror(readerr);
+X	    sig_catcher(0);
+X	}
+X#ifdef PUSHBACK
+X	if (*whatbuf & 0200 || no_macros) {
+X	    *whatbuf &= 0177;
+X	    goto got_canonical;
+X	}
+X	if (curmap == Null(KEYMAP*))
+X	    goto got_canonical;
+X	for (i = (curmap->km_type[*whatbuf] >> KM_GSHIFT) & KM_GMASK; i; --i){
+X	    Read_tty(&scrchar,1);
+X	}
+X	switch (curmap->km_type[*whatbuf] & KM_TMASK) {
+X	case KM_NOTHIN:			/* no entry? */
+X	    if (curmap == topmap)	/* unmapped canonical */
+X		goto got_canonical;
+X	    settle_down();
+X	    goto tryagain;
+X	case KM_KEYMAP:			/* another keymap? */
+X	    curmap = curmap->km_ptr[*whatbuf].km_km;
+X	    assert(curmap != Null(KEYMAP*));
+X	    break;
+X	case KM_STRING:			/* a string? */
+X	    pushstring(curmap->km_ptr[*whatbuf].km_str);
+X	    if (++times > 20) {		/* loop? */
+X		fputs("\r\nmacro loop?\r\n",stdout);
+X		settle_down();
+X	    }
+X	    no_macros = FALSE;
+X	    goto tryagain;
+X	}
+X#else
+X	*whatbuf &= 0177;
+X	break;
+X#endif
+X    }
+X
+Xgot_canonical:
+X#ifndef TERMIO
+X    if (*whatbuf == '\r')
+X	*whatbuf = '\n';
+X#endif
+X    if (whatbuf == buf)
+X	whatbuf[1] = FINISHCMD;		/* tell finish_command to work */
+X}
+X
+X#ifdef PUSHBACK
+Xvoid
+Xpushstring(str)
+Xchar *str;
+X{
+X    Reg1 int i;
+X    char tmpbuf[PUSHSIZE];
+X    Reg2 char *s = tmpbuf;
+X
+X    assert(str != Nullch);
+X    interp(s,PUSHSIZE,str);
+X    for (i = strlen(s)-1; i >= 0; --i) {
+X	s[i] ^= 0200; 
+X	pushchar(s[i]);
+X    }
+X}
+X#endif
+!STUFFY!FUNK!
+echo Extracting util.c
+sed >util.c <<'!STUFFY!FUNK!' -e 's/X//'
+X/* $Header: util.c,v 7.0.1.2 86/10/20 12:07:46 lwall Exp $ */
+X
+X/* $Log:	util.c,v $
+X * Revision 7.0.1.2  86/10/20  12:07:46  lwall
+X * Made all exits reset tty.
+X * 
+X * Revision 7.0.1.1  86/10/16  10:54:02  lwall
+X * Added Damage.  Fixed random bugs.
+X * 
+X * Revision 7.0  86/10/08  15:14:31  lwall
+X * Split into separate files.  Added amoebas and pirates.
+X * 
+X */
+X
+X#include "EXTERN.h"
+X#include "warp.h"
+X#include "ndir.h"
+X#include "object.h"
+X#include "sig.h"
+X#include "term.h"
+X#include "INTERN.h"
+X#include "util.h"
+X
+Xvoid
+Xutil_init()
+X{
+X    ;
+X}
+X
+Xvoid
+Xmovc3(len,src,dest)
+X#ifdef vax
+Xchar *dest, *src;
+Xint len;
+X{
+X    asm("movc3 4(ap),*8(ap),*12(ap)");
+X}
+X#else
+XReg1 char *dest;
+XReg2 char *src;
+XReg3 int len;
+X{
+X    if (dest <= src) {
+X	for (; len; len--) {
+X	    *dest++ = *src++;
+X	}
+X    }
+X    else {
+X	dest += len;
+X	src += len;
+X	for (; len; len--) {
+X	    *--dest = *--src;
+X	}
+X    }
+X}
+X#endif
+X
+Xvoid
+Xno_can_do(what)
+Xchar *what;
+X{
+X    fprintf(stderr,"Sorry, your terminal is too %s to play warp.\r\n",what);
+X    finalize(1);
+X}
+X
+Xint
+Xexdis(maxnum)
+Xint maxnum;
+X{
+X    double temp, temp2;
+X    double exp();
+X    double log();
+X
+X    temp = (double) maxnum;
+X#ifndef lint
+X    temp2 = (double) myrand();
+X#else
+X    temp2 = 0.0;
+X#endif
+X#if RANDBITS == 15
+X    return (int) exp(temp2 * log(temp)/0x7fff);
+X#else
+X#if RANDBITS == 16
+X    return (int) exp(temp2 * log(temp)/0xffff);
+X#else
+X    return (int) exp(temp2 * log(temp)/0x7fffffff);
+X#endif
+X#endif
+X}
+X
+Xstatic char nomem[] = "warp: out of memory!\r\n";
+X
+X/* paranoid version of malloc */
+X
+Xchar *
+Xsafemalloc(size)
+XMEM_SIZE size;
+X{
+X    char *ptr;
+X    char *malloc();
+X
+X    ptr = malloc(size?size:1);	/* malloc(0) is NASTY on our system */
+X    if (ptr != Nullch)
+X	return ptr;
+X    else {
+X	fputs(nomem,stdout);
+X	sig_catcher(0);
+X    }
+X    /*NOTREACHED*/
+X}
+X
+X/* safe version of string copy */
+X
+Xchar *
+Xsafecpy(to,from,len)
+Xchar *to;
+XReg2 char *from;
+XReg1 int len;
+X{
+X    Reg3 char *dest = to;
+X
+X    if (from != Nullch) 
+X	for (len--; len && (*dest++ = *from++); len--) ;
+X    *dest = '\0';
+X    return to;
+X}
+X
+X/* copy a string up to some (non-backslashed) delimiter, if any */
+X
+Xchar *
+Xcpytill(to,from,delim)
+XReg2 char *to;
+XReg1 char *from;
+XReg3 int delim;
+X{
+X    for (; *from; from++,to++) {
+X	if (*from == '\\' && from[1] == delim)
+X	    from++;
+X	else if (*from == delim)
+X	    break;
+X	*to = *from;
+X    }
+X    *to = '\0';
+X    return from;
+X}
+X
+X/* return ptr to little string in big string, NULL if not found */
+X
+Xchar *
+Xinstr(big, little)
+Xchar *big, *little;
+X
+X{
+X    Reg3 char *t;
+X    Reg1 char *s;
+X    Reg2 char *x;
+X
+X    for (t = big; *t; t++) {
+X	for (x=t,s=little; *s; x++,s++) {
+X	    if (!*x)
+X		return Nullch;
+X	    if (*s != *x)
+X		break;
+X	}
+X	if (!*s)
+X	    return t;
+X    }
+X    return Nullch;
+X}
+X
+X/* effective access */
+X
+X#ifdef SETUIDGID
+Xint
+Xeaccess(filename, mod)
+Xchar *filename;
+Xint mod;
+X{
+X    int protection, euid;
+X    
+X    mod &= 7;				/* remove extraneous garbage */
+X    if (stat(filename, &filestat) < 0)
+X	return -1;
+X    euid = geteuid();
+X    if (euid == ROOTID)
+X	return 0;
+X    protection = 7 & (filestat.st_mode >>
+X      (filestat.st_uid == euid ? 6 :
+X        (filestat.st_gid == getegid() ? 3 : 0)
+X      ));
+X    if ((mod & protection) == mod)
+X	return 0;
+X    errno = EACCES;
+X    return -1;
+X}
+X#endif
+X
+X/*
+X * Get working directory
+X */
+X
+X#ifdef GETWD
+X#define	dot	"."
+X#define	dotdot	".."
+X
+Xstatic	char	*name;
+X
+Xstatic	DIR	*dirp;
+Xstatic	int	off;
+Xstatic	struct	stat	d, dd;
+Xstatic	struct	direct	*dir;
+X
+Xchar *
+Xgetwd(np)
+Xchar *np;
+X{
+X	long rdev, rino;
+X
+X	*np++ = '/';
+X	*np = 0;
+X	name = np;
+X	off = -1;
+X	stat("/", &d);
+X	rdev = d.st_dev;
+X	rino = d.st_ino;
+X	for (;;) {
+X		stat(dot, &d);
+X		if (d.st_ino==rino && d.st_dev==rdev)
+X			goto done;
+X		if ((dirp = opendir(dotdot)) == Null(DIR *))
+X			prexit("getwd: cannot open ..\r\n");
+X		stat(dotdot, &dd);
+X		chdir(dotdot);
+X		if(d.st_dev == dd.st_dev) {
+X			if(d.st_ino == dd.st_ino)
+X				goto done;
+X			do
+X				if ((dir = readdir(dirp)) == Null(struct direct *))
+X					prexit("getwd: read error in ..\r\n");
+X			while (dir->d_ino != d.st_ino);
+X		}
+X		else do {
+X				if ((dir = readdir(dirp)) == Null(struct direct *))
+X					prexit("getwd: read error in ..\r\n");
+X				stat(dir->d_name, &dd);
+X			} while(dd.st_ino != d.st_ino || dd.st_dev != d.st_dev);
+X		cat();
+X		closedir(dirp);
+X	}
+Xdone:
+X	name--;
+X	if (chdir(name) < 0) {
+X		printf("getwd: can't cd back to %s\r\n",name);
+X		sig_catcher(0);
+X	}
+X	return (name);
+X}
+X
+Xvoid
+Xcat()
+X{
+X	Reg1 int i;
+X	Reg2 int j;
+X
+X	i = -1;
+X	while (dir->d_name[++i] != 0);
+X	if ((off+i+2) > 1024-1)
+X		return;
+X	for(j=off+1; j>=0; --j)
+X		name[j+i+1] = name[j];
+X	if (off >= 0)
+X		name[i] = '/';
+X	off=i+off+1;
+X	name[off] = 0;
+X	for(--i; i>=0; --i)
+X		name[i] = dir->d_name[i];
+X}
+X
+Xvoid
+Xprexit(cp)
+Xchar *cp;
+X{
+X	write(2, cp, strlen(cp));
+X	sig_catcher(0);
+X}
+X#else
+Xchar *
+Xgetwd(np)			/* shorter but slower */
+Xchar *np;
+X{
+X    FILE *popen();
+X    FILE *pipefp = popen("/bin/pwd","r");
+X
+X    if (pipefp == Nullfp) {
+X	printf("Can't run /bin/pwd\r\n");
+X	finalize(1);
+X    }
+X    Fgets(np,512,pipefp);
+X    np[strlen(np)-1] = '\0';	/* wipe out newline */
+X    pclose(pipefp);
+X    return np;
+X}
+X#endif
+X
+X/* copy a string to a safe spot */
+X
+Xchar *
+Xsavestr(str)
+Xchar *str;
+X{
+X    Reg1 char *newaddr = safemalloc((MEM_SIZE)(strlen(str)+1));
+X
+X    strcpy(newaddr,str);
+X    return newaddr;
+X}
+X
+Xchar *
+Xgetval(nam,def)
+Xchar *nam,*def;
+X{
+X    char *val;
+X
+X    if ((val = getenv(nam)) == Nullch || !*val)
+X	val = def;
+X    return val;
+X}
+!STUFFY!FUNK!
+echo Extracting intrp.h
+sed >intrp.h <<'!STUFFY!FUNK!' -e 's/X//'
+X/* $Header: intrp.h,v 7.0.1.1 86/12/12 16:59:45 lwall Exp $
+X *
+X * $Log:	intrp.h,v $
+X * Revision 7.0.1.1  86/12/12  16:59:45  lwall
+X * Baseline for net release.
+X * 
+X * Revision 7.0  86/10/08  15:12:27  lwall
+X * Split into separate files.  Added amoebas and pirates.
+X * 
+X */
+X
+XEXT char *origdir INIT(Nullch);		/* cwd when warp invoked */
+XEXT char *homedir INIT(Nullch);		/* login directory */
+XEXT char *dotdir INIT(Nullch);		/* where . files go */
+XEXT char *logname INIT(Nullch);		/* login id */
+XEXT char *hostname INIT(Nullch);	/* host name */
+XEXT char *realname INIT(Nullch);	/* real name from /etc/passwd */
+X
+Xvoid    intrp_init();
+Xchar	*filexp();
+Xchar	*dointerp();
+Xvoid	interp();
+Xchar	*getrealname();
+!STUFFY!FUNK!
+echo ""
+echo "End of kit 1 (of 7)"
+cat /dev/null >kit1isdone
+config=true
+for iskit in 1 2 3 4 5 6 7; do
+    if test -f kit${iskit}isdone; then
+	echo "You have run kit ${iskit}."
+    else
+	echo "You still need to run kit ${iskit}."
+	config=false
+    fi
+done
+case $config in
+    true)
+	echo "You have run all your kits.  Please read README and then type Configure."
+	chmod 755 Configure
+	;;
+esac
+: Someone might mail this, so...
+exit

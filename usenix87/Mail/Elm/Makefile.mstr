@@ -1,0 +1,277 @@
+#
+#  Makefile for the entire ELM mail system
+#
+#         (C) Copyright 1986, Dave Taylor
+#
+#  Last modification: October 8th, 1986
+
+SHELL=/bin/sh
+
+#########################
+#
+# The following entries need to be customized for the local site:  
+#    The first is the address of the data-cassette drive to allow
+# easy tape copies to be made, and the second is the final location 
+# that all the software should be installed in when 'make install'
+# is run.
+#
+#########################
+
+TAPE=   >tapeunit< 
+DEST=   >dest-dir<
+
+LIB=    /usr/local/lib
+MAN=	/usr/man/man1
+CATMAN= /usr/man/cat1
+SHAR=   /usr/local/bin/shar -s 60000
+
+DEFINE = >os-define<
+LIB2   = >lib2<
+
+#########################
+
+LIBS=   >libs<
+CFLAGS= -O
+CC=	>cc<
+RM=	>rm<
+MV=     >mv<
+CP=	>cp<
+
+# if you want to use "nroff", change this...
+
+FORMATTER = >troff<
+TBL       = >tbl<
+
+DOCS=   Alias.guide Config.guide Elm.coversheet Filter.guide Ref.guide     \
+	Forms.guide Users.guide answer.1 autoreply.1 checkalias.1          \
+	elm.1 fastmail.1 filter.1 from.1 listalias.1 messages.1 newalias.1 \
+	newmail.1 printmail.1 readmsg.1 trim-headers.1 wnewmail.1
+
+UTILSRC= utils/answer.c utils/arepdaemon.c utils/autoreply.c           \
+	utils/fastmail.c utils/from.c utils/newalias.c \
+	utils/newmail.c utils/printmail.c utils/readmsg.c utils/wnewmail.c \
+	utils/trim-headers
+
+FILTSRC= filter/actions.c filter/filter.c filter/parse.c filter/rules.c     \
+	filter/summarize.c filter/utils.c
+
+ELMSRC=	src/addr_utils.c src/alias.c src/aliasdb.c src/aliaslib.c src/args.c  \
+	src/bounceback.c src/builtin.c src/calendar.c src/connect_to.c	      \
+	src/curses.c src/date.c src/delete.c src/domains.c src/edit.c	      \
+	src/editmsg.c src/elm.c src/encode.c src/errno.c src/file.c	      \
+	src/file_utils.c src/fileio.c src/forms.c src/getopt.c src/hdrconfg.c \
+	src/help.c src/initialize.c src/input_utils.c src/leavembox.c	      \
+	src/limit.c src/mailmsg1.c src/mailmsg2.c src/mailtime.c src/mkhdrs.c \
+	src/newmbox.c src/opt_utils.c src/options.c src/output_utils.c        \
+	src/pattern.c src/pmalloc.c src/quit.c src/read_rc.c src/remail.c     \
+	src/reply.c src/return_addr.c src/save_opts.c src/savecopy.c          \
+	src/screen.c src/showmsg.c src/signals.c src/softkeys.c src/sort.c    \
+	src/string2.c src/strings.c src/syscall.c src/utils.c src/validname.c
+
+MISCHDRS  = hdrs/defs.h hdrs/sysdefs.h
+ELMHDRS   = hdrs/headers.h 
+FILTHDRS  = hdrs/filter.h
+MAINHDRS  = hdrs/elm.h
+
+################
+
+all:	bin/elm filter utils 
+	@echo Everything is up to date!
+
+documentation:  doc/Users.fmtd doc/Ref.fmtd doc/Config.fmtd doc/Alias.fmtd \
+		doc/Form.fmtd doc/Filter.fmtd
+	
+doc/Users.fmtd: doc/Users.guide
+	${TBL} doc/Users.guide | ${FORMATTER} -mm > doc/Users.fmtd
+
+doc/Form.fmtd: doc/Form.guide
+	${FORMATTER} -mm doc/Form.guide > doc/Form.fmtd
+
+doc/Filter.fmtd: doc/Filter.guide
+	${TBL} doc/Filter.guide | ${FORMATTER} -mm > doc/Filter.fmtd
+
+doc/Ref.fmtd: doc/Ref.guide
+	${FORMATTER} -mm doc/Ref.guide > doc/Ref.fmtd
+
+doc/Config.fmtd:  doc/Config.guide
+	${TBL} doc/Config.guide | ${FORMATTER} -mm > doc/Config.fmtd
+
+doc/Alias.fmtd:  doc/Alias.guide
+	${FORMATTER} -mm doc/Alias.guide > doc/Alias.fmtd
+
+bin/elm: ${ELMSRC} ${MISCHDRS} ${ELMHDRS} ${MAINHDRS}
+	cd src;make 'DEFINE=${DEFINE}' 'LIB2=${LIB2}' ../bin/elm
+	
+bin/utils: ${UTILSRC} ${MISCHHDRS}
+	cd utils; make 'DEFINE=${DEFINE}' 'LIBS=${LIB2}' all
+
+bin/filter: ${FILTSRC} ${FILTHDR}
+	cd filter; make 'DEFINE=${DEFINE}' 'LIBS=${LIB2}' all
+
+install: all
+	${CP} bin/elm          ${DEST}/elm
+	${CP} bin/from         ${DEST}/from
+	${CP} bin/newalias     ${DEST}/newalias
+	${CP} bin/printmail    ${DEST}/printmail
+	${CP} bin/fastmail     ${DEST}/fastmail
+	${CP} bin/readmsg      ${DEST}/readmsg
+	${CP} bin/newmail      ${DEST}/newmail
+	${CP} bin/wnewmail     ${DEST}/wnewmail
+	${CP} bin/checkalias   ${DEST}/checkalias
+	${CP} bin/messages     ${DEST}/messages
+	${CP} bin/trim-headers ${DEST}/trim-headers
+	${CP} bin/arepdaemon   ${DEST}/arepdaemon
+	${CP} bin/autoreply    ${DEST}/autoreply
+	${CP} bin/listalias    ${DEST}/listalias
+	${CP} bin/filter       ${DEST}/filter
+	${RM} ${CATMAN}/elm.1 ${CATMAN}/from.1 \
+	      ${CATMAN}/newalias.1 ${CATMAN}/printmail.1 \
+	      ${CATMAN}/fastmail.1 ${CATMAN}/elm.1 \
+	      ${CATMAN}/readmsg.1 ${CATMAN}/answer.1 \
+	      ${CATMAN}/newmail.1 ${CATMAN}/checkalias.1 \
+	      ${CATMAN}/autoreply.1 ${CATMAN}/wnewmail.1 \
+	      ${CATMAN}/messages.1 ${CATMAN}/trim-headers.1 \
+	      ${CATMAN}/listalias.1 ${CATMAN}/filter.1
+	${CP} doc/elm.1        ${MAN}/elm.1
+	${CP} doc/from.1       ${MAN}/from.1
+	${CP} doc/newalias.1   ${MAN}/newalias.1
+	${CP} doc/printmail.1  ${MAN}/printmail.1
+	${CP} doc/fastmail.1   ${MAN}/fastmail.1
+	${CP} doc/checkalias.1 ${MAN}/checkalias.1
+	${CP} doc/messages.1   ${MAN}/messages.1
+	${CP} doc/trim-headers.1 ${MAN}/trim-headers.1
+	${CP} doc/autoreply.1  ${MAN}/autoreply.1
+	${CP} doc/answer.1     ${MAN}/answer.1
+	${CP} doc/readmsg.1    ${MAN}/readmsg.1
+	${CP} doc/newmail.1    ${MAN}/newmail.1
+	${CP} doc/wnewmail.1   ${MAN}/wnewmail.1
+	${CP} doc/listalias.1  ${MAN}/listalias.1
+	${CP} doc/filter.1     ${MAN}/filter.1
+	${CP} doc/elm-help.?   ${LIB}
+	${CP} doc/elmrc-info   ${LIB}
+	chmod a+rx ${DEST}/from ${DEST}/newalias \
+		   ${DEST}/printmail ${DEST}/fastmail \
+		   ${DEST}/readmsg ${DEST}/trim-headers \
+		   ${DEST}/checkalias ${DEST}/autoreply \
+		   ${DEST}/newmail ${DEST}/wnewmail ${DEST}/messages \
+		   ${DEST}/listalias
+	chgrp mail ${DEST}/elm ${DEST}/filter
+	chmod 2755 ${DEST}/elm ${DEST}/filter
+	@echo Done with installation.
+
+rmt-install: remote-defined
+	@echo " "
+	@echo Warning: This assumes "install" has been done on the
+	@echo "         remote machine.  If this is not the case you"
+	@echo "         better hit BREAK quickly!"
+	@echo " "
+	${CP} ${REMOTE}${DEST}/elm          ${DEST}/elm
+	${CP} ${REMOTE}${DEST}/from         ${DEST}/from
+	${CP} ${REMOTE}${DEST}/newalias     ${DEST}/newalias
+	${CP} ${REMOTE}${DEST}/printmail    ${DEST}/printmail
+	${CP} ${REMOTE}${DEST}/fastmail     ${DEST}/fastmail
+	${CP} ${REMOTE}${DEST}/readmsg      ${DEST}/readmsg
+	${CP} ${REMOTE}${DEST}/wnewmail     ${DEST}/wnewmail
+	${CP} ${REMOTE}${DEST}/newmail      ${DEST}/newmail
+	${CP} ${REMOTE}${DEST}/checkalias   ${DEST}/checkalias
+	${CP} ${REMOTE}${DEST}/messages     ${DEST}/messages
+	${CP} ${REMOTE}${DEST}/arepdaemon   ${DEST}/arepdaemon
+	${CP} ${REMOTE}${DEST}/autoreply    ${DEST}/autoreply
+	${CP} ${REMOTE}${DEST}/listalias    ${DEST}/listalias
+	${RM} ${CATMAN}/elm.1 \
+	      ${CATMAN}/from.1 \
+              ${CATMAN}/newalias.1 \
+	      ${CATMAN}/printmail.1 \
+	      ${CATMAN}/fastmail.1 \
+              ${CATMAN}/checkalias.1 \
+              ${CATMAN}/autoreply.1 \
+	      ${CATMAN}/readmsg.1 \
+	      ${CATMAN}/answer.1 \
+	      ${CATMAN}/newmail.1 \
+	      ${CATMAN}/wnewmail.1 \
+	      ${CATMAN}/listalias.1 \
+              ${CATMAN}/elm.1
+	${CP} ${REMOTE}${MAN}/elm.1        ${MAN}/elm.1
+	${CP} ${REMOTE}${MAN}/from.1       ${MAN}/from.1
+	${CP} ${REMOTE}${MAN}/newalias.1   ${MAN}/newalias.1
+	${CP} ${REMOTE}${MAN}/printmail.1  ${MAN}/printmail.1
+	${CP} ${REMOTE}${MAN}/fastmail.1   ${MAN}/fastmail.1
+	${CP} ${REMOTE}${MAN}/checkalias.1 ${MAN}/checkalias.1
+	${CP} ${REMOTE}${MAN}/autoreply.1  ${MAN}/autoreply.1
+	${CP} ${REMOTE}${MAN}/readmsg.1    ${MAN}/readmsg.1
+	${CP} ${REMOTE}${MAN}/answer.1     ${MAN}/answer.1
+	${CP} ${REMOTE}${MAN}/wnewmail.1   ${MAN}/wnewmail.1
+	${CP} ${REMOTE}${MAN}/newmail.1    ${MAN}/newmail.1
+	${CP} ${REMOTE}${MAN}/listalias.1  ${MAN}/listalias.1
+	${CP} ${REMOTE}${LIB}/elm-help.?   ${LIB}
+	${CP} ${REMOTE}${LIB}/elmrc-info   ${LIB}
+	chmod a+rx ${DEST}/from ${DEST}/newalias ${DEST}/printmail \
+	           ${DEST}/fastmail ${DEST}/readmsg \
+		   ${DEST}/checkalias ${DEST}/autoreply ${DEST}/wnewmail \
+		   ${DEST}/newmail ${DEST}/messages ${DEST}/listalias
+	chgrp mail ${DEST}/elm
+	chmod 2755 ${DEST}/elm
+	@echo everything is installed based on files from ${REMOTE}
+
+source: 
+	tar cvf ${TAPE} bin/makelisting utils/*.c src/*.c doc/* hdrs/* \
+	Instructions Makefile* utils/Makefile* src/Makefile* test/*    \
+	utils/*.awk Overview filter/*.c filter/Makefile*
+
+# Note that the production for SHAR assumes a pretty snazzy shar program
+# that can break down the output into a number of files as needed...
+#   The current threshold is 60,000 bytes per file, for email/netnews
+
+shar:   
+	${SHAR} *
+
+lint:
+	lint ${UTILSRC} > lint.out
+
+listing:
+	@echo listing all source files 
+	@/bin/echo \\f > LISTING
+	@echo adding file 'README'...
+	@cat README >> LISTING
+	@/bin/echo \\f >> LISTING
+	@echo adding file 'Instructions...
+	@cat Instructions >> LISTING
+	@/bin/echo \\f >> LISTING
+	@echo adding file 'Makefile'...
+	@cat Makefile >> LISTING
+	@bin/makelisting Makefile ${UTILSRC} src/Makefile src/*.c hdrs/*.h \
+	${FILTSRC}
+	@echo LISTING generated.
+
+elm-listing: 
+	@echo listing just the ELM system source files
+	@echo ' ' > src/LISTING
+	@cd src ; make listing ; cd ..
+	@echo LISTING generated \(in directory /src\).
+
+clean:
+	@cd src ; make clean 
+	@cd utils; make clean
+	@cd filter; make clean
+	@echo All spurious files removed
+
+elm: bin/elm
+filter: bin/filter
+utils: bin/utils
+utils/checkalias:
+utils/messages:
+doc/Users.guide:
+doc/Ref.guide:
+doc/Alias.guide:
+doc/Config.guide:
+
+remote-defined:
+	@if ( "${REMOTE}" == "" ) then; \
+	   echo " " ; \
+	   echo "You need to define 'REMOTE' as the remote file system" ; \
+	   echo "for this particular command.   The easiest way to do " ; \
+	   echo "this is to type:" ;\
+	   echo "    make -f <makefile> REMOTE=<remote file system> rmt-install" ; \
+	   echo " " ; \
+	 endif
+	@if ( "${REMOTE}" == "" ) exit 1

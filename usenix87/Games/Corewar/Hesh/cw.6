@@ -1,0 +1,288 @@
+.\"	Documentation for Corewars system
+.\"
+.\"	static	char	rcsid[] = "$Header: cw.6,v 7.2 86/01/06 21:28:21 ccohesh Exp $";
+.\"
+.TH CW UCD "2 December 1985"
+.SH NAME
+mars, rcasm, unrc \- Core Wars simulation system
+.SH SYNOPSIS
+.B mars
+[
+.B \-dilpv
+] [
+.B \-rn
+] [
+.B \-sn
+] [
+.B \-cn
+] file file ...
+.br
+.B rcasm
+file [ofile]
+.br
+.B unrc
+file
+.SH OPTIONS
+.TP
+.B \-d
+Do not print the status window if in visual display mode.
+.TP
+.B \-i
+Print current instruction.  This turns on the
+.B \-p
+and the
+.B \-v
+options.
+.TP
+.B \-l
+Print job size and load location during startup.
+.TP
+.B \-p
+Print the current cycle number.
+.TP
+.B \-rn
+Set the seed for the random number generator to
+.B n.
+If
+.B n
+is zero, then
+.B mars
+will create its own seed and print it.
+.TP
+.B \-sn
+Set the minimum amount of memory initially separating jobs to
+.B n
+memory pages.  A memory page is 16 words.  This value must be less
+than 511.  The default separation value is 8 pages.
+.TP
+.B \-cn
+Set the maximum number of execution cycles to
+.B n.
+The default value is 1024.
+.TP
+.B \-v
+Do not run in visual display mode.  This is useful to quickly
+determine the outcome.  Also, the instruction display will not
+work in visual display mode.
+.TP
+.SH DESCRIPTION
+.I Mars
+(an acronym for Memory Array Redcode Simulator) executes battle
+programs created by
+.I rcasm.
+The battle programs are entered into the battlefield at randomly
+chosen positions and executed in a simple version of time-sharing.
+Execution continues until all but one program is left running or
+the instruction cycle limit is reached.
+Programs are halted when they attempt to execute an invalid instruction 
+or an instruction with an illegal addressing mode.
+When
+.I mars
+terminates it prints a summary of results of the battle indicating
+how long each job ran and the reason (if any) for a job's termination.
+.LP
+By default
+.I mars
+will display the battle using a box of 512 periods ('.'), each representing
+one memory page of 16 memory locations.  The position of each program's
+program counter is marked by a capital letter and the areas affected by the
+program executing the "MOV" instruction by the corresponding lowercase
+letter.  An optional status window is displayed to the right of this box.
+Each line in the window contains information for one program.
+This information includes the letter representing the program, the `name'
+of the program (via the command line argument) and the program's current
+status.  If the
+.B \-p
+option is specified on the command line the bottom line of the status window
+will indicate the number of cycles elapsed and the number of programs
+still operational.
+.LP
+.I Rcasm
+assembles the named
+.I redcode
+assembly language
+.I file.
+The output of the assembly is left on the file
+.I ofile;
+if that is ommitted,
+.I rc.out
+is used.
+.LP
+.I Unrc
+dis-assembles the named
+.I redcode
+object file writing the
+.I redcode
+assembly instructions to the standard output.
+However, be aware that since
+.I rcasm
+does not include comments in the object files that it creates, the output from
+.I unrc
+will not contain any comments that once might have been in the original
+source core.
+.SH DETAILS
+The size of the memory into which the programs are loaded is 8192 words.
+This is divided into 512 16 word pages.  Jobs are loaded on page
+boundaries with the default minimum separation between programs being
+8 pages.
+Since jobs are loaded on page boundaries they can work in teams
+(i.e. employ strategies such that if two jobs of the same type are
+loaded they will only kill jobs of a different type).
+This is obvious in the
+.B dwarf
+program.  If one
+.B dwarf
+job can not kill itself it will not be able to kill other
+.B dwarfs.
+This isn't necessarily true for programs that use the
+.B RND
+instruction.
+.LP
+None of the programs know where the other ones are, they do not
+even know how many other programs exist.
+Because a program can never refer to an absolute address, some addressing
+modes for some operands do not make sense.
+All memory addressing is relative to the current instruction.
+Since memory is `circular', addressing location 8192 would be the same as
+addressing location 0.
+.LP
+Since execution of a program starts on its first instruction, the user
+is cautioned to not have any
+.B DAT
+instructions at this point.  If a user prefers to place all his
+.B DAT
+instructions at the beginning of his program, it is suggested that he
+precede them with a
+.B JMP
+instruction to the appropriate address.
+.SH REDCODE
+.TS
+center tab(:);
+c s s s
+c c s c.
+Redcode Instruction Set
+=
+Mnemonic:Arguments:Action
+Symbol::
+_
+.T&
+lw(0.35i) cw(0.25i) cw(0.25i) lw(4i).
+DAT::B:T{
+Initialize location to value B.
+T}
+MOV:A:B:T{
+Move A into location B.
+T}
+ADD:A:B:T{
+Add operand A to contents of location B and store result in location B.
+T}
+SUB:A:B:T{
+Subtract operand A from contents of location B and store result in location B.
+T}
+JMP::B:T{
+Jump to location B.
+T}
+JMZ:A:B:T{
+If operand A is 0, jump to location B; otherwise continue with next instruction.
+T}
+DJZ:A:B:T{
+Decrement contants of location A by 1.  If location A now holds 0,
+jump to location B; otherwise continue with next instruction.
+T}
+CMP:A:B:T{
+Compare operand A with operand B.
+If they are not equal, skip next instruction; otherwise continue with
+next instruction.
+T}
+MUL:A:B:T{
+Multiply operand B by operand A and store result in location B.
+T}
+DIV:A:B:T{
+Divide operand B by operand A and store result in location B.
+T}
+RND::B:T{
+Chose a random integer between 0 and the maximum memory size and store
+it in location B.
+T}
+.TE
+.sp 2
+.TS
+center tab(:);
+c s s
+c c c.
+Redcode Addressing Modes
+=
+Mnemonic:Name:Meaning
+Symbol::
+_
+.T&
+c l lw(4.0i).
+#:Immediate:T{
+The number following this symbol is the operand.
+T}
+<none>:Relative:T{
+The number specifies an offset from the current instruction.
+Mars adds the offset to the address of the current instruction;
+the number stored at the location reached in this was is the operand.
+T}
+@:Indirect:T{
+The number following this symbol specifies an offset from the current
+instruction to a location where the relative address of the operand is found.
+Mars adds the offset to the address of the current instruction and retrieves
+the number stored at the specified location; this number is the interpreted
+as an offset from its own address.  The number found at this second location
+is the operand.
+T}
+.TE
+.LP
+Labels are another feature of this assembly language.
+Labels consist of alphanumerical characters witha maximum length of
+six characters starting with a dollar sign ('$').
+To declare a label, simply place the label with a colon (':') appended to it
+at the beginning of an instruction.
+Labels can be used anywhere where you would normally specify an integer address.
+.SH EXAMPLES
+.ta 1.5i 2.0i 2.25i
+	JMP		$START
+.br
+$ADDR:	DAT		0
+.br
+$START:	ADD	#8	$ADDR
+.br
+	MOV	#0	@$ADDR
+.br
+	JMP		$START
+.LP
+This is a simple program, usually refered to as
+.B Dwarf.
+It works its way through memory bombarding every eighth memory
+address with a zero.
+.LP
+An even simpler program,
+.B imp,
+simply copies itself throughout memory, one memory location at a time.
+.br
+$ME:	MOV	$ME	$AFTERME
+$AFTERME:	DAT	0
+.SH FILES
+.ta 1.5i
+rc.out	default resultant object file
+.SH "SEE ALSO"
+D. G. Jones and A. K. Dewdney, "CORE WAR GUIDELINES."
+.br
+A. K. Dewdney,
+"Computer Recreations,"
+.I Scientific American,
+May, 1984, pp. 14-23
+.SH DIAGNOSTICS
+.B Rcasm
+will complain if it discovers syntax errors in the input file.
+.B Unrc
+will complain if the input file contains invalid redcode instructions.
+.B Mars
+will complain about argument syntax errors and files that it cannot open.
+.SH AUTHOR
+Peter Costantinidis, Jr., University of California, Davis
+.SH BUGS
+None known at this time.  When they are discovered the author would
+appreciate notification.

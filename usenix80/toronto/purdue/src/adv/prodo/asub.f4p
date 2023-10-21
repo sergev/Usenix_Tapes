@@ -1,0 +1,229 @@
+c subroutines for adventure
+c
+c modified for pdp-11 fortran iv by
+c
+c	r. supnik
+c	disk engineering
+c
+	subroutine a5toa1(a,b,c,d)
+c
+c this routine takes the up to 6 character "word" in a:b:c
+c and types it out, followed by the punctuation mark in d.
+c it also appends a crlf to get to a new line.
+c
+	implicit integer (a-z)
+	common /alphas/ blank
+c
+	if(a .ne. blank) type 1,a
+	if(b .ne. blank) type 1,b
+	if(c .ne. blank) type 1,c
+	type 2,d
+	return
+c
+1       format(1xa2,$)
+2       format(1xa2)
+c
+	end
+c  data structure routines (vocab, dstroy, juggle, move, put, carry, drop)
+c
+c
+	subroutine vocab(id1,id2,init,v)
+c
+c  look up id1:id2 in the vocabulary (atab and a2tab)
+c  and return its "definition" (ktab), or
+c  -1 if not found.  if init is positive, this is an init call setting
+c  up a keyword variable, and not finding it constitutes a bug.  it also means
+c  that only ktab values which taken over 1000 equal init may be considered.
+c  (thus "steps", which is a motion verb as well as an object, may be located
+c  as an object.)  and it also means the ktab value is taken mod 1000.
+c
+	implicit integer (a-z)
+	common /voccom/ ktab,atab,a2tab,tabsiz
+	dimension ktab(300),atab(300),a2tab(300)
+c
+	do 1 i=1,tabsiz
+	if(ktab(i).eq.-1)goto 2
+	if(init.ge.0.and.ktab(i)/1000.ne.init)goto 1
+	if(atab(i).eq.id1 .and. a2tab(i).eq.id2)goto 3
+1	continue
+	call bug(21)
+c
+2	v=-1
+	if(init.lt.0)return
+	type 100,id1,id2
+100	format(' keyword = ',2a2)
+	call bug(5)
+c
+3	v=ktab(i)
+	if(init.ge.0)v=mod(v,1000)
+	return
+	end
+c
+c
+c
+	subroutine dstroy(object)
+c
+c  permanently eliminate "object" by moving to a non-existent location.
+c
+	implicit integer (a-z)
+c
+	call move(object,0)
+	return
+	end
+c
+c
+c
+	subroutine juggle(object)
+c
+c  juggle an object by picking it up and putting it down again, the purpose
+c  being to get the object to the front of the chain of things at its loc.
+c
+	implicit integer (a-z)
+	common /placom/ atloc,link,place,fixed,holdng
+	dimension atloc(150),link(200),place(100),fixed(100)
+c
+	i=place(object)
+	j=fixed(object)
+	call move(object,i)
+	call move(object+100,j)
+	return
+	end
+c
+c
+c
+	subroutine move(object,where)
+c
+c  place any object anywhere by picking it up and dropping it.  may already be
+c  toting, in which case the carry is a no-op.  mustn't pick up objects which
+c  are not at any loc, since carry wants to remove objects from atloc chains.
+c
+	implicit integer (a-z)
+	common /placom/ atloc,link,place,fixed,holdng
+	dimension atloc(150),link(200),place(100),fixed(100)
+c
+	if(object.gt.100)goto 1
+	from=place(object)
+	goto 2
+1	from=fixed(object-100)
+2	if(from.gt.0.and.from.le.300)call carry(object,from)
+	call drop(object,where)
+	return
+	end
+c
+c
+c
+	integer function put(object,where,pval)
+c
+c  put is the same as move, except it returns a value used to set up the
+c  negated prop values for the repository objects.
+c
+	implicit integer (a-z)
+c
+	call move(object,where)
+	put=(-1)-pval
+	return
+	end
+c
+c
+c
+	subroutine carry(object,where)
+c
+c  start toting an object, removing it from the list of things at its former
+c  location.  incr holdng unless it was already being toted.  if object>100
+c  (moving "fixed" second loc), don't change place or holdng.
+c
+	implicit integer (a-z)
+	common /placom/ atloc,link,place,fixed,holdng
+	dimension atloc(150),link(200),place(100),fixed(100)
+c
+	if(object.gt.100)goto 5
+	if(place(object).eq.-1)return
+	place(object)=-1
+	holdng=holdng+1
+5	if(atloc(where).ne.object)goto 6
+	atloc(where)=link(object)
+	return
+6	temp=atloc(where)
+7	if(link(temp).eq.object)goto 8
+	temp=link(temp)
+	goto 7
+8	link(temp)=link(object)
+	return
+	end
+c
+c
+c
+	subroutine drop(object,where)
+c
+c  place an object at a given loc, prefixing it onto the atloc list.  decr
+c  holdng if the object was being toted.
+c
+	implicit integer (a-z)
+	common /placom/ atloc,link,place,fixed,holdng
+	dimension atloc(150)
+	dimension link(200)
+	dimension place(100)
+	dimension fixed(100)
+c
+	if(object.gt.100)goto 1
+	if(place(object).eq.-1)holdng=holdng-1
+	place(object)=where
+	goto 2
+1	fixed(object-100)=where
+2	if(where.le.0)return
+	link(object)=atloc(where)
+	atloc(where)=object
+	return
+	end
+c utility routines (rnd, bug)
+c
+	integer function rnd(range)
+c
+c a variant using the random number generator in forlib.
+c
+	implicit integer (a-z)
+	real ran
+	data r/0/
+c
+	if(r.ne.0) go to 1
+	r=1
+	call idate(i,j,k)
+	i= i.or.k
+	j= j.or.k
+1	rnd= ran(i,j) *float(range)
+c
+	return
+	end
+c
+c
+c
+c
+	subroutine bug(num)
+	implicit integer (a-z)
+c
+c  the following conditions are currently considered fatal bugs.  numbers < 20
+c  are detected while reading the database; the others occur at "run time".
+c	0	message line > 70 characters
+c	1	null line in message
+c	2	too many words of messages
+c	3	too many travel options
+c	4	too many vocabulary words
+c	5	required vocabulary word not found
+c	6	too many rtext or mtext messages
+c	7	too many hints
+c	8	location has cond bit being set twice
+c	9	invalid section number in database
+c	20	special travel (500>l>300) exceeds goto list
+c	21	ran off end of vocabulary table
+c	22	vocabulary type (n/1000) not between 0 and 3
+c	23	intransitive action verb exceeds goto list
+c	24	transitive action verb exceeds goto list
+c	25	conditional travel entry with no alternative
+c	26	location has no travel entries
+c	27	hint number exceeds goto list
+c	28	invalid month returned by date function
+c
+	type 1, num
+1	format (' fatal error ',i3,', consult your local wizard.'/)
+	stop
+	end

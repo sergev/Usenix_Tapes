@@ -1,0 +1,62 @@
+Received: from wucs by plus5.uucp (UIUC-5.31/03Jun86-09:31:46) with UUCP
+	id AA07653; Wed, 11 Jun 86 19:59:32 EDT
+Received: from seismo by wucs.UUCP with UUCP; Wed, 11 Jun 86 18:55:04 CDT
+Received: by seismo.CSS.GOV; Wed, 11 Jun 86 19:07:05 EDT
+Received: from bboards by ICS.UCI.EDU id a012962; 11 Jun 86 15:48 PDT
+Received: from uw-beaver.arpa by ICS.UCI.EDU id a012930; 11 Jun 86 15:42 PDT
+Received: by uw-beaver.arpa (5.45/5.3)
+	id AA17823; Wed, 11 Jun 86 15:44:28 PDT
+From: Voradesh Yenbut <seismo!uw-beaver.arpa!yenbut>
+Return-Path: <yenbut@uw-beaver.arpa>
+Message-Id: <8606112244.AA17823@uw-beaver.arpa>
+To: ICS.UCI.EDU!mh-workers
+Subject: Re: Repl bug fix 
+In-Reply-To: Your message of Wed, 21 May 86 19:12:55 MST.
+             <6434.517111975@nrtc-gremlin.northrop.com> 
+Date: Wed, 11 Jun 86 15:44:26 -0800
+
+I am running MH 6.5 on SUN workstations.  Repl is also dumping core
+on me as in a transaction below:
+
+	sumatra% repl 
+	Draft "/u1/yenbut/Mail/draft" exists (174 bytes).
+	Disposition? repl
+	Segmentation fault (core dumped)
+
+A stack backtrace from adb shows that a zero pointer has been
+used for a string which is a problem on SUN:
+
+	memory fault
+	$c
+	_strlen[1ac08](0) + 14
+	_getcpy[d41c](0) + e
+	_getname[c310](0) + 36
+	_formataddr[91f6]() + 2aa
+	_fmtscan[e714](32104,342b8,2f1,29734) + 92a
+	_replout[8b3c](28578,31dd0,fff9d8) + 5c6
+	_main[8068](1,fffe34,fffe3c) + 998
+
+Here is my temporary fix:
+------------------------------------
+*** getcpy.c	Tue Oct 29 09:27:52 1985
+--- getcpy.c_n	Wed Jun 11 14:34:50 1986
+***************
+*** 9,14
+  {
+      register char  *cp;
+  
+      if ((cp = malloc ((unsigned) (strlen (str) + 1))) == NULL)
+  	adios (NULLCP, "unable to allocate string storage");
+  
+
+--- 9,17 -----
+  {
+      register char  *cp;
+  
++     /* fix for SUNs */
++     if (!str) str = "";
++ 
+      if ((cp = malloc ((unsigned) (strlen (str) + 1))) == NULL)
+  	adios (NULLCP, "unable to allocate string storage");
+
+

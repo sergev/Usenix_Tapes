@@ -1,0 +1,102 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 alpha 4/3/85; site ukma.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!cbosgd!ukma!sean
+From: sean@ukma.UUCP (Sean Casey)
+Newsgroups: net.games.emp
+Subject: Old empire 1.1 problems: solved
+Message-ID: <2376@ukma.UUCP>
+Date: 14 Nov 85 19:25:58 GMT
+Date-Received: 15 Nov 85 23:58:50 GMT
+References: <556@drutx.UUCP>
+Reply-To: sean@ukma.UUCP (Sean Casey)
+Organization: The White Tower @ The Univ. of KY
+Lines: 88
+
+IT WORKS!  IT WORKS!  IT WORKS!
+
+Here's some fixes and suggestions.  These are primarily for the guy
+who's maintaining it, but I thought they might have some general
+usefulness so I'm posting them here.
+
+
+Makefile:  _unix.O
+
+I think it is a good idea to change the makefiles to use the $(LIBDIR)
+directory.  This cuts down on the complexity by keeping things in a
+common directory.  Whether or not I can persuade Tom that it's a good
+idea,  I'd also like to suggest that lines be added to the makefile(s)
+to create the _unix.O directory(ies).  There were no instructions that
+a _unix.O directory would have to be created anywhere, so inexperienced
+installers may have a little trouble with it.
+
+3b2 floating point:
+
+A 3b2 has no floating point hardware and must emulate it in software.
+Unfortunately, the C compiler doesn't know this, and blindly generates
+floating point instructions for the wc32000.  This can cause extreme
+consternation when the poor user gets "Illegal instruction - core dump"
+upon execution of the first floating point instruction.  There is a
+barely documented option to cc, "-f" that will force the loading of
+floating point emulation routines.  Note that the "-f" need only appear
+in the final load of whatever you are compiling.
+
+execl() bug:
+
+After about 6 hours of testing and recompiling, I found out what broke
+execl().  execl() works before sigsave() and not after.  Here's the
+code to sigsave.c:
+
+----- EMPSUBS/sigsave.c -----
+
+extern	int	sigaddr[];
+
+sigsave()
+{
+	sigaddr[0] = signal(-1, 1);
+	sigaddr[1] = signal(2, 1);
+	sigaddr[2] = signal(3, 1);
+}
+
+sigrest()
+{
+	signal(-1, sigaddr[0]);
+	signal(2, sigaddr[1]);
+	signal(3, sigaddr[2]);
+}
+
+What is signal -1?  I can't find it in signal.h, and as documented,
+the signal(2) call does nothing special with it.  It shouldn't even work,
+but it does for BSD.  Beats me.  My temporary fix was to change the -1
+to 1 (SIGHUP), but a REAL fix would use the defines in signal.h.
+
+============
+Improvements
+============
+
+I'm announcing these because I don't want to duplicate someone's efforts
+if I don't have to.  Let me know if you are working on any of these...
+
+I'm probably going to hack up empire so that it does NOT use 6 overlapping
+modules.  I imagine that this was done to make it fit on a small address
+space machine.  This is really unnecessary for something like a 3b2, or
+a Vax that has enough address space to handle it.  The scheme uses much
+more disk space than is necessary.  It also slows it down because a 3b2
+has a pretty slow disk (well, ours does).  If and when I get this completed
+I'll send it to Tom and he can do an official announcement.
+
+I'm also going to write a server to run empire over 3bnet so that everyone
+on 3bnet will be playing the same game.  The game is much more fun with
+lots of players.  This will involve modifying part of empire so that it
+can be used with a pty.
+
+Happy emping!
+
+Sean
+
+
+-- 
+-------------------------------------------------------------------------------
+Sean Casey                             UUCP:  sean@ukma.UUCP   or
+915 Patterson Office Tower                    {cbosgd,anlams,hasmed}!ukma!sean
+University of Kentucky                 ARPA:  ukma!sean@ANL-MCS.ARPA
+Lexington, Ky. 40506-0027            BITNET:  sean@UKMA.BITNET

@@ -1,0 +1,66 @@
+#
+
+/*
+ *      mx imp definitions
+ */
+
+#define NDH     0               /* number of dh lines */
+#define NDA     1               /* number of da lines */
+#define NDM     1               /* number of dmc lines */
+
+
+#ifdef  INIT                    /* compile initialized structs only once */
+
+
+/*
+ * map host number to line number
+ */
+char    mihostline[] { -1, 0, -1, 1, -2, -2};
+
+
+/*
+ * map line number to device
+ */
+struct ld {
+	int     ld_min;         /* minor device number */
+	int     *ld_csr;        /* csr addr */
+	int     (*ld_task)();   /* device driver task */
+	int     (*ld_spl)();    /* spl function */
+	struct devdat *ld_dat;  /* per line data */
+};
+
+extern  spl5(),spl6();
+extern  midmtask(),midatask();
+
+struct ld milinedev[] {
+	0, 0160200, &midmtask, &spl5, 0,
+	0, 0172411, &midatask, &spl6, 0,
+	-1
+};
+
+#endif  INIT
+
+
+/*
+ * Each line device data table has a fixed prefix so that mitask can
+ * queue up output buffers for that line.  If the line is dead, mitask
+ * will reverse packets arriving for that line.
+ */
+struct devdat {
+	int     *d_csr;         /* csr address */
+	pbn     d_oq;           /* output queue */
+	char    d_up;           /* line is up */
+	char    d_xstate;       /* xmit state, 0=inactive */
+	char    d_rstate;       /* rec state */
+};
+
+
+/* task entry flags */
+
+#define TPACK   0               /* packet */
+#define TTIMER  1
+#define TSTART  2
+#define TINIT   3
+
+
+#define TTIMERTICKS 6            /* ticks per timer entry */

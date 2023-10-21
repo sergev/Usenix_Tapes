@@ -1,0 +1,242 @@
+22c22
+< # define USERMEM 	450000L	/* default user memory */
+---
+> # define USERMEM 	450000	/* default user memory */
+46,49d45
+< #ifndef M_XENIX
+< #  define huge		/* needed only for 16-bit machines */
+< #endif
+< 
+51c47
+< # if USERMEM >= (433484L+SACREDMEM)
+---
+> # if USERMEM >= (433484+SACREDMEM)
+78c74
+< # define HSIZE	69001L		/* 95% occupancy */
+---
+> # define HSIZE	69001		/* 95% occupancy */
+81c77
+< # define HSIZE	35023L		/* 94% occupancy */
+---
+> # define HSIZE	35023		/* 94% occupancy */
+92a89,98
+> #ifdef M_XENIX			/* Stupid compiler can't handle arrays with */
+> # if BITS == 16			/* more than 65535 bytes - so we fake it */
+> #  define XENIX_16
+> # else
+> #  if BITS > 13			/* Code only handles BITS = 12, 13, or 16 */
+> #   define BITS	13
+> #  endif
+> # endif
+> #endif
+> 
+259c265
+< code_int maxmaxcode;			/* should NEVER generate this code */
+---
+> code_int maxmaxcode = 1 << BITS;	/* should NEVER generate this code */
+261c267
+< # define MAXCODE(n_bits)	((code_int)1 << (n_bits) - 1)
+---
+> # define MAXCODE(n_bits)	(1 << (n_bits) - 1)
+263c269
+< # define MAXCODE(n_bits)	(((code_int)1 << (n_bits)) - 1)
+---
+> # define MAXCODE(n_bits)	((1 << (n_bits)) - 1)
+266,267c272,298
+< count_int huge htab [HSIZE];
+< unsigned short huge codetab [HSIZE];
+---
+> #ifdef XENIX_16
+> count_int htab0[8192];
+> count_int htab1[8192];
+> count_int htab2[8192];
+> count_int htab3[8192];
+> count_int htab4[8192];
+> count_int htab5[8192];
+> count_int htab6[8192];
+> count_int htab7[8192];
+> count_int htab8[HSIZE-65536];
+> count_int * htab[9] = {
+> 	htab0, htab1, htab2, htab3, htab4, htab5, htab6, htab7, htab8 };
+> 
+> #define htabof(i)	(htab[(i) >> 13][(i) & 0x1fff])
+> unsigned short code0tab[16384];
+> unsigned short code1tab[16384];
+> unsigned short code2tab[16384];
+> unsigned short code3tab[16384];
+> unsigned short code4tab[16384];
+> unsigned short * codetab[5] = {
+> 	code0tab, code1tab, code2tab, code3tab, code4tab };
+> 
+> #define codetabof(i)	(codetab[(i) >> 14][(i) & 0x3fff])
+> 
+> #else	/* Normal machine */
+> count_int htab [HSIZE];
+> unsigned short codetab [HSIZE];
+269a301
+> #endif	/* XENIX_16 */
+283,284c315,321
+< # define tab_suffixof(i)	((char_type huge *)(htab))[i]
+< # define de_stack		((char_type huge *)&tab_suffixof(1<<BITS))
+---
+> #ifdef XENIX_16
+> # define tab_suffixof(i)	((char_type *)htab[(i)>>15])[(i) & 0x7fff]
+> # define de_stack		((char_type *)(htab2))
+> #else	/* Normal machine */
+> # define tab_suffixof(i)	((char_type *)(htab))[i]
+> # define de_stack		((char_type *)&tab_suffixof(1<<BITS))
+> #endif	/* XENIX_16 */
+485c522
+<     maxmaxcode = (code_int)1 << maxbits;
+---
+>     maxmaxcode = 1 << maxbits;
+513c550
+< 		    maxmaxcode = (code_int)1 << maxbits;
+---
+> 		    maxmaxcode = 1 << maxbits;
+631c668
+< 		maxmaxcode = (code_int)1 << maxbits;
+---
+> 		maxmaxcode = 1 << maxbits;
+675c712
+<     register code_int i = 0;	/* must hold HSIZE */
+---
+>     register code_int i = 0;
+677,678c714,719
+<     register unsigned ent;	/* must hold BITS bits */
+<     register code_int disp;	/* must hold HSIZE */
+---
+>     register code_int ent;
+> #ifdef XENIX_16
+>     register code_int disp;
+> #else	/* Normal machine */
+>     register int disp;
+> #endif
+809,810c850,851
+< output( incode )
+<   code_int  incode;
+---
+> output( code )
+> code_int  code;
+821d861
+<     register unsigned short code;
+829,830c869
+<     if ( incode >= 0 ) {
+< 	code = incode;
+---
+>     if ( code >= 0 ) {
+863c902
+< 	if (bits)
+---
+> 	if(bits)
+938c977
+<     register char_type huge *stackp;
+---
+>     register char_type *stackp;
+940,941c979
+<     register unsigned short code;
+<     register code_int oldcode, incode;
+---
+>     register code_int code, oldcode, incode;
+947,949c985,987
+<     for ( incode = 255; incode >= 0; incode-- ) {
+< 	tab_prefixof(incode) = 0;
+< 	tab_suffixof(incode) = (char_type)incode;
+---
+>     for ( code = 255; code >= 0; code-- ) {
+> 	tab_prefixof(code) = 0;
+> 	tab_suffixof(code) = (char_type)code;
+956c994
+<     putchar( finchar );		/* first code must be 8 bits = char */
+---
+>     putchar( (char)finchar );		/* first code must be 8 bits = char */
+961c999
+<     while ( (incode = getcode()) > -1 ) {
+---
+>     while ( (code = getcode()) > -1 ) {
+963d1000
+< 	code = incode;
+965,966c1002,1003
+< 	    for ( incode = 255; incode >= 0; incode-- )
+< 		tab_prefixof(incode) = 0;
+---
+> 	    for ( code = 255; code >= 0; code-- )
+> 		tab_prefixof(code) = 0;
+969c1006
+< 	    if ( (incode = getcode ()) == -1 )	/* O, untimely death! */
+---
+> 	    if ( (code = getcode ()) == -1 )	/* O, untimely death! */
+971d1007
+< 	    code = incode;
+972a1009
+> 	incode = code;
+984c1021,1025
+< 	while ( code >= 256 ) {		/* already unsigned compare */
+---
+> #ifdef SIGNED_COMPARE_SLOW
+> 	while ( ((unsigned long)code) >= ((unsigned long)256) ) {
+> #else
+> 	while ( code >= 256 ) {
+> #endif
+1000,1001c1041
+< 	if ( free_ent < maxmaxcode ) {
+< 	    code = free_ent++;
+---
+> 	if ( (code=free_ent) < maxmaxcode ) {
+1003a1044
+> 	    free_ent = code+1;
+1025c1066,1067
+< code_int getcode() {
+---
+> code_int
+> getcode() {
+1030c1072
+<     register unsigned short code;
+---
+>     register code_int code;
+1093c1135
+<     return (code_int)code;
+---
+>     return code;
+1185,1186c1227,1228
+< 	   for ( ; ent != 0;
+< 		   ent = (ent >= FIRST ? tab_prefixof(ent) : 0) ) {
+---
+> 	   for ( ; ent != NULL;
+> 		   ent = (ent >= FIRST ? tab_prefixof(ent) : NULL) ) {
+1350c1392,1398
+< 	register count_int huge *htab_p = htab+hsize;
+---
+> #ifndef XENIX_16	/* Normal machine */
+> 	register count_int *htab_p = htab+hsize;
+> #else
+> 	register j;
+> 	register long k = hsize;
+> 	register count_int *htab_p;
+> #endif
+1353a1402,1411
+> #ifdef XENIX_16
+>     for(j=0; j<=8 && k>=0; j++,k-=8192) {
+> 	i = 8192;
+> 	if(k < 8192) {
+> 		i = k;
+> 	}
+> 	htab_p = &(htab[j][i]);
+> 	i -= 16;
+> 	if(i > 0) {
+> #else
+1354a1413
+> #endif
+1373a1433,1436
+> #ifdef XENIX_16
+> 	}
+>     }
+> #endif
+1380c1443
+< long int num, den;
+---
+> count_int num, den;
+1407a1471,1473
+> #endif
+> #ifdef XENIX_16
+> 	fprintf(stderr, "XENIX_16, ");

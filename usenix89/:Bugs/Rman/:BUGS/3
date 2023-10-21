@@ -1,0 +1,180 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site ucbvax.ARPA
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!ucbvax!broome
+From: broome@ucbvax.ARPA (Jonathan C. Broome)
+Newsgroups: net.sources.bugs
+Subject: More rman fixes
+Message-ID: <10488@ucbvax.ARPA>
+Date: 29 Sep 85 04:03:43 GMT
+Date-Received: 30 Sep 85 09:58:40 GMT
+Reply-To: broome@ucbvax.UUCP (Jonathan C. Broome)
+Organization: University of California at Berkeley
+Lines: 167
+
+[ chomp, why do we still need this? ]
+
+Enclosed are diffs to fix two more problems found with rman, one that
+caused masscomp's and the like to become ill in free(), the other which
+was a bad argument to recvfrom(), noticed on a sun.  Thanks go to Bruce 
+Karsh (geowhiz!karsh) and Robert Ward (hslrswi!robert) for pointing them 
+out.  Hopefully this set of diffs will be slightly more successful than 
+the last set... If not, the entire set of (fixed) sources is available 
+on ucbvax in ~ftp/pub/rman.tar.Z (compressed with 12 bits), and I will 
+be willing to mail them to anyone without ftp access.
+
+Enjoy.
+
+===========================================================
+Jonathan C. Broome       University of California, Berkeley
+
+          UUCP    ...!ucbvax!broome
+          ARPA    broome@ucbvax.ARPA 
+===========================================================
+
+===================================================================
+RCS file: RCS/gethost.c,v
+retrieving revision 1.8
+diff -c -r1.8 gethost.c
+*** /tmp/,RCSt1006365	Sat Sep 28 16:14:30 1985
+--- gethost.c	Sat Sep 28 16:03:36 1985
+***************
+*** 75,80
+  	int    got_one = 0;
+  	int    sock;
+  	int    hosts;
+  	int    eof = 0;
+  	extern int errno;
+  	extern int verbose;
+
+--- 75,81 -----
+  	int    got_one = 0;
+  	int    sock;
+  	int    hosts;
++ 	int    len;
+  	int    eof = 0;
+  	extern int errno;
+  	extern int verbose;
+***************
+*** 134,140
+  					break;
+  				continue;
+  			}
+! 			if ((x = recvfrom (sock, buf, 20, 0, &sin, sizeof (sin))) <= 0)
+  				continue;
+  			buf[x] = '\0';
+  			(void) sscanf (buf, "%f", &la);
+
+--- 135,142 -----
+  					break;
+  				continue;
+  			}
+! 			len = sizeof (sin);
+! 			if ((x = recvfrom (sock, buf, 20, 0, &sin, &len)) <= 0)
+  				continue;
+  			buf[x] = '\0';
+  			(void) sscanf (buf, "%f", &la);
+===================================================================
+===================================================================
+RCS file: RCS/config.c,v
+retrieving revision 1.4
+diff -c -r1.4 config.c
+*** /tmp/,RCSt1006233	Sat Sep 28 16:10:25 1985
+--- config.c	Mon Sep 23 12:10:57 1985
+***************
+*** 27,33
+  {
+  	FILE *fp;
+  	char line[512];
+! 	char **argv = (char **) 0;
+  	int  d = 0;
+  	int  s;
+  	int  iscont;
+
+--- 27,34 -----
+  {
+  	FILE *fp;
+  	char line[512];
+! 	char **argv;
+! 	char **avsave = (char **) 0;	/* so we can properly free memory */
+  	int  d = 0;
+  	int  s;
+  	int  iscont;
+***************
+*** 45,50
+  
+  	while (getline (line, 512, fp)) {
+  		iscont = (*line == ' ');    /* continuation line begins with a space */
+  		if ((suffs = parse (line, &argv)) == 0)
+  			continue;
+  		
+
+--- 46,53 -----
+  
+  	while (getline (line, 512, fp)) {
+  		iscont = (*line == ' ');    /* continuation line begins with a space */
++ 		argv = avsave;				/* free any old space */
++ 
+  		if ((suffs = parse (line, &argv)) == 0)
+  			continue;
+  		
+***************
+*** 48,53
+  		if ((suffs = parse (line, &argv)) == 0)
+  			continue;
+  		
+  		if (streql (argv[0], "type") == 0) {   /* beginning of new cpu type */
+  			addtype (argv[1]);                 /* save the pointers         */
+  			continue;
+
+--- 51,58 -----
+  		if ((suffs = parse (line, &argv)) == 0)
+  			continue;
+  		
++ 		avsave = argv;				/* save pointer to new space */
++ 
+  		if (streql (argv[0], "type") == 0) {   /* beginning of new cpu type */
+  			addtype (argv[1]);                 /* save the pointers         */
+  			continue;
+===================================================================
+RCS file: RCS/ping.c,v
+retrieving revision 1.5
+diff -c -r1.5 ping.c
+*** /tmp/,RCSt1006233	Sat Sep 28 16:10:58 1985
+--- ping.c	Sat Sep 28 16:06:45 1985
+***************
+*** 85,90
+  	struct  sockaddr_in from;
+  	double  avenrun[3];
+  	char    buf[20];
+  
+  	/* grab the load average */
+  	lseek (kmem, (long) nl[0].n_value, 0);
+
+--- 85,91 -----
+  	struct  sockaddr_in from;
+  	double  avenrun[3];
+  	char    buf[20];
++ 	int		len;
+  
+  	/* grab the load average */
+  	lseek (kmem, (long) nl[0].n_value, 0);
+***************
+*** 94,100
+  		return;
+  
+  	/* don't want to see what they sent, just need their address */
+! 	if (recvfrom (sock, buf, 20, 0, &from, sizeof (from)) < 1)
+  		return;
+  
+  	sprintf (buf,"%.2f %.2f %.2f\n", avenrun[0], avenrun[1], avenrun[2]);
+
+--- 95,102 -----
+  		return;
+  
+  	/* don't want to see what they sent, just need their address */
+! 	len = sizeof (from);
+! 	if (recvfrom (sock, buf, 20, 0, &from, &len) < 1)
+  		return;
+  
+  	sprintf (buf,"%.2f %.2f %.2f\n", avenrun[0], avenrun[1], avenrun[2]);
+===================================================================

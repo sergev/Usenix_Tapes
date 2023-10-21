@@ -1,0 +1,246 @@
+/* file ned.defs - "include" file for new RAND editor */
+/*   Walt Bilofsky - 14 January 1977 */
+
+
+#define EDITED -1		/* openwrite set to -1 if file is edited */
+
+#define DEBUGCHECK checkfsd()   /* check fsd consistency for debugging */
+				/* DEBUGCHECK should be checkfsd() if */
+				/* continual fsd checking is desired. */
+#define CONTROLCHAR (lread1 < 040)
+#define CTRLCHAR   (((lread1>=0)&&(lread1<040)) || (lread1 == 0177))
+#define LINEL 80		/* length of screen line */
+#define NLINES 24               /* number of lines on screen */
+#define LBUFFER 512	/* *** MUST BE AT LEAST fsdmaxl
+			   size of chunks in which files
+			   being closed out are written */
+#define NEWLINE 012	/* newline character */
+#define PARAMREDIT 40		/* editing portion of paramport */
+#define PARAMRINFO 78		/* last col for text of paramport */
+#define NPARAMLINES 1	/* number of param lines on screen */
+#define FILEMODE 0666           /* mode of editor-created files */
+
+#define NTABS 30
+#define BIGTAB 32767
+
+#define FOREVER for (;;)
+
+#define UP 1 /* Up     */
+#define DN 2 /* Down   */
+#define RN 3 /* Return */
+#define HO 4 /* Home   */
+#define RT 5 /* Right  */
+#define LT 6 /* Left   */
+#define TB 7 /* Tab    */
+#define BT 8 /* Backtab*/
+
+/* margin characters */
+#define LMCH  '|'
+#define RMCH  '|'
+#define TMCH	'-'
+#define BMCH	'-'
+#define MRMCH '>'
+#define MLMCH '<'
+#define ELMCH '^'
+#define DOTCH '+'
+#define VCSRCH 0255   /* cursor pointer, vertical margins */
+#define HCSRCH 0374   /* cursor pointer, horizontal margins */
+
+/* fsd - file segment descriptor.  describes 1 to 127 contiguous lines
+	on a file.  this is the atomic workspace component. */
+
+#define SFSD 10 /* size in bytes of fsd exclusive of fsdbytes*/
+#define FSDMAXL 127	/* max nr lines in an fsd */
+
+struct fsd
+	{
+	struct fsd *backptr;	/* previous fsd in chain */
+	struct fsd *fwdptr;	/* next fsd in chain */
+	char fsdnlines;	/* number of lines in this fsd.
+			0 if this is the last fsd in chain. */
+	char fsdfile;	/* channel number of file containing lines.
+			   0 if this is the last fsd in chain. */
+	int seekhigh;	/* record number of first char */
+	int seeklow;	/* character number of first char */
+	char fsdbytes;	/* a variable number of bytes - as many as
+			are needed to describe fsdnlines-1 more lines.
+			byte values are interpreted as follows:
+			1-127	next line starts this many characters
+				after the start of last line.
+			0	sneak in a blank line here.
+			-n	next line starts n*128+next byte chars
+				after the start of last line.
+			there are at least fsdnlines-1 bytes but may
+			be more if lines are 128 or more characters
+			long.  note that lines in the file need not be
+			contiguous to be describable in the same
+			fsd but the output routine demands it. */
+	};
+
+#define MAXFILES 14
+
+struct fsd *openfsds[MAXFILES];
+char *openfnames[MAXFILES],
+     openwrite[MAXFILES];	/* 1 if corresp. file is writable */
+int  nlines[MAXFILES];		/* line number of last non-blank line */
+
+/* workspace - structure that describes a file */
+
+#define SWKSP 16		/* size in bytes of workspace */
+
+struct workspace
+	{
+	struct fsd *curfsd;	/* ptr to current line's fsd */
+	int ulhclno;		/* line no of ulhc of screen */
+	int ulhccno;		/* col no of column 0 of screen */
+	int curlno;		/* current line no. */
+	int curflno;		/* line no of 1st line in curfsd */
+	char flags;		/* not now used 	  */
+	char wfile;		/* channel number of file - 0 if none */
+	int ccol;		/* curorcol when inactive */
+	int crow;		/* cursorline when inactive */
+	};
+
+struct workspace *curwksp, *pickwksp;
+int curfile;
+
+
+/* viewport - describes a viewing window with file
+   all marg values, and ltext and ttext, are limits relative
+	to (0,0) = ulhc of screen.  the other six limits are
+	relative to ltext and ttext. */
+
+#define SVIEWPORT 38	/* size in bytes of viewport */
+
+struct viewport
+	{
+	struct workspace *wksp;	/* workspace window is showing */
+	struct workspace *altwksp;	/* alternate workspace */
+	int prevport;		/* number of the ancester port	 */
+	int ltext;		/* boundaries of text (rel. 0,0) */
+	int rtext;
+	int ttext;
+	int btext;
+	int lmarg;		/* margins - same as or one outside */
+	int rmarg;		/*  text limits */
+	int tmarg;
+	int bmarg;
+	int ledit;		/* edit window limits on screen */
+	int redit;
+	int tedit;
+	int bedit;
+	char *firstcol; 	/* first col containing nonblank */
+	char *lastcol;		/* last col containing nonblank  */
+	char *lmchars;		/* left margin characters	 */
+	char *rmchars;		/* right margin characters	 */
+	};
+
+#define MAXPORTLIST 10
+struct viewport *portlist[MAXPORTLIST],
+		*curport,	/* current editing port */
+		wholescreen,	/* whole screen */
+		paramport;	/* port for param input, etc. */
+int nportlist;
+
+
+
+
+/*      savebuf - structure that describes a pick or delete buffer */
+
+#define SSAVEBUF 6
+
+struct  savebuf
+	{
+	int linenum;    /* the first line number in pickfile */
+	int nrows;
+	int ncolumns;
+	};
+struct savebuf *pickbuf, *deletebuf;
+
+/*
+control character assignments */
+
+#define CCENTER 	   000	   /* enter parameter	   <BREAK > */
+#define CCLPORT 	   001	   /* port left 	   <cntr A> */
+#define CCSETFILE          013     /* set file             <cntr K> */
+#define CCCHPORT	   003	   /* change port	   <cntr C> */
+#define CCOPEN		   004	   /* insert		   <cntr D> */
+#define CCMISRCH	   005	   /* minus search	   <cntr E> */
+#define CCCLOSE 	   006	   /* delete		   <cntr F> */
+#define CCPUT		   007	   /* put		   <cntr G> */
+#define CCMOVELEFT	   010	   /* backspace 	   <cntr H> */
+#define CCTAB		   011	   /* tab		   <cntr I> */
+#define CCMOVEDOWN	   015	   /* move down 1 line	   <cntr J> */
+#define CCHOME             002     /* home cursor          <cntr B> */
+#define CCPICK		   014	   /* pick		   <cntr L> */
+#define CCRETURN	   012	   /* return		   <cntr M> */
+#define CCMOVEUP           032     /* move up 1 lin        <cntr N> */
+#define CCINSMODE          020     /* insert mode          <cntr O> */
+#define CCGOTO             017     /* goto linenumber      <cntr P> */
+#define CCMIPAGE	   021	   /* plus a page	   <cntr Q> */
+#define CCPLSRCH	   022	   /* plus search	   <cntr R> */
+#define CCRPORT 	   023	   /* port right	   <cntr S> */
+#define CCPLLINE	   024	   /* minus a line	   <cntr T> */
+#define CCDELCH 	   025	   /* character delete	   <cntr U> */
+#define CCSAVEFILE	   026	   /* make new file	   <cntr V> */
+#define CCMILINE	   027	   /* plus a line	   <cntr W> */
+#define CCDOCMD            030     /* execute a filter     <cntr X> */
+#define CCPLPAGE	   031	   /* minus a page	   <cntr Y> */
+#define CCMAKEPORT         016     /* make a viewport      <cntr Z> */
+#define CCTABS             033     /* set tabs             <cntr [> */
+#define CCCTRLQUOTE        037     /* knockdown next char  <cntr \> */
+#define CCBACKTAB	   035	   /* tab left		   <cntr ]> */
+#define CCBACKSPACE	   036	   /* backspace and erase  <cntr ^> */
+#define CCMOVERIGHT        034     /* forward move         <cntr _> */
+#define CCQUIT		  0177	   /* terminate editor run <DEL   > */
+
+/*
+*/
+
+int cursorline; 	/* physical screen position of */
+int cursorcol;		/*  cursor from (0,0)=ulhc of text in port */
+
+
+extern char  cntlmotions[];
+
+
+
+extern int tabstops[];
+char blanks[LINEL];
+
+extern char lread1;		/* last char read from tty 0r -1 when used */
+
+/* default parameters */
+extern int defplline,defplpage,defmiline,defmipage,deflport,defrport,
+	definsert, defdelete, defpick;
+extern char deffile[];
+
+int errsw;    /* is 1 if error occurred; initialize to clear paramport */
+int gosw;     /* is 1 if compil should be called */
+int slowsw;   /* is 1 if slow speed terminal (no bullets) */
+
+int paraml;		/** globals for param read routine */
+char *paramv, paramtype, paramc0, paramr0, paramc1, paramr1;
+
+/* array to hold current line being edited */
+/* tabs are expanded on input. */
+
+char *cline;		/* array */
+int lcline;		/* length of cline */
+int ncline;		/* number of chars in current line */
+int icline;		/* increment for next expansion */
+char fcline;		/* flag - has line been changed ? */
+int clineno;		/* line number in workspace of cline */
+
+int tempfile;		/* channel number of temporary file */
+int tempfh;		/* positioning of end of temp file */
+int tempfl;
+int ttyfile;		/* channel number of tty backup file */
+int inputfile;		/* channel number of command input file */
+
+extern char *searchkey;
+
+char userid,groupid;
+extern char pwbuf[];    /* holds user's line of passwd file */
+
+char *tmpname;         /* name of file, for do command */

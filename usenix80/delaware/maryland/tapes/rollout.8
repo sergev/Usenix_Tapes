@@ -1,0 +1,127 @@
+.th ROLLOUT VIII 26-October-79
+.sh NAME
+rollout \*- roll out rk disks to magtape in ROLLIN format
+.sh SYNOPSIS
+.bd /etc/rollout
+[ - ] special_file ...
+.sh DESCRIPTION
+.it Rollout
+creates magtape files on /dev/nrw_rmt0 in the format
+which can be read by DEC's stand-alone program ROLLIN.
+The files contain unformatted copies of entire rk disk platters
+suitable for restoring garbled disks.
+The tape must be positioned before writing the data.
+.s3
+ROLLIN format for the first file on tape consists of:
+.s3
+.ft I
+.lp +13 13
+record	length (subparts)
+.ft R
+.lp +13 13
+tape_label	14 bytes: name.ext (3 words),
+UIC [1,1] (1 word),
+protection code 0233 (1 word),
+Julian_date from 1970 (2 words)
+.lp +13 13
+bootstrap	512 bytes
+.lp +13 13
+ROLLIN_image	10240 bytes
+.lp +13 13
+reel_label	512 bytes: 1 (1 word), 0 (255 words)
+.lp +13 13
+data	8192 bytes for 304 records
+.lp +13 13
+data	4096 bytes for one last record
+.lp +13 13
+file_mark	one per file; 3 after last file.
+.i0
+.s3
+.fi
+If the first file to be written is not the first file on the tape,
+use the option \*- to suppress writing the ROLLIN boot records.
+Subsequent files on the tape omit the bootstrap and image
+of the ROLLIN program.
+After the last file is written,
+.it rollout
+positions the tape just beyond the first file mark.
+Thus the tape need not be repositioned to write additional files.
+.s1
+The file label name in the label record is encoded in three
+.it radix-50
+words.
+Two words consist of UNX suffixed with the last
+three characters of the special file name.
+The third word is the extension .ROL
+but is not used in specifying file names to ROLLIN.
+For example,
+when the file /dev/rrk0 is written,
+UNXRK0.ROL is used as the file name and extension in the tape label.
+.s1
+The modified version of
+.it dd
+that supports the
+.it seek
+option can reread files written by
+.it rollout.
+For example,
+the command
+.s3
+.ti +8
+dd if=/dev/nrw_rmt0 of=/dev/rrk1 bs=8192 seek=4
+.s3
+restores the contents of /dev/rrk1 from the first file on tape unit 0.
+After the tape has been positioned at some non-initial file,
+.it dd
+uses the
+.it seek=2
+option.
+.sh FILES
+.lp +20 20
+/usr/mdec/rollboot	bootstrap and ROLLIN image
+.br
+.lp +20 20
+/dev/nrw_rmt0	Non-rewinding Harvard Magtape unit 0
+.br
+.lp +20 20
+/dev/rrk?	Raw disk special files
+.i0
+.fi
+.sh "SEE ALSO"
+DEC DOS/BATCH-11 Programmer's Handbook
+.br
+dd(I), tm(IV), ldostape(VI)
+.sh DIAGNOSTICS
+Physical I/O errors produce a message and stop the transfer.
+The bootstrap and ROLLIN image file must be present.
+.sh AUTHOR
+Robert L. Kirby
+.br
+University of Maryland
+.br
+College Park, Maryland 20742
+.sh BUGS
+A tape handler that supports a non-rewinding close must be
+added to the operating system before using
+.it rollout.
+.s3
+Only two file marks are written after the last file
+by the Harvard tape handler.
+ROLLIN expects three file marks,
+so the file must be re-opened for writing to place
+a third file mark on tape, e.g.
+.s3
+.ti +8
+cat /dev/null > /dev/nrw_rmt0 .
+.s3
+Non-rewinding magtape unit 0 is the only output device.
+.s3
+Files in the ROLLIN format can only be reread without
+console error messages, if
+.it dd
+has been modified to allow seeking
+.it (seek=)
+over the 4 (or 2) initial records instead of having to try
+to read them with the
+.it skip=
+command.

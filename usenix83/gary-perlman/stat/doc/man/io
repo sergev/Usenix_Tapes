@@ -1,0 +1,168 @@
+.TH IO 1STAT "May 5, 1982"
+.SH NAME
+io \- control and monitor input/output (io) flow intelligently
+.SH SYNOPSIS
+.B io -mf [file ...]
+.SH DESCRIPTION
+.I Io
+is a program that initiates, continues, and terminates input and output.
+It makes intelligent decisions about what it should do based on
+where it is called in a pipeline (beginning, middle, or end),
+whether it is given file arguments,
+and whether flow monitoring is requested.
+The following flag argument options must be preceded by a dash
+and can be combined in any order to control how \fIio\fR works.
+.TP
+.B m
+request monitoring of flow
+.TP
+.B f
+force overwrites of files without user interaction
+(useful in shell scripts)
+.TP
+.B a
+appends text the named file rather than overwriting it
+(only useful when output is being directed to a file)
+.PP
+\fIIo\fR can replace shell file redirection used in shells (with <, > and >>),
+the simplest uses of \fIcat\fR, the pipefitting program \fItee\fR,
+all with the ability to monitor the
+progress of the processes in a pipeline.
+Some uses of
+.I io
+are best shown by example:
+
+The following form simply prints the named files to the standard output:
+.ce
+io file1 file2 file3 ...
+
+The following form redirects the output from the pipe to the named file.
+.ce
+program1 | program2 | io file
+If the output file from \fIio\fR exists,
+\fIio\fR makes a temporary file before changing it to avoid
+the possibility of persons over-writing their input files.
+Thus, it is possible to sort a file onto itself with \fIio\fR:
+.ce
+sort foo | io foo
+is both legal and safe.
+\fIIo\fR will ask you if you want to safely overwrite any
+files that already exist,
+for which you should respond with a 'y' or a 'n'.
+To avoid having to interact with \fIio\fR,
+see the \fB-f\fR flag which forces the safe overwrite.
+
+The following form simply continues the flow from standard input
+to standard output:
+.ce
+program1 | io | program2
+When \fIio\fR is used in the middle of a pipeline,
+it automatically monitors the flow of characters through it
+by printing a character about every 1000 bytes.
+This character changes from instance to instance of \fIio\fR
+so that several flow meters can supply discriminable information.
+The character selection is by process identification number,
+so that successive programs would have different flow characters.
+For example, the following shell command would set up three meters
+each with different flow characters:
+.ce
+io foo | io | io | io -m bar
+
+The automatic monitoring of flow is not used if \fIio\fR
+is used in the middle of a pipeline and is called with an argument file name.
+For example:
+.ce
+program | io fubar | program
+In this case, the input to \fIio\fR is copied into the file fubar,
+and another copy is continued along the pipeline.
+This is similar to the standard UNIX \fItee\fR program.
+The monitoring could be turned on if the \fB-m\fR flag were used:
+.ce
+program | io -m fubar | program
+
+\fIIo\fR can replace the redirection symbols '<'
+(used to redirect the standard input),
+and '>' (used to redirect the standard output),
+used in the standard UNIX command shells, \fIsh\fR and \fIcsh\fR.
+.ce
+io file | program
+has the same effect as:
+.ce
+program < file
+but is a bit slower.
+And,
+.ce
+program | io file
+is the same as
+.ce
+program > file
+except that it is safer.
+\fIIo\fR can be used to append text to a file
+(emulating the shell >> redirection) by using the \fB-a\fR flag:
+.ce
+program | io -a file
+is the exact same as
+.ce
+program >> file
+
+If \fIio\fR is called with the \fB-m\fR option,
+it will monitor the flow of bytes through it.
+For example, the following command sets up a bunch of flow meters.
+.ce
+io -m file | io | io -m file
+When the flow meter is at the beginning of a pipeline,
+its meter prints the percent of its input so far read.
+Its speed depends on how fast programs down the pipeline
+are reading the output from whatever version of \fIio\fR is used.
+Note that the \fB-m\fR flag is not needed in the middle of the
+pipeline as its only use in that context could be as a flow meter.
+.SH RATIONALE
+The conceptual model of UNIX for piping programs implies that we move data from
+some file, through several programs, and into another file, which --
+conceptually at least, may be the same file as the data have come from.  Thus,
+conceptually, the flow through a pipe should look like this:
+.ce
+file => program1 ==> program2 ==> ... ==> programN  ==> file
+Within the existing UNIX shells, this pipe must be specified as
+.ce 2
+program1 < file | program2 | ... | programN > temp
+mv temp file
+This specification of the pipe presents a system image of UNIX that conflicts
+with the underlying mental model of most users.  First, the specification of
+"file" and "program1" are out of order; second, one must distinguish
+among "<" ">" and "|".  The program \fIio\fR is designed to
+allow a format more consistent with the underlying conceptualization.  Along
+the way, it eliminates the need for distinguishing between <, >, and |
+and offers some new properties.   Using \fIio\fR,
+the example pipe can be written
+.ce
+io file | program1 | program2 | ... | programN | io file
+.SH DIAGNOSTICS
+The program has a lot of knowledge about how it is being used.
+It knows whether it is reading from piped input or from the terminal
+keyboard (tty).
+It also knows whether it is writing to a pipe or to the tty.
+It knows to check argument files to see if ones to be read
+can be read, and if a file to be written exists, and if so,
+to make a temporary version of it before over-writing it.
+It also knows that depending on the combination of its information,
+that some combinations are not meaningful, and even dangerous.
+It will complain about all of these,
+and in most cases, break the pipeline it is in to the best of its ability.
+.SH SEE\ ALSO
+sh(1), csh(1), cat(1), tee(1)
+.SH AUTHOR
+Gary Perlman and Don Norman
+.SH BUGS
+Hitting the BREAK or DEL keys while \fIio\fR is overwriting
+a file can have bad effects.
+
+If you have several diversions to existing save files as in:
+.ce
+pgm | io save.1 | pgm2 | io save.2 | pgm3 | io save.3
+It will be confusing as all the different instances of
+\fIio\fR ask you if you want to overwrite each.
+
+With several flow meters going at the same time,
+it is difficult to figure what is going on.
+\fIIo\fR is better suited to a system with better screen management.

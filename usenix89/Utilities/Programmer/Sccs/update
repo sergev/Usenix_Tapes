@@ -1,0 +1,72 @@
+#!/bin/csh -f
+# Shell script to put back checked out SCCS files and get them again for 
+# release.
+#
+set edit rev 
+while ( $#argv )
+    switch ( $argv[1] )
+        case "-check":
+            set checkonly
+            breaksw
+        case "-askeach":
+            set askeach
+            breaksw
+        case "-clean":
+            set clean
+            breaksw
+        case "-comments":
+            set comments        # so it won't bark below
+            breaksw
+        case "-*"
+            echo Unkown option \"$argv[1]\" ignored.
+            breaksw
+        default:
+            if ( ! $?args ) set args
+            set args = ( $args $argv[1] )
+            breaksw
+    endsw
+    shift
+end
+if ( ! -e S ) then
+    echo -n "No S directory, make it? "
+    set ans = $<
+    if ( $ans == "y" ) then
+        mkdir S
+    else if ( ! $?checkonly ) then
+        echo Quit.
+        exit
+    endif
+endif
+if ( ! $?args ) set args = ( *.[che] )
+foreach i ( $args )
+    if ( ! -w $i ) then
+        if ( $?clean ) then
+            /bin/rm -f $i
+        endif
+    else
+        if ( $?checkonly ) then
+            echo "$i"
+        else
+            echo -n "$i? "
+            set ans = $<
+            if ( $ans == "y" ) then
+                if ( ! ( -e S/s.$i ) ) then
+                    echo -n "$i is not SCCSed.  SCCS it (y/n)? "
+                    set ans = $<
+                    if ( $ans == "y" ) then
+                        admin -i$i S/s.$i
+                        /bin/rm $i
+                        if ( ! $?clean ) /usr/bin/get -s S/s.$i
+                    endif
+                    continue
+                endif
+                if ( $?askeach  ||  !( $?comments ) ) then
+                    echo -n "Comments for sccs? "
+                    set comments = $<
+                endif
+                delta -s -y"$comments" S/s.$i
+                if ( ! $?clean ) /usr/bin/get -s S/s.$i
+            endif
+        endif
+    endif
+end

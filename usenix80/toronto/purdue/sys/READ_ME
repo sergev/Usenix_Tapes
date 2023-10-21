@@ -1,0 +1,139 @@
+This is a summary of differences between Bell V6 and Purdue UNIX
+Some thing were probably left out, but this will have to do.
+Much more detailed info exists in file "syslog".
+
+
+1) We run 5 DH-11's on 11/70. (80 tty's) + console.  Also have about
+   16 pty's (pseudo ttys for the network). Have run out of names to
+   call the /dev/tty? files - haven't decided what to do about it yet.
+   DH-11 have been modified (Purdue does own maint) to run 19,200 baud
+   on 50 baud speed and 38,400 baud on EXTA.
+   Tty driver uses disk buffers for DMA output at 9600 baud on up
+   if there are no delays, etc.  Can page thru files at 38.4 KB
+   with almost no system impact (Rand editor very nice at 38.4 KB!)
+   ESC key stops (suspends) tty output in cooked mode, another
+   ESC or any character restarts it again.
+
+2) Several cross assemblers written for 6800's, 8080's, etc.
+
+3) /etc/passwd has no passwords in it. "real" password file is
+   /etc/6passwd, which login, su, passwd,  use.
+
+4) Shell and editor (ed and xed) have had much work done to them
+   by Craig Strickland (TGI). ed has line numbers and error mesgs.
+
+5) RP04 driver sorts request's by cyl unless proc has a nice --5 or better
+   which causes its request to get linked to head of buffer I/O queue.
+
+6) "nicer" sys call, does a nice an another running proc.
+
+7) Scheduler changed to run a proc in background (LSCHD) after it
+   has consummed a certain amount of CPU time.  Only runs these proc's
+   when there is nothing else to do, they don't fight for interactive
+   use.  sched() also swaps to 2 swap devices, one "fast" primary device
+   and 1 secondary (slow and large dev). We have 500 blocks on primary
+   (RS04) and 10000 on secondary (RP04) swap.  Initial swaps are done
+   to primary dev if there is space, overflowing to secondary.  After
+   30 seconds of doing nothing (like a login:), it gets moved to sec
+   swap.  About 90-95% of our swaps go to primary dev.  The other 1500
+   blocks on RS04 are used for /tmp.  Text always goes to sec dev.
+   This is implemanted as a fake device "/dev/swap" (dev/swap.c, note
+   "dmr" is "dev" in our system.) malloc.c has change to allocate "last
+   fit" also change in main() to allocate the "crack" between devices.
+   #define XSWAP in param.h to enable dual swap dev stuff.
+
+8) Boot up procedure more automated, have "default" boot file name
+   stored in last 14 bytes of boot block. If swr == 0, sys comes up
+   running by itself.  Usefull for booting up over network, etc, after
+   install of new kernel.
+
+9) tty driver rewritten.  Allows high speed 8bit input (upto 19.2 kb)
+   with no handshaking under full load. Used fake device "xx" for
+   interlock, dhrint() switches out to "sufet()" in mch.s which
+   stuff character into circular buffer (4 KW max) in user proc.
+   User proc ("upload") must be su and copies data to std out.
+   Must be suid root, cause he can clobber circ buffer pointers.
+   Tried this once at 38.4 KB, but it slowed things down a little.
+   DH-11 silos interrupt at 16 chars (was 32) or timeout every 67
+   millisec for KB input if not 16 chars in silo.
+
+10) Format of STTY/GTTY call changed. The "speeds" word uses right
+    hand 4 bits for speed (ispeed=ospeed), and extra flags into
+    left hand 12 bits (see tty.h)  #define XSTTY to do this in param.h
+
+11) Running out of files, inodes, disk space, puts proc to sleep
+    at pri = -3; returns error if SIGKIL is sent to it.  Also max
+    limit on proc's a non su can create, and limit on max block's
+    in a single file (650) for non su.  uid's < 10 get higher limit
+    (special projects).  Stops runaway programs generating disk files
+    returns EF2BIG error.
+
+12) When user logs off with processes &'d off, init "blitzes" tty when
+    he opens it again.  This calls tty.c/nultty() which tracks down all
+    file descriptors pointing to inode for this tty and points them to
+    an inode for "/dev/null", and current tty inode is closed.  This
+    allows background proc's to keep running, but dumps output to /dev/null
+    instead of next guy's terminal session.
+
+13) Mail is SUID root, has had MANY other checks put in, so very hard
+    to abuse.
+
+14) ken/clock.c maintains several counters for system performance, etc.
+
+15) free block/inode counts kept in superblock - df runs much faster
+
+16) Several changes to iget/iput/update/itrunc to speed up sync's
+    and leave the disk in better shape in case of crash, should only
+    leave "missing", "dups in free" and dangling directory entries
+    which can be fixed by an "automatic" filesystem recovery program
+    (which hasn't been written yet).  No more zillions of "bad" blocks
+    and multiple allocated blocks which used to show up on a sudden
+    stop (which need "human magic" to fix).
+
+17) Most of kernel buffer pool (except super-blocks and NODEV blocks)
+    is now outside kernel D space. ka5 is pointed around to do this.
+    clists, proc table, and network buffers are also out there. this
+    extended area must lie in first 64KW because of Unibus mapping
+    algorithm used, still room for about 140 I/O buffers.
+    #define XBUF in param.h to use extended buffer pool
+
+18) If a proc is nicer'd to +127, he won't run or swap in.
+
+19) dump/restor use large tape buffers (25 or 50 blocks). Can fit
+    whole 65535 block filesystem on 1 tape at 1600 bpi.
+
+20) init, getty changed to allow a tty to be off, on (login) or
+    allow to to come in a number of predefined programs. Su only program
+    "on" and "off" edit /etc/ttys file and send hangup to init.
+
+21) 20 blocks' of args allowed on exec() sys call
+
+22) System lives through power failures.  Registers saved on powerdown
+    and restored on power up.  All dev handlers have open() routine
+    called with NODEV (-1) as an argument, individual handlers are
+    responsible for waiting (hard wait loops) for their respective devices
+    to come ready or aborting the requests (tape lose vaccuum).
+    #ifdef POWERFAIL in param.h controls the inclusion of powerfail code.
+
+23) Zillions of small mods to just about everything, to speed up
+    fix bugs, etc.
+
+24) The network. Bill Croft's network (#ifdef MX in param.h) is
+    described in a separate document.  It needs XBUF and XSTTY
+    defined in param.h
+    See also files in "src/mx/*".
+
+25) exec sys call (see estabur()/main.c) fixed not to crash system on large text
+     and new routine in bio.c "bclose()" to flush/disassociate
+    buffers on block dev close.
+
+
+Note: We use 16 bit user id's here (1200 login accounts) and have dropped
+GID's.  Most files just have the GID bits cleared out, however various
+little misc things are done if they are on (like audit trail on a file
+or a dir, etc.)  Everything here compiles (in sys) with the photo-7
+version of C. A few things in src/s? still need v6 compiler.  Also watch
+out as some of the initial #defines in param.h also have to be entered
+in low.s and m45.s since as cannot #include a C file.
+Good luck.
+--ghg

@@ -1,0 +1,235 @@
+#!/bin/sh
+# yacpps: yet another C pre-processor simulator
+#
+#	Usage: yacpps [-i] [-D label] ... [-U label] ... [source]
+#
+#	where options are:
+#		-i:	Implicit #define's.
+#			  1. If a #define of an unknown label occurs in
+#			     a comment, then it is set as being undefined.
+#			  2. If a #define of an unknown label occurs in
+#			     the scope of an undefined #ifdef, then it is
+#			     set as being undefined.
+#		-D label: Defines the label.
+#		-U label: Undefines the label.
+#
+#	All labels which are not Defined or Undefined are treated as
+#	unknown, and may appear under #ifdef and #unifdef scopes in the
+#	output.
+#
+#	The labels "pdp11" and "vax" are treated specially, in that
+#	their definition-states are computed automatically.
+#
+#	When removing #ifdefs from code which was written for many
+#	different systems, it is necessary to explicitly Define the
+#	system you are using and to Undefine all other possibilities.
+#	For example,
+#	    yacpps -D sysV -U BSD -U V7 -U sysIII -U ultrix -U eunice
+#	Failure to do it like this will cause lots of dependant code
+#	to be left in, which should have been removed.
+#
+#
+# -----------------------------------------------------------------------
+#
+#		Author: Simon Brown
+#			Department of Computer Science,
+#			University of Edinburgh. 
+#		Date:	Monday October 6th, 1986
+#		
+#	Written on the ERCC/ITS GEC-63/40 "its63b" for the SysV shell.
+#	Not guarenteed to work under BSD (but it probably will).
+#
+#	THIS SOFTWARE MAY BE DISTRIBUTED TO ANYONE SO LONG AS THESE
+#	LINES REMAIN UNDISTURBED.
+#
+#	Please mail any bugs to simon@its63b.ed.ac.uk
+#
+#		
+# -----------------------------------------------------------------------
+#
+# KNOWN BUGS: 1. It doesn't understand comments properly.
+#	      2. Any Control-G's in the input are converted into
+#		 newlines.
+#	      3. Sometimes it leaves pairs of #ifdef/#endif lines
+#		 with no dependant lines between - it would be tidier
+#		 if it just deleted the whole lot.
+#			
+# -----------------------------------------------------------------------
+#
+
+machines="pdp11 vax"	# add whatever you are using, too
+implicit=false
+
+set -- `getopt D:U:i $*`
+if [ $? != 0 ]
+then	echo "Usage: $0 [-i] [-Dlabel] ... [-Ulabel] ... [source]" 1>&2
+	exit 1
+fi
+while [ $# -ge 1 ]
+do
+	case $1 in
+	    -i)	implicit=true
+		shift ;;
+	    -D) eval _$2=true
+		shift; shift ;;
+	    -U) eval _$2=false
+		shift; shift ;;
+	    --) shift; break ;;
+	     *) echo "wow.... a getopt error! ($1)" 1>&2;
+		exit 1
+	esac
+done
+if [ $# -ge 1 ]
+then exec < $1
+fi
+
+#fast shell functions... (delete these if you don't have the System-V shell)
+true(){ return 0; }
+false(){ return 1; } 
+
+def=true
+state=true
+for engine in $machines
+do
+	if $engine > /dev/null 2>&1
+	then eval _$engine=true
+	else eval _$engine=false
+	fi
+done
+
+tr '\\' '\007'  |  while IFS= read line 
+do
+	IFS=" 	"
+	case $line in
+	    \#define*)
+			set $line
+			var=$2
+			case $var in
+			    *\(* ) normal=false ;;
+			    *    ) normal=true
+			esac
+			case $state in
+			    true) 
+				  if $normal
+				  then eval _$var=true
+				  fi
+				  echo "$line" ;;
+			    neither)
+				  if $normal
+				  then eval : \${_$var:=neither};
+				  fi
+				  echo "$line" ;;
+			    false)
+				  if $implicit && $normal
+				  then eval _$var=false
+				  fi 
+			esac
+			;;
+	    \#undef*)
+			set $line
+			var=$2
+			case $state in
+			    true) 
+				  eval _$var=false
+				  echo "$line" ;;
+			    neither)
+				  eval : \${_$var:=neither}
+				  echo "$line" ;;
+			esac 
+			;;
+	    /\*#define*)
+			if $implicit
+			then
+				IFS=" 	/*"
+				set $line
+				var=$2
+				case $state in
+				    true)
+					  eval _$var=false
+					  echo "$line" ;;
+				    neither)
+					  eval : \${_$var:=neither}
+					  echo "$line"
+				esac 
+				IFS=" 	"
+			else	case $state in
+			   	    true|neither)
+					  echo "$line"
+			     	esac
+			fi
+			;;
+	    \#ifdef*)
+			set $line
+			var=$2
+			case $state in
+			    false) : ;;
+			    neither) eval state=\${_$var:-neither}
+				     case $state in
+					true) state=neither 
+				     esac ;;
+			     * )     eval state=\${_$var:-neither}
+			esac
+			case $state in
+			    true) def="true $def" ;;
+			    false)def="false $def" ;;
+			     *)   def="neither $def"
+				  echo "$line"
+			esac
+			;;
+	    \#ifndef*)
+			set $line
+			var=$2
+			case $state in
+			    false)   state=true ;;
+			    neither) eval state=\${_$var:-neither}
+				     case $state in
+					true) state=neither ;;
+					false) state=true
+				     esac ;;
+			      * )    eval state=\${_$var:-neither}
+			esac
+			case $state in
+			    true) def="false $def"
+				  state=false ;;
+			    false)def="true $def"
+				  state=true ;;
+			     * )  def="neither $def"
+				  echo "$line" 
+			esac
+			;;
+	    \#else*)
+			set $def
+			state=$1
+			shift
+			case $state in
+			    true) def="false $*"
+				  state=false ;;
+			    false)def="true $*" 
+				  state=true ;;
+			      *)  def="neither $*"
+				  echo "$line"
+			esac
+			;;
+	    \#endif*)
+			case $state in
+			    neither) echo "$line"
+			esac
+			set $def
+			shift
+			state=$1
+			def=$*
+			;;
+	    \#if*)
+			def="neither $def"
+			state=neither
+			echo "$line"
+			;;
+	        *)
+			case $state in
+			    true|neither)
+					echo "$line"
+			esac
+	esac
+done  | tr '\007' '\\'
+				  
+

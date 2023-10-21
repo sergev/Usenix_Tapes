@@ -1,0 +1,67 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: SV,v 1.6 86/06/22 18:14:30 dick Exp $
+
+#
+#		S a v e   V e r s i o n
+#	SV writes a record about the present version (i.e. collection of
+#	revisions) to standard output. This record can, at a later date, be
+#	fed to RV, which will then restore the present version; this process
+#	requires the repository again (or still) to be present, though not
+#	necessarily with the same path name.
+#
+#	SV requires the directory to be quiescent.
+#
+Name=SV; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+# determine the way we are called
+case $# in
+0)
+	# treat all pertinent files
+	set "`$CVSLIB/FN.aux $Repository`"
+	;;
+*)
+	echo $Name: call is $Name \>save.record >&2
+	exit 1
+	;;
+esac
+
+# collect the sets of affected files
+
+OK=yes
+. $CVSLIB/CS.aux	# sets CLIST, GLIST, MLIST, OLIST, ALIST, RLIST, WLIST
+
+case $OK in
+no)
+	echo $Name failed\; correct above errors first >&2
+	exit 1
+esac
+
+# is the directory quiescent?
+case "$CLIST$GLIST$MLIST$OLIST$ALIST$RLIST$WLIST" in
+"")
+	;;
+*)
+	echo $Name: the following files are not up to date: >&2
+	echo "$CLIST$GLIST$MLIST$OLIST$ALIST$RLIST$WLIST" >&2
+	exit 1
+	;;
+esac
+
+# now it is easy:
+cat CVS.adm/Entries
+
+exit 0

@@ -1,0 +1,138 @@
+;  
+;   MPW Asm Mandelbrot function using 68881 processor
+;               by S. Gillespie @ Reed College
+;
+    MC68881
+
+MandelBrot  Proc Export
+;
+;
+;
+;   Function MandelBrot(LoopMax: Integer; c: Float[2]): Integer;
+;
+;       Note: Float = Byte[12] -- a 96-bit Extended 68881 float.
+;           All float operations assume Extended floating point
+;           variables.
+;
+;   This function does the necessary calculation to determine
+;   if a given complex number (x + iy) is in the Mandelbrot set,
+;   depending on the number of iterations requested.
+;
+;   Returns 0 if complex number c is IN the set at iteration
+;       LoopMax.  Otherwise, returns the number of the iteration
+;       at which the point blows up.
+;
+;   Given:
+;       LoopMax: Maximum number of iterations to perform
+;       c: The complex number (c[0] + i*c[1]) to be tested
+;       x: Temporary complex number (a,i*b)
+;       Modsquare(x) = a^2 + b^2
+;       j: Loop variable
+;       
+;   Here is a pseudo-Pascal translation of the routine (note,
+;     however, that the asm routine handles the loop counter
+;     a little differently):
+;   
+; Begin
+;   x := c;
+;   j := 0;
+;
+;   Repeat
+;       x := x^2 + c;
+;       j := j+1;
+;   Until (j=LoopMax) or (Modsqare(x)>4);
+;
+;   If Modsquare(x)>4 Then
+;     Mandelbrot := j
+;   Else
+;     Mandelbrot := 0;
+; End;
+;
+; --------------------------------------------
+;
+
+imoff   equ 12      ; Offset to imaginary part of the number
+Creal   equ fp0     ; This reg holds the real part of c
+Cimag   equ fp1     ;   "   "     "   "  imaginary part of c
+Xreal   equ fp2     ; Real part of x
+Ximag   equ fp3     ; Imaginary part of x
+
+    Move.l  (sp)+,a1        ; Return address
+    Move.l  (sp)+,a0        ; Pointer to c
+    Clr.l   d0
+    Move.w  (sp)+,d0        ; LoopMax
+    Subq.w  #1,d0           ; LoopCounter in d0
+    
+    Clr.w   (sp)            ; Clear function result location
+    
+    Suba.w  #12,sp          ; Allocate space for temporary
+                            ; float on the stack.  This float
+                            ; will be used in the Modsquare test,
+                            ; so it is set equal to 4 in the next two
+                            ; lines.
+    FMove.w #4,fp0
+    FMove.x fp0,(sp)
+    
+    FMove.x (a0),Creal      ; Load up the fp registers with c
+    FMove.x imoff(a0),Cimag
+    
+    FMove.x Creal,Xreal     ; x := c
+    FMove.x Cimag,Ximag
+
+    Clr.l   d1              ; keeps track of no. of iterations
+    
+Loop
+    Addq.w  #1,d1           ; bump iteration count
+        
+        ; Now, must do the x := x^2 + c calculation,
+        ; so load up some temporary registers for the operations
+        
+    FMove.x Xreal,fp4       
+    FMove.x Ximag,fp5
+    
+    FMove.x Xreal,fp6
+    FMove.x Ximag,fp7
+    
+        ;  for complex number x = (a,i*b),   x^2 = (a^2-b^2,i*2ab)
+        
+    FMul.x  fp4,fp4     ;   a^2
+    FMul.x  fp5,fp5     ;   b^2
+    
+    FMove.x fp4,Xreal
+    FSub.x  fp5,Xreal   ; a^2-b^2
+    
+    FMul.x  fp6,fp7     ; a*b
+    FMul.w  #2,fp7      ; 2*ab
+    FMove.x fp7,Ximag
+    
+    FAdd.x  Creal,Xreal ;   Add c to x^2
+    FAdd.x  Cimag,Ximag
+    
+        ;   Now, do the Modsquare test...
+        
+    FMove.x Xreal,fp4
+    FMove.x Ximag,fp5
+    
+    FMul.x  fp4,fp4     ; a^2
+    FMul.x  fp5,fp5     ; b^2
+    Fadd.x  fp4,fp5     ; a^2 + b^2
+    
+        ;  The stack pointer points to temporary float which
+        ;       equals 4. 
+        
+    FCmp.x  (sp),fp5    
+    Fdbgt   d0,Loop     ; Break if loop counter goes negative
+                        ; or if modsquare(x)>4
+                        
+    Fbgt    NotInSet    ; If not > 4, return blowup value
+    
+    Adda.w  #12,sp
+    Bra.s   GetOut
+NotInSet
+    Adda.w  #12,sp
+    Move.w  d1,(sp)     ; Return value...
+GetOut
+    Jmp (a1)
+    
+    endp
+    End

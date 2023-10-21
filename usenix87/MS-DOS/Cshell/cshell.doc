@@ -1,0 +1,527 @@
+        shell.exe 
+
+        command processor for ms.dos 
+
+        This is  yet  another  command.com  replacement.    It implements
+        unix-like shell commands (ls, mv, fgrep, rm, chdir,  chmod)  etc.
+        Other features include: 
+
+        1. Command line expansion of ambiguous file names.  
+
+        Programs  invoked  from  shell   never see '*.*' as an argument -
+        they see  the  list  of  all  matching  files  in    the  current
+        directory.  
+
+        2. History substitution - ala C-shell.  
+
+        History substitution is a powerful means to save retyping of long 
+        command lines.It allows you to do things like re-execute the last 
+        command,  re-execute  the  last  command but redirect output to a
+        file, or execute a  new  command  with  arguments  from  previous
+        command  lines.    The  last  20  commands  are saved, and can be
+        reviewed by typing the 'history' command.  
+
+        Previous commands can be referred to by their number, or relative 
+        to the  current  command's  number.    Parameters  from  previous
+        commands can be seperated out and used individually.  
+
+        History  substitutions  specifications  come  in  two parts - the
+        command number  specifier and the argument  specifier,  seperated
+        by a  colon.    The  argument    specifier  is optional; if it is
+        omitted, the entire command line is specified.  
+
+            <command specifier> ::= !! | !n | !-n 
+            !!  = last command
+            !n  = nth command
+            !-n = command n commands before current command number
+
+            <argument specifier> ::= :[^$*] | :n | :n* | <empty>
+            n   = number of argument (0 being the command name)
+            ^   = first argument (i.e. argv[1])
+            $   = last argument
+            *   = ^-$, or nothing if only one word on command line
+            n*  = arguments n through $
+
+            <history subst specification> ::= <command specifier><argument specifier>
+
+        This is not as complicatated as  it  may  appear.    Here  is  an
+        example session.  
+
+            0% ls *.c
+            *.c
+            foo.c bar.c
+            1% more foo.c
+            /* edit the last argument of the last command */
+            2% edit !!:$			
+            /* go off and edit */
+            /* reference last argument of last command */
+            3% fgrep foo !!:$ bar.c 
+            FOO.C : foo
+            BAR.C : foo
+            /* edit the second thru the last args of command 3 */
+
+
+
+
+
+
+
+
+            4% edit !3:2*			
+            (go off and edit)
+            /* repeat last command */
+            %5 !!
+            (go off and edit)
+            /* remove the 1st argument of the command 2 before the current one */
+            %6 rm !-6:^
+
+        History  substitution here is a compatible subset of the C-shells
+        history substitution  facility.    Cshell  allows  even   weirder
+        combinations.  
+
+        3.  Multiple  commands  on  one  command line - Command lines are
+        split at  semicolons.  
+
+        example 
+
+            %0 ls -l *.c ; make shell.exe ; exit
+
+        4. Character escapes and argument quoting - i.e.  '\;' suppresses 
+        the command  parser  from  seeing  the  semicolon  as  a  command
+        seperator.  
+
+        Quotes are handles thusly: 
+
+            1.  String  surrounded  by  single quotes are stripped of the
+            single quotes, and passed without wild-card expansion to  the
+            invoked program.  
+
+            2.  Strings  surrounded  by double quotes are passed complete
+            with quotes to the calling program.   This  was  done  for  a
+            version  of grep that I have that accepts regular expressions
+            with embedded blanks within double quotes.  
+
+        5. Many builtin commands.  
+
+            Output of the 'commands' command
+
+            a:              b:              c:              cat             
+            cd              chdir           chmod           cls             
+            commands        copy            cp              copy            
+            d:              del             dir             dump            
+            e:              echo            era             erase           
+            error           exit            f:              fgrep           
+            g:              h:              hd              hist            
+            history         i:              j:              ls              
+            md              mkdir           more            mv              
+            no history      popd            pushd           pwd             
+            rd              rm              rmdir           set             
+            tee             touch           version         y               
+            
+
+        There are many that are simply aliases, e.g.    'copy'  and  'cp'
+        invoke the same program.  
+
+        6. commands description syntax 
+
+            terms used in syntax explanations :
+
+
+
+
+
+
+
+
+            
+            fname ::= PC-DOS ambiguous or unambiguous file or directory name.
+            
+            uname ::= unambiguous PC-DOS file or directory name
+            
+            string ::= any string of printable characters of arbitrary(<512) length.
+            
+            filelist ::= filename [filename .. filename]
+            
+            noargs ::= no arguments at all
+            
+            {arg} ::= term is optional
+            
+            envstring ::=	<string>=<string> 
+
+        7. command syntax 
+
+        drive
+            a: | b: | c: | d: | e: | f: | g: | h: | i: | j: <noargs> 
+
+            changes default  drive.    If  you  don't  have such a drive,
+            nothing happens.  
+
+        cat
+            cat {<filelist>} 
+
+            copies specified files to  standard  output.    If  none  are
+            given, copies standard input to standard output 
+
+        cp
+            cp | copy <filelist> <uname> 
+
+            copies specified  files  to  destination  file or device.  If
+            more than one file is in the file list,  <uname>  must  be  a
+            directory.  
+
+        cd
+            cd | chdir <dirname> 
+
+            makes <dirname> the current default directory.  
+
+        chmod
+            chmod {-|+[rwh]*} <filelist> 
+
+            change file permissions for specified files 
+
+            +r, -r turn on or off read permission - i.e. hide the file.
+            +w, -w turn on or off write permission.
+            +h, -h turn on or off hidden attribute - converse of r
+            +a, -a turn on or off archive attribute
+
+            Note  that '-r' or '+rwh' are both valid syntax for switches.
+            Also new permission switches  are  permissable  between  file
+            names  with  the  following  warning: I don't reset the masks
+            between file names - if you have a second batch of  attribute
+            changes on  the  command  line,  the  effect is additive.  If
+            you're not  careful,  you  could  make  a  mess  of  a  files
+            attributes.  
+
+
+
+
+
+
+
+
+            If  you don't specify any attribute switches, file attributes
+            will be set  to  0,  which  means  read,write,not  hidden,not
+            system, not  modified since last backup.  
+
+        cls
+            cls | clear <noargs> 
+
+            clears the screen and homes the cursor.  
+
+        commands
+            commands <noargs> 
+
+            prints a table of available built-in commands.  
+
+        del
+            del 
+
+            synonym for rm.  
+
+        dir
+            dir 
+
+            synonym for ls.  
+
+        dump
+
+            dump filespec [block [page]] | [segment:[offset]] [count] 
+
+            Where a block is 64K bytes and a page is 256 bytes
+            Segment:offset are standard 8086 notation in hexadecimal
+            Count is the number of bytes to dump in decimal
+
+            This came from some anonymous public domain source, ported by me
+
+        echo
+            echo <anything> 
+
+            echos argument list to screen.  
+
+        era
+            era 
+
+            synonym for rm.  
+
+        error
+            error <noargs> 
+
+            prints returned value of last command to the screen.  
+
+        exit
+            exit <noargs> 
+
+            terminates execution of the shell.  
+
+        fgrep
+            fgrep <pattern> <filelist> 
+
+            looks for unambiguous pattern <pattern> in <filelist>.  echos 
+
+
+
+
+
+
+
+
+            lines matching to the screen.  
+
+        hist
+            hist | history <noargs> 
+
+            prints history list to standard output.  
+
+        ls
+            ls | dir {-[alqcr]} <filelist> 
+
+            Lists files that match <filelist> 
+
+            -a all  files,  including  system  files are listed.  '.' and
+            '..' are suppressed, but you know they're there if  you  need
+            them, don't you?  
+            -l prints out file times, permissions, etc 
+            -q suppresses header line from display - useful when you want 
+            to pipe stuff into another program.  
+            -c print as one column.  
+            -r recurse through all encountered subdirectories.  
+
+        md
+            md | mkdir <uname> 
+
+            make a directory.  Prints an error if it can't be done 
+
+        more
+            more {-[0-9]*} {<filelist>} 
+
+            List file to screen with pauses 
+
+            -n  specify  tab  width  when  expanding  tabs, where n is an
+            integer.  more acts like 'cat'  when  redirected  -  you  can
+            concatenate files  in this manner.  If no files are specifed,
+            standard input is 'mored.' 
+
+        mv
+            mv <filelist> <uname> 
+
+            moves specified file or files to target specifed by  <uname>.
+            If  there  is  more  than one file in list, <uname> must be a
+            directory 
+
+        popd
+            popd <noargs> 
+
+            returns to directory at top of directory stack.  
+
+        pushd
+            pushd <uname> 
+
+            save  current  working  directory  on  directory  stack,  and
+            changes current working directory to <uname>.  
+
+        pwd
+            pwd 
+
+            prints current working directory to standard output.  
+
+
+
+
+
+
+
+
+        rd
+            rd | rmdir <uname> 
+
+            remove specified directory if possible.  
+
+        rm
+            rm {-q} <filelist> 
+
+            blows  away all files in <filelist>. If -q is specified, will
+            ask if they should be removed.  
+
+        set
+            set {<envstring> {<envstring> .. <envstring>}} 
+
+            sets a string in the environment.   If  you  specify  'name='
+            with   no   string   after,   it  will  remove  it  from  the
+            environment.  If you don't specify a string, set  prints  out
+            current environment.  
+
+        tee
+            tee <uname> 
+
+            Copies  standard  input to standard output, depositing a copy
+            in <uname> 
+
+        touch
+            touch <filelist> 
+
+            Makes the modification time of specified  files  the  current
+            date and time.  
+
+        y
+            y <filelist> 
+
+            copies standard input to standard output, and then copies the 
+            specified files  to standard output.  Sort of the opposite of
+            tee, in other words.  
+
+        7. Helpful hints 
+
+            Use forward slashes in all path names - they get converted to 
+            back slashes before  dos  hears  about  them.    If  you  are
+            invoking a program that expects forward slashes (dos external 
+            commands frinstance) precede it with a back slash.  
+
+            put  single  quotes around arguments with semicolons in them,
+            so they don't turn into command delimiters.  
+
+            The set command affects only the local  shell's  environment.
+            You can 'exit' to command.com and the original environment is 
+            intact.   The  local  environment  is  4K  large  -  which is
+            useful.  
+
+            Exit and re-invoke if you have trouble loading large programs 
+            from it - shell dynamically allocates and  frees  memory  all
+            the  time,  but the AZTEC run-time doesn't tell DOS to shrink
+            memory 
+
+
+
+
+
+
+
+
+
+        8. Implementation notes 
+
+            DOS doesn't acknowledge  a  'change  default  drive'  command
+            until you issue  a  'get  current directory' call.  Why?  The
+            only way I figured this out is by disassembling command.com.  
+
+            This was developed with AZTEC C by MANX.  In  it  are  a  few
+            hacked  up  pieces  of  AZTECS library source, which I hereby
+            acknowledge.  If MANX has  a  problem  with  me  distributing
+            them,  they  can  call  me direct - I figure I'm doing them a
+            favor by disseminating this program  as  an  example  of  the
+            power and quality of their compiler and development tools.  
+
+            If  you  have  the AZTEC compiler and MANX's version of make,
+            you can recreate the shell  from  source,  by  using  arc  to
+            unpack everything into a directory, editing the macros BINDIR 
+            and CLIB  and then making  shell.com.  I wouldn't try it with
+            any other compiler, because I make a lot of  calls  to  AZTEC
+            specific routines.    You can write your own commands and add
+            them  by  editing  cmds.c,  and  putting  the  name  of  your
+            subroutine and its associated command string into the builtin 
+            array.   
+
+            You  can  safely  modify  any  of my builtins, as long as you
+            don't assume that all of your static variables are  going  to
+            stay initialized to startup values.  
+
+            Any  of the other code (main.c, fexecvp.c fexecv.c) modify at
+            your own peril.  I break them every time I do it, and I wrote 
+            them!!!  
+
+            PC|MS-DOS has a limit of 20 file  handles.    If  you  add  a
+            command  that opens files, make sure you catch the ctrl-break
+            signal and close them.  Look at CAT.C or Y.C for examples.  
+
+        9. BUGS 
+            External DOS commands have trouble parsing the  command  line
+            when invoked from   shell.  The command line gets garbled.  I
+            spent a lot of time trying to figure this problem out  to  no
+            avail.  They apparently get their command line arguments some 
+            way that  is a mystery to me.  The only solution is either to
+            either run command.com, or 'exit'  to  the  original  command
+            prompt.  
+
+            This  problem  has  kept  me  from running this as a straight
+            command.com   replacement.    It  just  goes  to  show   that
+            Microsoft and IBM have one hell of a time following their own 
+            rules.  
+
+            Programs  compiled  by  AZTEC  C  that don't set up their own
+            signal  handlers  seem  to  be  'unbreakable'  -  you   can't
+            ctrl-break  out  of  them, as though SIGINT is set to SIG_IGN
+            before entry.  You might not want to invoke such a program if 
+            it lasts hours and you want to be able to break  out  of  it.
+            FIXED in current version.  Thanks to AZTEC Tech Support.  
+
+        10. HISTORY 
+
+
+
+
+
+
+
+
+
+            V 1.0 - Initial release
+
+            Functional, but   somewhat   buggy.     Lacked  full  history
+            substitution.  
+
+            V 1.1
+
+            Added history substitution.  Fixed some bugs.  This has  been
+            floating around for a while.  
+
+            V 1.2
+
+            Fixed bugs.    Added 'free space' display to ls -l. Minimized
+            weird behavior of cp and  mv.    Did  you  know  that  PC-DOS
+            doesn't  think  the  root directory is a directory if you ask
+        it?  Caused much pain.  
+
+        QUESTIONS COMMENTS GOTO 
+        KENT WILLIAMS
+        NORAND INC.
+        550 2nd ST. S.E.
+        Cedar Rapids Iowa 52401
+        (319) 338-6053 (HOME VOICE)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,38 @@
+
+#!/bin/sh
+#
+#	ca -- check active file versus /usr/spool/news
+#
+: ${SPOOLDIR:=/usr/spool/news}
+: ${LIBDIR:=/usr/lib/news}
+TMP1=/tmp/ca1.$$
+TMP2=/tmp/ca2.$$
+
+trap 'rm $TMP1 $TMP2' 1 2 3 15
+
+echo "Groups found only in" >$TMP1
+echo "$LIBDIR/active" >>$TMP1
+echo "-----------------------------------" >>$TMP1
+echo "Directories found only in" >$TMP2
+echo "$SPOOLDIR" >>$TMP2
+echo "----------------------------------" >>$TMP2
+
+echo "Building file of groups from $LIBDIR/active" 1>&2
+sed 's/ .*$//' <$LIBDIR/active | sort >>$TMP1
+
+echo "Building file of directories from $SPOOLDIR" 1>&2
+cd $SPOOLDIR
+find . -type d -print | sed '
+1d
+s/^\.\///
+s/\//\./g
+' | sort >>$TMP2
+
+echo "Doing file comparison" 1>&2
+echo
+echo
+sdiff -s -w 79 $TMP1 $TMP2 | sed '/^[0-9]/d'
+
+rm $TMP1 $TMP2
+
+exit 0

@@ -1,0 +1,343 @@
+Mot68 users manual.
+	It is assumed the reader has a knowage of the standsard
+motorola assember format and pysdo-ops.  This assembler will assemble
+any motorola standard object program.  It also has a number of features
+not found in the motorola standards.  'Mot68' is case-sensitive.  Upper
+and low case charactors are different.  All psydo-ops and instuctions
+are in lower case, i.e. there is a differance between a
+	'cmp a'		(valid instruction)
+and a
+	'cmp A'		(invalid intruction).
+User lables and macro names may use upper and lower case as the user
+wishes.
+
+
+Funny Conventions:
+
+
+Arithmetic:
+	The arithmetic power of the assembler is that of the
+	'c' languege on the 11/70.  There is NO order of operations,
+	so parentheis () must be used to direct the assembler.
+	The operators are:
+	+ - *	standard.
+	/	divide, get the integer portion
+	>>	arithmetic shift right
+	<<	arithmetic shift left
+	^	XOR
+	!	complement
+	~	two's complement
+	&	and
+	|	or
+
+	The operators for the comparisions (used in if statment or
+	anywhere else the result it true or false)
+	==	equal to
+	!=	not equal to
+	<=	less than or equal to
+	>=	greater than or equal to
+	>	  "	 "
+	<	less	 "
+	||	or
+	&&	and
+
+	Also, at any point in the assembly you can re-assign the
+	value of a variable while evaluatin the operhand by using
+	an equals sign.  For example, if 'foo' had a value of 10 :
+	'foo = foo + 2'
+	would have a value 12, and foo would have a value of 12.
+
+	Special re-asignments exist for situations where such
+	constructions are used a great deal.  They are:
+
+	=+	'foo =+ 2' is the same as 'foo = foo + 2'
+	Others:
+	=-  =*  =/  =%
+
+	the equal sign in conjuction with the 'eval' psydo-op
+	is used to change the value of a variable in the symbol table.
+
+	*	is value of current location(start of that current
+		instruction).  Note that '*' is also the multiplication
+		operator.  '***' means (pc) times (pc).
+		*+2 means the current locatin plus two.
+		2*3 is a six.
+		2** is two times the current location counter.
+
+    Errors:
+	Errors are preceeded by the line number they occure in.
+	They are preceeded by a  '%%' so that files may be read
+	in with the editor to search for errors (usfull on long
+	programs.)
+
+    Table sizes:
+	Max number of symbols = 500
+	Max  "	   "  macros  = 60
+	Max  "     "  char. in a dup = 500
+	Max  "  of local variables in a macro = 20
+
+	Lables begin in the first colum.  A colen after the lable
+	is not needed, but if one is there it is ignored.  The lenght
+	of a lable may be up to 20 charactors.
+	A doubl-colen ( :: ) after a lable forces that lable into the
+	symbol table under all conditions, even in a macro.
+
+	All arithmetic operators have the same priority
+	(there is no order of operations)
+
+    Files produced are:
+	m.out	6800 absolute load file
+	m.lst	listing of program.
+	m.sym	Symbol table file
+
+	At this point, not all forms of symbol table overflow are checked.
+	In fact, many tables are not checked for overflow at all.
+	Table overflow presents itself with a core dump.  If
+	you should get a core dump, contact me (/v/wa1yyn) and
+	I will increase the offended table.
+
+Radix Conventions:
+
+	 Numbers with no post or pre radix tags are initally decimal.
+	Post radix tags are:
+		q	octal
+		h	hex
+		.	decimal
+	Pre-radix tags are:
+		0	octal
+		00	hex
+		000	binary
+		$	hex
+		%	binary
+		@	octal
+	Any numer with a hex digit in it is considered hex
+	irregardless of any radix flags.
+	Othewise, post radix has priority.
+	To change the default radix, use the 'base' psydo-op.
+	the operhand field of the base psydo-op  is allways
+	in base ten.  Usage is:
+	
+	base	16	;to set default radix to base 16
+		The operhand field of the base psydo-op is 
+		allways in base ten.
+
+Comments:
+	    Any spaceing charactor in the operhand field starts a
+	comment.  A ';' also starts a comment, and therefore can not
+	be used in a 'fcc' statement.  A '*' in the first colum starts
+	a whole line of comments (the rest of the line is ignored).
+
+
+Pysdo Ops:
+
+    org	#
+	   A symbol on an org statement has the value
+	of the org #. i.e.
+
+	foo	org	10h
+
+	'foo' will have a value of 10h.
+
+lable    equ  [expression]
+	    Assigns the value of the expression to the lable.
+	Expressions can contain any previously defined symbols.
+	There is NO  'SET' psydo-op.  Use  'eval' instead (see below)
+
+
+    fcb	# [,#,#...]		(same as 'db' )
+	   Define Byte.  Evaluates the number and stores it.
+	Can stack arguments seperated by commas.  Only the lower eight
+	bits are stored. Any high-order bits are truncated.
+	Charactor constants are in single-quotes, i.e. ldab	#'G'
+
+    fcc	"string" [,...]		(same as 'ds' )
+	    Define String.  Initalized storage area
+	to string.	Special charactors are preceeded by a '\'.
+	'\r' is 15q (carrige return)
+	'\n' is 12q (line feed)
+	'\t' is 11q (tab)
+	'\b' is a 10q (backspace)
+	'\e'  is a  4 (eot)
+	'\0' is 0  (null byte)
+	'\"' for the  "  charactor itself
+	'\\' for a back-slash  (  \  )
+
+    rmb	 #  [,#,#...]
+	    Reserves the given number of bytes in memory.
+
+    fdb	# [,...]		(same as 'dw')
+	  Define word.  Evaluates the number and stores as a
+	full word (2 bytes).
+
+    repeat	n
+	   Repeats the line folling the 'repeat' n times.
+	Nested repeats produce funny but constant results.
+	Lables in the line are passed on the first repetition,
+	and delited for subsiquent repititions.
+	Do not try to repeat a dup.
+
+    dup	n
+	 .
+	[dup field]
+	 .
+	enddup
+	   Duplicates the series of lines between the dup and the
+	enddup n times.
+	Lables in the dup field are passed on the first dup, and
+	deleted for subsiquent dups.  Dups may be nested.
+	Do NOT use the word 'endup' anywhere in the dup field.  This
+	may cause the assembler to terminate your text before you wanted.
+
+    defmacro	name
+	 .
+	[macro body]
+	 .
+	endmacro
+	   Defines the macro 'name' as the macro body.  Arguments
+	in main are substituted whenever there is a &# , where
+	1 <= # <= 9 .  The number of calling parametors is not
+	specified.  To invoke the macro, type:
+
+	name	arg1,arg2,...arg9
+
+	Be sure the arguments match the call.  Mot68 does not
+	check for this.
+	Local symbols may be used in the macros.  The symbols must
+	not apear elsewhere in the program.
+	To use a '&' in the text string or macro body, type
+	a '\&' instead.
+	Instructions may be used as macro names to replace
+	or modify an istruction to your likeing.  Generally
+	speaking, macro names take precidence over everthing.
+	Maximum nesting level is at least 22 levels, and maybee
+	more depending on various unexplicable conditions.
+
+    fixtable
+	   Fixes the symbol table to the current lenght.
+
+    expunge
+	  Expunges the table up to the point of the last 'fixtable'
+
+	expung	symbol [,symbol2,...]
+	   Expunges the symbol or symbols from the table.
+
+    fixmacro
+	expungemacro
+	expungemacro name[,name2,...]
+	   Same as fixtable group but for macros.
+
+Note:  the fixtable and fixmacro and associated commands are good
+	for globle macros and variables.
+
+    eval	expression.
+	   Evaluates the expression.  'expression' can be any
+	valid 'c' expression, and will allow you to modify the
+	value of symbols in the symbol table (i.e. foo =+ 1).
+	To set a currently defined varaible to a new value, type:
+		eval	data = 1234
+
+    if	expression
+    .
+    (code here assembled if value of 'expression' is not-zero)
+    .
+    [else]
+    .
+    (code here assembled if value of 'expression' is zero.
+	This code here is optional.)
+    .
+   endif
+	Conditional assembly.  Done if expression is non-zero.
+	'expression' is any valid 'c' expression.  'if's can be nested.
+	Do not use the word 'endif' or 'else' in the code inside the if
+	statement.
+
+    listoff
+	Suppresses listing of source.  The statement itself is not
+	listed.
+
+    liston
+	Enables listing of source.  The statement itself is not listed.
+
+    binoff
+	Suppresses generation of binary (m.out) file.
+
+    binon
+	Enables (turns on) generation of binary (m.out) file.
+
+    cycle_time
+	Prints out how many MPU cycles (1 micro-second on standard 6800)
+	are taken by the code if executed straight thru.  This does NOT
+	take loops, branches, etc. into account but mearly totals up
+	the cycle time for each instruction as it is assembled. This
+	means that macros ARE included in the total, as code for macros
+	is assembled when the macro is invoked.  The total is zeroed at
+	each usage of the psydo-op, so the total printed is the amount
+	for all code between any set of 'cycle_time' psydo-ops.
+
+
+    include	"filename"
+	    Takes the file 'filename' and runs it through the assembler
+	until it is ended, when it returns to the original source.
+	The include file can include other include files.  All assembler
+	pysdo-ops are valid in the include file and code can be generated.
+
+    macon
+	    Enables the printing of expaned macro code in the source
+	listing.
+
+    macoff
+	    Disables the printing of expanded macro code in the source
+	listing.
+
+    message
+	message prints out any text in the operhand field
+	on the terminal during pass 1 and on the lising durring
+	pass two.  It increments the error count too. If the
+	expression '%symbol' is encoutered in the line, the
+	value of the symbol is printed.  i.e.  if 'data' had a value
+	of 45, the line:
+		message	data was a %data.
+	would print:
+		data was a 45.
+	Note that only a symbol (Not an expression) can be printed.
+
+    Internal Variables:
+
+	Internal variables exist with certain usefull information in
+    them.  They may be used in expressions like any other varaibles.
+	Valid internal varibles are:
+
+	_NARGS		Number of arguments passed in the most recient
+		macro.  This is NOT a nested variable.
+
+	_NEST		Number of levels of nesting in a macro, repeat,
+		or dup.
+
+	_SECONDS	Seconds of real world clock as of time of assembly
+
+	_MIN		Minutes ...
+	_HOUR		Hours ...
+	_DAY		Day #
+	_MONTH		Month
+	_YEAR		Current year
+	_DOW		Day of week (monday = 1)
+	_DOY		Day of year
+	_DSTF		Daylight saving flag (1 = daylight saving time)
+	_ASSVERNO	Assembler version number.  Changes when major
+		changes in the assember accure.
+
+	A user may change any of these variables with sucsess except
+for '_NARGS' and '_NEST', which the assembler will clobber.  If a user
+defines a lable as any of these except '_NARGS' and '_NEST', the user
+variable has priority and is used.  Do NOT expunge these variables!
+
+
+    end
+	    Last statement of assembler.  Sinals end of source code.
+
+
+	To use type:
+	% mot68 "filename"
+
+	Any problems mail the the trouble to me.	(/v/wa1yyn  EE)
+	Tnx -Pete

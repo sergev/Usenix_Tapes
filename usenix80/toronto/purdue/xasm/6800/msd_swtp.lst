@@ -1,0 +1,1910 @@
+		  	include /v/wa1yyn/68lib.rom/maclib
+		  	global	pchar,gchar
+		  	global	_abh,_abl,_abx,_abt,_abt2,_abt3,_abt4,_abt5
+		  	global	_awt,_awt2,_awt3
+		  *
+		  *	6800 Symbolic Debugger
+		  *
+		  *	Peter D. Hallenbeck
+		  *
+		  *	Copyright (c) Jan, 1979
+		  *
+		  ************************************************
+		  *
+		  *	R a m   V a r i a b l e s
+		  *
+        1         CONMOD	equ	1	; 0 = Not continuous program,
+		  *			;(such as a rom with seperat
+		  *			;ram, stack, and symbol table
+		  *			;address) Note that the
+		  *			;symbols '_STACK', '_STABLE'
+		  *			;and '_RAMSTART' must be set
+		  *			;to the correct addresses.
+		  *			; 1 = continuous in memory
+		  *			;i.e. debugger to be down
+		  *			;loaded into one contiguous
+		  *			;piece of RAM.  Note that
+		  *			;'ACTSTART' MUST be defined as
+		  *			;the Final (after re-location)
+		  *			;starting address.
+     2c00         ACTSTART	equ	2c00
+		  	if	CONMOD
+  32    0 7e   dd 	jmp	main
+     2c00         	org	ACTSTART	;must set up '_xxx' vars
+     2bfe         _FSTABLE	equ	$ - 2	;symbol table at bottom
+		  	ds	2	;gard space
+		  	ds	80
+		  _FSTACK	ds	1	;stack space
+		  	else
+     8004         _ACIA	equ	8004h	;Acia location
+        0         _FILL	equ	0	;# of fill chars needed
+        1         _FILLCHAR	equ  1	;Fill charactor
+		  	if	CONMOD
+		  	ds	1	;next memory is FWA ram
+		  	else
+		  _pupf	ds	1	;Powerup Flag (5a = powered up)
+		  *	Rom library working variables		*
+		  _abh	ds	1
+		  _abl	ds	1
+		  _abx	ds	1
+		  _abt	ds	1
+		  _abt2	ds	1
+		  _abt3	ds	1
+		  _abt4	ds	1
+		  _abt5	ds	1
+		  _awt	ds	2
+		  _awt2	ds	2
+		  _awt3	ds	2
+		  *
+		  _symb	ds	1	;True if symbolic mode
+		  _radix	ds	1	;Current Radix
+		  _cloc	ds	2	;Current Open Location
+		  _cloop	ds	1	;Current lenght of opcode
+		  _ctop	ds	1	;Current type of opcode:
+		  *			0 = Imidiate
+		  *			1 = Direct
+		  *			2 = Indexed
+		  *			3 = Extended
+		  *			4 = Inherant
+		  *			5 = Relative
+		  *			6 = Undefined Instruction
+		  _istring	ds	22	;Input string buffer
+		  _tsv	ds	2	;Target string value
+		  _stable	ds	2	;Start of Symbol Table
+		  _temp	ds	2	;Various working variables
+		  _temp1	ds	2
+		  _temp2	ds	2
+		  _argim	ds	1	;argument instruction mode
+		  _arg1i	ds	1	;instruction (opcode)
+		  _arg1if	ds	1	;flag for opcode (true = have opcode)
+		  _argib	ds	2	;base for opcode array
+		  _arg1	ds	2	;1st argument
+		  _arg1f	ds	1	;1st arg. flag (true = have one)
+		  _arg2	ds	2	;2nd argument
+		  _arg2f	ds	1	;2nd arg. flag
+		  _arg3	ds	2	;3rd argument
+		  _arg3f	ds	1	;3rd arg. flag
+		  _argtc	ds	1	;arg. terminator char
+		  _arg	ds	2	;arg. accumulator
+		  _argt	ds	2	;arg. accumulator _temp reg.
+		  _argfun	ds	1	;arg. function (0 = startup)
+		  _argpnt	ds	1	;decimal point flag
+		  _fill	ds	1	;# of fill chars
+		  _fillc	ds	1	;fill char count
+		  _dqbuff	ds	3	;" comand buffer
+		  _nalts	ds	1	;# of alt modes
+		  _altgdef	ds	2	;$g default adress
+		  _altzb	ds	2	;$z default begining
+		  _altze	ds	2	;$z default end
+		  _altzv	ds	1	;$z defualt preset value
+		  _altfb	ds	2	;$f default begining
+		  _altfe	ds	2	;$f default end
+		  _altfd	ds	1	;$f default value
+       14         _ADDSTKLN	equ	20	;# of address on stack
+		  _addcnt	ds	1	;address stack count
+		  _addstk	ds	2 * _ADDSTKLN	;'(' address stack
+		  _addpnt	ds	2		;addstk pointer
+		  *
+		  *	M a i n    P r o g r a m
+		  *
+		  *	FWA Rom starts here
+		  	if	CONMOD
+		  	ds	2	;gard space
+       dd         	org	$ - ACTSTART
+		  	else
+ 123   dd  f      main	sei		;kill those interupts!
+		  	if	CONMOD
+ 125   de 8e 2c52 	lds	#_FSTACK
+		  	else
+ 129   e1 ce 8004 	ldx	#_ACIA
+ 130   e4 86  3   	ldaa	#3
+ 131   e6 a7  0   	staa	0,x
+ 132   e8 86  9   	ldaa	#9h	;7 + even + 1
+ 133   ea a7  0   	staa	0,x	;for two stops, store 1
+ 134   ec  9      main1	dex
+ 135   ed 26 fd   	bne	main1
+ 136   ef bd    0 	jsr	pcrlf
+ 137   f2 c6  7   	ldab	#7
+ 138   f4 bd  cc6 	jsr	pchar	;all good things beep
+ 139   f7 c6 5a   	ldab	#5a
+ 140   f9 f1 2c54 	cmpb	_pupf	;first reset ever ?
+ 141   fc 27 4d   	beq	bigl	;no.
+ 142   fe f7 2c54 	stab	_pupf
+		  	if	CONMOD
+ 144  101 ce 2bfe 	ldx	#_FSTABLE
+		  	else
+ 148  104 bd  8f1 	jsr	set_stable	;init _symbol table
+ 149  107 c6 10   	ldab	#16	;base 16
+ 150  109 f7 2c64 	stab	_radix
+ 151  10c ce  100 	ldx	#100h
+ 152  10f ff 2c65 	stx	_cloc
+ 153  112 c6  1   	ldab	#1
+ 154  114 f7 2c67 	stab	_cloop
+ 155  117 c6  6   	ldab	#6
+ 156  119 f7 2c68 	stab	_ctop
+ 157  11c f7 2c63 	stab	_symb	;symbolic mode
+ 158  11f c6  0   	ldab	#_FILL
+ 159  121 f7 2c9e 	stab	_fill
+ 160  124 ce 2cb1 	ldx	#_addstk
+ 161  127 ff 2cd9 	stx	_addpnt	;clear address stack
+ 162  12a 7f 2cb0 	clr	_addcnt
+ 163  12d 7f 2caa 	clr	_altzv
+ 164  130 7f 2caf 	clr	_altfd
+ 165  133 ce    0 	ldx	#0
+ 166  136 ff 2ca6 	stx	_altzb
+ 167  139 ff 2ca8 	stx	_altze
+ 168  13c ff 2cab 	stx	_altfb
+ 169  13f ff 2cad 	stx	_altfe
+ 170  142 ce   dd 	ldx	#main
+ 171  145 ff 2ca4 	stx	_altgdef	;default start is debuger
+		  *
+ 173  148 bd    0 bigls	jsr	pdspace
+ 174  14b bd  a70 bigl	jsr	getargs
+ 175  14e ce  161 	ldx	#dlist
+ 176  151 bd  9ee 	jsr	tsearch
+ 177  154 25  7   	bcs	bigl10
+ 178  156 c6 3f   unknown	ldab	#'?'
+ 179  158 bd  cc6 	jsr	pchar
+ 180  15b 20 eb   	bra	bigls
+ 181  15d ee 1e   bigl10	ldx	glist-dlist,x
+ 182  15f 6e  0   	jmp	0,x
+		  *
+		  dlist	db	'/',0
+ 184  161 2f       0
+		  	db	'\r',0
+ 185  163  d       0
+		  	db	'\n',0
+ 186  165  a       0
+		  	db	'=',0
+ 187  167 3d       0
+		  	db	':',0
+ 188  169 3a       0
+		  	db	4,0
+ 189  16b  4       0
+		  	db	'?',0
+ 190  16d 3f       0
+		  	db	'"',0
+ 191  16f 22       0
+		  	db	'!',0
+ 192  171 21       0
+		  	db	033,0	;Alt-mode
+ 193  173 1b       0
+		  	db	12,0	;form-feed
+ 194  175  c       0
+		  	db	' ',0
+ 195  177 20       0
+		  	db	'(',0
+ 196  179 28       0
+		  	db	')',0
+ 197  17b 29       0
+ 198  17d  0  0   	dw	0	;end of list
+		  *
+ 200  17f  1 9d   glist	dw	comslash
+ 201  181  1 b7   	dw	comret
+ 202  183  1 c0   	dw	comnl
+ 203  185  1 d9   	dw	comeq
+ 204  187  2 36   	dw	comcol
+ 205  189  2 45   	dw	comlog
+ 206  18b  2 4a   	dw	comque
+ 207  18d  2 a6   	dw	comdq
+ 208  18f  2 cc   	dw	comex
+ 209  191  3 fb   	dw	comalt
+ 210  193  3 19   	dw	comff
+ 211  195  1 d4   	dw	comspc
+ 212  197  3 2d   	dw	comop
+ 213  199  3 ac   	dw	comcp
+ 214  19b  0  0   	dw	0
+		  *
+		  *	C o m m a n d    R o u t i n e s
+		  *
+ 218  19d 7d 2c90 comslash	tst	_arg1f
+ 219  1a0 26  6   	bne	comslash1
+ 220  1a2 fe 2c65 	ldx	_cloc
+ 221  1a5 ff 2c8e 	stx	_arg1
+ 222  1a8 fe 2c8e comslash1	ldx	_arg1
+ 223  1ab ff 2c65 	stx	_cloc
+ 224  1ae bd    0 	jsr	pdspace
+ 225  1b1 bd  7b2 	jsr	dumpcl
+ 226  1b4 7e  14b 	jmp	bigl
+		  *
+ 228  1b7 bd  c09 comret	jsr	storeit
+ 229  1ba bd    0 	jsr	pcrlf
+ 230  1bd 7e  14b 	jmp	bigl
+		  *
+ 232  1c0 c6  d   comnl	ldab	#'\r'
+ 233  1c2 bd  cc6 	jsr	pchar
+ 234  1c5 bd  c09 comnl05	jsr	storeit
+ 235  1c8 bd  5d1 	jsr	in_cloc
+ 236  1cb bd  5f2 comnl10	jsr	prcloc
+ 237  1ce bd  7b2 	jsr	dumpcl
+ 238  1d1 7e  14b 	jmp	bigl
+		  *
+ 240  1d4 bd    0 comspc	jsr	pdspace
+ 241  1d7 20 ec   	bra	comnl05
+		  *
+ 243  1d9 7d 2c8b comeq	tst	_arg1if	;dump out in current base
+ 244  1dc 27 1d   	beq	comeq20	;if no instruction
+ 245  1de f6 2c8a 	ldab	_arg1i
+ 246  1e1 4f      	clra
+ 247  1e2 bd    0 	jsr	abtox
+ 248  1e5 bd  8e8 	jsr	printx
+ 249  1e8 bd    0 	jsr	pspace
+ 250  1eb 7d 2c90 	tst	_arg1f
+ 251  1ee 26  3   	bne	comeq10
+ 252  1f0 7e  148 comeqd	jmp	bigls
+ 253  1f3 fe 2c8e comeq10	ldx	_arg1
+ 254  1f6 bd  8e8 comeq15	jsr	printx
+ 255  1f9 20 f5   	bra	comeqd
+ 256  1fb 7d 2c90 comeq20	tst	_arg1f
+ 257  1fe 26 f3   	bne	comeq10	;if just data
+ 258  200 fe 2c65 	ldx	_cloc
+ 259  203 7d 2c63 	tst	_symb	;dump current loc
+ 260  206 26  8   	bne	symeq30
+ 261  208 e6  0   	ldab	0,x
+ 262  20a 4f      	clra
+ 263  20b bd    0 	jsr	abtox
+ 264  20e 20 e6   	bra	comeq15
+ 265  210 e6  0   symeq30	ldab	0,x
+ 266  212 4f      	clra
+ 267  213 bd    0 	jsr	abtox
+ 268  216 bd  8e8 	jsr	printx
+ 269  219 bd    0 	jsr	pspace
+ 270  21c fe 2c65 	ldx	_cloc
+ 271  21f b6 2c67 	ldaa	_cloop
+ 272  222 81  1   	cmpa	#1
+ 273  224 27 ca   	beq	comeqd
+ 274  226 81  2   	cmpa	#2
+ 275  228 26  8   	bne	comeq40
+ 276  22a e6  1   	ldab	1,x
+ 277  22c 4f      	clra
+ 278  22d bd    0 	jsr	abtox
+ 279  230 20 c4   comeq35	bra	comeq15
+ 280  232 ee  1   comeq40	ldx	1,x
+ 281  234 20 fa   	bra	comeq35
+		  *
+ 283  236 ce 2c69 comcol	ldx	#_istring	;':' is enter _symbol
+ 284  239 bd    0 	jsr	gets		;command
+ 285  23c fe 2c8e 	ldx	_arg1
+ 286  23f bd  70c 	jsr	syment
+ 287  242 7e  14b 	jmp	bigl
+		  *
+ 289  245 fe fffe comlog	ldx	0fffe
+ 290  248 6e  0   	jmp	0,x
+		  *
+ 292  24a 7d 2c8b comque	tst	_arg1if	;print as ascii char
+ 293  24d 27 24   	beq	comque20	;if no instruction
+ 294  24f f6 2c8a 	ldab	_arg1i
+ 295  252 bd  a56 	jsr	ascout
+ 296  255 7d 2c90 	tst	_arg1f
+ 297  258 26  3   	bne	comque10
+ 298  25a 7e  148 comqued	jmp	bigls
+ 299  25d fe 2c8e comque10	ldx	_arg1
+ 300  260 ff 2c83 comque15	stx	_temp
+ 301  263 f6 2c83 	ldab	_temp
+ 302  266 27  3   	beq	comque18
+ 303  268 bd  a56 	jsr	ascout
+ 304  26b f6 2c84 comque18	ldab	_temp + 1
+ 305  26e bd  a56 	jsr	ascout
+ 306  271 20 e7   	bra	comqued
+ 307  273 7d 2c90 comque20	tst	_arg1f
+ 308  276 26 e5   	bne	comque10	;if just data
+ 309  278 fe 2c65 	ldx	_cloc
+ 310  27b 7d 2c63 	tst	_symb	;dump current loc
+ 311  27e 26  7   	bne	symque30
+ 312  280 e6  0   	ldab	0,x
+ 313  282 bd  a56 	jsr	ascout
+ 314  285 20 d3   	bra	comqued
+ 315  287 e6  0   symque30	ldab	0,x
+ 316  289 bd  a56 	jsr	ascout
+ 317  28c fe 2c65 	ldx	_cloc
+ 318  28f b6 2c67 	ldaa	_cloop
+ 319  292 81  1   	cmpa	#1
+ 320  294 27 c4   	beq	comqued
+ 321  296 81  2   	cmpa	#2
+ 322  298 26  8   	bne	comque40
+ 323  29a e6  1   	ldab	1,x
+ 324  29c 4f      	clra
+ 325  29d bd    0 	jsr	abtox
+ 326  2a0 20 be   comque35	bra	comque15
+ 327  2a2 ee  1   comque40	ldx	1,x
+ 328  2a4 20 fa   	bra	comque35
+		  *
+ 330  2a6 b6 2c8f comdq	ldaa	_arg1 + 1
+ 331  2a9 b7 2ca0 	staa	_dqbuff
+ 332  2ac 7f 2ca1 	clr	_dqbuff + 1
+ 333  2af 7f 2ca2 	clr	_dqbuff + 2
+ 334  2b2 fe 2c65 	ldx	_cloc
+ 335  2b5 bd    0 	jsr	pshx
+ 336  2b8 ce 2ca0 	ldx	#_dqbuff
+ 337  2bb ff 2c65 	stx	_cloc
+ 338  2be bd  7b2 	jsr	dumpcl
+ 339  2c1 bd    0 	jsr	pulx
+ 340  2c4 c6 22   	ldab	#'"'
+ 341  2c6 bd  cc6 	jsr	pchar
+ 342  2c9 7e  148 	jmp	bigls
+		  *
+ 344  2cc fe 2c65 comex	ldx	_cloc
+ 345  2cf ff 2c7f 	stx	_tsv
+ 346  2d2 bd  76a 	jsr	puttsv
+ 347  2d5 c6 5c   	ldab	#'\\'
+ 348  2d7 bd  cc6 	jsr	pchar
+ 349  2da bd    0 	jsr	pspace
+ 350  2dd 86  8   	ldaa	#8
+ 351  2df b7 2ca0 	staa	_dqbuff
+ 352  2e2 bd    0 comex10	jsr	pspace
+ 353  2e5 e6  0   	ldab	0,x
+ 354  2e7  8      	inx
+ 355  2e8 bd  59a 	jsr	pbyte
+ 356  2eb 7a 2ca0 	dec	_dqbuff
+ 357  2ee 26 f2   	bne	comex10
+ 358  2f0 fe 2c65 	ldx	_cloc
+ 359  2f3 86  8   	ldaa	#8
+ 360  2f5 b7 2ca0 	staa	_dqbuff
+ 361  2f8 bd    0 comex20	jsr	pspace
+ 362  2fb e6  0   	ldab	0,x
+ 363  2fd  8      	inx
+ 364  2fe bd  a56 	jsr	ascout
+ 365  301 7a 2ca0 	dec	_dqbuff
+ 366  304 26 f2   	bne	comex20
+ 367  306 ff 2c65 	stx	_cloc
+ 368  309 86  1   	ldaa	#1
+ 369  30b b7 2c67 	staa	_cloop
+ 370  30e 86  6   	ldaa	#6
+ 371  310 b7 2c68 	staa	_ctop
+ 372  313 bd    0 	jsr	pcrlf
+ 373  316 7e  14b comex30	jmp	bigl
+		  *
+ 375  319 bd  c09 comff	jsr	storeit
+ 376  31c c6  d   	ldab	#13	;ouput 16 line feeds
+ 377  31e bd  cc6 	jsr	pchar
+ 378  321 86  f   	ldaa	#15
+ 379  323 c6  a   	ldab	#10
+ 380  325 bd  cc6 comff10	jsr	pchar
+ 381  328 4a      	deca
+ 382  329 2c fa   	bge	comff10
+ 383  32b 20 e9   	bra	comex30
+		  *
+ 385  32d bd  c09 comop	jsr	storeit	;go to branch or jump address
+ 386  330 f6 2cb0 	ldab	_addcnt
+ 387  333 c1 14   	cmpb	#_ADDSTKLN
+ 388  335 26 24   	bne	comop10
+ 389  337 ce  340 	ldx	#comop07
+ 390  33a bd    0 	jsr	prints
+ 391  33d 7e  156 comop05	jmp	unknown
+		  comop07	ds	" Too many nested addresses\0"
+ 392  340 20      54 6f 6f 20 6d 61 6e 79 20 6e 65 73 74 65 64
+ 392  350 20      61 64 64 72 65 73 73 65 73  0
+ 393  35b f6 2c68 comop10	ldab	_ctop
+ 394  35e c1  3   	cmpb	#3	;imidiate
+ 395  360 27  4   	beq	comop15
+ 396  362 c1  5   	cmpb	#5
+ 397  364 26 d7   	bne	comop05
+ 398  366 f6 2cb0 comop15	ldab	_addcnt
+ 399  369 4f      	clra
+ 400  36a bd    0 	jsr	abtox
+ 401  36d f6 2c64 	ldab	_radix
+ 402  370 37      	pshb
+ 403  371 c6  a   	ldab	#10
+ 404  373 f7 2c64 	stab	_radix
+ 405  376 bd    0 	jsr	bout
+ 406  379 33      	pulb
+ 407  37a f7 2c64 	stab	_radix
+ 408  37d bd    0 	jsr	pcrlf
+ 409  380 fe 2c65 	ldx	_cloc
+ 410  383 bd    0 	jsr	xtoab	;save current addess
+ 411  386 fe 2cd9 	ldx	_addpnt
+ 412  389 a7  0   	staa	0,x
+ 413  38b e7  1   	stab	1,x
+ 414  38d  8      	inx
+ 415  38e  8      	inx
+ 416  38f ff 2cd9 	stx	_addpnt
+ 417  392 7c 2cb0 	inc	_addcnt
+ 418  395 f6 2c68 	ldab	_ctop
+ 419  398 c1  3   	cmpb	#3	;only extended or
+ 420  39a 26  7   	bne	comop20	;relative instructions
+ 421  39c fe 2c65 	ldx	_cloc
+ 422  39f ee  1   	ldx	1,x
+ 423  3a1 20  3   	bra	comop30
+ 424  3a3 bd  60c comop20	jsr	getbea
+ 425  3a6 ff 2c65 comop30	stx	_cloc
+ 426  3a9 7e  1cb 	jmp	comnl10
+		  *
+ 428  3ac bd  c09 comcp	jsr	storeit	;return to address of
+ 429  3af 7d 2cb0 	tst	_addcnt	;most recent '(' command
+ 430  3b2 26 15   	bne	comcp10
+ 431  3b4 ce  3bd 	ldx	#comcp05
+ 432  3b7 bd    0 	jsr	prints
+ 433  3ba 7e  156 	jmp	unknown
+		  comcp05	ds	"No address \0"
+ 434  3bd 4e      6f 20 61 64 64 72 65 73 73 20  0
+ 435  3c9 7a 2cb0 comcp10	dec	_addcnt
+ 436  3cc 4f      	clra
+ 437  3cd f6 2cb0 	ldab	_addcnt
+ 438  3d0 bd    0 	jsr	abtox
+ 439  3d3 f6 2c64 	ldab	_radix
+ 440  3d6 37      	pshb
+ 441  3d7 c6  a   	ldab	#10
+ 442  3d9 f7 2c64 	stab	_radix
+ 443  3dc bd    0 	jsr	bout
+ 444  3df 33      	pulb
+ 445  3e0 f7 2c64 	stab	_radix
+ 446  3e3 bd    0 	jsr	pcrlf
+ 447  3e6 fe 2cd9 	ldx	_addpnt
+ 448  3e9  9      	dex
+ 449  3ea e6  0   	ldab	0,x
+ 450  3ec  9      	dex
+ 451  3ed a6  0   	ldaa	0,x
+ 452  3ef ff 2cd9 	stx	_addpnt
+ 453  3f2 bd    0 	jsr	abtox
+ 454  3f5 ff 2c65 	stx	_cloc
+ 455  3f8 7e  1cb 	jmp	comnl10
+		  *
+ 457  3fb 7f 2ca3 comalt	clr	_nalts
+ 458  3fe c6 24   comalt05	ldab	#'$'
+ 459  400 bd  cc6 	jsr	pchar
+ 460  403 bd  cf9 	jsr	gchar
+ 461  406 c1 1b   	cmpb	#033	;double alt-mode
+ 462  408 26  5   	bne	comalt10
+ 463  40a 7c 2ca3 	inc	_nalts
+ 464  40d 20 ef   	bra	comalt05
+ 465  40f ce  41e comalt10	ldx	#daltlist
+ 466  412 bd  9ee 	jsr	tsearch
+ 467  415 25  3   	bcs	comalt20
+ 468  417 7e  156 	jmp	unknown
+ 469  41a ee 10   comalt20	ldx	galtlist-daltlist,x
+ 470  41c 6e  0   	jmp	0,x
+		  *
+		  daltlist	db	's',0
+ 472  41e 73       0
+		  	db	'r',0
+ 473  420 72       0
+		  	db	'g',0
+ 474  422 67       0
+		  	db	'l',0
+ 475  424 6c       0
+		  	db	't',0
+ 476  426 74       0
+		  	db	'z',0
+ 477  428 7a       0
+		  	db	'f',0
+ 478  42a 66       0
+ 479  42c  0  0   	dw	0	;end of list
+ 480  42e  4 3e   galtlist	dw	alts
+ 481  430  4 50   	dw	altr	;goto the alter?
+ 482  432  4 7c   	dw	altg
+ 483  434  4 a9   	dw	altl
+ 484  436  4 e8   	dw	altt
+ 485  438  5  2   	dw	altz
+ 486  43a  5 35   	dw	altf
+ 487  43c  0  0   	dw	0
+		  *
+ 489  43e 7d 2ca3 alts	tst	_nalts
+ 490  441 27  6   	beq	alts10	;_symbolic on
+ 491  443 7f 2c63 	clr	_symb
+ 492  446 7e  148 alts05	jmp	bigls
+ 493  449 86 ff   alts10	ldaa	#0ff
+ 494  44b b7 2c63 	staa	_symb
+ 495  44e 20 f6   	bra	alts05
+		  *
+ 497  450 b6 2c64 altr	ldaa	_radix
+ 498  453 36      	psha
+ 499  454 86  a   	ldaa	#10
+ 500  456 b7 2c64 	staa	_radix
+ 501  459 bd  913 	jsr	getnum
+ 502  45c 37      	pshb
+ 503  45d bd    0 	jsr	xtoab
+ 504  460 c4 1f   	andb	#1f	;no absurd bases
+ 505  462 c1  1   	cmpb	#1
+ 506  464 2f  f   	ble	altr20
+ 507  466 f7 2c64 	stab	_radix
+ 508  469 33      	pulb
+ 509  46a 32      	pula
+ 510  46b c1  d   altr05	cmpb	#'\r'
+ 511  46d 26 da   	bne	alts10
+ 512  46f bd    0 	jsr	pcrlf
+ 513  472 7e  14b altr10	jmp	bigl
+ 514  475 33      altr20	pulb		;Base 0 error message
+ 515  476 32      	pula
+ 516  477 b7 2c64 	staa	_radix
+ 517  47a 20 ef   	bra	altr05
+		  *
+ 519  47c bd  cf9 altg	jsr	gchar
+ 520  47f c1 6f   	cmpb	#'o'
+ 521  481 27  3   	beq	altg10
+ 522  483 7e  156 	jmp	unknown
+ 523  486 7d 2c90 altg10	tst	_arg1f
+ 524  489 27  f   	beq	altg20
+ 525  48b f6 2c8f 	ldab	_arg1 + 1
+ 526  48e f7 2ca5 	stab	_altgdef + 1
+ 527  491 37      	pshb
+ 528  492 f6 2c8e 	ldab	_arg1
+ 529  495 f7 2ca4 	stab	_altgdef
+ 530  498 20  7   	bra	altg30
+ 531  49a f6 2ca5 altg20	ldab	_altgdef + 1	;use default address
+ 532  49d 37      	pshb
+ 533  49e f6 2ca4 	ldab	_altgdef
+ 534  4a1 37      altg30	pshb
+ 535  4a2  1      	nop
+		  	repeat	5
+ 537  4a3 37      	pshb
+ 537  4a4 37      	pshb
+ 537  4a5 37      	pshb
+ 537  4a6 37      	pshb
+ 537  4a7 37      	pshb
+ 538  4a8 3b      	rti		;go to it!
+		  *
+ 540  4a9 bd  cef altl	jsr	ichar
+ 541  4ac bd  cc6 	jsr	pchar
+ 542  4af c1 53   	cmpb	#'S'
+ 543  4b1 26 f6   	bne	altl
+ 544  4b3 bd  cef 	jsr	ichar
+ 545  4b6 bd  cc6 	jsr	pchar
+ 546  4b9 c1 39   	cmpb	#'9'
+ 547  4bb 26  3   	bne	alt10
+ 548  4bd 7e  148 altl05	jmp	bigls
+ 549  4c0 c1 31   alt10	cmpb	#'1'
+ 550  4c2 26 e5   	bne	altl
+ 551  4c4 bd  5b0 	jsr	gbyte
+ 552  4c7 c0  3   	subb	#3
+ 553  4c9 f7 2c83 	stab	_temp	;byte count
+ 554  4cc ce 2c85 	ldx	#_temp1
+ 555  4cf bd  5b0 	jsr	gbyte
+ 556  4d2 e7  0   	stab	0,x
+ 557  4d4 bd  5b0 	jsr	gbyte
+ 558  4d7 e7  1   	stab	1,x
+ 559  4d9 ee  0   	ldx	0,x
+ 560  4db bd  5b0 altl20	jsr	gbyte
+ 561  4de e7  0   	stab	0,x
+ 562  4e0  8      	inx
+ 563  4e1 7a 2c83 	dec	_temp
+ 564  4e4 26 f5   	bne	altl20
+ 565  4e6 20 c1   	bra	altl
+		  *
+ 567  4e8 7d 2c90 altt	tst	_arg1f	;set symbol table
+ 568  4eb 26  9   	bne	altt10
+ 569  4ed fe 2c81 	ldx	_stable	;table at same location
+		  	repeat	4
+ 571  4f0  8      	inx
+ 571  4f1  8      	inx
+ 571  4f2  8      	inx
+ 571  4f3  8      	inx
+ 572  4f4 20  3   	bra	altt20
+ 573  4f6 fe 2c8e altt10	ldx	_arg1	;table at new location
+ 574  4f9 ff 2c81 altt20	stx	_stable
+ 575  4fc bd  8f1 	jsr	set_stable	;clear table
+ 576  4ff 7e  148 	jmp	bigls
+		  *
+ 578  502 7d 2c90 altz	tst	_arg1f
+ 579  505 27  6   	beq	altz10
+ 580  507 fe 2c8e 	ldx	_arg1
+ 581  50a ff 2ca6 	stx	_altzb
+ 582  50d 7d 2c93 altz10	tst	_arg2f
+ 583  510 27  6   	beq	altz20
+ 584  512 fe 2c91 	ldx	_arg2
+ 585  515 ff 2ca8 	stx	_altze
+ 586  518 7d 2c96 altz20	tst	_arg3f
+ 587  51b 27  6   	beq	altz30
+ 588  51d b6 2c95 	ldaa	_arg3 + 1
+ 589  520 b7 2caa 	staa	_altzv
+ 590  523 f6 2caa altz30	ldab	_altzv
+ 591  526 fe 2ca6 	ldx	_altzb
+ 592  529  9      	dex
+ 593  52a  8      altz40	inx
+ 594  52b e7  0   	stab	0,x
+ 595  52d bc 2ca8 	cpx	_altze
+ 596  530 26 f8   	bne	altz40
+ 597  532 7e  148 	jmp	bigls
+		  *
+ 599  535 7d 2c90 altf	tst	_arg1f	;find byte
+ 600  538 27  6   	beq	altf10
+ 601  53a fe 2c8e 	ldx	_arg1
+ 602  53d ff 2cab 	stx	_altfb
+ 603  540 7d 2c93 altf10	tst	_arg2f
+ 604  543 27  7   	beq	altf20
+ 605  545 fe 2c91 	ldx	_arg2
+ 606  548  8      	inx
+ 607  549 ff 2cad 	stx	_altfe
+ 608  54c 7d 2c96 altf20	tst	_arg3f
+ 609  54f 27  6   	beq	altf30
+ 610  551 b6 2c95 	ldaa	_arg3 + 1
+ 611  554 b7 2caf 	staa	_altfd
+ 612  557 fe 2cab altf30	ldx	_altfb
+ 613  55a bd    0 	jsr	pdspace
+ 614  55d f6 2caf altf35	ldab	_altfd
+ 615  560 4f      	clra
+ 616  561  9      	dex
+ 617  562  8      altf40	inx
+ 618  563 bc 2cad 	cpx	_altfe
+ 619  566 26  3   	bne	altf47
+ 620  568 7e  14b altf45	jmp	bigl
+ 621  56b e1  0   altf47	cmpb	0,x
+ 622  56d 26 f3   	bne	altf40
+ 623  56f bd  8e8 altf50	jsr	printx
+ 624  572 bd    0 	jsr	pcrlf
+ 625  575 4c      	inca
+ 626  576 81  f   	cmpa	#15
+ 627  578 26 e8   	bne	altf40
+		  	pshx
+ 629  57d ce  593 	ldx	#altfmes
+ 630  580 bd    0 	jsr	prints
+		  	pulx
+ 632  586 bd  cf9 	jsr	gchar
+ 633  589 bd    0 	jsr	pcrlf
+ 634  58c c1 6e   	cmpb	#'n'
+ 635  58e 27 d8   	beq	altf45
+ 636  590  8      	inx
+ 637  591 20 ca   	bra	altf35
+		  altfmes	ds	"More? \0"
+ 638  593 4d      6f 72 65 3f 20  0
+		  *
+		  *
+		  *	M a j o r    S u b r o u t i n e s
+		  *
+ 643  59a 37      pbyte	pshb		;print out hex byte in (b)
+		  	repeat	4	;(b) gets clobbered
+ 645  59b 54      	lsrb
+ 645  59c 54      	lsrb
+ 645  59d 54      	lsrb
+ 645  59e 54      	lsrb
+ 646  59f 8d  1   	bsr	phexdig
+ 647  5a1 33      	pulb
+ 648  5a2 c4  f   phexdig	andb	#0f	;print hex digit
+ 649  5a4 cb 30   	addb	#48
+ 650  5a6 c1 3a   	cmpb	#58
+ 651  5a8 2b  2   	bmi	phex10
+ 652  5aa cb  7   	addb	#7
+ 653  5ac bd  cc6 phex10	jsr	pchar
+ 654  5af 39      	rts
+		  *
+ 656  5b0 36      gbyte	psha
+ 657  5b1 bd  cf9 	jsr	gchar
+ 658  5b4 8d  f   	bsr	makehex
+		  	repeat	4
+ 660  5b6 58      	aslb
+ 660  5b7 58      	aslb
+ 660  5b8 58      	aslb
+ 660  5b9 58      	aslb
+ 661  5ba 37      	pshb
+ 662  5bb bd  cf9 	jsr	gchar
+ 663  5be 8d  5   	bsr	makehex
+ 664  5c0 32      	pula
+ 665  5c1 1b      	aba
+ 666  5c2 16      	tab
+ 667  5c3 32      	pula
+ 668  5c4 39      	rts
+		  *
+ 670  5c5 c0 30   makehex	subb	#'0'
+ 671  5c7 c1  9   	cmpb	#9
+ 672  5c9 2f  2   	ble	makehex1
+ 673  5cb c0  7   	subb	#'A'-':'
+ 674  5cd c4  f   makehex1	andb	#0f
+ 675  5cf  c      	clc
+ 676  5d0 39      	rts
+		  *
+		  in_cloc	pshx		;Increment clock to next location
+ 679  5d4 37      	pshb		;or instuction
+ 680  5d5 fe 2c65 	ldx	_cloc
+ 681  5d8 7d 2c63 	tst	_symb
+ 682  5db 27  c   	beq	in_cloc10
+ 683  5dd bd    0 	jsr	xtoab
+ 684  5e0 fb 2c67 	addb	_cloop
+ 685  5e3 89  0   	adca	#0
+ 686  5e5 bd    0 	jsr	abtox
+ 687  5e8  9      	dex
+ 688  5e9  8      in_cloc10	inx
+ 689  5ea ff 2c65 	stx	_cloc
+ 690  5ed 33      	pulb
+		  	pulx
+ 692  5f1 39      	rts
+		  *
+		  prcloc	pshx		;Print out value of 'cloc'
+ 695  5f5 37      	pshb
+ 696  5f6 fe 2c65 	ldx	_cloc
+ 697  5f9 ff 2c7f 	stx	_tsv
+ 698  5fc bd  76a 	jsr	puttsv
+ 699  5ff c6 5c   	ldab	#'\\'
+ 700  601 bd  cc6 	jsr	pchar
+ 701  604 bd    0 	jsr	pdspace
+ 702  607 33      	pulb
+		  	pulx
+ 704  60b 39      	rts
+		  *
+ 706  60c fe 2c65 getbea	ldx	_cloc
+ 707  60f e6  1   	ldab	1,x
+ 708  611 b6 2c65 	ldaa	_cloc
+ 709  614 5d      	tstb
+ 710  615 2b  b   	bmi	getbea40
+ 711  617 fb 2c66 	addb	_cloc + 1
+ 712  61a 89  0   	adca	#0
+ 713  61c cb  2   	addb	#2
+ 714  61e 89  0   	adca	#0
+ 715  620 20  d   	bra	getbea50
+ 716  622 53      getbea40	comb
+ 717  623 5a      	decb
+ 718  624 f7 2c83 	stab	_temp
+ 719  627 f6 2c66 	ldab	_cloc + 1
+ 720  62a f0 2c83 	subb	_temp
+ 721  62d 82  0   	sbca	#0
+ 722  62f b7 2c7f getbea50	staa	_tsv
+ 723  632 f7 2c80 	stab	_tsv + 1
+ 724  635 bd    0 	jsr	abtox
+ 725  638 39      	rts
+		  *
+ 727  639 ce 2c69 mnemlu	ldx	#_istring	;look up (possible) mnemonic
+ 728  63c a6  3   	ldaa	3,x		;in MOT, Carry = 1 if found.
+ 729  63e 81 61   	cmpa	#'a'
+ 730  640 26  8   	bne	mnemlu10
+ 731  642 e6  1   	ldab	1,x
+ 732  644 ca 80   	orab	#80h
+ 733  646 e7  1   	stab	1,x
+ 734  648 20 10   	bra	mnemlu18
+ 735  64a 81 62   mnemlu10	cmpa	#'b'
+ 736  64c 27  6   	beq	mnemlu15
+ 737  64e 6d  3   	tst	3,x
+ 738  650 26 29   	bne	mnemlu35
+ 739  652 20  a   	bra	mnemlu20
+ 740  654 e6  2   mnemlu15	ldab	2,x
+ 741  656 ca 80   	orab	#80h
+ 742  658 e7  2   	stab	2,x
+ 743  65a 6d  4   mnemlu18	tst	4,x
+ 744  65c 26 1d   	bne	mnemlu35
+ 745  65e ce  d27 mnemlu20	ldx	#MOT-8
+ 746  661 ff 2c87 mnemlu30	stx	_temp2
+ 747  664 ce 2c69 	ldx	#_istring
+ 748  667 ff 2c83 	stx	_temp
+ 749  66a e6  0   	ldab	0,x
+ 750  66c fe 2c87 	ldx	_temp2
+		  	repeat	8
+ 752  66f  8      	inx
+ 752  670  8      	inx
+ 752  671  8      	inx
+ 752  672  8      	inx
+ 752  673  8      	inx
+ 752  674  8      	inx
+ 752  675  8      	inx
+ 752  676  8      	inx
+ 753  677 6d  0   	tst	0,x
+ 754  679 26 11   	bne	mnemlu40
+ 755  67b ce 2c69 mnemlu35	ldx	#_istring
+ 756  67e e6  1   	ldab	1,x
+ 757  680 c4 7f   	andb	#0177
+ 758  682 e7  1   	stab	1,x
+ 759  684 e6  2   	ldab	2,x
+ 760  686 c4 7f   	andb	#0177
+ 761  688 e7  2   	stab	2,x
+ 762  68a  c      	clc
+ 763  68b 39      	rts
+ 764  68c e1  0   mnemlu40	cmpb	0,x
+ 765  68e 26 d1   	bne	mnemlu30
+ 766  690 ff 2c87 	stx	_temp2
+ 767  693 fe 2c83 	ldx	_temp
+ 768  696  8      	inx
+ 769  697 ff 2c83 	stx	_temp
+ 770  69a e6  0   	ldab	0,x
+ 771  69c fe 2c87 	ldx	_temp2
+ 772  69f e1  1   	cmpb	1,x
+ 773  6a1 26 be   	bne	mnemlu30
+ 774  6a3 ff 2c87 	stx	_temp2
+ 775  6a6 fe 2c83 	ldx	_temp
+ 776  6a9  8      	inx
+ 777  6aa e6  0   	ldab	0,x
+ 778  6ac fe 2c87 	ldx	_temp2
+ 779  6af e1  2   	cmpb	2,x
+ 780  6b1 26 ae   	bne	mnemlu30
+		  	repeat	3
+ 782  6b3  8      	inx
+ 782  6b4  8      	inx
+ 782  6b5  8      	inx
+ 783  6b6  d      	sec
+ 784  6b7 39      	rts
+		  *
+		  symlu	pshab
+ 787  6ba ce 2c69 	ldx	#_istring	;Look up string in 'istring'
+ 788  6bd 6d  0   	tst	0,x		;to see if is in _symbol
+ 789  6bf 26  4   	bne	symlu10		;table.  Carry = 1 if found,
+		  symlu05	pulab			;(x) = value if found.
+ 791  6c3  c      	clc
+ 792  6c4 39      	rts
+ 793  6c5 fe 2c81 symlu10	ldx	_stable
+		  	repeat	4
+ 795  6c8  8      	inx
+ 795  6c9  8      	inx
+ 795  6ca  8      	inx
+ 795  6cb  8      	inx
+ 796  6cc ff 2c87 symlu20	stx	_temp2
+ 797  6cf ce 2c69 	ldx	#_istring
+ 798  6d2 ff 2c83 	stx	_temp
+ 799  6d5 fe 2c87 	ldx	_temp2
+ 800  6d8 6d  0   symlu30	tst	0,x
+ 801  6da 27  3   	beq	symlu35
+ 802  6dc  9      	dex
+ 803  6dd 20 f9   	bra	symlu30
+		  symlu35	repeat	3
+ 805  6df  9      	dex
+ 805  6e0  9      	dex
+ 805  6e1  9      	dex
+ 806  6e2 6d  0   	tst	0,x
+ 807  6e4 27 db   	beq	symlu05
+ 808  6e6 ff 2c87 symlu40	stx	_temp2
+ 809  6e9 fe 2c83 	ldx	_temp
+ 810  6ec e6  0   	ldab	0,x
+ 811  6ee  8      	inx
+ 812  6ef ff 2c83 	stx	_temp
+ 813  6f2 fe 2c87 	ldx	_temp2
+ 814  6f5 e1  0   	cmpb	0,x
+ 815  6f7 26 d3   	bne	symlu20
+ 816  6f9 5d      	tstb
+ 817  6fa 27  3   	beq	symlu50
+ 818  6fc  9      	dex
+ 819  6fd 20 e7   	bra	symlu40
+ 820  6ff  9      symlu50	dex
+ 821  700 a6  0   	ldaa	0,x
+ 822  702  9      	dex
+ 823  703 e6  0   	ldab	0,x
+ 824  705 bd    0 	jsr	abtox
+		  	pulab
+ 826  70a  d      	sec
+ 827  70b 39      	rts
+		  *
+		  syment	pshab		;enter string in '_istring'
+ 830  70e ff 2c83 	stx	_temp	;into _symbol table with
+ 831  711 fe 2c81 	ldx	_stable	;of (x).
+		  	repeat	3
+ 833  714  8      	inx
+ 833  715  8      	inx
+ 833  716  8      	inx
+ 834  717 6d  0   syment10	tst	0,x
+ 835  719 27  3   	beq	syment20
+ 836  71b  9      	dex
+ 837  71c 20 f9   	bra	syment10
+		  syment20	repeat	3
+ 839  71e  9      	dex
+ 839  71f  9      	dex
+ 839  720  9      	dex
+ 840  721 6d  0   	tst	0,x
+ 841  723 26 f2   	bne	syment10
+ 842  725 ff 2c85 	stx	_temp1
+ 843  728 ce 2c69 	ldx	#_istring
+ 844  72b ff 2c87 	stx	_temp2
+ 845  72e fe 2c85 	ldx	_temp1
+ 846  731 ff 2c85 syment30	stx	_temp1	;_stable pointer
+ 847  734 fe 2c87 	ldx	_temp2	;new _symbol pointer
+ 848  737 e6  0   	ldab	0,x
+ 849  739 27  c   	beq	syment40	;if end of new _symb
+ 850  73b  8      	inx
+ 851  73c ff 2c87 	stx	_temp2
+ 852  73f fe 2c85 	ldx	_temp1
+ 853  742 e7  0   	stab	0,x
+ 854  744  9      	dex
+ 855  745 20 ea   	bra	syment30
+ 856  747 fe 2c85 syment40	ldx	_temp1
+ 857  74a 6f  0   	clr	0,x
+ 858  74c  9      	dex
+ 859  74d b6 2c83 	ldaa	_temp
+ 860  750 a7  0   	staa	0,x
+ 861  752  9      	dex
+ 862  753 b6 2c84 	ldaa	_temp + 1
+ 863  756 a7  0   	staa	0,x
+		  	dup	4
+ 867  758  9      	dex;
+ 867  759 6f  0   	clr	0,x;
+ 867  75b  9      	dex;
+ 867  75c 6f  0   	clr	0,x;
+ 867  75e  9      	dex;
+ 867  75f 6f  0   	clr	0,x;
+ 867  761  9      	dex;
+ 867  762 6f  0   	clr	0,x;
+ 868  764 fe 2c83 	ldx	_temp
+		  	pulab
+ 870  769 39      	rts
+		  *
+		  *	Put value in '_tsv' out on terminal. (sym. table
+		  *	search only).  Takes into account Symbol/Byte
+		  *	mode and current _radix.  No registers modified.
+		  puttsv	pshx
+		  	pshab
+ 877  76f 7d 2c63 	tst	_symb
+ 878  772 27 32   	beq	puttsv60	;byte mode
+ 879  774 fe 2c81 	ldx	_stable
+ 880  777 b6 2c7f 	ldaa	_tsv	;inverse Stable look-up
+ 881  77a f6 2c80 	ldab	_tsv + 1
+ 882  77d ff 2c83 puttsv10	stx	_temp
+ 883  780 6d  0   puttsv15	tst	0,x
+ 884  782 27  3   	beq	puttsv20
+ 885  784  9      	dex
+ 886  785 20 f9   	bra	puttsv15
+ 887  787  9      puttsv20	dex
+ 888  788 a1  0   	cmpa	0,x
+ 889  78a 27  8   	beq	puttsv30
+ 890  78c  9      	dex
+ 891  78d  9      puttsv25	dex
+ 892  78e 6d  0   	tst	0,x
+ 893  790 26 eb   	bne	puttsv10
+ 894  792 20 12   	bra	puttsv60
+ 895  794  9      puttsv30	dex
+ 896  795 e1  0   	cmpb	0,x
+ 897  797 26 f4   	bne	puttsv25
+ 898  799 fe 2c83 	ldx	_temp
+ 899  79c e6  0   puttsv55	ldab	0,x
+ 900  79e 27  c   	beq	puttsv70
+ 901  7a0 bd  cc6 	jsr	pchar
+ 902  7a3  9      	dex
+ 903  7a4 20 f6   	bra	puttsv55
+ 904  7a6 fe 2c7f puttsv60	ldx	_tsv
+ 905  7a9 bd  8e8 	jsr	printx
+		  puttsv70	pulab
+		  	pulx
+ 908  7b1 39      	rts
+		  *
+		  dumpcl	pshx		;Dump what '_cloc' points
+		  	pshab		;to in correct mode.  No
+ 912  7b7 fe 2c65 	ldx	_cloc	;registers modified
+ 913  7ba e6  0   	ldab	0,x
+ 914  7bc 27  5   	beq	dumpcl05
+ 915  7be 7d 2c63 	tst	_symb
+ 916  7c1 26 11   	bne	dumpcl10
+ 917  7c3 4f      dumpcl05	clra
+ 918  7c4 bd    0 	jsr	abtox
+ 919  7c7 bd  8e8 	jsr	printx
+ 920  7ca c6  1   	ldab	#1
+ 921  7cc f7 2c67 	stab	_cloop	;undefineds are 1 long
+ 922  7cf c6  6   	ldab	#6
+ 923  7d1 7e  860 	jmp	dumpcl30
+ 924  7d4 ce  d2f dumpcl10	ldx	#MOT	;inverse MOT table look-up
+ 925  7d7 6d  0   dumpcl20	tst	0,x
+ 926  7d9 27 e8   	beq	dumpcl05
+ 927  7db  8      	inx
+ 928  7dc  8      	inx
+ 929  7dd  8      	inx
+ 930  7de e1  0   	cmpb	0,x
+ 931  7e0 27 17   	beq	dumpcli
+ 932  7e2 e1  1   	cmpb	1,x
+ 933  7e4 27 46   	beq	dumpcld
+ 934  7e6 e1  2   	cmpb	2,x
+ 935  7e8 27 57   	beq	dumpclx
+ 936  7ea e1  3   	cmpb	3,x
+ 937  7ec 27 6a   	beq	dumpcle
+ 938  7ee e1  4   	cmpb	4,x
+ 939  7f0 27 7a   	beq	dumpcln
+		  	repeat	5
+ 941  7f2  8      	inx
+ 941  7f3  8      	inx
+ 941  7f4  8      	inx
+ 941  7f5  8      	inx
+ 941  7f6  8      	inx
+ 942  7f7 20 de   	bra	dumpcl20
+ 943  7f9 37      dumpcli	pshb
+ 944  7fa bd  8ba 	jsr	dumpclo
+ 945  7fd c6 23   	ldab	#'#'
+ 946  7ff bd  cc6 	jsr	pchar
+ 947  802 33      	pulb
+ 948  803 37      	pshb
+ 949  804 bd  894 	jsr	dumpclgo	;get operhand
+ 950  807 c1  3   	cmpb	#3
+ 951  809 27 19   	beq	dumpcli1
+ 952  80b 33      	pulb
+ 953  80c bd  8e8 	jsr	printx
+ 954  80f bd    0 	jsr	xtoab
+ 955  812 c1 20   	cmpb	#' '
+ 956  814 2d 12   	blt	dumpcli2
+ 957  816 bd    0 	jsr	pspace	;print out in ascii
+ 958  819 bd  9c6 	jsr	printsq
+ 959  81c bd  cc6 	jsr	pchar
+ 960  81f bd  9c6 	jsr	printsq
+ 961  822 20  4   	bra	dumpcli2
+ 962  824 33      dumpcli1	pulb
+ 963  825 bd  8b0 	jsr	dumpclz
+ 964  828 5f      dumpcli2	clrb
+ 965  829 7e  860 	jmp	dumpcl30
+ 966  82c bd  8ba dumpcld	jsr	dumpclo
+ 967  82f bd  8b0 	jsr	dumpclz
+ 968  832 c6 2c   	ldab	#','
+ 969  834 bd  cc6 	jsr	pchar
+ 970  837 c6 64   	ldab	#'d'
+ 971  839 bd  cc6 	jsr	pchar
+ 972  83c c6  1   	ldab	#1
+ 973  83e 7e  860 	jmp	dumpcl30
+ 974  841 bd  8ba dumpclx	jsr	dumpclo
+ 975  844 bd  894 	jsr	dumpclgo
+ 976  847 bd  8e8 	jsr	printx
+ 977  84a c6 2c   	ldab	#','
+ 978  84c bd  cc6 	jsr	pchar
+ 979  84f c6 78   	ldab	#'x'
+ 980  851 bd  cc6 	jsr	pchar
+ 981  854 c6  2   	ldab	#2
+ 982  856 20  8   	bra	dumpcl30
+ 983  858 bd  8ba dumpcle	jsr	dumpclo
+ 984  85b bd  8b0 	jsr	dumpclz
+ 985  85e c6  3   	ldab	#3
+ 986  860 f7 2c68 dumpcl30	stab	_ctop
+		  	pulab
+ 988  865 bd    0 	jsr	pdspace
+		  	pulx
+ 990  86b 39      	rts
+ 991  86c 37      dumpcln	pshb
+ 992  86d bd  8ba 	jsr	dumpclo
+ 993  870 33      	pulb
+ 994  871 c1 8d   	cmpb	#8d
+ 995  873 27 10   	beq	dumpclr
+ 996  875 c4 f0   	andb	#0f0
+ 997  877 c1 20   	cmpb	#20h
+ 998  879 27  a   	beq	dumpclr
+ 999  87b c6  1   	ldab	#1
+1000  87d f7 2c67 	stab	_cloop
+1001  880 c6  4   	ldab	#4
+1002  882 7e  860 	jmp	dumpcl30
+1003  885 c6  2   dumpclr	ldab	#2
+1004  887 f7 2c67 	stab	_cloop
+1005  88a bd  60c 	jsr	getbea
+1006  88d bd  76a 	jsr	puttsv
+1007  890 c6  5   	ldab	#5
+1008  892 20 cc   	bra	dumpcl30
+1009  894 bd    0 dumpclgo	jsr	bcount
+1010  897 f7 2c67 	stab	_cloop
+1011  89a fe 2c65 	ldx	_cloc
+1012  89d  8      	inx
+1013  89e ee  0   	ldx	0,x
+1014  8a0 c1  3   	cmpb	#3
+1015  8a2 27  b   	beq	dumpclgo1
+1016  8a4 bd    0 	jsr	xtoab
+1017  8a7 16      	tab
+1018  8a8 4f      	clra
+1019  8a9 bd    0 	jsr	abtox
+1020  8ac f6 2c67 	ldab	_cloop
+1021  8af 39      dumpclgo1	rts
+1022  8b0 bd  894 dumpclz	jsr	dumpclgo
+1023  8b3 ff 2c7f 	stx	_tsv
+1024  8b6 bd  76a 	jsr	puttsv
+1025  8b9 39      	rts
+1026  8ba 37      dumpclo	pshb
+		  	repeat	3
+1028  8bb  9      	dex
+1028  8bc  9      	dex
+1028  8bd  9      	dex
+1029  8be e6  0   	ldab	0,x
+1030  8c0 bd  cc6 	jsr	pchar
+1031  8c3 e6  1   	ldab	1,x
+1032  8c5 c4 7f   	andb	#0177
+1033  8c7 bd  cc6 	jsr	pchar
+1034  8ca e6  2   	ldab	2,x
+1035  8cc c4 7f   	andb	#0177
+1036  8ce bd  cc6 	jsr	pchar
+1037  8d1 6d  1   	tst	1,x
+1038  8d3 2a  5   	bpl	dumpclo1
+1039  8d5 c6 61   	ldab	#'a'
+1040  8d7 bd  cc6 	jsr	pchar
+1041  8da 6d  2   dumpclo1	tst	2,x
+1042  8dc 2a  5   	bpl	dumpclo2
+1043  8de c6 62   	ldab	#'b'
+1044  8e0 bd  cc6 	jsr	pchar
+1045  8e3 bd    0 dumpclo2	jsr	pdspace
+1046  8e6 33      	pulb
+1047  8e7 39      	rts
+		  *
+1049  8e8 37      printx	pshb
+1050  8e9 f6 2c64 	ldab	_radix	;print out (x) in
+1051  8ec bd    0 	jsr	bout	;current _radix
+1052  8ef 33      	pulb
+1053  8f0 39      	rts
+		  *
+1055  8f1 36      set_stable	psha	;set up the varable '_stable'
+1056  8f2 86 ff   	ldaa	#0ff	;for movable _symbol table.
+1057  8f4 a7  0   	staa	0,x	;(x) has FWA ram
+1058  8f6  9      	dex
+1059  8f7 6f  0   	clr	0,x
+1060  8f9  9      	dex
+1061  8fa a7  0   	staa	0,x
+1062  8fc  9      	dex
+1063  8fd a7  0   	staa	0,x
+1064  8ff  9      	dex
+1065  900 6f  0   	clr	0,x	;zero _symbol table
+1066  902 ff 2c81 	stx	_stable
+		  	dup	4
+1070  905  9      	dex;
+1070  906 6f  0   	clr	0,x;
+1070  908  9      	dex;
+1070  909 6f  0   	clr	0,x;
+1070  90b  9      	dex;
+1070  90c 6f  0   	clr	0,x;
+1070  90e  9      	dex;
+1070  90f 6f  0   	clr	0,x;
+1071  911 32      	pula
+1072  912 39      	rts
+		  *
+1074  913 7f 2c98 getnum	clr	_arg	;get a number from the terminal
+1075  916 7f 2c99 	clr	_arg + 1	;take care of operators
+1076  919 7f 2c9c 	clr	_argfun	;'argfun' is flag for null entry.
+1077  91c 7f 2c9d 	clr	_argpnt	;clear '.' flag
+1078  91f ce 2c69 getnum05	ldx	#_istring	;return # in (x),
+1079  922 bd    0 	jsr	gets	;terminating char. in (b)
+1080  925 37      getnumhs	pshb	;"have string" entry point
+1081  926 ce 2c69 	ldx	#_istring
+1082  929 6d  0   	tst	0,x
+1083  92b 26 21   	bne	getnum7
+1084  92d c1 2e   	cmpb	#'.'	;numer is current loc.
+1085  92f 27 10   	beq	getnum6
+1086  931 c1 27   	cmpb	#'\''
+1087  933 26 19   	bne	getnum7
+1088  935 bd  cf9 	jsr	gchar
+1089  938 4f      	clra
+1090  939 bd    0 	jsr	abtox
+1091  93c bd  9c6 	jsr	printsq
+1092  93f 20  3   	bra	getnum6a
+1093  941 fe 2c65 getnum6	ldx _cloc
+1094  944 33      getnum6a	pulb
+1095  945 7c 2c9d 	inc	_argpnt	;flag the decimal point
+1096  948 bd  cf9 	jsr	gchar
+1097  94b 37      	pshb
+1098  94c 20 17   	bra	getnum20
+1099  94e c6 40   getnum7	ldab	#'@'
+1100  950 e1  0   	cmpb	0,x
+1101  952 2c  b   	bge	getnum10	;have number
+1102  954 bd  6b8 	jsr	symlu
+1103  957 25  c   	bcs	getnum20
+1104  959 33      	pulb
+1105  95a bd  d0a 	jsr	uerror
+1106  95d 20 c0   	bra	getnum05
+1107  95f f6 2c64 getnum10	ldab	_radix
+1108  962 bd    0 	jsr	cnum
+1109  965 33      getnum20	pulb	;(x) has #, b = term
+1110  966 7d 2c9c 	tst	_argfun
+1111  969 26 19   	bne	getnum30
+1112  96b ff 2c98 	stx	_arg	;funny stuff for 1st number
+1113  96e ce 2c69 	ldx	#_istring
+1114  971 6d  0   	tst	0,x	;and '_argfun' flag hack
+1115  973 27  5   	beq	getnum25
+1116  975 7c 2c9c 	inc	_argfun
+1117  978 20 3a   	bra	getnum40
+1118  97a 7d 2c9d getnum25	tst	_argpnt
+1119  97d 27 35   	beq	getnum40
+1120  97f 7c 2c9c 	inc	_argfun	;the "number" was '.'
+1121  982 20 30   	bra	getnum40
+1122  984 f7 2c97 getnum30	stab	_argtc	;examine term. char
+1123  987 ff 2c9a 	stx	_argt
+1124  98a f6 2c9c 	ldab	_argfun	;switch on last term. char
+1125  98d ce  9ce 	ldx	#adlist
+1126  990 bd  9ee 	jsr	tsearch	;look up last
+1127  993 25 18   	bcs	getnum35
+		  	prints	I-error\r\n
+1129  9ad ee 10   getnum35	ldx	aglist-adlist,x	;do function
+1130  9af ad  0   	jsr	0,x
+1131  9b1 f6 2c97 	ldab	_argtc	;get this term
+1132  9b4 ce  9ce getnum40	ldx	#adlist
+1133  9b7 bd  9ee 	jsr	tsearch	;see if not function
+1134  9ba 25  4   	bcs	getnum50
+1135  9bc fe 2c98 	ldx	_arg
+1136  9bf 39      	rts
+1137  9c0 f7 2c9c getnum50	stab	_argfun
+1138  9c3 7e  91f 	jmp	getnum05
+		  *
+1140  9c6 37      printsq	pshb		;print a single qoute '
+1141  9c7 c6 27   	ldab	#'\''
+1142  9c9 bd  cc6 	jsr	pchar
+1143  9cc 33      	pulb
+1144  9cd 39      	rts
+		  *
+1146  9ce 2b      adlist	db	'+'	;function data list
+1147  9cf  0      	db	0
+1148  9d0 2d      	db	'-'
+1149  9d1  0      	db	0
+1150  9d2 2a      	db	'*'
+1151  9d3  0      	db	0
+1152  9d4 7c      	db	'|'
+1153  9d5  0      	db	0
+1154  9d6 26      	db	'&'
+1155  9d7  0      	db	0
+1156  9d8 5e      	db	'^'
+1157  9d9  0      	db	0
+1158  9da 23      	db	'#'
+1159  9db  0      	db	0
+1160  9dc  0      	db	0
+1161  9dd  0      	db	0
+1162  9de  9 fe   aglist	dw	fnplus	;function 'go' list
+1163  9e0  a  d   	dw	fnminus
+1164  9e2  a 17   	dw	fnmul
+1165  9e4  a 26   	dw	fnor
+1166  9e6  a 37   	dw	fnand
+1167  9e8  a 41   	dw	fnxor
+1168  9ea  a 4c   	dw	fnpnd
+1169  9ec  0  0   	dw	0
+1170  9ee 6d  0   tsearch	tst	0,x	;search t_arget list table
+1171  9f0 27  a   	beq	tsearch20	;for data in (b)
+1172  9f2 e1  0   	cmpb	0,x	;x points to list,
+1173  9f4 27  4   	beq	tsearch10	;c = 1 if found
+1174  9f6  8      	inx
+1175  9f7  8      	inx
+1176  9f8 20 f4   	bra	tsearch
+1177  9fa  d      tsearch10	sec
+1178  9fb 39      	rts
+1179  9fc  c      tsearch20	clc
+1180  9fd 39      	rts
+		  *
+1182  9fe 8d 30   fnplus	bsr	fnloadab
+1183  a00 fb 2c9b 	addb	_argt + 1
+1184  a03 b9 2c9a 	adca	_argt
+1185  a06 f7 2c99 fnstrab	stab	_arg + 1
+1186  a09 b7 2c98 	staa	_arg
+1187  a0c 39      	rts
+1188  a0d 8d 21   fnminus	bsr	fnloadab
+1189  a0f f0 2c9b 	subb	_argt + 1
+1190  a12 b2 2c9a 	sbca	_argt
+1191  a15 20 ef   	bra	fnstrab
+1192  a17 b6 2c9a fnmul	ldaa	_argt
+1193  a1a f6 2c9b 	ldab	_argt + 1
+1194  a1d fe 2c98 	ldx	_arg
+1195  a20 bd    0 	jsr	imul
+1196  a23 7e  a06 	jmp	fnstrab
+1197  a26 8d  8   fnor	bsr	fnloadab
+1198  a28 fa 2c9b 	orab	_argt + 1
+1199  a2b ba 2c9a 	oraa	_argt
+1200  a2e 20 d6   	bra	fnstrab
+1201  a30 f6 2c99 fnloadab	ldab	_arg + 1
+1202  a33 b6 2c98 	ldaa	_arg
+1203  a36 39      	rts
+1204  a37 8d f7   fnand	bsr	fnloadab
+1205  a39 f4 2c9b 	andb	_argt + 1
+1206  a3c b4 2c9a 	anda	_argt
+1207  a3f 20 c5   	bra	fnstrab
+1208  a41 8d ed   fnxor	bsr	fnloadab
+1209  a43 b8 2c9a 	eora	_argt
+1210  a46 f8 2c9b 	eorb	_argt + 1
+1211  a49 7e  a06 	jmp	fnstrab
+1212  a4c fe 2c9a fnpnd	ldx	_argt
+1213  a4f ff 2c98 	stx	_arg
+1214  a52 7f 2c89 	clr	_argim
+1215  a55 39      	rts
+		  *
+1217  a56 37      ascout	pshb
+1218  a57 c4 7f   	andb	#127	;types a char on terminal
+1219  a59 c1 20   	cmpb	#32	;prefix control chars with
+1220  a5b 2c  7   	bge	ascout1	;up-arrow
+1221  a5d cb 40   	addb	#64
+1222  a5f 37      	pshb
+1223  a60 c6 5e   	ldab	#94
+1224  a62 20  3   	bra	ascout2
+1225  a64 37      ascout1	pshb
+1226  a65 c6 20   	ldab	#' '
+1227  a67 bd  cc6 ascout2	jsr	pchar
+1228  a6a 33      	pulb
+1229  a6b bd  cc6 	jsr	pchar
+1230  a6e 33      	pulb
+1231  a6f 39      	rts
+		  *
+1233  a70 c6  6   getargs	ldab	#6	;get all (possible)
+1234  a72 f7 2c89 	stab	_argim	;arguments
+1235  a75 7f 2c8b 	clr	_arg1if	;clear instruction flag
+1236  a78 7f 2c90 	clr	_arg1f	;clear 1st flag
+1237  a7b 7f 2c93 	clr	_arg2f	;clear 2nd flag
+1238  a7e 7f 2c96 	clr	_arg3f	;clear 3rd flag
+1239  a81 ce 2c69 	ldx	#_istring
+1240  a84 bd    0 	jsr	gets
+1241  a87 37      	pshb
+1242  a88 bd  639 	jsr	mnemlu
+1243  a8b 25 26   	bcs	getarg10	;if instruction
+1244  a8d ce 2c69 	ldx	#_istring
+1245  a90 c6 40   	ldab	#'@'
+1246  a92 e1  0   	cmpb	0,x
+1247  a94 2c  b   	bge	getarg3
+1248  a96 bd  6b8 	jsr	symlu
+1249  a99 25  6   	bcs	getarg3
+1250  a9b 33      	pulb
+1251  a9c bd  d0a 	jsr	uerror
+1252  a9f 20 cf   	bra	getargs
+1253  aa1 33      getarg3	pulb
+1254  aa2 7f 2c98 	clr	_arg
+1255  aa5 7f 2c99 	clr	_arg + 1
+1256  aa8 7f 2c9c 	clr	_argfun
+1257  aab 7f 2c9d 	clr	_argpnt
+1258  aae bd  925 	jsr	getnumhs	;get number
+1259  ab1 20 1b   	bra	getarg30	;and process
+1260  ab3 ff 2c8c getarg10	stx	_argib
+1261  ab6 73 2c8b 	com	_arg1if
+1262  ab9 33      	pulb
+1263  aba c1 20   	cmpb	#' '
+1264  abc 27  d   	beq	getarg20	;if not inherant
+1265  abe a6  4   	ldaa	4,x
+1266  ac0 27 3e   	beq	getarg58	;if missing operhand
+1267  ac2 b7 2c8a 	staa	_arg1i
+1268  ac5 86  4   	ldaa	#4	;Note- don't know if is
+1269  ac7 b7 2c89 	staa	_argim	;relative or inherant
+1270  aca 39      	rts
+1271  acb bd  913 getarg20	jsr	getnum
+1272  ace ff 2c8e getarg30	stx	_arg1
+1273  ad1 7d 2c9c 	tst	_argfun
+1274  ad4 27  3   	beq	getarg40	;if no 1st argument
+1275  ad6 73 2c90 	com	_arg1f
+1276  ad9 c1 3b   getarg40	cmpb	#';'
+1277  adb 27 49   	beq	getarg70	;more args
+1278  add c1 2c   	cmpb	#','
+1279  adf 26 42   	bne	getarg60	;no more args
+1280  ae1 bd  cf9 	jsr	gchar
+1281  ae4 c1 78   	cmpb	#'x'
+1282  ae6 26  7   	bne	getarg50
+1283  ae8 c6  2   	ldab	#2	;tag for indexed addressing
+1284  aea f7 2c89 	stab	_argim
+1285  aed 20  c   	bra	getarg55
+1286  aef c1 64   getarg50	cmpb	#'d'
+1287  af1 27  3   	beq	getarg53
+1288  af3 7e  bd4 	jmp	getargbm	;bad addressing mode
+1289  af6 c6  1   getarg53	ldab	#1
+1290  af8 f7 2c89 	stab	_argim	;tag as direct addressing
+1291  afb bd  cf9 getarg55	jsr	gchar	;get terminating char
+1292  afe 20 d9   	bra	getarg40	;and process
+1293  b00 ce  b11 getarg58	ldx	#getarmo
+1294  b03 bd  d28 	jsr	crprints
+1295  b06 c6  7   getarg59	ldab	#7
+1296  b08 bd  cc6 	jsr	pchar
+1297  b0b bd    0 	jsr	pdspace
+1298  b0e 7e  a70 	jmp	getargs
+		  getarmo	ds	"Missing operand "
+1299  b11 4d      69 73 73 69 6e 67 20 6f 70 65 72 61 6e 64 20
+		  	db	7,0
+1300  b21  7       0
+1301  b23 7e  b46 getarg60	jmp	getargdone	;branch bridge
+1302  b26 bd  913 getarg70	jsr	getnum	;2nd arg
+1303  b29 ff 2c91 	stx	_arg2
+1304  b2c 7d 2c9c 	tst	_argfun
+1305  b2f 27  3   	beq	getarg80	;if no arg
+1306  b31 73 2c93 	com	_arg2f
+1307  b34 c1 3b   getarg80	cmpb	#';'
+1308  b36 26 eb   	bne	getarg60
+1309  b38 bd  913 	jsr	getnum	;3rd _arg
+1310  b3b ff 2c94 	stx	_arg3
+1311  b3e 7d 2c9c 	tst	_argfun
+1312  b41 27  3   	beq	getargdone
+1313  b43 73 2c96 	com	_arg3f
+1314  b46 7d 2c8b getargdone	tst	_arg1if
+1315  b49 26  1   	bne	getarg90
+1316  b4b 39      	rts
+1317  b4c 37      getarg90	pshb
+1318  b4d fe 2c8c 	ldx	_argib
+1319  b50 f6 2c89 	ldab	_argim
+1320  b53 26  9   	bne	getarg100
+1321  b55 e6  0   	ldab	0,x	;immid
+1322  b57 27 7a   getarg95	beq	getarg144
+1323  b59 f7 2c8a 	stab	_arg1i
+1324  b5c 33      	pulb
+1325  b5d 39      	rts
+1326  b5e c1  1   getarg100	cmpb	#1
+1327  b60 26  4   	bne	getarg110
+1328  b62 e6  1   	ldab	1,x	;direct
+1329  b64 20 f1   	bra	getarg95
+1330  b66 c1  2   getarg110	cmpb	#2
+1331  b68 26  4   	bne	getarg120
+1332  b6a e6  2   	ldab	2,x	;index
+1333  b6c 20 e9   	bra	getarg95
+1334  b6e 6d  3   getarg120	tst	3,x	;extended
+1335  b70 27  9   	beq	getarg130
+1336  b72 c6  3   	ldab	#3
+1337  b74 f7 2c89 	stab	_argim
+1338  b77 e6  3   	ldab	3,x
+1339  b79 20 dc   	bra	getarg95
+1340  b7b 6d  4   getarg130	tst	4,x
+1341  b7d 27 54   	beq	getarg144
+1342  b7f e6  4   	ldab	4,x
+1343  b81 c1 8d   	cmpb	#8d
+1344  b83 27  c   	beq	getarg140
+1345  b85 f7 2c83 	stab	_temp
+1346  b88 c4 f0   	andb	#0f0
+1347  b8a c1 20   	cmpb	#20h
+1348  b8c 26 45   	bne	getarg144
+1349  b8e f6 2c83 	ldab	_temp
+1350  b91 37      getarg140	pshb	;relative
+1351  b92 c6  5   	ldab	#5
+1352  b94 f7 2c89 	stab	_argim
+1353  b97 f6 2c8f 	ldab	_arg1 + 1
+1354  b9a c0  2   	subb	#2
+1355  b9c f0 2c66 	subb	_cloc + 1
+1356  b9f b6 2c65 	ldaa	_cloc
+1357  ba2 37      	pshb
+1358  ba3 5d      	tstb
+1359  ba4 2b  9   	bmi	getar10
+1360  ba6 cb  2   	addb	#2
+1361  ba8 fb 2c66 	addb	_cloc + 1
+1362  bab 89  0   	adca	#0
+1363  bad 20  e   	bra	getar20
+1364  baf 50      getar10	negb
+1365  bb0 c0  2   	subb	#2
+1366  bb2 f7 2c58 	stab	_abt
+1367  bb5 f6 2c66 	ldab	_cloc + 1
+1368  bb8 f0 2c58 	subb	_abt
+1369  bbb 82  0   	sbca	#0
+1370  bbd b1 2c8e getar20	cmpa	_arg1
+1371  bc0 26 30   	bne	getarre		;range error
+1372  bc2 f1 2c8f 	cmpb	_arg1 + 1
+1373  bc5 26 2b   	bne	getarre		;range error
+1374  bc7 33      	pulb
+1375  bc8 f7 2c8f 	stab	_arg1 + 1
+1376  bcb 7f 2c8e 	clr	_arg1
+1377  bce 33      getarg142	pulb
+1378  bcf 5d      	tstb
+1379  bd0 7e  b57 	jmp	getarg95
+1380  bd3 33      getarg144	pulb	;bad mode
+1381  bd4 ce  bdd getargbm	ldx	#getarbm
+1382  bd7 bd  d28 geta146	jsr	crprints
+1383  bda 7e  b06 	jmp	getarg59
+		  getarbm	ds	"Bad addressing mode \0"
+1384  bdd 42      61 64 20 61 64 64 72 65 73 73 69 6e 67 20 6d
+1384  bed 6f      64 65 20  0
+1385  bf2 33      getarre	pulb
+1386  bf3 33      	pulb
+1387  bf4 33      	pulb
+1388  bf5 ce  bfa 	ldx	#getarrem
+1389  bf8 20 dd   	bra	geta146
+		  getarrem	ds	"Out of range? \0"
+1390  bfa 4f      75 74 20 6f 66 20 72 61 6e 67 65 3f 20  0
+		  *
+		  storeit	pshx
+		  	pshab
+1394  c0e 7d 2c63 	tst	_symb
+1395  c11 26 1f   	bne	storeit30	;if _symbolic
+1396  c13 7d 2c8b 	tst	_arg1if
+1397  c16 26  b   	bne	storeit10	;if instuctions
+1398  c18 7d 2c90 	tst	_arg1f
+1399  c1b 26 10   	bne	storeit20	;if data
+		  storeitd	pulab
+		  	pulx
+1402  c22 39      	rts
+1403  c23 f6 2c8a storeit10	ldab	_arg1i	;instruction
+1404  c26 fe 2c65 storeit15	ldx	_cloc
+1405  c29 e7  0   	stab	0,x
+1406  c2b 20 f0   	bra	storeitd
+1407  c2d f6 2c8f storeit20	ldab	_arg1 + 1
+1408  c30 20 f4   	bra	storeit15	;data
+1409  c32 fe 2c65 storeit30	ldx	_cloc
+1410  c35 7d 2c8b 	tst	_arg1if	;symbolic
+1411  c38 26 22   	bne	storeit60	;if instruction
+1412  c3a 7d 2c90 	tst	_arg1f
+1413  c3d 27 de   	beq	storeitd	;nothing
+1414  c3f b6 2c67 	ldaa	_cloop
+1415  c42 f6 2c8f 	ldab	_arg1 + 1
+1416  c45 81  1   	cmpa	#1
+1417  c47 26  4   	bne	storeit40
+1418  c49 e7  0   	stab	0,x
+1419  c4b 20 d0   	bra	storeitd
+1420  c4d 81  2   storeit40	cmpa	#2
+1421  c4f 27  1   	beq	storeit50
+1422  c51  8      	inx
+1423  c52 b6 2c8e storeit50	ldaa	_arg1
+1424  c55 a7  0   	staa	0,x
+1425  c57 e7  1   	stab	1,x
+1426  c59 7e  c1d 	jmp	storeitd
+1427  c5c b6 2c67 storeit60	ldaa	_cloop	;instruction
+1428  c5f f6 2c89 	ldab	_argim
+1429  c62 c1  2   	cmpb	#2
+1430  c64 2e 1c   	bgt	storeit80
+1431  c66 81  2   	cmpa	#2	;imidiate,dir,index
+1432  c68 2c  3   	bge	storeit70
+1433  c6a 7e  cb4 	jmp	storeitse	;size error
+1434  c6d b6 2c8a storeit70	ldaa	_arg1i
+1435  c70 a7  0   	staa	0,x
+1436  c72 b6 2c8f 	ldaa	_arg1 + 1
+1437  c75 a7  1   	staa	1,x
+1438  c77 86  2   	ldaa	#2
+1439  c79 b7 2c67 	staa	_cloop
+1440  c7c f7 2c68 	stab	_ctop
+1441  c7f 7e  c1d 	jmp	storeitd
+1442  c82 c1  5   storeit80	cmpb	#5
+1443  c84 26  7   	bne	storeit90
+1444  c86 81  2   	cmpa	#2	;relative
+1445  c88 2c e3   	bge	storeit70
+1446  c8a 7e  cb4 	jmp	storeitse	;size error
+1447  c8d c1  3   storeit90	cmpb	#3
+1448  c8f 26 16   	bne	storeit100
+1449  c91 81  3   	cmpa	#3	;extended
+1450  c93 26 1f   	bne	storeitse
+1451  c95 b6 2c8a 	ldaa	_arg1i
+1452  c98 a7  0   	staa	0,x
+1453  c9a b6 2c8e 	ldaa	_arg1
+1454  c9d a7  1   	staa	1,x
+1455  c9f b6 2c8f 	ldaa	_arg1 + 1
+1456  ca2 a7  2   	staa	2,x
+1457  ca4 7e  c1d 	jmp	storeitd
+1458  ca7 b6 2c8a storeit100	ldaa	_arg1i	;must be inherant
+1459  caa a7  0   	staa	0,x
+1460  cac 86  1   	ldaa	#1
+1461  cae b7 2c67 	staa	_cloop
+1462  cb1 7e  c1d 	jmp	storeitd	;don't change ctop
+1463  cb4 ce  cbd storeitse	ldx	#storeitm
+1464  cb7 bd  d28 	jsr	crprints
+1465  cba 7e  c1d 	jmp	storeitd
+		  storeitm	ds	"Size?  "
+1466  cbd 53      69 7a 65 3f 20 20
+		  	db	7,0
+1467  cc4  7       0
+		  *
+1469  cc6 36      pchar	psha
+1470  cc7 86  2   	ldaa	#2
+1471  cc9 b5 8004 pcharl	bita	_ACIA
+1472  ccc 27 fb   	beq	pcharl
+1473  cce f7 8005 	stab	_ACIA+1
+1474  cd1 32      	pula
+1475  cd2 7d 2c9e 	tst	_fill
+1476  cd5 26  1   	bne	pchar3
+1477  cd7 39      	rts
+1478  cd8 c1  d   pchar3	cmpb	#13	;_fill after CR ?
+1479  cda 27  1   	beq	pchar1
+1480  cdc 39      	rts
+1481  cdd 37      pchar1	pshb
+1482  cde f6 2c9e 	ldab	_fill
+1483  ce1 f7 2c9f 	stab	_fillc
+1484  ce4 c6  1   	ldab	#_FILLCHAR	;_fill stuff
+1485  ce6 8d de   pchar2	bsr	pchar
+1486  ce8 7a 2c9f 	dec	_fillc
+1487  ceb 26 f9   	bne	pchar2
+1488  ced 33      	pulb
+1489  cee 39      	rts
+		  *
+1491  cef f6 8004 ichar	ldab	_ACIA	;full dup get charactor
+1492  cf2 54      	lsrb
+1493  cf3 24 fa   	bcc	ichar
+1494  cf5 f6 8005 	ldab	_ACIA + 1
+1495  cf8 39      	rts
+		  *
+1497  cf9 bd  cef gchar	jsr	ichar	;get a charactor
+1498  cfc c4 7f   	andb	#0177	;(half-duplex, ignore _fills)
+1499  cfe c1  1   	cmpb	#1	;fill char?
+1500  d00 27 f7   	beq	gchar
+1501  d02 c1 1b   	cmpb	#033	;don't echo 'esc'
+1502  d04 27  3   	beq	gchar10
+1503  d06 bd  cc6 	jsr	pchar	;half duplex
+1504  d09 39      gchar10	rts
+		  *
+		  uerror	pshx
+1507  d0d ce  d17 	ldx	#uerrorm
+1508  d10 bd    0 	jsr	prints
+		  	pulx
+1510  d16 39      	rts
+		  uerrorm	ds	"  Undefinedd ?"
+1511  d17 20      20 55 6e 64 65 66 69 6e 65 64 64  8 20 3f
+		  	db	7,0
+1512  d26  7       0
+1513  d28 bd    0 crprints	jsr	pcrlf
+1514  d2b bd    0 	jsr	prints
+1515  d2e 39      	rts
+		  *
+		  *	M achine  O pcode  T able
+		  *
+		  *  char  char  char  imid  direct  index  ext.  inher/rel
+		  *       +80=A  +80=B
+		  MOT	db	'a',228,100,139,155,171,187,0
+1521  d2f 61      e4 64 8b 9b ab bb  0
+		  	db	'a',100,228,203,219,235,251,0
+1522  d37 61      64 e4 cb db eb fb  0
+		  	db	'a',98,97,0,0,0,0,27
+1523  d3f 61      62 61  0  0  0  0 1b
+		  	db	'a',228,99,137,153,169,185,0
+1524  d47 61      e4 63 89 99 a9 b9  0
+		  	db	'a',100,227,201,217,233,249,0
+1525  d4f 61      64 e3 c9 d9 e9 f9  0
+		  	db	'a',238,100,132,148,164,180,0
+1526  d57 61      ee 64 84 94 a4 b4  0
+		  	db	'a',110,228,196,212,228,244,0
+1527  d5f 61      6e e4 c4 d4 e4 f4  0
+		  	db	'b',233,116,133,149,165,181,0
+1528  d67 62      e9 74 85 95 a5 b5  0
+		  	db	'b',105,244,197,213,229,245,0
+1529  d6f 62      69 f4 c5 d5 e5 f5  0
+		  	db	'c',108,114,0,0,111,127,0
+1530  d77 63      6c 72  0  0 6f 7f  0
+		  	db	'c',236,114,0,0,0,0,79
+1531  d7f 63      ec 72  0  0  0  0 4f
+		  	db	'c',108,242,0,0,0,0,95
+1532  d87 63      6c f2  0  0  0  0 5f
+		  	db	'c',237,112,129,145,161,177,0
+1533  d8f 63      ed 70 81 91 a1 b1  0
+		  	db	'c',109,240,193,209,225,241,0
+1534  d97 63      6d f0 c1 d1 e1 f1  0
+		  	db	'c',98,97,0,0,0,0,17
+1535  d9f 63      62 61  0  0  0  0 11
+		  	db	'c',111,109,0,0,99,115,0
+1536  da7 63      6f 6d  0  0 63 73  0
+		  	db	'c',239,109,0,0,0,0,67
+1537  daf 63      ef 6d  0  0  0  0 43
+		  	db	'c',111,237,0,0,0,0,83
+1538  db7 63      6f ed  0  0  0  0 53
+		  	db	'n',101,103,0,0,96,112,0
+1539  dbf 6e      65 67  0  0 60 70  0
+		  	db	'n',229,103,0,0,0,0,64
+1540  dc7 6e      e5 67  0  0  0  0 40
+		  	db	'n',101,231,0,0,0,0,80
+1541  dcf 6e      65 e7  0  0  0  0 50
+		  	db	'd',97,97,0,0,0,0,25
+1542  dd7 64      61 61  0  0  0  0 19
+		  	db	'd',101,99,0,0,106,122,0
+1543  ddf 64      65 63  0  0 6a 7a  0
+		  	db	'd',229,99,0,0,0,0,74
+1544  de7 64      e5 63  0  0  0  0 4a
+		  	db	'd',101,227,0,0,0,0,90
+1545  def 64      65 e3  0  0  0  0 5a
+		  	db	'e',239,114,136,152,168,184,0
+1546  df7 65      ef 72 88 98 a8 b8  0
+		  	db	'e',111,242,200,216,232,248,0
+1547  dff 65      6f f2 c8 d8 e8 f8  0
+		  	db	'i',110,99,0,0,108,124,0
+1548  e07 69      6e 63  0  0 6c 7c  0
+		  	db	'i',238,99,0,0,0,0,76
+1549  e0f 69      ee 63  0  0  0  0 4c
+		  	db	'i',110,227,0,0,0,0,92
+1550  e17 69      6e e3  0  0  0  0 5c
+		  	db	'l',228,97,134,150,166,182,0
+1551  e1f 6c      e4 61 86 96 a6 b6  0
+		  	db	'l',100,225,198,214,230,246,0
+1552  e27 6c      64 e1 c6 d6 e6 f6  0
+		  	db	'o',242,97,138,154,170,186,0
+1553  e2f 6f      f2 61 8a 9a aa ba  0
+		  	db	'o',114,225,202,218,234,250,0
+1554  e37 6f      72 e1 ca da ea fa  0
+		  	db	'p',243,104,0,0,0,0,54
+1555  e3f 70      f3 68  0  0  0  0 36
+		  	db	'p',115,232,0,0,0,0,55
+1556  e47 70      73 e8  0  0  0  0 37
+		  	db	'p',245,108,0,0,0,0,50
+1557  e4f 70      f5 6c  0  0  0  0 32
+		  	db	'p',117,236,0,0,0,0,51
+1558  e57 70      75 ec  0  0  0  0 33
+		  	db	'r',111,108,0,0,105,121,0
+1559  e5f 72      6f 6c  0  0 69 79  0
+		  	db	'r',239,108,0,0,0,0,73
+1560  e67 72      ef 6c  0  0  0  0 49
+		  	db	'r',111,236,0,0,0,0,89
+1561  e6f 72      6f ec  0  0  0  0 59
+		  	db	'r',111,114,0,0,102,118,0
+1562  e77 72      6f 72  0  0 66 76  0
+		  	db	'r',239,114,0,0,0,0,70
+1563  e7f 72      ef 72  0  0  0  0 46
+		  	db	'r',111,242,0,0,0,0,86
+1564  e87 72      6f f2  0  0  0  0 56
+		  	db	'a',115,108,0,0,104,120,0
+1565  e8f 61      73 6c  0  0 68 78  0
+		  	db	'a',243,108,0,0,0,0,72
+1566  e97 61      f3 6c  0  0  0  0 48
+		  	db	'a',115,236,0,0,0,0,88
+1567  e9f 61      73 ec  0  0  0  0 58
+		  	db	'a',115,114,0,0,103,119,0
+1568  ea7 61      73 72  0  0 67 77  0
+		  	db	'a',243,114,0,0,0,0,71
+1569  eaf 61      f3 72  0  0  0  0 47
+		  	db	'a',115,242,0,0,0,0,87
+1570  eb7 61      73 f2  0  0  0  0 57
+		  	db	'l',115,114,0,0,100,116,0
+1571  ebf 6c      73 72  0  0 64 74  0
+		  	db	'l',243,114,0,0,0,0,68
+1572  ec7 6c      f3 72  0  0  0  0 44
+		  	db	'l',115,242,0,0,0,0,84
+1573  ecf 6c      73 f2  0  0  0  0 54
+		  	db	's',244,97,0,151,167,183,0
+1574  ed7 73      f4 61  0 97 a7 b7  0
+		  	db	's',116,225,0,215,231,247,0
+1575  edf 73      74 e1  0 d7 e7 f7  0
+		  	db	's',245,98,128,144,160,176,0
+1576  ee7 73      f5 62 80 90 a0 b0  0
+		  	db	's',117,226,192,208,224,240,0
+1577  eef 73      75 e2 c0 d0 e0 f0  0
+		  	db	's',98,97,0,0,0,0,16
+1578  ef7 73      62 61  0  0  0  0 10
+		  	db	's',226,99,130,146,162,178,0
+1579  eff 73      e2 63 82 92 a2 b2  0
+		  	db	's',98,227,194,210,226,242,0
+1580  f07 73      62 e3 c2 d2 e2 f2  0
+		  	db	't',97,98,0,0,0,0,22
+1581  f0f 74      61 62  0  0  0  0 16
+		  	db	't',98,97,0,0,0,0,23
+1582  f17 74      62 61  0  0  0  0 17
+		  	db	't',115,116,0,0,109,125,0
+1583  f1f 74      73 74  0  0 6d 7d  0
+		  	db	't',243,116,0,0,0,0,77
+1584  f27 74      f3 74  0  0  0  0 4d
+		  	db	't',115,244,0,0,0,0,93
+1585  f2f 74      73 f4  0  0  0  0 5d
+		  	db	'c',112,120,140,156,172,188,0
+1586  f37 63      70 78 8c 9c ac bc  0
+		  	db	'd',101,120,0,0,0,0,9
+1587  f3f 64      65 78  0  0  0  0  9
+		  	db	'd',101,115,0,0,0,0,52
+1588  f47 64      65 73  0  0  0  0 34
+		  	db	'i',110,120,0,0,0,0,8
+1589  f4f 69      6e 78  0  0  0  0  8
+		  	db	'i',110,115,0,0,0,0,49
+1590  f57 69      6e 73  0  0  0  0 31
+		  	db	'l',100,120,206,222,238,254,0
+1591  f5f 6c      64 78 ce de ee fe  0
+		  	db	'l',100,115,142,158,174,190,0
+1592  f67 6c      64 73 8e 9e ae be  0
+		  	db	's',116,120,0,223,239,255,0
+1593  f6f 73      74 78  0 df ef ff  0
+		  	db	's',116,115,0,159,175,191,0
+1594  f77 73      74 73  0 9f af bf  0
+		  	db	't',120,115,0,0,0,0,53
+1595  f7f 74      78 73  0  0  0  0 35
+		  	db	't',115,120,0,0,0,0,48
+1596  f87 74      73 78  0  0  0  0 30
+		  	db	'b',114,97,0,0,0,0,32
+1597  f8f 62      72 61  0  0  0  0 20
+		  	db	'b',99,99,0,0,0,0,36
+1598  f97 62      63 63  0  0  0  0 24
+		  	db	'b',99,115,0,0,0,0,37
+1599  f9f 62      63 73  0  0  0  0 25
+		  	db	'b',101,113,0,0,0,0,39
+1600  fa7 62      65 71  0  0  0  0 27
+		  	db	'b',103,101,0,0,0,0,44
+1601  faf 62      67 65  0  0  0  0 2c
+		  	db	'b',103,116,0,0,0,0,46
+1602  fb7 62      67 74  0  0  0  0 2e
+		  	db	'b',104,105,0,0,0,0,34
+1603  fbf 62      68 69  0  0  0  0 22
+		  	db	'b',108,101,0,0,0,0,47
+1604  fc7 62      6c 65  0  0  0  0 2f
+		  	db	'b',108,115,0,0,0,0,35
+1605  fcf 62      6c 73  0  0  0  0 23
+		  	db	'b',108,116,0,0,0,0,45
+1606  fd7 62      6c 74  0  0  0  0 2d
+		  	db	'b',109,105,0,0,0,0,43
+1607  fdf 62      6d 69  0  0  0  0 2b
+		  	db	'b',110,101,0,0,0,0,38
+1608  fe7 62      6e 65  0  0  0  0 26
+		  	db	'b',118,99,0,0,0,0,40
+1609  fef 62      76 63  0  0  0  0 28
+		  	db	'b',118,115,0,0,0,0,41
+1610  ff7 62      76 73  0  0  0  0 29
+		  	db	'b',112,108,0,0,0,0,42
+1611  fff 62      70 6c  0  0  0  0 2a
+		  	db	'b',115,114,0,0,0,0,141
+1612 1007 62      73 72  0  0  0  0 8d
+		  	db	'j',109,112,0,0,110,126,0
+1613 100f 6a      6d 70  0  0 6e 7e  0
+		  	db	'j',115,114,0,0,173,189,0
+1614 1017 6a      73 72  0  0 ad bd  0
+		  	db	'n',111,112,0,0,0,0,1
+1615 101f 6e      6f 70  0  0  0  0  1
+		  	db	'r',116,105,0,0,0,0,59
+1616 1027 72      74 69  0  0  0  0 3b
+		  	db	'r',116,115,0,0,0,0,57
+1617 102f 72      74 73  0  0  0  0 39
+		  	db	's',119,105,0,0,0,0,63
+1618 1037 73      77 69  0  0  0  0 3f
+		  	db	'w',97,105,0,0,0,0,62
+1619 103f 77      61 69  0  0  0  0 3e
+		  	db	'c',108,99,0,0,0,0,12
+1620 1047 63      6c 63  0  0  0  0  c
+		  	db	'c',108,105,0,0,0,0,14
+1621 104f 63      6c 69  0  0  0  0  e
+		  	db	'c',108,118,0,0,0,0,10
+1622 1057 63      6c 76  0  0  0  0  a
+		  	db	's',101,99,0,0,0,0,13
+1623 105f 73      65 63  0  0  0  0  d
+		  	db	's',101,105,0,0,0,0,15
+1624 1067 73      65 69  0  0  0  0  f
+		  	db	's',101,118,0,0,0,0,11
+1625 106f 73      65 76  0  0  0  0  b
+		  	db	't',97,112,0,0,0,0,6
+1626 1077 74      61 70  0  0  0  0  6
+		  	db	't',112,97,0,0,0,0,7
+1627 107f 74      70 61  0  0  0  0  7
+		  	db	0,0,0,0,0,0,0,0
+1628 1087  0       0  0  0  0  0  0  0
+		  	db	0,0,0,0,0,0,0,0
+1629 108f  0       0  0  0  0  0  0  0
+		  	end
+2c00 ACTSTART                  1 CONMOD                  d2f MOT               
+8004 _ACIA                    14 _ADDSTKLN                 0 _FILL             
+   1 _FILLCHAR              2bfe _FSTABLE               2c52 _FSTACK           
+2c55 _abh                   2c56 _abl                   2c58 _abt              
+2c59 _abt2                  2c5a _abt3                  2c5b _abt4             
+2c5c _abt5                  2c57 _abx                   2cb0 _addcnt           
+2cd9 _addpnt                2cb1 _addstk                2cab _altfb            
+2caf _altfd                 2cad _altfe                 2ca4 _altgdef          
+2ca6 _altzb                 2ca8 _altze                 2caa _altzv            
+2c8a _arg1i                 2c8b _arg1if                2c8e _arg1             
+2c90 _arg1f                 2c91 _arg2                  2c93 _arg2f            
+2c94 _arg3                  2c96 _arg3f                 2c8c _argib            
+2c89 _argim                 2c97 _argtc                 2c98 _arg              
+2c9c _argfun                2c9d _argpnt                2c9a _argt             
+2c5d _awt                   2c5f _awt2                  2c61 _awt3             
+2c65 _cloc                  2c67 _cloop                 2c68 _ctop             
+2ca0 _dqbuff                2c9e _fill                  2c9f _fillc            
+2c69 _istring               2ca3 _nalts                 2c54 _pupf             
+2c64 _radix                 2c81 _stable                2c63 _symb             
+2c83 _temp                  2c85 _temp1                 2c87 _temp2            
+2c7f _tsv                    9ce adlist                  9de aglist            
+ 4c0 alt10                   535 altf                    540 altf10            
+ 54c altf20                  557 altf30                  55d altf35            
+ 562 altf40                  568 altf45                  56b altf47            
+ 56f altf50                  593 altfmes                 47c altg              
+ 486 altg10                  49a altg20                  4a1 altg30            
+ 4a9 altl                    4bd altl05                  4db altl20            
+ 450 altr                    46b altr05                  472 altr10            
+ 475 altr20                  43e alts                    446 alts05            
+ 449 alts10                  4e8 altt                    4f6 altt10            
+ 4f9 altt20                  502 altz                    50d altz10            
+ 518 altz20                  523 altz30                  52a altz40            
+ a56 ascout                  a64 ascout1                 a67 ascout2           
+ 148 bigls                   14b bigl                    15d bigl10            
+ 3fb comalt                  3fe comalt05                40f comalt10          
+ 41a comalt20                236 comcol                  3ac comcp             
+ 3bd comcp05                 3c9 comcp10                 2a6 comdq             
+ 1d9 comeq                   1f3 comeq10                 1f6 comeq15           
+ 1fb comeq20                 230 comeq35                 232 comeq40           
+ 1f0 comeqd                  2cc comex                   2e2 comex10           
+ 2f8 comex20                 316 comex30                 319 comff             
+ 325 comff10                 245 comlog                  1c0 comnl             
+ 1c5 comnl05                 1cb comnl10                 32d comop             
+ 33d comop05                 340 comop07                 35b comop10           
+ 366 comop15                 3a3 comop20                 3a6 comop30           
+ 24a comque                  25d comque10                260 comque15          
+ 26b comque18                273 comque20                2a0 comque35          
+ 2a2 comque40                25a comqued                 1b7 comret            
+ 19d comslash                1a8 comslash1               1d4 comspc            
+ d28 crprints                41e daltlist                161 dlist             
+ 7b2 dumpcl                  7c3 dumpcl05                7d4 dumpcl10          
+ 7d7 dumpcl20                860 dumpcl30                82c dumpcld           
+ 858 dumpcle                 894 dumpclgo                8af dumpclgo1         
+ 7f9 dumpcli                 824 dumpcli1                828 dumpcli2          
+ 86c dumpcln                 8ba dumpclo                 8da dumpclo1          
+ 8e3 dumpclo2                885 dumpclr                 841 dumpclx           
+ 8b0 dumpclz                 a37 fnand                   a30 fnloadab          
+ a0d fnminus                 a17 fnmul                   a26 fnor              
+ 9fe fnplus                  a4c fnpnd                   a06 fnstrab           
+ a41 fnxor                   42e galtlist                5b0 gbyte             
+ cf9 gchar                   d09 gchar10                 bd7 geta146           
+ baf getar10                 bbd getar20                 bdd getarbm           
+ ab3 getarg10                b5e getarg100               b66 getarg110         
+ b6e getarg120               b7b getarg130               b91 getarg140         
+ bce getarg142               bd3 getarg144               acb getarg20          
+ aa1 getarg3                 ace getarg30                ad9 getarg40          
+ aef getarg50                af6 getarg53                afb getarg55          
+ b00 getarg58                b06 getarg59                b23 getarg60          
+ b26 getarg70                b34 getarg80                b4c getarg90          
+ b57 getarg95                bd4 getargbm                b46 getargdone        
+ a70 getargs                 b11 getarmo                 bf2 getarre           
+ bfa getarrem                60c getbea                  622 getbea40          
+ 62f getbea50                913 getnum                  91f getnum05          
+ 95f getnum10                965 getnum20                97a getnum25          
+ 984 getnum30                9ad getnum35                9b4 getnum40          
+ 9c0 getnum50                941 getnum6                 944 getnum6a          
+ 94e getnum7                 925 getnumhs                17f glist             
+ cef ichar                   5d1 in_cloc                 5e9 in_cloc10         
+  dd main                     ec main1                   5c5 makehex           
+ 5cd makehex1                639 mnemlu                  64a mnemlu10          
+ 654 mnemlu15                65a mnemlu18                65e mnemlu20          
+ 661 mnemlu30                67b mnemlu35                68c mnemlu40          
+ 59a pbyte                   cc6 pchar                   cdd pchar1            
+ ce6 pchar2                  cd8 pchar3                  cc9 pcharl            
+ 5ac phex10                  5a2 phexdig                 5f2 prcloc            
+ 9c6 printsq                 8e8 printx                  76a puttsv            
+ 77d puttsv10                780 puttsv15                787 puttsv20          
+ 78d puttsv25                794 puttsv30                79c puttsv55          
+ 7a6 puttsv60                7ac puttsv70                8f1 set_stable        
+ c09 storeit                 c23 storeit10               ca7 storeit100        
+ c26 storeit15               c2d storeit20               c32 storeit30         
+ c4d storeit40               c52 storeit50               c5c storeit60         
+ c6d storeit70               c82 storeit80               c8d storeit90         
+ c1d storeitd                cbd storeitm                cb4 storeitse         
+ 70c syment                  717 syment10                71e syment20          
+ 731 syment30                747 syment40                210 symeq30           
+ 6b8 symlu                   6c1 symlu05                 6c5 symlu10           
+ 6cc symlu20                 6d8 symlu30                 6df symlu35           
+ 6e6 symlu40                 6ff symlu50                 287 symque30          
+ 9ee tsearch                 9fa tsearch10               9fc tsearch20         
+ d0a uerror                  d17 uerrorm                 156 unknown           
+

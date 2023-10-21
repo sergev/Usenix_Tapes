@@ -1,0 +1,117 @@
+.TH PRINTFCK 1  "18 January 1983"
+.SH NAME
+printfck \- modify C program to enable typechecking of printf() calls
+.SH SYNOPSIS
+.B printfck
+[ -n ]
+[ -e functionname ] ...
+[ -f functionfile ] ...
+[ c-program ] ...
+.SH DESCRIPTION
+.I Printfck
+reads the C-program source from the named files (or standard
+input if no arguments are given) and determines the types of
+the arguments to
+.IR printf (3S)
+and
+.IR scanf (3S)
+according to the given format string. It writes to standard
+output a modified version of the program, where the
+.I printf()
+or
+.I scanf()
+arguments are turned into calls to dummy routines. For example:
+.PP
+                printf("Name %8s not known.", x);
+ becomes
+                printf("Name %8s not known.", percent_s(x));
+.PP
+The routine percent_s() is defined within the modified program
+to be a function requiring a pointer to a character, so
+.IR lint (1)
+can now check that variable x does indeed have the appropriate
+type.  Any lint warnings about improper usage of a percent_*
+function indicates that the corresponding printf argument does
+not match the command string!
+.PP
+The program recognises the routines
+.IR printf() ,
+.IR sprintf() ,
+.IR fprintf() ,
+.IR scanf() ,
+.I sscanf()
+and
+.IR fscanf() .
+.PP
+A typical way of using this would be:
+
+                printfck part1.c part2.c part3.c  > temp.c
+                lint temp.c
+.SH "OPTIONS"
+The options allow modification of the list of functions checked
+by
+.IR printfck .
+This allows the correct checking of user-defined variants of
+printf() or scanf()
+and makes lint give more useful line numbers when it
+complains.
+.TP
+-n
+Erase the default list of functions.
+.TP
+-e
+The following argument is the name of a function to be checked
+in the same way as printf(): its first argument is a printf()
+format string from which subsequent argument types may be
+deduced. Note that fprintf() could not be specified in this
+way, because its first argument is not the format string.
+.TP
+-f
+The following argument is the name of a file containing a list
+of (function name,
+.IR n ,
+.IR t )
+triples, where
+.I n
+is the number of arguments which precede the format string
+and
+.I t
+indicates the type of formatting involved; 0 means
+printf()-style and 1 means scanf()-style.
+For example, the following file is equivalent to the default
+function names (# indicates a comment):
+.PP
+                # default specification for printfck
+                printf   0        # printf( "format", arg2, ... );
+                fprintf  1        # fprintf( fp, "format", arg3, ... );
+                sprintf  1        # sprintf( s, "format", arg3, ... );
+                scanf    0        # scanf( "format", arg2, ... );
+                fscanf   1        # fscanf( fp, "format", arg3, ... );
+                sscanf   1        # sscanf( s, "format", arg3, ... );
+.SH "LIMITATIONS"
+If the format string is not an explicit constant,
+.I printfck
+cannot help you. It will however do its level best, and can
+cope with complicated #ifdefs, given suitable hints:
+
+.nr x \n(.lu/2u
+.in +0.5i
+ THIS FAILS                \h'|\nxu' THIS WORKS
+                           \h'|\nxu'
+        printf("%s%d",     \h'|\nxu'         printf("%s%d", (
+ #ifdef debug              \h'|\nxu' #ifdef debug
+                "foo"      \h'|\nxu'                 "foo"
+ #else                     \h'|\nxu' #else
+                "bar"      \h'|\nxu'                 "bar"
+ #endif debug              \h'|\nxu' #endif debug
+                , num);    \h'|\nxu'                 ), num);
+.in
+.SH "BUGS"
+Doesn't check arguments to see if they contain invocations of
+the routines to be checked.
+.SH "SEE ALSO"
+printf(3S), scanf(3S), lint(1)
+.SH "AUTHOR"
+.nf
+Mod.sources:  Volume 4, Issue 114
+Submitted by: Guido van Rossum <seismo!mcvax!guido>

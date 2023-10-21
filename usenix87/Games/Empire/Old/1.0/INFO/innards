@@ -1,0 +1,197 @@
+.TH Concept : INNARDS
+.s1
+Sector Updates
+.s1
+Several characteristics of the empire game are dependent on
+sector updates --
+mobility, efficiency, mining of ore, generation
+of production units, etc.
+An understanding of the calculations
+involved is often necessary in planning the timing of various
+actions.
+This info topic is included
+to help explain how this (complex) task is carried out,
+and although it is unlikely that it is strictly up to date,
+it should provide a feel for the overall philosophy.
+.s1
+All commodities in a sector are kept as integers,
+some as 16 bits but most in 8 bits (i.e. values range from
+-128 to 127).
+Because of this an update that gives a population
+growth of .9 civilians becomes a growth of 0.
+On the other hand,
+an update that produces 150 units of ore in a sector can at
+most add 127 units of ore.
+.s1
+Here is an approximate description of the algorithm that is
+called whenever a sector is accessed:
+.NF
+.sp
+Variables used are:
+.in +1
+curup = the present time (in half hours)
+lstup = the time of the last update for the sector
+dt = curup - lstup, elapsed time since last update
+civ, mil = civilians & military for the sector
+desig, effic = designation & efficiency for the sector
+miner, gmin = regular & gold mineral content of the sector
+t_level, r_level = technology & research level of the country
+p_stage, p_time = plague stage & plague stage duration
+workforce = an intermediate variable that represents work potential
+iwork = the amount of work done in the sector
+.FI
+.nf
+.in +1
+.sp
+If lstup == 0 (i.e. never been updated) set lstup=curup
+workforce = (civ + mil / 5) / 100
+If workforce = 0 go away and don't update anything
+dt = curup - lstup
+If dt > 256 then set it to 256
+iwork = dt * workforce
+If t < 1 and we weren't told to ignore time,
+	    go away and don't update anything
+    A few other strange considerations enter here, e.g. if the sector
+    does not belong to the current plasyer and iwork is less than 48
+    then don't update, etc
+Check the weather, if it's bad enough do some damage to the sector
+
+If the weather is good enough for construction then
+  effic becomes effic + t (if possible) and costs $1 for each
+	percentage point gained.
+Set q equal to dt * civ
+If desig is urban then
+	set q = min(127, civ + min(q/100, ore)) - civ
+	set civ = civ + 10 * q
+	set ore = ore - q
+Else if desig is bridge span
+	set civ = civ - q / 400
+Else If civ > 31 and civ < 97
+	set civ = min(127, civ + q / 200)
+Else
+	set civ = min(127, civ + q / 400)
+
+Add dt to mobil (to a max of 127)
+Add dt to lstup
+
+Pay for military supplies and amount equal to
+	((mil / 32) * dt) / 8 dollars
+.s1
+Check for plague conditions:
+.in +3
+If p_stage = "third" kill off a bunch of people,
+alert the owner and the news and decrement p_time by dt.
+If p_time <= 0 set p_stage = zero
+(the plague has burned itself out).
+.br
+If p_stage = "second" report
+to the owner and the news and decrement p_time by dt.
+If p_time <= 0 set p_stage = "third"
+and randomly reset p_time in the range of 32 to 64.
+.br
+If p_stage = "first" decrement p_time by dt.
+If p_time <= 0 set p_stage = "second"
+and randomly reset p_time in the range of 32 to 64.
+.br
+If p_stage = zero and a random number in the range 0-99
+is less than the following figure:
+.NF +3
+(civ + mil)          (t_level + ore + 100)
+-----------  *  -------------------------------
+    254         (r_level + effic + mobil + 100)
+.FI
+then set p_stage = "first"
+and set p_time to a random number of half hours between
+32 and 64.
+.s1
+If anything is being delivered from this sector and there is more
+of it than the delivery threshold deliver as much of the excess
+as mobility allows.
+If plague_stage is "second" (the infectious stage) set plague_stage
+and plague_time in the delivered sector.
+.s1
+If effic is less than 60 or the current player is broke skip the rest.
+.in +3
+.fi
+.s1
+.ti -3
+If desig is bank then accrue dt * $.125 interest per gold bar
+.ti -3
+If desig is capital, radar, or wethr pay dt * $1 for utilities
+.ti -3
+If desig is technology or research then pay dt * $1 for utilities,
+convert units of production into tecnological or medical advances,
+and then turn up to effic * iwork units of ore into production units
+.ti -3
+If desig is defense plant, shell industry or airport then
+convert units of production into guns, shells or planes then
+turn up to effic * iwork units of ore into production units
+If production is being sold (contract) collect money for it
+.ti -3
+If desig is harbor or bridge head then
+turn up to effic * iwork units of ore into production units
+If production is being sold (contract) collect money for it
+.ti -3
+If desig is goldmine then
+turn production units into gold bars,
+turn up to effic * iwork units of ore into production units
+If production is being sold (contract) collect money for it
+Dig up gmin * iwork / 100 units of ore
+decrement gmin by gmin * iwork / 200
+.ti -3
+If desig is mine then
+dig up miner * effic * iwork / 10000 units of ore
+If ore is being sold (contract) collect money for it
+.in -3
+.s1
+Note that the work done in a sector (ore dug up, efficiency growth,
+population growth, production units generated, etc) is dependent on the
+product of time since last update and work force (iwork above)
+while the accumulation of
+mobility is independent of work force.
+.s1
+Also note that civilian
+populations between 32 and 96 grow at twice the rate of those
+lower or higher.
+.s1
+Finally, note that if the population of a
+sector is very low it may take a long time before t
+is greater than 1 so the
+sector may not be updated for quite a while.
+.s1
+Ship Updates
+.s1
+Ships are also updated only when accessed however the mechanism
+is much simpler.  The only characteristics that are changed by
+ship updates are the mobility units and the efficiency (if less
+than 100%).
+
+The algorithm here is:
+.NF +3
+t = curup - lstup
+if t < 3 don't update anything
+add t to mobility (with a maximum of 127)
+add t to efficiency (with a maximum of 100)
+.FI
+Note that since an Empire Time Unit is half an hour, ships will
+only be updated every one and a half hours.
+.s1
+Bureaucratic Time Units
+.s1
+There is one further update that is not handled in the sector
+update routine; that is the update of bureaucracy time units (B.T.U.).
+These are the numbers printed in brackets before the command
+prompt.
+Most commands given use B.T.U.s, some use 1/2, some use 1 and some use
+more, making B.T.U.s a vital commodity. The generation of B.T.U.s is
+dependent on the efficiency and the work force in the capital sector.
+Note that no capital implies no B.T.U.s.
+.s1
+The relationship governing the
+accumulation of B.T.U.s is:
+.NF +3
+B.T.U. = B.T.U. + (curup-lstup) * civil * effic / 50
+.FI
+Therefore, a 100% capital with 100 civilians gains 96 B.T.U. a day,
+while a 30% capital with 38 civilians only gains 11 (10.94) B.T.U. a day.
+.in \\n(in

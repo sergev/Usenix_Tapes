@@ -1,0 +1,147 @@
+
+In the crypt program I recently posted, there was a call made to a
+small program "/usr/lib/makekey". Apparently this does not exist on all
+*IX* machines.
+
+I really dont see why - it is a 4 or 5 line program which reads a
+password on its stdin, and prints the encrypted result on its stdout,
+using exactly the same routines as passwd does.
+
+Rather than re-write the program, I have made some mods to the crypt source
+to make the calls directly.
+
+Since the library routine is called 'crypt', the routine within my program
+has to change its name, 'encrypt' is also used in the library, so the
+final name change is to 'encode'.
+
+The following is a diff of the changes required (actually, the source becomes
+smaller and simpler .... )
+
+============================================================================
+
+19a20
+> 	char		*crypt();
+22d22
+< 	int		pipe_fd[2];
+25c25,27
+< 	char		buf[13];
+---
+> 	char		buf[14];
+> 	char		key[9];
+> 	char		salt[3];
+27,30c29,32
+< 	strncpy(buf, password, 8);
+< 	while (*password) *password++ = '\0';
+< 	buf[8] = buf[0];
+< 	buf[9] = buf[1];
+---
+> 	strncpy(key, password, 8);
+> 	salt[0] = key[0];
+> 	salt[1] = key[1];
+> 	salt[2] = '\0';
+32c34
+< 	pipe(pipe_fd);
+---
+> 	strncpy(buf, crypt(key, salt), 13);
+34,53d35
+< 	if (fork() == 0)
+< 	{
+< 		close(0);
+< 		close(1);
+< 		dup(pipe_fd[0]);
+< 		dup(pipe_fd[1]);
+< 		execl("/usr/lib/makekey", "-", 0);
+< 		execl("/lib/makekey", "-", 0);
+< 		exit(1);
+< 	}
+< 
+< 	write(pipe_fd[1], buf, 10);
+< 	wait((int *) NULL);
+< 
+< 	if (read(pipe_fd[0], buf, 13) != 13)
+< 	{
+< 		fprintf(stderr, "crypt: cannot generate key\n");
+< 		exit(1);
+< 	}
+< 
+119c101
+< crypt()
+---
+> encode()
+202c184
+< 	else      crypt();
+---
+> 	else      encode();
+
+In the crypt program I recently posted, there was a call made to a
+small program "/usr/lib/makekey". Apparently this does not exist on all
+*IX* machines.
+
+I really dont see why - it is a 4 or 5 line program which reads a
+password on its stdin, and prints the encrypted result on its stdout,
+using exactly the same routines as passwd does.
+
+Rather than re-write the program, I have made some mods to the crypt source
+to make the calls directly.
+
+Since the library routine is called 'crypt', the routine within my program
+has to change its name, 'encrypt' is also used in the library, so the
+final name change is to 'encode'.
+
+The following is a diff of the changes required (actually, the source becomes
+smaller and simpler .... )
+
+
+19a20
+> 	char		*crypt();
+22d22
+< 	int		pipe_fd[2];
+25c25,27
+< 	char		buf[13];
+---
+> 	char		buf[14];
+> 	char		key[9];
+> 	char		salt[3];
+27,30c29,32
+< 	strncpy(buf, password, 8);
+< 	while (*password) *password++ = '\0';
+< 	buf[8] = buf[0];
+< 	buf[9] = buf[1];
+---
+> 	strncpy(key, password, 8);
+> 	salt[0] = key[0];
+> 	salt[1] = key[1];
+> 	salt[2] = '\0';
+32c34
+< 	pipe(pipe_fd);
+---
+> 	strncpy(buf, crypt(key, salt), 13);
+34,53d35
+< 	if (fork() == 0)
+< 	{
+< 		close(0);
+< 		close(1);
+< 		dup(pipe_fd[0]);
+< 		dup(pipe_fd[1]);
+< 		execl("/usr/lib/makekey", "-", 0);
+< 		execl("/lib/makekey", "-", 0);
+< 		exit(1);
+< 	}
+< 
+< 	write(pipe_fd[1], buf, 10);
+< 	wait((int *) NULL);
+< 
+< 	if (read(pipe_fd[0], buf, 13) != 13)
+< 	{
+< 		fprintf(stderr, "crypt: cannot generate key\n");
+< 		exit(1);
+< 	}
+< 
+119c101
+< crypt()
+---
+> encode()
+202c184
+< 	else      crypt();
+---
+> 	else      encode();

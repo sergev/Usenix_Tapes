@@ -1,0 +1,90 @@
+#
+#  Makefile for the ELM mail program.
+#
+#         (C) Copyright 1986, Dave Taylor
+#
+#  Last modification: August 15th, 1986
+
+SHELL=/bin/sh
+
+DEFINE= 
+LIB2  = 
+
+# IF you're on an ACSnet system (Australia) then
+# you'll want to uncomment the following;
+
+#   DEFINE= ${DEFINE} -DACSNET
+
+##############################
+
+CFILES=	addr_utils.c alias.c aliasdb.c aliaslib.c args.c bounceback.c 	\
+	builtin.c calendar.c connect_to.c curses.c date.c delete.c	\
+	domains.c edit.c editmsg.c elm.c encode.c errno.c file.c	\
+	file_utils.c fileio.c forms.c getopt.c hdrconfg.c help.c	\
+	initialize.c input_utils.c leavembox.c limit.c mailmsg1.c	\
+	mailmsg2.c mailtime.c mkhdrs.c newmbox.c opt_utils.c options.c	\
+	output_utils.c pattern.c pmalloc.c quit.c read_rc.c remail.c	\
+	reply.c return_addr.c savecopy.c screen.c showmsg.c signals.c	\
+	softkeys.c sort.c string2.c strings.c syscall.c utils.c		\
+	save_opts.c validname.c
+
+HEADERS=../hdrs/curses.h ../hdrs/defs.h ../hdrs/headers.h ../hdrs/sysdefs.h
+
+OBJS  =	addr_utils.o alias.o aliasdb.o aliaslib.o args.o bounceback.o 	\
+	builtin.o calendar.o connect_to.o curses.o date.o delete.o	\
+	domains.o edit.o editmsg.o elm.o encode.o errno.o file.o	\
+	file_utils.o fileio.o forms.o getopt.o hdrconfg.o help.o	\
+	initialize.o input_utils.o leavembox.o limit.o mailmsg1.o	\
+	mailmsg2.o mailtime.o mkhdrs.o newmbox.o opt_utils.o options.o	\
+	output_utils.o pattern.o pmalloc.o quit.o read_rc.o remail.o	\
+	reply.o return_addr.o savecopy.o screen.o showmsg.o signals.o	\
+	softkeys.o sort.o string2.o strings.o syscall.o utils.o		\
+	save_opts.o validname.o
+
+BIN=    ../bin
+LIBS=   -ltermcap
+CFLAGS= -O -I../hdrs
+CC=	/bin/cc
+RM=	/bin/rm -f
+
+../bin/elm: ${OBJS} ${EXTRA} ${HEADERS} ../hdrs/elm.h
+	${CC} -o ${BIN}/elm -n ${OBJS} ${LIBS} ${LIB2}
+
+.c.o:   ${HEADERS}
+	${CC} -c ${CFLAGS} ${DEFINE} $*.c 
+
+curses.o: curses.c ../hdrs/curses.h
+	${CC} -c ${CFLAGS} -DRAWMODE ${DEFINE} curses.c
+
+# curses.c : curses.q
+# 	@../bin/quickscreen curses.q
+#
+# curses.q :
+# 	@cp curses.c curses.q
+
+clean:
+	${RM} ${OBJS} LINT.OUT ../bin/elm 
+
+lint: LINT.OUT
+
+LINT.OUT: ${CFILES}
+	lint -DRAWMODE -I../hdrs ${CFILES} -ltermcap > LINT.OUT
+
+listing: LISTING
+
+LISTING: Makefile INDEX ${HEADERS} ${CFILES}
+	@echo adding file 'Makefile'...
+	@/bin/echo \\f > LISTING
+	@cat Makefile >> LISTING
+	@echo adding file 'INDEX'...
+	@/bin/echo \\f >> LISTING
+	@cat INDEX >> LISTING
+	@../bin/makelisting ${HEADERS} ${CFILES}
+	@echo LISTING generated.
+
+index: INDEX
+
+INDEX: ${CFILES} ${HEADERS}
+	@echo Creating function definition index
+	@index *.c | sort > INDEX
+	@echo File INDEX generated

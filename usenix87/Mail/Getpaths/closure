@@ -1,0 +1,56 @@
+#! /bin/sh
+# closure: Joseph T. Buck, Entropic Processing, Inc.
+# Usage: closure startfile paths thresh
+# This rather awk-ward script builds a "transitive closure" of a backbone.
+if test $# != 3
+then echo Usage: $0 backbone-list paths threshold >&2; exit 1
+fi
+# The file /tmp/$$c contains the current backbone list; /tmp/$$a contains
+# The latest set of additions.
+cp $1 /tmp/$$c
+echo "------ Original backbone: ------"
+awk -F! '{ for (i=1; i<=NF; i++) if ($i != "BACKBONE") printf ("%s ",$i); }
+END { printf ("\n");}' /tmp/$$c
+i=1
+while true
+do
+   awk -F! '{
+    if ($1 == "BACKBONE") {
+	for (i = 2; i <= NF; i++)
+	    backbone[$i] = 1;
+    }
+    else {
+	i = 1;
+	while (i <= NF && !backbone[$i])
+	    i++;
+	if (i > NF)
+	    next;
+	while (1) {
+	    while (i <= NF && backbone[$i])
+		i++;
+	    if (i > NF)
+		break;
+	    first = i - 1;
+	    while (i <= NF && !backbone[$i])
+		i++;
+	    if (i > NF)
+		break;
+	    for (j = first; j < i; j++)
+		printf ("%s!", $j);
+	    printf ("%s\n", $i);
+	}
+    }
+}' /tmp/$$c $2 | sort | uniq -c |\
+   awk '{ if ($1 >= thr) printf("BACKBONE!%s\n", $2); }' thr=$3 - > /tmp/$$a
+   if test ! -s /tmp/$$a
+     then echo "------ Final backbone: ------"
+	  awk -F! '{for (i=2; i<NF; i++) print $i}' /tmp/$$c | sort -u
+	  rm /tmp/$$c /tmp/$$a
+	  exit 0
+   fi
+   echo "------ Pass $i: add the following: ------"
+   awk -F! '{ for (i=2; i<NF; i++) printf("%s!", $i); printf("%s\n", $NF);}' /tmp/$$a
+   cat /tmp/$$a >> /tmp/$$c
+   i=`expr $i + 1`
+done
+

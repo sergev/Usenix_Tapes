@@ -1,0 +1,342 @@
+#
+/*
+ * Pseudo-teletype Driver
+ * (Actually two drivers, requiring two entries in 'cdevsw')
+ */
+#include "../param.h"
+#include "../conf.h"
+#include "../user.h"
+#include "../tty.h"
+#include "../proc.h"
+#include "../systm.h"
+#include "/src/mx/mxvt.h"
+
+#define NPTY 16	/* Number of pseudo-teletypes */
+
+/*
+ * There are two drivers here.  One is the device which looks like a TTY
+ * and can be thought of as the slave device, and hence its routines are
+ * are prefixed with 'pts' (PTY slave).  The other driver can be
+ * thought of as the controlling device, and its routines are prefixed
+ * by 'ptc' (PTY Controller).  To type on the simulated keyboard of the
+ * PTY, one does a 'write' to the controlling device.  To get the 
+ * simulated printout from the PTY, one does a 'read' on the controlling
+ * device.  Normally, the controlling device is called 'ptyx' and the
+ * slave device is called 'ttyx' (to make programs like 'who' happy).
+ */
+
+struct tty pty[NPTY];	/* TTY headers for PTYs */
+
+struct ptyx {
+	char    x_sttyf;        /* flag turns on when gtty finished */
+	char    x_stty[6];      /* holds stty array after gtty across net */
+}ptyx[NPTY];
+
+ptsopen(dev,flag)	 /* Open for PTY Slave */
+{
+	register struct tty *tp;
+	register struct proc *pp;
+
+# ifdef POWERFAIL
+	if (dev == NODEV)
+		return;
+# endif
+	if (dev.d_minor >= NPTY)	/* Verify minor device number */
+	{
+		u.u_error = ENXIO;	/* No such device */
+		return;
+	}
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+# ifdef XSTTY
+	if ((tp->t_speeds&BLITZ) || (tp->t_state&DRSVD)) {
+		u.u_error = ENXIO;
+		return;
+	}
+# endif
+	if ((tp->t_state&ISOPEN)==0)    /* if not open */
+	{
+		tp->t_dev = dev; /* Purdue - ghg */
+		tp->t_state =| ISOPEN|SSTART|CARR_ON;
+				/* Mark as open and with */
+				/* special start routine */
+		tp->t_flags = 0;
+	}
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	pp = u.u_procp;		/* get pointer to process table entry */
+	if (pp->p_ttyp == 0)		/* if it has no controling teletype */
+		pp->p_ttyp = tp;	/* assign controlling tty */
+
+}
+
+ptsclose(dev)	 /* Close slave part of PTY */
+{
+	register struct tty *tp;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	if (tp->t_addr)		/* Other side open? */
+	{
+		wflushtty(tp);		/* Yes, wait for it */
+	}else{
+		flushtty(tp);		/* Otherwise, just blast it */
+	}
+	tp->t_state =& ~ISOPEN;	/* Mark as closed */
+# ifdef XSTTY
+	tp->t_speeds =& ~BLITZ;
+# endif
+	wakeup(&tp->t_outq.c_cf);	/* ptcread returns eof */
+}
+
+ptsread(dev) /* Read from PTY, i.e. from data written by controlling device */
+{
+	register struct tty *tp;
+	register c;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	if(!tp->t_addr) return; /* eof if no contr device */
+	if(!tp->t_canq.c_cc) {
+		while(!tp->t_delct) {
+			if(tp->t_speeds&BLITZ) return;
+			sleep(&tp->t_rawq,TTIPRI);
+		}
+		while((c=getc(&tp->t_rawq)) >= 0) {
+			if(c==0377) {
+				tp->t_delct--;
+				break;
+			}
+			putc(c,&tp->t_canq);
+		}
+	}
+	while(tp->t_canq.c_cc && passc((getc(&tp->t_canq)))>=0);
+}
+
+ptswrite(dev) /* Write on PTY, i.e. to be read from controlling device */
+{
+	register struct tty *tp;
+	register c;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	while (tp->t_addr==0)		/* Wait for controlling device to be */
+		sleep(&tp->t_addr,TTOPRI);	/* opened */
+# ifdef XSTTY
+	if(tp->t_speeds&BLITZ) {
+		u.u_count = 0;
+		return;                 /* fake completed write */
+	}
+# endif
+	while((c=cpass()) >= 0) {
+		if(tp->t_outq.c_cc>TTHIWAT) ptcwout(tp);
+		putc(c,&tp->t_outq);
+		if(c == IAC) putc(c,&tp->t_outq);
+	}
+	ttstart(tp);
+}
+
+ptcopen(dev,flag)	 /* Open for PTY Controller */
+{
+	register struct tty *tp;
+	register struct proc *pp;
+	int ptsstart();		/* Routine to start write from slave */
+
+	if (dev.d_minor >= NPTY)	/* Verify minor device number */
+	{
+		u.u_error = ENXIO;	/* No such device */
+		return;
+	}
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	if (tp->t_addr || (tp->t_state&ISOPEN) == 0) /* ctl open or slave closed? */
+	{
+		u.u_error = EACCES;  /* I/O error
+					(Is there something better? */
+		return;
+	}
+	tp->t_addr = &ptsstart;	/* Set address of start routine */
+	wakeup(&tp->t_addr);		/* Wakeup slave's writers */
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	pp = u.u_procp;		/* get pointer to process table entry */
+	if (pp->p_ttyp == 0)		/* if it has no controling teletype */
+		pp->p_ttyp = tp;	/* assign controlling tty */
+}
+
+ptcclose(dev)	 /* Close controlling part of PTY */
+{
+	register struct tty *tp;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	if (tp->t_state&ISOPEN) { /* Is it slave open? */
+		/*
+		 * Net died (servers die on recovery).
+		 * Abort any I/O to slave end.  This is
+		 * not a very good way of handling things
+		 * (I.E. somebody who won't die on I/O
+		 * error of EOF will hang this pty), should
+		 * probably find some way to nulltty() the
+		 * slave's end, but haven't got an easy handle
+		 * on his files or inodes.
+		 * --ghg 12/20/78.
+		 */
+		tp->t_state =| DRSVD; 	/* so slave won't open until done */
+		tp->t_speeds =| BLITZ;
+		flushtty(tp);
+		signal(tp, SIGINT);
+		sleep(&lbolt, -1);	/* let everybody come in */
+		sleep(&lbolt, -1);
+		signal(tp, SIGQIT);	/* lets get nasty */
+		sleep(&lbolt, -1);
+		sleep(&lbolt, -1);
+	}
+	flushtty(tp);
+	tp->t_addr = 0;		/* Mark as closed */
+	tp->t_state =& ~DRSVD;	/* let slave open up now */
+}
+
+ptcread(dev)	 /* Read from PTY's output buffer */
+{
+	register struct tty *tp;
+	register int temp;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	while (tp->t_outq.c_cc==0 && tp->t_state&ISOPEN)
+		sleep(&tp->t_outq.c_cf,TTIPRI);	/* (Woken by ptsstart */
+
+	temp = tp->t_outq.c_cc;
+	/* Copy in what's there, or all that will fit */
+	while (tp->t_outq.c_cc && passc(getc(&tp->t_outq))>=0);
+
+	/* Now, decide whether to wake up process waiting on input queue */
+	if (tp->t_outq.c_cc==0 || (temp>TTLOWAT && tp->t_outq.c_cc<=TTLOWAT))
+		wakeup(&tp->t_outq);
+}
+
+ptsstart(tp) /* Called by 'ttstart' to output a character.  Merely wakes up */
+	/* controlling half, which does actual work */
+{
+	wakeup(&tp->t_outq.c_cf);
+}
+
+ptcwrite(dev)	 /* Stuff characters into PTY's input buffer */
+{
+	register struct tty *tp;
+	register c;
+	register count;
+	struct ptyx *pp;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	count = 0;
+
+	for(;;) {
+		if(tp->t_rawq.c_cc >= TTYHOG) {
+			flushtty(tp);
+			count = 0;
+		}
+		if((c=cpass()) < 0) break;
+		if((c&=0177) != IAC) {
+put:                    putc(c,&tp->t_rawq);
+			count++;
+			continue;
+		}
+		switch(c = cpass()) {
+
+		case C_IN:
+			signal(tp,SIGINT);
+			goto sync;
+
+		case C_QU:
+			signal(tp,SIGQIT);
+
+		sync:
+			while(getc(&tp->t_canq) >= 0);
+			while(getc(&tp->t_rawq) >= 0);
+			tp->t_delct = 0;
+			putc(IAC,&tp->t_outq);
+			putc(C_DM,&tp->t_outq);
+			ptcwout(tp);
+			ttstart(tp);
+			break;
+
+		case C_EF:
+			putc(0377,&tp->t_rawq);
+			tp->t_delct++;
+			wakeup(&tp->t_rawq);
+			break;
+
+		case C_ST:
+			pp = &ptyx[dev.d_minor];
+			for(c=0 ; c<6 ; c++)
+				pp->x_stty[c] = cpass();
+			pp->x_sttyf++;
+			wakeup(&tp->t_canq);
+			break;
+
+		case IAC:
+			goto put;
+		}
+	}
+	if(!count) return;
+	putc(0377,&tp->t_rawq);
+	tp->t_delct++;
+	wakeup(&tp->t_rawq);
+}
+
+ptsgtty(dev,v)
+int *v;
+{
+	register struct tty *tp;
+	register struct ptyx *pp;
+	char *cp,*cq;
+	int i;
+
+	tp = &pty[dev.d_minor];	/* Setup pointer to PTY header */
+	pp = &ptyx[dev.d_minor];
+	if(v) {
+		if(!tp->t_addr) goto bad;
+		if(u.u_arg[4]) {        /* called from empty */
+			/* Temporary rand change for empty */
+			u.u_arg[4] = (tp->t_canq.c_cc==0 &&
+				tp->t_delct==0);
+			return;
+		}
+		putc(IAC, &tp->t_outq);
+		putc(C_GT, &tp->t_outq);
+		ttstart(tp);
+		pp->x_sttyf = 0;
+		while(!pp->x_sttyf)
+			sleep(&tp->t_canq,3);
+		cp = pp->x_stty;
+		cq = v;
+		for(i=0 ; i<6 ; i++)
+			*cq++ = *cp++;
+		return;
+	}
+# ifdef XSTTY
+	if(!u.u_uid && (u.u_arg[0] & BLITZ)) {
+		tp->t_speeds = BLITZ;
+		flushtty(tp);
+		nulltty();
+		return;
+	}
+# endif
+	if(!tp->t_addr) goto bad;
+	putc(IAC, &tp->t_outq);
+	putc(C_ST, &tp->t_outq);
+	cp = u.u_arg;
+	for(i=0 ; i<6 ; i++)
+		putc(*cp++, &tp->t_outq);
+	ptcwout(tp);
+	ttstart(tp);
+	return;
+bad:
+	u.u_error = ENXIO;
+}
+
+ptcwout(tp)
+register struct tty *tp;
+{
+	while(tp->t_outq.c_cc > TTHIWAT) {
+		ttstart(tp);
+		sleep(&tp->t_outq, TTOPRI);
+	}
+}

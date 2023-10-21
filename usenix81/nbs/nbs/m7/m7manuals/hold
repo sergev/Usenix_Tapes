@@ -1,0 +1,1914 @@
+
+
+
+
+
+
+                                   M7:
+                   A general pattern matching facility
+
+                               Users Manual
+                                    by
+
+                              A. R. Marriott
+                              G. H. Skillman
+                              S. B. Salazar
+                              W. T. Hardgrave
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   -1-
+
+
+
+
+
+
+
+
+
+
+
+                             1.  INTRODUCTION
+
+
+
+            M7 is a general pattern matching  filter  designed  and
+       implemented  at the National Bureau of Standards (NBS) which
+       repetitively matches and  replaces  the  text  on  an  input
+       string  under  the  control of a set of user defined macros.
+       These macros are read from the user's file, preprocessed and
+       stored  on  a second file, ("M7_WKS.tmp"), and then compared
+       against input strings being read from standard input.   This
+       matching  and  replacement stage commences as macros are re-
+       trieved from the file and compared with the input string un-
+       til,  unless instructed otherwise, all of the macros fail to
+       match the input.  The final version  of  the  altered  input
+       string is displayed on standard output.
+
+            M7 is called from the UNIX____ shell level in the following
+       manner:
+
+               M7 [-p] [-t]
+               [-f "<preprocessed file>" "<macro count>"]
+               [-a "<macro definition>"] <macro file>
+
+       The macro_____ file____ consists of macro_____ definitions___________ which have  two
+       main  parts:  a  pattern_______  which  is matched against an input
+       string, and a replacement___________ definition__________  which  is  substituted
+       for the matched substring.  The user should refer to section
+       9 for a description of  the  execution  options.   After  M7
+       preprocesses the macro file, the user types in input strings
+       from the terminal.  Figure 1.1 shows the flow of information
+       into and out of M7.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   -2-
+
+
+
+
+
+
+
+
+
+
+
+            M7 is written entirely in the  programming  language  C
+       and  consists of more than 40 highly modular subroutines and
+       functions.  Several routines are C versions of programs con-
+       tained in Software________ Tools_____ which have been modified to support
+       the more powerful features  of  M7.   For  more  information
+       about  the  internals  of  M7  see the M7__ Software________ Internals_________
+       Manual______.
+
+            This document presents the  information  necessary  for
+       using  M7.  Section 2 explains what comprises the macro file
+       and how to set one up.  Sections 3 and 4 discuss the pattern
+       and  the  replacement  definition emphasizing the characters
+       and constructions which have special meanings.  The  use  of
+       stacks  to  save  text for later matching and replacement is
+       described in section 5.  Section 6 deals with counters which
+       can  be  used  for  such tasks as line numbering.  Section 7
+       discusses how M7 uses the macro file to  repetitively  match
+       the  text  on  an  input string.  Section 8 describes how to
+       generate new macros from other macros and  section  9  lists
+       the  calling  options for M7. A detailed example which shows
+       how to create and arrange macros to solve a specific problem
+       is  provided  in  section 10. Error messages and constraints
+       are the topics of the closing sections.
+
+
+
+
+                              2.  MACRO FILE
+
+
+
+            The macro file contains all of the pattern matching and
+       replacement  information  which M7 evaluates when it is pro-
+       cessing input text.  The name of this file is passed  to  M7
+       through  the  calling argument list.  If more than one macro
+       file is specified, the effect will be as if  they  were  all
+       concatenated  onto  a  single  file  with  the macros in the
+       latter files at the end.
+
+            This section will explain how to set up the macro  file
+       and  describe some of the features  that make the macro file
+       more readable.
+
+
+       2.1  MACRO DEFINITION
+
+
+            The logical entry into the macro file is a macro defin-
+       ition.  The basic form of a macro definition is
+
+        '<pattern>'<replacement symbol>'<replacement definition>';
+
+
+
+                                   -3-
+
+
+
+
+
+
+
+
+
+
+
+       The replacement symbol can be either "=" or "<" as discussed
+       in  section  7.   (The  angle brackets are part of our meta-
+       language and should not be included in the actual macro  de-
+       finition.)  See  section  3 and 4 for more information about
+       the pattern and replacement definition.
+
+       The delimiting single quotes and the  terminating  semicolon
+       allow for arbitrary spacing. For example,
+
+               'A'     =       'B';
+               'A'='B'         ;
+               'A'=    'B';
+
+       are all identical.
+
+            More than one macro definition can be placed on a line.
+       For example,
+
+               'A'='B';
+               'C'='D';
+
+       can be written as
+
+               'A'='B'; 'C'='D';
+
+       Those counter and stack constructions that do not yield  us-
+       able text or that have incrementation should be placed after
+       the pattern to ensure that these  operations  are  performed
+       only  if  the  input  string matches the pattern. Section 12
+       gives more on the consequences of placing stack and  counter
+       calls of such types in or before the macro's pattern.
+
+            For an example of how stack and counters should best be
+       used, consider the macro
+
+               'avg({[0-9]*},{[0-9]*})' = / notice the
+                       comment / '({1}+{2})\/2'&(1,a)&(2,b);
+
+       this would match the input
+
+               avg(26,42)
+
+       and replace it with
+
+               (26+42)/2
+
+       and then save the arguments 26 and 42  on  stacks  a  and  b
+       respectively. Another example would be
+
+               'reset a' = 'done'#(a=1);
+
+       This would match the input
+
+
+                                   -4-
+
+
+
+
+
+
+
+
+
+
+
+               reset a
+
+       and replace it with
+
+               done
+
+       and set counter 'a' to 1.
+
+
+       2.2  LINE CONTINUATION
+
+
+            Macro definitions may be continued across physical line
+       limits  by using the slash.  When this symbol is encountered
+       in a macro definition, M7 will ignore all  characters  until
+       the next slash is found. For example,
+
+               'FIND THIS TEXT' = 'AND REPLACE IT /
+                                 / WITH THIS TEXT';
+
+       This construction can also be used to  put  comments  around
+       patterns  and replacement definitions (see section 3.3).  If
+       the slash is to be taken literally, then it must be escaped.
+       For  example,  the  slash if used as the symbol for division
+       must be preceded by the escape symbol (\).
+
+            Since all characters surrounding the  pattern  and  re-
+       placement  definitions other than the replacement symbol and
+       stack and counter calls are ignored, one may also continue a
+       line  by  simply putting the pattern and its replacement de-
+       finition on separate lines. An example of this is:
+
+               'Replace this very long line'   =
+               'with this very long line';
+
+       This feature can not be used inside stack and  counter  call
+       constructions which will be discussed in sections 5 and 6.
+
+
+       2.3  COMMENTS
+
+            Commentary text may be arbitrarily placed in the  macro
+       file  by  using  the line continuation feature.  Recall that
+       when this character is encountered, all characters following
+       it are ignored until the next line continuation character is
+       found.  Thus, to add a comment in a macro definition, it  is
+       only  necessary  to surround the comment with the line coun-
+       tinuation character. The use of this character is not neces-
+       sary,  however,  when  a  comment which does not contain the
+       characters "&" or "#" is being inserted outside of a pattern
+       or replacement definition.  Here is an example of a comment-
+       ed macro file.
+
+
+                                   -5-
+
+
+
+
+
+
+
+
+
+
+
+               This macro file does various things
+
+               'Boy'  =   'girl';   changes boy to girl
+               '  '   =   ' ';      shrinks spacing
+               'a'    =   '';       deletes the character a
+
+            These commenting features can be used to make the macro
+       file more readable.
+
+
+
+
+                               3.  PATTERNS
+
+
+
+            A powerful pattern matching facility is  the  heart  of
+       M7.  M7 searches the input string for a pattern (sequence of
+       characters) and if successful, substitutes the matched  por-
+       tion  of  the  input  string with what is defined in the re-
+       placement definition of the macro.
+
+            Certain characters and sequences of characters  can  be
+       used  to create more powerful patterns. These chatacters are
+       listed in the table below and described in  detail  in  sec-
+       tions 3.2 and 3.3.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   -6-
+
+
+
+
+
+
+
+
+
+
+
+                       TABLE OF SPECIAL CHARACTERS
+
+
+
+        _________________________________________________________
+       |           |                                             |
+       | CHARACTER |          FUNCTION OF THE CHARACTER          |
+       |           |                                             |
+       |_________________________________________________________|
+       |           |                                             |
+       |     $     | Matches the null character at the end       |
+       |           | of the line.                                |
+       |           |                                             |
+       |     ^     | Matches the null character at the beginning |
+       |           | of the line.                                |
+       |           |                                             |
+       |     *     | Matches one or more characters of the       |
+       |           | preceding type of character. (Closure 1)    |
+       |           |                                             |
+       |     *-    | Matches zero or more characters of the      |
+       |           | preceding type of character. (Closure 2)    |
+       |           |                                             |
+       |     []    | Matches any of the characters listed in     |
+       |           | the brackets. (Character class)             |
+       |           |                                             |
+       |     -     | Indicates a range of characters in a        |
+       |           | character class.                            |
+       |           |                                             |
+       |     ~     | Matches anything not listed in a            |
+       |           | character class. (Complement)               |
+       |           |                                             |
+       |     ?n    | Matches a character that is in special      |
+       |           | character class n. 1 <= n <= 6              |
+       |           |                                             |
+       |     &     | Refers to an entry on one of 26 stacks.     |
+       |           |                                             |
+       |     #     | Refers to a counter or its increment.       |
+       |           |                                             |
+       |    {}     | Tags or refers to a portion of input text.  |
+       |           |                                             |
+       |     /     | Line continuation: Skips to the next slash. |
+       |           |                                             |
+       |     \     | Escapes any of the special characters.      |
+       |           |                                             |
+        _________________________________________________________
+
+
+
+
+
+
+
+
+
+                                   -7-
+
+
+
+
+
+
+
+
+
+
+
+       3.1  GENERAL PATTERN MATCHING
+
+            The simplest form of a pattern is one which has none of
+       the  special characters which are described in the next sub-
+       sections. These patterns consist of a sequence of characters
+       to  be  matched exactly.  M7 scans the input string starting
+       at the first character.  If the first characters of the pat-
+       tern  and  the  input  string are the same, M7 will continue
+       with the next pair of characters and the next until the  end
+       of  the  pattern  is  reached  or  one of the pairs fails to
+       match. If the end of the pattern is reached a match has been
+       found.  If,  on  the other hand, a pair of characters do not
+       match, then M7 starts over again this time  looking  for  an
+       occurence  of  the pattern at the second position of the in-
+       put. The pattern ultimately fails to match if  it  fails  to
+       match the input string at the last position.
+
+            In the subsection on special characters, and throughout
+       the  rest  of  the document, sample patterns are given along
+       with strings that would match; the collection of strings  is
+       not exhaustive, just exemplary.
+
+
+       3.2  SPECIAL CHARACTERS
+
+            A '$' matches the null character at the end of a  line.
+       For example, the pattern
+
+               The back$
+
+       will match
+
+               The back
+
+       but not
+
+               The back end
+
+            A '^' matches the null character at the beginning of  a
+       line.  For example, the pattern
+
+               ^front part
+
+       will match
+
+               front part
+
+       but not
+
+               the front part
+
+
+
+
+                                   -8-
+
+
+
+
+
+
+
+
+
+
+
+            The construction "[c1c2c3...cn]" is termed a  character_________
+       class_____.  It tells M7 to match one of the characters specified
+       between the brackets (i.e. c1, or, c2, or, ... cn).  A range
+       of letters or digits can be specified using a dash.  For ex-
+       ample, the pattern
+
+               [a-c]
+
+       will match 'a', 'b', or 'c'. Also, the pattern
+
+               [0-3]
+
+       will match '0', '1', '2', or '3'.
+
+            The use of '~' as the first character in the  character
+       class  reverses  the meaning of the construction. Instead of
+       matching with any of  the  characters  that  appear  in  the
+       class,  M7  will  match  only  if the input character is not___
+       found between the brackets (complement).  For  example,  the
+       pattern
+
+               [~a-z]
+
+       would match any character that is not a lower case letter.
+
+            The symbol "?" denotes a set of six  special  character
+       classes  which  were  incorporated  into M7 because of their
+       common usage.  A digit between one and six which follows the
+       "?"  in  the user's pattern will match a single character if
+       it is contained in the corresponding set:
+
+               ?1 - matches any character.
+               ?2 - matches any alpha-numeric character.
+               ?3 - matches any alphabetic character.
+               ?4 - matches any upper case letter.
+               ?5 - matches any lower case letter.
+               ?6 - matches any digit.
+
+
+            M7 has a powerful implementation of closures.  The  '*'
+       is  used  as the closure character and matches any number of
+       additional characters that meet the same specifications  re-
+       quired  of  the  preceding  character.  For instance, recall
+       that the pattern
+
+               [ab]
+
+       will match a character if it is an "a" or  "b".   Thus,  the
+       pattern
+
+               [ab]*
+
+
+
+                                   -9-
+
+
+
+
+
+
+
+
+
+
+
+       will match a string of "a"'s and "b"'s.  Also, the pattern
+
+               a*
+
+       will match a string of "a"'s, the pattern
+
+               [~a-zA-Z]*
+
+       will match a string of  non-alphabetic  characters  and  the
+       pattern
+
+               ?1*
+
+       will match the remainder of the text.
+
+            Notice that with this construction at least one charac-
+       ter  must  be  present that can be matched by the segment of
+       the pattern preceding the '*'.  However, it is often  desir-
+       able to have the pattern match the input when there are zero
+       or more occurences of the pattern which  precedes  the  clo-
+       sure.  M7 supports a "zero or more" type of closure with the
+       construction "*-" which can be used in the  same  manner  as
+       the  regular closure "*".  Both closures repeat the previous
+       pattern construction and therefore a  pattern  cannot  begin
+       with "*", "{*}", or "^*", since there is no previous pattern
+       with which to check  succeeding  characters  in  the  input.
+       Secondly,  the closure constructions should not follow stack
+       and counter calls that are not of type 1.  This  is  because
+       only type 1 constructions are used to compare with the input
+       string; the use of any others will  result  in  an  infinite
+       loop.   (The  user should refer to sections 3.3, 5, 6 and 12
+       for information on stacks and  counters.)  Furthermore,  the
+       construction  "**"  is  meaningless since the second closure
+       has no pattern preceding it either.
+
+            It is important to discuss the algorithm used by M7  in
+       implementing the closure feature. Suppose we had the pattern
+
+               1[01]*1
+
+       and the following input text:
+
+               1011011001
+
+       The pattern would fail if the closure would only  match  the
+       longest string of 0's and 1's.  M7's closure feature, howev-
+       er, is designed to follow this algorithm:
+
+               1. Match the longest string possible.
+               2. Does the rest of the pattern match?
+                  a. If yes, indicate success and terminate.
+               3. Did the previous character match this closure?
+
+
+                                   -10-
+
+
+
+
+
+
+
+
+
+
+
+                  a. If yes, back up one character and
+                     go to step 2.
+               4. Was there a previous closure?
+                  a. If yes, back up one character from the
+                     last character matched in the previous
+                     closure and go to step 2.
+               5. Indicate failure and stop.
+
+       An illustration of multiple closure patterns, which are han-
+       dled by the fourth step in the algorithm, is the pattern:
+
+               ?1*[0-9]*
+
+       with the input text:
+
+               Mozart's 38th symphony
+
+       M7 will decrease the number of  characters  matched  by  the
+       first  closure until the second closure is able to match the
+       '8' upon which the pattern succeeds.
+
+            A '\' escapes the  special  meaning  of  the  character
+       which follows it. For example, the pattern
+
+               \*
+
+       matches the character '*'. The escape character can  be  es-
+       caped  by  typing "\\".  Two alphabetic characters have spe-
+       cial meaning when they are escaped. "\n" matches a line feed
+       and "\t" matches a tab.
+
+            A character loses its special meaning when  escaped  or
+       when:
+
+               '-' occurs at the end of the character class.
+               '-' or '~' occur outside of a character class.
+               '~' not at the beginning of a character class.
+               '?' not followed by a digit between 1 and 6.
+               The  special character  is in a character class
+                       and is not '~' or '-'.
+
+
+       3.3  TAGS, STACKS AND COUNTERS
+
+            Tags, stacks and counters are three features that  dis-
+       tinguish M7 from other pattern matching and replacement pro-
+       grams. These structures allow communication between the pat-
+       tern and replacement definitions of a macro and even between
+       independent macros and input strings.
+
+
+
+
+
+                                   -11-
+
+
+
+
+
+
+
+
+
+
+
+            The construction "{<pattern>}" tells M7 to remember the
+       text which matches the pattern between the braces for use in
+       later processing. The occurrences of these "tags" in a  pat-
+       tern are numbered; the first is numbered 1 and so forth with
+       up to 99 tags per macro. For example, if the pattern is
+
+               h{[aeiou]*}d
+
+       and the input text is
+
+               head
+
+       then M7 will remember "ea".  This tagged  text  can  now  be
+       used  in  the replacement definition or stored on a stack as
+       described in sections 3.0 and 4.0.
+
+            Tags can be nested in the pattern.  For  instance,  the
+       pattern
+
+               {ab{cd}e{f{ghi}}} {j}
+
+       will remember "abcdefghi" as tag #1, "cd" as tag #2,  "fghi"
+       as  tag #3, "ghi" as tag #4, and "j" as tag #5. That is, the
+       left bracket determines the ordering.
+
+            The construction "&(i)", where 'i' is  any  lower  case
+       letter,  causes  M7  to match what is currently being refer-
+       enced in the stack identified by "i".  For example, if stack
+       'a' contained the text "tony" then the pattern
+
+               He is &(a)
+
+       would match
+
+               He is tony
+
+       and the pattern
+
+               the world needs more &(a)*s
+
+       would match
+
+               the world needs more tonytonytonytonys
+
+       See sections 3.0 and 4.0 for more information on stacks.
+
+            The construction "#(i)", where 'i' is  any  lower  case
+       letter,  matches the current value of the counter identified
+       by 'i'.  For example, if counter b was 20 then the pattern
+
+               go to #(b)
+
+
+
+                                   -12-
+
+
+
+
+
+
+
+
+
+
+
+       would match
+
+               go to 20
+
+       and the pattern
+
+               go to #(b)*
+
+       would match
+
+               go to 2020
+
+       See sections 3.0 and 5.0 for more information on counters.
+
+            Here are a few additional sample patterns and  some  of
+       the input texts that they would match.
+
+               PATTERN                         TEXT
+               _______                         ____
+
+               ?4A*-B          would match     TAB
+                               or              JB
+
+               ^[1-3][ABC]?3$  would match     1BE
+                               or              3AT
+
+               ??3*\-         would match     ?singleword
+                               but not         ?
+
+
+
+
+                        4.  REPLACEMENT DEFINITION
+
+
+
+            When a portion of the input string matches  a  pattern,
+       it  is  replaced by text as specified by the replacement de-
+       finition.  The replacement definition can consist of any se-
+       quence  of  characters,  however, certain characters and se-
+       quences of characters  have  special  meaning  as  described
+       below.
+
+            The construction "{n}" is replaced by the text  matched
+       by  tag  number  n where n is from 1 to 99.  This tag number
+       refers to an occurrence of a tag in the  corresponding  pat-
+       tern  (see  section 3.3).  The first tag would be tag number
+       1, the second tag would be tag number 2 and  so  forth.  The
+       construction  is  useful for such tasks as passing arguments
+       from the matched text. For example, suppose there is a  pat-
+       tern
+
+
+
+                                   -13-
+
+
+
+
+
+
+
+
+
+
+
+               ADD,{[A-Z]*},{[0-9]*},{[0-9]*}
+
+       with replacement definition
+
+               {1}={2}+{3}
+
+       Then, the input string
+
+               ADD,A,24,100:
+
+       would be replaced by
+
+               A=24+100
+
+            The  construction  "&(i)"  is  replaced  by  the   text
+       currently referenced in stack 'i'.  For example if stack 'a'
+       contained "car", then the replacement definition
+
+               my &(a)
+
+       would cause M7 to replace some matched string with
+
+               my car
+
+       See sections 3 and 5 for more information on stacks.
+
+            The construction "#(i)"  is  replaced  by  the  current
+       value  of  the  counter 'i'. For example, if counter 'b' was
+       100 then the replacement definition
+
+               go to #(b)
+
+       would cause M7 to replace some matched string with
+
+               go to 100
+
+       See sections 3.0 or 6.0 for more information on counters.
+
+            A '\' indicates to M7 to escape the special meaning  of
+       the character which follows. See section 3.2 for more infor-
+       mation on the escape character.
+
+
+
+
+                                5.  STACKS
+
+
+
+
+
+
+
+
+                                   -14-
+
+
+
+
+
+
+
+
+
+
+
+            M7 supports 26 user stacks. Each stack is identified by
+       a  lower  case  letter,  called the stack_____ identifier__________, has at
+       most twenty entries, and has its own  pointer.   Each  entry
+       may  have up to fifty characters.  The purpose of the stacks
+       is to save text so that it can be used later in the matching
+       and  replacement parts of other macro definitions.  For many
+       applications the stacks may be used as simple variables.
+
+            There are 4 basic stack call constructions. They are:
+
+           1.  "&(i)" is replaced by what is currently being point-
+               ed to in the stack identified by 'i'.
+
+           2.  "&(n,i)" puts the text matched by tag number n  onto
+               stack 'i' where n is from 1 to 99.
+
+           3.  "&(i=n)" sets the stack pointer for stack 'i'  to  n
+               where 1 <= n <= 20.
+
+           4.  &"(i:<text>:)" puts the text onto stack  'i'.  Note,
+               the  angle  brackets should not be placed around the
+               text.
+
+       Spaces are ignored in both stack and counter calls.
+
+            An optional feature of types 1, 2, and  4  stack  calls
+       are the two stack operators, '+' and '-', which respectively
+       increment and decrement the stack pointer by  1.   Placement
+       of the operators before and after the stack identifier indi-
+       cates to M7 whether to perform the operation before or after
+       the  stack  is  accessed.  The purpose of implementing these
+       operators in this way was to allow the user  flexibility  in
+       pushing  and popping text onto and off of stacks.  For exam-
+       ple,
+
+               &(+e)
+
+       would first increment the stack pointer and then be replaced
+       by what is currently being pointed to in the stack.
+
+            A  few  additional  items  should  be  mentioned  about
+       stacks.  The stack pointer is always initialized to point at
+       position 1 and cannot be decremented  below  this  position.
+       If the stack pointer points at position 1 and a decrement is
+       indicated, the stack pointer will continue to point at posi-
+       tion  1.  Before  text is placed onto a stack position, that
+       position contains the null string.  Finally, the two  incre-
+       ment  operators  should not be used on stack calls which ap-
+       pear in or before the pattern. The reason for this  will  be
+       discussed  in  section  12.   See sections 3.3, 4 and 12 for
+       more information and examples.
+
+
+
+                                   -15-
+
+
+
+
+
+
+
+
+
+
+
+                               6.  COUNTERS
+
+
+            M7 allows the user to have 26 general purpose  counters
+       each of which has its own increment. The counters are physi-
+       cally stored as integers, but they are used in  pattern  and
+       replacement  definition  as character strings. Conversion is
+       done automatically.  Each counter is identified by  a  lower
+       case  letter  called the counter_______ identifier__________.  These counters
+       are useful for such tasks as line numbering and counting how
+       many times a pattern is matched.
+
+            There are 3 basic counter call constructions. They are:
+
+           1.  "#(i)" is replaced in  the  string  by  the  current
+               value of the counter identified by "i".
+
+           2.  "#(i=n)" sets the counter to n where n  can  be  any
+               integer greater than 0.
+
+           3.  "#(i,n)" sets counter i's increment to n where n  is
+               a positive integer.
+
+       Spaces are ignored in counter calls as well as stack calls.
+
+            The two increment operators, + and -,  are  similar  to
+       the  stack  operators  except that stack pointers are incre-
+       mented or decremented by 1 whereas a counter is  changed  by
+       the  value  of its increment.  These operators can be placed
+       before or after the counter identifier to indicate that  the
+       counter should be incremented or decremented before or after
+       the particular function is performed. For example,
+
+               #(y+)
+
+       would be replaced by the current value of  the  counter  'y'
+       after which the counter would be incremented.
+
+            There are some restrictions on counters.  Counters  and
+       increments  are always initialized to 1 and cannot be set to
+       a value less than 1.  The user should  avoid  placing  stack
+       and  counter  calls  that are not of type 1 in or before the
+       pattern. The reason for this will be  discussed  in  section
+       12.  Finally, as with stacks, the increment operators should
+       not be used in or before the pattern part of a  macro.   See
+       sections  3.3, 4 and 12 for more information and examples on
+       counters.
+
+
+
+
+
+
+
+                                   -16-
+
+
+
+
+
+
+
+
+
+
+
+                            7.  RESCAN FEATURE
+
+
+            M7 will repetitively match and rematch the text  on  an
+       input  string  according  to  the macro definitions until no
+       more matches can be found.  The algorithm for  the  matching
+       and replacement of input strings is as follows:
+
+               1. Read the next line from the standard input.
+               2. If it's the end of the file then stop.
+               3. Get the first pattern.
+               4. Replace all occurences of the pattern in the
+                  input with the replacement definition.
+               5. Did the current pattern occur in the input
+                  at least once?
+                  a. If yes, go to step 3.
+               6. Is there another pattern?
+                  a. If yes, get the next pattern and go to
+                     step 4.
+               7. Write out the new line and go to step 1.
+
+
+            The first pattern refers to the most recent  macro  de-
+       finition entered onto the macro file. Thus the first pattern
+       attempted to be matched would be the last  macro  definition
+       in  the macro file. The next pattern attempted to be matched
+       would be the next to the last entry and so  on.   Since  the
+       user can emit macros from other macros, as discussed in sec-
+       tion 8, these later generated macros will always be  scanned
+       first.
+
+            The user should be careful not to cause M7 to  go  into
+       an  infinite  matching  loop.  A very simple example of this
+       would be the macro
+
+               'int' = 'integer';
+
+       This macro would match the input "print" and replace it with
+       "printeger".  M7  will  again use this macro to continuously
+       match 'int' and replace it with 'integer'.  The user  should
+       use  the  trace  feature (see section 9.0) to make sure this
+       type of replacement does not occur.
+
+            The rescan feature can be turned off for  a  particular
+       macro by putting '<' between the pattern and replacement de-
+       finition instead of '='.  This construction can be  used  to
+       avoid  infinite  matching  loops.  The macro definition then
+       looks like the following:
+
+               '<pattern>'<'<replacement>';
+
+       M7 will attempt to change all occurences of the  pattern  in
+
+
+                                   -17-
+
+
+
+
+
+
+
+
+
+
+
+       the input string to what is found in the replacement defini-
+       tion.  If successful, the pattern will not be used again un-
+       til the next input string is read in.
+
+            For example, the macro definition
+
+               'ab'<'abc';
+
+       and the input
+
+               ababab
+
+       will result in
+
+               abcabcabc
+
+
+
+
+                          8.  CONTROL CHARACTER
+
+
+            The character '%' is used to generate new macros and to
+       enable  and  disable  the t and n options.  Any input string
+       which begins with "%TRACE", "%NFLAG" or "%MACRO" starting in
+       the first column, is considered a command. The line will not
+       be output nor will an attempt be made  to  match  any  other
+       patterns  against  it.  The command "%MACRO" is used to gen-
+       erate new macros, "%TRACE" to enable/disable  the  t  option
+       and "%NFLAG" to enable/disable the n option.
+
+            The format for the "%MACRO" command is:
+
+               %MACRO '<pattern>'='<replacement definition>';
+
+            Using this control character construction it is easy to
+       generate  macros  from  other macros.  For example, consider
+       the maco:
+
+               '#define,{[a-z]*},{[a-z]*}' = /
+                / '%MACRO \'{1}\'=\'{2}\'\;';
+
+       This macro would match the input "#define,cat,dog"  and  re-
+       place  it  with  "%MACRO  'cat'='dog';".  The modified input
+       string would be evaluated as a control  character  structure
+       and  placed onto the preprocessed macro file.  The new macro
+       would be the first macro to be scanned.  If the  next  input
+       were "cat" it would be replaced by "dog".
+
+
+
+
+
+
+                                   -18-
+
+
+
+
+
+
+
+
+
+
+
+            Program flags can be set by typing
+
+               %<flagname> 1(or 0)
+
+       where flagname can be "TRACE" or "NFLAG".  The numbers 1 and
+       0  stand for ON and OFF respectively.  For example,  the in-
+       put
+
+               %TRACE 1
+
+       will turn the trace option (the "t" option) on and the input
+
+               %NFLAG 1
+
+       will turn the n option  on.   These  options  are  discussed
+       below.  This construction can also be generated from a macro
+       as described above.
+
+            A command is not successful if an error occurs  in  the
+       macro  in  a macro generation command or a symbol other than
+       '0' or '1' occurs in the eighth column of  the  '%TRACE'  or
+       '%NFLAG' command. If an illegal macro is given, the same er-
+       ror messages are displayed as when M7 is  preprocessing  the
+       input  macro file; if an illegal value for a program flag is
+       given, an error message is displayed but execution does  not___
+       terminate.
+
+
+
+
+                          9.  EXECUTION OPTIONS
+
+
+
+            M7 has several calling options any one or all of  which
+       may  be specified using the standard UNIX____ calling procedure.
+       The following is a list of the options and their functions.
+
+           1.  The -t option will print  a  trace  of  the  pattern
+               matching  and  replacement  on  the standard output.
+               This is  very  useful  for  "debugging"  your  macro
+               files. The trace is of the form
+
+                       oldline:<text before replacement>
+                       macro #:n
+                       newline:<text after replacement>
+
+               where n is the macro number. (Numbers start with the
+               first entry in the preprocessed macro file.
+
+
+
+
+
+                                   -19-
+
+
+
+
+
+
+
+
+
+
+
+           2.  The -n option prints only the  input  strings  which
+               were matched by at least one macro definition.
+
+           3.  The -p option provides a prompt for  initial  input.
+               After  M7  has  preprocessed the macro file, "ready"
+               will be printed to inform the user that he can start
+               typing in input strings.
+
+           4.  The -f option specifies a file which contains macros
+               that  are  already  preprocessed. With this feature,
+               the user does not have to wait for M7  to  reprepro-
+               cess  a  commonly  used  macro file.  The format for
+               this option is
+
+                       -f "preprocessed file" "macro count"
+
+               where the preprocessed____________ file____ is the file  of  prepro-
+               cessed  macros  and  macro_____  count_____  is a count of the
+               number of macros in the  file.   A  typical  example
+               would be:
+
+                       M7 -f "M7_WKS.tmp" "23"
+
+               The "f" option must be placed before  any  occurence
+               of  the "a" option and before the names of any files
+               which contain non-preprocessed macros.  If  the  "f"
+               option is used, M7 will work with the file specified
+               there instead of creating the new file "M7_WKS.tmp".
+               The  user should refer to section 12 for information
+               pertaining to the limitations of the 'f' option.
+
+           5.  The -a option takes the following character  string,
+               surrounded  by double quotes, as a macro definition.
+               This option may be repeated  several  times  to  put
+               several macros on the file. These macros will be the
+               first macros preprocessed and consequently  will  be
+               used  last  as  M7 scans the pattern file unless the
+               "f" option is used beforehand.
+
+
+
+
+                              10.  USING M7
+
+
+             This section demonstrates how M7 can be used  to  per-
+       form  a  practical  application.  A systematic procedure for
+       source translations using pattern matching  macros  will  be
+       presented  along with useful tips and cautions on how to set
+       up a macro file.
+
+
+
+
+                                   -20-
+
+
+
+
+
+
+
+
+
+
+
+            The first step in using M7 is to define what the  input
+       and  the  output  should look like.  If the input and output
+       are well defined, fewer problems will be  encountered  while
+       writing  the  macros.   Restrictions will usually have to be
+       put on the initial specifications because of  implementation
+       limitations.   The  user should be aware of all the possible
+       combinations of input and be willing to change the  specifi-
+       cations  as  necessary.  The example below translates from a
+       FORTRAN-like DO statement to a C-like "for" statement.
+
+
+                       FROM
+
+
+               do <label> <index>=<init value>,<final value>,<inc>
+               <stmt1>
+               <stmt2>
+               .
+               .
+
+               .
+               .
+               <stmtn>
+       <label> continue
+
+
+                       TO
+
+               for(<index>=<init val>;<index><=<final value>;
+                                      <index>=<index>+<inc>){
+               <stmt1>;
+               <stmt2>;
+               .
+               .
+
+               .
+               .
+               <stmtn>;
+               }
+
+            A pictorial representation of this type is one  way  to
+       specify  input and output.  Another way is to set up a table
+       of possible inputs and the  corresponding  outputs.  Do  not
+       forget  details. For example, the specifications of this ex-
+       ample failed to show that the increment need not  be  speci-
+       fied  in  FORTRAN;  it defaults to 1.  Details such as these
+       should be included in the input and output specifications.
+
+            The next step would be to design a pattern matching al-
+       gorithm  for  the  translation. This can be written out as a
+       step by step word description of the  pattern  matching  and
+       replacement. For this example, the algorithm here is:
+
+
+                                   -21-
+
+
+
+
+
+
+
+
+
+
+
+           1.  Shrink the spacing (i.e.  replace  tabs  and  double
+               spacing with a single space)
+
+           2.  Match a FORTRAN "do" string and replace it with a  C
+               programming  language "for" string and store the la-
+               bel on a stack.
+
+           3.  Match a statement which does not have a semicolon or
+               a  brace at the end and replace it  with a statement
+               with a semicolon at the end.
+
+           4.  Match the label stack at the beginning of a continue
+               statement and replace it with a right brace.
+
+           5.  Strip off the label field.
+
+       The idea of shrinking spaces is an important utility and  is
+       used often.
+
+            The next step after the algorithm is written out is  to
+       create  a  set of macros which will perform each step of the
+       algorithm. As they are written, each set  should  be  tested
+       separately for correct output.
+
+            Precedence is important at this point.  The ordering of
+       the  macros in the macro file has a significant influence on
+       the output because of the rescanning algorithm.  The  macros
+       of  higher  precedence  or  ones that other macros depend on
+       should be placed closer to the end of the macro file so that
+       they  are applied first.  Space shrinking macros are usually
+       placed near the end of the macro file.   The  trace  feature
+       can  be  used  to see how the steps in the translation algo-
+       rithm interact with each other.  The following set of macros
+       perform the translation which was described previously:
+
+              1. '{[~}{\;]}$' = '{1}\;';                     step 3
+              2. 'do {?6*} {?2*}={?6*},{?6*}$'=              step 2
+                 'for({2}={3}\;{2}<={4}\;{2}++)\{',&(1,a);
+              3. 'do {?6*} {?2*}=/                           step 2
+                 /{?6*},{?6*},{?6*}' =
+                 'for({2}={3}\;{2}<={4}\;{2}={2}+{5})\{',&(1,a);
+              4. '^[ 0-9]*' = '';                            step 5
+              5. '^&(a) *continue' = '\}';                   step 4
+              6. '^ &(a) *continue' = '\}';                  step 4
+              7. '  ' = ' ';                                 step 1
+              8. '\t' = ' ';                                 step 1
+
+       The step numbers correspond to the step numbers of the  word
+       description of the translation algorithm given above.
+
+
+
+
+
+                                   -22-
+
+
+
+
+
+
+
+
+
+
+
+            The first macro places the semicolon at the  end  of  a
+       statement.  This  macro  is at the beginning of the file be-
+       cause it is the last macro  to  be  matched.  Otherwise,  M7
+       would  put  a semicolon at the end of the "do" statement be-
+       fore translating it which is not what is desired.  Note that
+       all  semicolons  which appear in the macro file which do not
+       terminate a macro definition must be escaped.
+
+            The macros numbered 2 and 3 translate the FORTRAN  "do"
+       statement  into  a  C  programming language "for" statement.
+       The ordering of these two macros in the macro file is signi-
+       ficant.   The  third  macro  matches  the optional increment
+       specification. The second macro will also match this  struc-
+       ture.  If the second macro were placed in front of the third
+       macro (i.e. further down in the file) the  output  would  be
+       incorrect.
+
+            The fourth macro removes numbers and spaces which occur
+       at the beginning of a line (i.e. removes the line numbers).
+
+            The fifth and the sixth macros match  the  end  of  the
+       "do"  loop  (i.e. the label indicated on the "do" statement,
+       which was stored on a stack, is matched to the beginning  of
+       a  continue statement). Note, that this macro is matched be-
+       fore the macro that removes the line numbers.
+
+            The seventh and eighth macros shrink the spacing;  dou-
+       ble spaces and tabs are replaced with single spaces. This is
+       done so that macros 2 and 3 will match arbitrary spacing  of
+       the "do" statement.
+
+            The next step after the macros have  been  written  and
+       checked  for  precedence  is to test them on a wide range of
+       input.  Usually errors or limitations in the original  algo-
+       rithm  can be found at this step. For example, after testing
+       this set of macros one would find  that  nested  "do"  loops
+       would  not work.  This can be corrected by changing the mac-
+       ros so that the label indicated in  the  "do"  statement  is
+       pushed   onto  the  stack  and  then  popped  off  when  the
+       corresponding "continue" statement is found.
+
+            Creating a set of macros to perform a desired  transla-
+       tion  is  often as complex as writing a computer program; as
+       with a computer program the more time spent on the input and
+       output  specifications  and the matching algorithms the less
+       time spent on trial and error writing of macros.
+
+            Consider the matching  process  when  using  stacks  or
+       counters.  Macros should be written so their contents can be
+       dumped. For example,
+
+               'dump a' = '&(a)';
+
+
+                                   -23-
+
+
+
+
+
+
+
+
+
+
+
+       would dump the contents of stack a. One  should  be  careful
+       about pointing to the right position in a stack or using the
+       right value of a counter. Remember that  the  increment  and
+       the  decrement operators have different meanings when placed
+       before or after a stack identifier.
+
+            It is very easy to confuse M7. The  user  should  check
+       the following things when problems occur:
+
+           1.  that single quotes occur around the pattern and  re-
+               placement definition.
+
+           2.  that a semicolon occurs at the end  of  every  macro
+               definition.
+
+           3.  that special characters which are to be used as text
+               are escaped.
+
+           4.  that semicolons which do not occur at the end  of  a
+               macro definition are escaped.
+
+
+
+                        11.  FATAL ERROR MESSAGES
+
+
+            All errors detected by M7 result in termination of exe-
+       cution  except for when the t or n options are given illegal
+       values.  This is done because execution after  fatal  errors
+       is meaningless. The error messages that are generated are of
+       the form
+
+               <routine name>:<reason for termination>
+               The error occured on macro # <macro number>
+
+       where the routine name is the  name  of  the  M7  subroutine
+       where the error was detected. (See the M7__ Software________ Internals_________
+       Manual______)
+
+            The error messages which occur during the preprocessing
+       of  the  macro  file  usually  occur  because of things like
+       missing quotes or unescaped special  characters.  The  macro
+       file  should  be  thoroughly checked when an error occurs in
+       preprocessing.  The following is a list of  the  error  mes-
+       sages  which  are  generated  during preprocessing and their
+       possible causes:
+
+           1.  "M7: cannot open pattern  file"  indicates  that  M7
+               could  not  open  the specified macro file. The user
+               should check the calling arguments used.
+
+
+
+
+                                   -24-
+
+
+
+
+
+
+
+
+
+
+
+           2.  "M7: cannot open 'f' option file" indicates that  M7
+               could  not  find  the  already existing preprocessed
+               macro file.
+
+           3.  "M7: illegal placement of "f" option" indicates  the
+               "f"  option  was  used after the "a" option or after
+               the name of a user macro file was given.
+
+           4.  "PROCCALLS: error in  macro  definitions"  indicates
+               that M7 reached the terminating character ';' before
+               it had finished processing the macro definition.
+
+           5.  "MAKPAT: pattern terminated early" indicates that M7
+               found  the end of string character, EOS, in the pat-
+               tern.
+
+           6.  "MAKPAT: unbalanced tag braces" indicates  M7  found
+               an  unequal  number  of left and right braces in the
+               pattern.
+
+           7.  "MAKSUB: substitution text terminated  early"  indi-
+               cates  the  end  of string character, EOS, was found
+               before the terminating semicolon.
+
+           8.  "MAKSUB: preprocessed macro too large"  indicates  a
+               macro  was entered which when preprocessed, expanded
+               beyond the 512 character limit.
+
+           9.  "PROCCNTR: UNRECOGNIZEABLE CHAR"  indicates  that  a
+               symbol  other  than  '='  or  ','  was  found in the
+               counter call. Thus, M7 could not recognize what type
+               of counter call it was.
+
+          10.  "PROCSTCK: ILLEGAL CHARACTER" same as  above  except
+               for stacks. A symbol other than ',', '=', or ':' was
+               found.
+
+          11.  "PROCCNTR: ILLEGAL USE OF ','" and "PROCCNTR:  ILLE-
+               GAL USE OF '='" means that M7 found more than one of
+               the special symbols of a stack  call  and  therefore
+               could not determine the type.  Again, this is a syn-
+               tax error.
+
+          12.  "PROCSTCK: ILLEGAL USE OF ','",  "PROCSTCK:  ILLEGAL
+               USE OF '='" and "PROCSTCK: ILLEGAL USE OF ':'"  same
+               as above except for stacks.
+
+          13.  "ESC: END OF STRING ENCOUNTERED TOO SOON" The end of
+               string character, EOS, was found before the delimit-
+               ing quote or semicolon.
+
+
+
+
+                                   -25-
+
+
+
+
+
+
+
+
+
+
+
+          14.  "GETLINE: input string too long" indicates an  input
+               string  or  an  input  macro  was  entered which was
+               longer than 1054 characters.
+
+
+            The error messages which occur after the  preprocessing
+       of the macro definitions (i.e. after M7 prints "ready") usu-
+       ally occur because  of  internal  confusion.   This  may  be
+       caused  by  errors in the macro file which were not detected
+       during preprocessing. The following is a list of  the  error
+       messages which are generated after preprocessing.
+
+           1.  "OMATCH:  illegal  pattern  construction"  indicates
+               that M7 expected to find one of the internally coded
+               commands but found gibberish instead.  This  usually
+               occurs  when  the  user  has an illegal construction
+               such as "**" in the pattern.
+
+           2.  "DOSTCK:error in stack call" indicates that M7 found
+               an invalid stack call construction.
+
+           3.  "DOCNTR:error in counter  call"  indicates  that  M7
+               found an invalid counter call construction.
+
+
+
+
+                     12.  CONSTRAINTS AND LIMITATIONS
+
+
+            M7 has some program limitations which may be changed in
+       future  versions of M7. The following is a list of the known
+       limitations and constraints in M7:
+
+
+           1.  M7 does not indicate when it  is  in  an  indefinite
+               matching loop.  If M7 does not seem to be responding
+               with any output, use the trace feature (see  section
+               9.0) to see what is happening.
+
+           2.  The use of stack and  counter  constructions,  other
+               than  type 1, can lead to peculiar results if placed
+               in the pattern.  This is because  M7  executes  such
+               constructions  as  it  is scanning the macro and the
+               input string.  M7 actually makes several attempts to
+               match  a  pattern  before  being successful and with
+               each new attempt all the stack and counter calls are
+               executed  again.  If, during the course of trying to
+               match a pattern, M7 scans the pattern ten  different
+               times,  then the stack and counter calls in the pat-
+               tern will be executed  ten  times.   The  stack  and
+               counter  calls  placed before a macro's pattern will
+
+
+                                   -26-
+
+
+
+
+
+
+
+
+
+
+
+               only be executed the first time M7 attempts to  find
+               an  occurence  of  the pattern in a particular input
+               string while calls placed after a pattern will  only
+               be executed if the pattern matches.  This is why the
+               use of incrementation in a call within or  before  a
+               pattern   will   almost  certainly  have  disastrous
+               results.  For this reason  only  type  1  stack  and
+               counter calls should be used (and without any incre-
+               mentation) in the pattern of a macro.
+
+           3.  One possible reason for wanting to place  such  con-
+               structs in the pattern despite this warning would be
+               to use this powerful macro:
+
+                       '{~2}&(1,a) &(a)*-' < /delete reoccurrences/ '{1}';
+
+               This macro will tag  alpha-numeric  charaters  which
+               might  be  delimited  by  a  space. The text that is
+               tagged is immediately placed on a stack so that oth-
+               er  occurrences of the text in the same input string
+               may be deleted.
+
+           4.  A preprocessed macro  entry  is  restricted  to  512
+               characters.  This  number can be changed by updating
+               the source code and recompiling the new version.
+
+           5.  An input string or input macro is  limited  to  1054
+               characters  which  is  the  size  of  eight lines of
+               printer paper. This allows the  user  to  put  seven
+               lines  of  header  on  his macro file to improve the
+               looks of the file.
+
+           6.  A stack entry is limited to 50 characters  and  each
+               stack  has  space allocated for 20 entries (i.e. the
+               stack pointer can legally be set to point at entries
+               at  positions 1 to 20 on a stack).  This can also be
+               changed by recompiling the source code.
+
+           7.  Semicolons used for any reason other than  terminat-
+               ing  a  macro  definition must be escaped. This also
+               applies to double and single  quotes  which  do  not
+               delimit comments or sections of a macro.
+
+           8.  File headers should be restricted to about 800 char-
+               acters.  If  commentary  text  is too large a memory
+               fault will occur.
+
+           9.  Care should be taken in using stacks  and  counters.
+               Although  M7  checks for extraneous symbols, it does
+               not check for out of place letters, digits and  plus
+               and minus characters.
+
+
+
+                                   -27-
+
+
+
+
+
+
+
+
+
+
+
+          10.  The limitation on the number of macros with the  '<'
+               feature  has  been set to 100 in this version of m7.
+               However, the number can be changed by  updating  the
+               source code and then recompiling the entire program.
+
+          11.  An error was detected in M7 when the "seek"  routine
+               was  called to read backwards in the file 92 charac-
+               ters. Instead of moving back 92 characters, the file
+               pointer  was moved only a few characters. The source
+               code was modified to read back the remaining  number
+               of characters when this situation arose.
+
+          12.  The macros in the file given with the 'f' option are
+               treated as though they all had "=" as their replace-
+               ment symbol. If the user needs to turn off the  res-
+               can  feature  of  any macros in his file, he must go
+               through the preprocessing stage each  time  he  exe-
+               cutes M7.
+
+          13.  The name of the 'f' option file is  limited  to  ten
+               characters.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                   -28-
+
+
+
+
+
+
+
+
+
+
+
+                            TABLE OF CONTENTS
+
+
+                                                              Page
+
+
+       1.  INTRODUCTION ........................................ 2
+
+       2.  MACRO FILE .......................................... 3
+
+            2.1  MACRO DEFINITION .............................. 3
+
+            2.2  LINE CONTINUATION ............................. 5
+
+            2.3  COMMENTS ...................................... 5
+
+       3.  PATTERNS ............................................ 6
+
+            3.1  GENERAL PATTERN MATCHING ...................... 8
+
+            3.2  SPECIAL CHARACTERS ............................ 8
+
+            3.3  TAGS, STACKS AND COUNTERS .................... 11
+
+       4.  REPLACEMENT DEFINITION ............................. 13
+
+       5.  STACKS ............................................. 14
+
+       6.  COUNTERS ........................................... 16
+
+       7.  RESCAN FEATURE ..................................... 17
+
+       8.  CONTROL CHARACTER .................................. 18
+
+       9.  EXECUTION OPTIONS .................................. 19
+
+       10.  USING M7 .......................................... 20
+
+       11.  FATAL ERROR MESSAGES .............................. 24
+
+       12.  CONSTRAINTS AND LIMITATIONS ....................... 26
+
+
+
+
+
+
+
+
+
+
+
+
+
+                                  -iii-
+
+
+
+
+

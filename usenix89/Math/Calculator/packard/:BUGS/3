@@ -1,0 +1,61 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!alberta!ubc-vision!garfield!utai!utcsri!utzoo!watmath!clyde!burl!ulysses!allegra!mit-eddie!genrad!decvax!decwrl!sun!saber!imagen!geof
+From: geof@imagen.UUCP (Geoffrey Cooper)
+Newsgroups: net.sources.bugs
+Subject: Re: Floating point programmable calculator
+Message-ID: <343@imagen.UUCP>
+Date: 17 Apr 86 03:03:48 GMT
+Distribution: net
+Organization: IMAGEN Corporation, Santa Clara, CA 95052-8101
+Lines: 49
+Posted: Wed Apr 16 21:03:48 1986
+Cc: decwrl!sequent!tektronix!reed!keith
+
+Thanks to Keith Packard for his most useful calculator program.  I've
+already found many uses for it, were BC is too clumsy to program and
+dcalc (the apollo system calculator - non programmable) wasn't up to
+the task.  Also, it's nice and fast.
+
+I did find two bugs, though:
+	- printing out data in radix didn't work right for lettered digits
+	- sub-procedures corrupted the automatic variables of their caller.
+
+The first problem was easy to fix, just add a "-10" in the right place.
+The second bug was happening because the interpreter wasn't keeping
+track of how many automatics were being allocated, and wasn't leaving
+room for them in the stack.  Thus, pushed arguments randomly trashed auto-
+matics if there were any, and any automatics beyond the number of variables
+pushed as arguments would overlap with automatics in the called procedure.
+
+The fix was to keep track of the number of automatics and adjust the stack
+pointer on entry and exit of procedure invocations.
+
+I also noticed that it isn't possible to assign to an array.  It looks
+like this isn't supported in the grammar.  I guess it never got implemented.
+
+Below are diff files for the changes that I made:
+util.c:
+44c44
+< 			*--c = digit + 'a';
+---
+> 			*--c = (digit-10) + 'a';
+
+expr.c:
+317a318
+>                 stackp -= s->s_framec;
+322a324
+> 		stackp = framep;  /* OR stackp += argc + s->s_framec;*/
+324d325
+< 		stackp += argc;
+
+func.c:
+51a52
+>         sym->s_framec = -offset;
+
+ic.h:
+27a28
+>                         int             S_framec;       /* # automatics */
+46a48
+> # define s_framec	Su.S_func.S_framec
+
+- Geof Cooper
+  Imagen

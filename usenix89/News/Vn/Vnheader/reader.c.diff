@@ -1,0 +1,214 @@
+*** reader.c.old	Tue Sep  2 19:53:54 1986
+--- reader.c	Tue Sep  2 20:24:37 1986
+***************
+*** 19,26
+  extern char *Hdon_msg;
+  extern char *Hdoff_msg;
+  
+! extern char *T_head, *FT_head, *N_head, *L_head;
+! extern char *F_head, *P_head, *M_head, *R_head;
+  
+  static FILE *Fpread;
+  static char *Fname;
+
+--- 19,26 -----
+  extern char *Hdon_msg;
+  extern char *Hdoff_msg;
+  
+! extern char *T_head, *FT_head, *N_head, *L_head, *RT_head;
+! extern char *TO_head, *F_head, *P_head, *M_head, *R_head;
+  
+  static FILE *Fpread;
+  static char *Fname;
+***************
+*** 93,100
+  	double atof();
+  	char *optr;
+  	char c, *rf, buf[RECLEN], path[RECLEN], mid[RECLEN], ngrp[RECLEN];
+! 	char from[RECLEN], title[RECLEN], flto[RECLEN], pstr[24];
+! 	char dgname[48], getpgch(), *index(), *digest_extract();
+  	char *tgetstr();
+  
+  	*pages = 0;
+
+--- 93,100 -----
+  	double atof();
+  	char *optr;
+  	char c, *rf, buf[RECLEN], path[RECLEN], mid[RECLEN], ngrp[RECLEN];
+! 	char from[RECLEN], title[RECLEN], flto[RECLEN], reply[RECLEN];
+! 	char pstr[24], dgname[48], getpgch(), *index(), *digest_extract();
+  	char *tgetstr();
+  
+  	*pages = 0;
+***************
+*** 117,123
+  		return (0);
+  	}
+  
+! 	hlines = gethead (path, mid, from, title, ngrp, flto, &artlin);
+  	total = (float) artlin + 1.0;
+  	if (total < .99)
+  		total = 1.0;
+
+--- 117,123 -----
+  		return (0);
+  	}
+  
+! 	hlines = gethead (path, mid, from, title, ngrp, flto, reply, &artlin);
+  	total = (float) artlin + 1.0;
+  	if (total < .99)
+  		total = 1.0;
+***************
+*** 189,195
+  			else
+  			strcpy (pstr,PAGE_NEXT);
+  		}
+! 		c = getpgch(pstr,path,mid,from,title,ngrp,flto);
+  
+  		/*
+  			handle user input:
+
+--- 189,195 -----
+  			else
+  			strcpy (pstr,PAGE_NEXT);
+  		}
+! 		c = getpgch(pstr,path,mid,from,reply,title,ngrp,flto);
+  
+  		/*
+  			handle user input:
+***************
+*** 244,251
+  	posting followups, does not rewind, but leaves file at end of header
+  	lines.  Returns number of header lines.
+  */
+! static gethead (path, mid, from, title, ngrp, flto, lin)
+! char *path, *mid, *from, *title, *ngrp, *flto;
+  int *lin;
+  {
+  	int count;
+
+--- 244,251 -----
+  	posting followups, does not rewind, but leaves file at end of header
+  	lines.  Returns number of header lines.
+  */
+! static gethead (path, mid, from, title, ngrp, flto, reply, lin)
+! char *path, *mid, *from, *title, *ngrp, *flto, *reply;
+  int *lin;
+  {
+  	int count;
+***************
+*** 253,259
+  	long pos,ftell();
+  
+  	*lin = 0;
+! 	*path = *mid = *from = *title = *ngrp = *flto = '\0';
+  
+  	/* for conditional is abnormal - expected exit is break */
+  	for (count = 0; count < HDR_LINES && fgets(buf,RECLEN-1,Fpread) != NULL; ++count)
+
+--- 253,259 -----
+  	long pos,ftell();
+  
+  	*lin = 0;
+! 	*path = *mid = *from = *title = *ngrp = *flto = *reply = '\0';
+  
+  	/* for conditional is abnormal - expected exit is break */
+  	for (count = 0; count < HDR_LINES && fgets(buf,RECLEN-1,Fpread) != NULL; ++count)
+***************
+*** 304,309
+  			strcpy (flto,buf+FTHDLEN);
+  			continue;
+  		}
+  		if (strncmp(buf,L_head,LHDLEN) == 0)
+  		{
+  			buf [strlen(buf)-1] = '\0';
+
+--- 304,315 -----
+  			strcpy (flto,buf+FTHDLEN);
+  			continue;
+  		}
++ 		if (strncmp(buf,RT_head,RTHDLEN) == 0)
++ 		{
++ 			buf [strlen(buf)-1] = '\0';
++ 			strcpy (reply,buf+RTHDLEN);
++ 			continue;
++ 		}
+  		if (strncmp(buf,L_head,LHDLEN) == 0)
+  		{
+  			buf [strlen(buf)-1] = '\0';
+***************
+*** 319,326
+  	handles "mail", "save" and "followup" internally
+  	as well as flag resets.
+  */
+! static char getpgch(prompt,path,mid,from,title,ngrp,flto)
+! char *prompt, *path, *mid, *from, *title, *ngrp, *flto;
+  {
+  	char c;
+  	int ic;
+
+--- 325,332 -----
+  	handles "mail", "save" and "followup" internally
+  	as well as flag resets.
+  */
+! static char getpgch(prompt,path,mid,from,reply,title,ngrp,flto)
+! char *prompt, *path, *mid, *from, *reply, *title, *ngrp, *flto;
+  {
+  	char c;
+  	int ic;
+***************
+*** 362,368
+  			help_pg ();
+  			break;
+  		case PG_REPLY:
+! 			mail (path,title,from);
+  			break;
+  		case PG_FOLLOW:
+  			followup (mid,title,ngrp,flto);
+
+--- 368,374 -----
+  			help_pg ();
+  			break;
+  		case PG_REPLY:
+! 			mail (*reply ? reply : from,title,from);
+  			break;
+  		case PG_FOLLOW:
+  			followup (mid,title,ngrp,flto);
+***************
+*** 418,424
+  	tmpnam (fn);
+  	if ((fp = fopen(fn,"w")) == NULL)
+  		printex ("can't open %s\n",fn);
+! 	fprintf (fp,"%s%s%s\n\n%s:\n", T_head, FPFIX, t, f);
+  	edcopy (fp);
+  	fclose (fp);
+  	tty_set (SAVEMODE);
+
+--- 424,430 -----
+  	tmpnam (fn);
+  	if ((fp = fopen(fn,"w")) == NULL)
+  		printex ("can't open %s\n",fn);
+! 	fprintf (fp,"%s%s\n%s%s%s\n\n%s:\n", TO_head, p, T_head, FPFIX, t, f);
+  	edcopy (fp);
+  	fclose (fp);
+  	tty_set (SAVEMODE);
+***************
+*** 432,438
+  	new = rprompt ("still want to mail it ? ",cmd);
+  	if (new != NULL && (*new == 'y' || *new == 'Y'))
+  	{
+! 		sprintf (cmd,"%s %s <%s", Mailer, p, fn);
+  		system (cmd);
+  		printf ("given to mailer\n");
+  	}
+
+--- 438,446 -----
+  	new = rprompt ("still want to mail it ? ",cmd);
+  	if (new != NULL && (*new == 'y' || *new == 'Y'))
+  	{
+! 		if ((new = index(p, '(')) != NULL)
+! 			*new = '\0';	/* a poor way of deleting comments */
+! 		sprintf (cmd,"%s '%s' <%s", Mailer, p, fn);
+  		system (cmd);
+  		printf ("given to mailer\n");
+  	}

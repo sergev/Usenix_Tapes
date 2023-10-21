@@ -1,0 +1,5 @@
+resetui()
+{
+
+	setuid(getuid());
+}

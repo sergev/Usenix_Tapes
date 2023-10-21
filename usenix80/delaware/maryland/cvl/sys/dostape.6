@@ -1,0 +1,157 @@
+.th DOSTAPE VI 18-September-1979
+.sh NAME
+dostape \*- write DEC DOS-PIP Format Tape
+.sh SYNOPSIS
+.lp +7 7
+.bd dostape
+[
+.bd \*-special
+] [
+.bd \*-N
+] [
+.bd \*-n
+alias ] [
+.bd \*-uN
+] [
+.bd \*-gN
+]
+.br
+[
+.bd \*-pN
+] [
+.bd \*-a
+] [
+.bd \*-b
+] [
+.bd \*-fN
+] [
+.bd \*-hN
+] [ file ] ...
+.i0
+.fi
+.sh DESCRIPTION
+.it Dostape
+writes files in DEC's DOS/BATCH-11 Peripheral Interchange Program (PIP)
+magtape format.
+The format written by
+.it dostape
+may be read by DEC operating systems RT-11, DOS/BATCH-11, and RSX-11.
+The output tape must have been prepositioned using the Harvard
+non-rewinding magtape device.
+.it Dostape
+individually writes files converting each name into a sometimes
+abreviated DOS equivalent.
+If there are no file parameters,
+.it dostape
+reads its standard input using the default name "UNIX.OUT".
+.it Dostape
+normally leaves the tape positioned just after the file mark
+for the last file written,
+in position for a subsequent
+.it dostape
+invocation or for marking with two additional file marks which
+constitute the DOS end-of-tape convention.
+.s3
+Each DOS-PIP file on magtape consists of a 14 byte header record,
+512-byte data records, and one file mark.
+The first three words of the header consist of a radix-50
+encoded name and extension using up to 6 characters for the name
+and 3 characters for the extension.
+.it Dostape
+places only the final part of each path name into the header
+omitting any previous directory names and slashes,
+treating lower case a-z as upper case A-Z.
+From this,
+.it dostape
+uses the first 6 filename characters before the last dot(.), if any,
+for the encoded file name and the first three characters
+after the last dot as the extension.
+If the final part contains no dot,
+the first three characters in excess of the first six become the extension.
+The next two bytes are the user and group owner numbers,
+the next word is the protection code,
+and the last two words are the Julian date based on 1970
+computed from the file modify date.
+Logical records may extend across the 512-byte physical tape records.
+.it Dostape
+pads the last physical record with NULLs,
+i. e. zero bytes, up to 512 bytes.
+.s3
+Options, except aliasing,
+apply to all the following files but may be reset between files:
+.s3
+.lp +9 9
+-special	writes to given special file instead of
+default ``/dev/nrw_rmt0''.
+.lp +9 9
+-N	write to non-rewinding magtape raw device ``/dev/nrw_rmtN''
+where the octal number N gives the unit number (default 0).
+.lp +9 9
+-n alias	treat the next argument as an alias in the the next header
+in place of the actual file name.
+.lp +9 9
+-uN	place user ID N in header.
+If N is omitted, the file owner is used (default).
+.lp +9 9
+-gN	place user group ID N in header.
+If N is omitted, the file group owner is used (default).
+.lp +9 9
+-pN	place octal DOS protection code N in header.
+If N is omitted, use the default 0233.
+.lp +9 9
+-a	produce DOS formatted ASCII output by inserting
+a carriage return (015)
+before each line feed (012).
+.lp +9 9
+-b	produce DOS binary unformatted output (default)
+that copies bytes as is.
+The last record may be null padded.
+.lp +9 9
+-fN	produce DOS formatted binary output
+using input logical record size N.
+If N is omitted, use 8192 bytes.
+Prefixes each logical record with the format word 000001 and
+a record byte count that includes the prefix words.
+Suffixes each record with an additive one byte checksum
+and NULL padding to a word boundary.
+The final logical record may be foreshortened.
+The padding does not preclude the exact recovery of formatted binary data.
+.lp +9 9
+-hN	write one formatted binary header record of length N
+before the other formatted binary records.
+This record is followed by zero padding to fill out a physical record.
+If N is omitted, no header record is written.
+.i0
+.s3
+.fi
+For example
+.lp +15 10
+dostape	-4 /tmp/verylongname -a -g1 /tmp/short.c.s -h6 -f255 -n
+fakename.pic /tmp/pic
+.i0
+.s1
+.fi
+writes three files to device /dev/nrw_rmt4.
+The first unformatted file is called ``VERYLO.NGN'' in the tape header.
+The second formatted ASCII file called ``SHORT.S'' precedes
+each line feed with a carriage return.
+The third formatted binary file called ``FAKENA.PIC'' uses the data
+in /tmp/pic to produce a 6 byte logical record followed by 255 byte
+logical records appropriate to images with 6 byte headers.
+The last two files use group 1 instead of the original file group owner.
+.sh DIAGNOSTICS
+Physcial data I/O errors generate appropriate messages.
+Expansion troubles indicate inadequate buffer space.
+Illegal radix-50 characters are converted to
+the ``unused'' character (035).
+.sh FILES
+/dev/nrw_rmt? (default output device)
+.br
+unix.out (default tape header name)
+.sh "SEE ALSO"
+ldostape(VI), rdostape(VI), tm(IV), DEC's DOS/BATCH Handbook
+.sh AUTHORS
+Russ Smith
+.br
+Robert L. Kirby
+.sh BUGS

@@ -1,0 +1,68 @@
+
+#!/bin/csh
+echo Help shell script
+echo " "
+
+#constants
+set HELPDIR=~davidra/gnuplot/help
+
+#initialize levels
+set dir={$HELPDIR}
+cd {$dir}
+set levels=("" "" "" "" "" "" "" "" "" "")
+set level=0
+set new=2					#next topic is new
+
+#initial stuff
+cat .caveat
+echo -n Type \<CR\> to continue
+set request=($<)
+
+loop:
+#reset dir variable
+set dir={$HELPDIR}
+set i=1
+while ( $i <= $level )
+	set dir={$dir}/{$levels[$i]}
+	@ i++
+end
+echo " "
+
+if ( -e .HLP  && $new > 1 ) then
+	clear
+	more .HLP
+	echo " "
+endif
+if ( $new > 0 ) then
+	echo "Topics: "
+	ls -C *.HLP | sed s/\.HLP//g		#list HLP files
+	echo " "
+	echo "Subtopics: "
+	ls -dC `ls | fgrep -v .HLP`
+	echo " "
+endif
+echo -n Topic or subtopic or .. or quit or \<CR\>:\ 
+set new=0					#no longer new
+
+set request=($<)
+if ( {$request} == {} ) then
+	set new=1				#give list again
+else if ( {$request} == quit ) then
+	exit 0
+else if ( {$request} == .. ) then			#go back
+	set new=2				#"new" topic
+	if ( $level == 0 ) goto loop		#can't go back any further
+	@ level--				#go back one
+	cd ..
+else if ( -d {$request} ) then
+	set new=2				#really new topic
+	cd {$request}
+	@ level++
+	set levels[$level]={$request}
+else if ( -e {$request}.HLP ) then
+	more {$request}.HLP
+else
+	echo "not found"
+	set new=1				#give list again
+endif
+goto loop

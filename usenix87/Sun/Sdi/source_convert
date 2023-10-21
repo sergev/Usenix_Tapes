@@ -1,0 +1,60 @@
+/*
+ * Copyright 1987 by Mark Weiser.
+ * Permission to reproduce and use in any manner whatsoever on Suns is granted
+ * so long as this copyright and other identifying marks of authorship
+ * in the code and the game remain intact and visible.  Use of this code
+ * in other products is reserved to me--I'm working on Mac and IBM versions.
+ */
+
+/*
+ * Little hack to help generate assembler for the source code option.
+ */
+
+#include <stdio.h>
+#include <ctype.h>
+
+#define OUTSIZE 64
+#define MaxSizeOfAnOctalRepresentation 5
+
+char buff[OUTSIZE * MaxSizeOfAnOctalRepresentation];
+
+main(argc, argv)
+char **argv;
+{
+	char *p, c;
+	int i;
+	if (argc < 2) {
+		fprintf(stderr, "Need an argument.\n");
+		exit(1);
+	}
+	printf(" .even\n__start_of_text:\n");
+	while (! feof(stdin)) {
+		p = buff;
+		for (i = 0; i < OUTSIZE; i += 1) {
+			if ((c = getchar()) != EOF) {
+				if (isalnum(c)  || c == ' ' || c == '*' || c == '/'
+					|| c == '#' || c == '<' || c == '>' || c == '.'
+					|| c == '_' || c == '[' || c == ']' || c == '(' 
+					|| c == ')' || c == '{' || c == '}'
+					) {
+					*p++ = c;
+				} else {
+					*p++ = '\\';
+					sprintf(p, "%o", (unsigned int)c);
+					i += strlen(p);
+					p += strlen(p);
+				}
+			} else {
+				goto done;
+			}
+		}
+done:
+		*p = '\0';
+		printf(" .ascii \"%s\"\n", buff);
+	}
+	printf(" .ascii \"\\0\"\n",'\\');
+	printf(" .even\n");
+	printf(" .globl _%s\n", argv[1]);
+	printf("_%s:\n", argv[1]);
+	printf(" .long __start_of_text\n");
+}

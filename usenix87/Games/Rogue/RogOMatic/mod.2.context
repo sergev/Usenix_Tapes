@@ -1,0 +1,1158 @@
+diff -c1 packold/arms.c packnew/arms.c
+*** packold/arms.c	Mon Feb 11 11:27:10 1985
+--- packnew/arms.c	Sat Feb 16 23:46:50 1985
+***************
+*** 1,3
+  /*
+!  * arms.c: Rog-O-Matic XIV (CMU) Thu Jan 31 15:46:02 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * arms.c: Rog-O-Matic XIV (CMU) Sat Feb 16 09:47:34 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 40,51
+  
+-   /* Put protected sets of armor with equal ACs first.  DR UTexas 19 Jan 84 */
+-   for (j = n-1; j > 0; j--)
+-   { if (armval[j] == armval[j-1])
+-     { i = armind[j];
+-       w = armind[j-1];
+-       if (!itemis (w, PROTECTED) && itemis (i, PROTECTED))
+-         swap (armind[j], armind[j-1]);
+-     }
+-   }
+- 
+    if (print)
+
+--- 40,41 -----
+  
+    if (print)
+***************
+*** 51,53
+    if (print)
+!   { mvaddstr (1, 0, "Current Armor Rankings");
+      for (i = 0; i<n; i++)
+
+--- 41,43 -----
+    if (print)
+!   { mvprintw (1,0, "Current %sArmor Rankings", rustproof ? "Rustproof " : "");
+      for (i = 0; i<n; i++)
+***************
+*** 55,60
+    }
+- 
+-   /* Any uncursed, useful armor at or beyond position k? */
+-   for (i=k; i <= n; i++)
+-     if (!itemis ((j = armind[i-1]), CURSED) && armval[j] < 10) return (j);
+    
+
+--- 45,46 -----
+    }
+    
+***************
+*** 60,62
+    
+-   /* Return the kth best, even though it is cursed or useless */
+    return ((k <= n) ? armind[k-1] : NONE);
+
+--- 46,47 -----
+    
+    return ((k <= n) ? armind[k-1] : NONE);
+diff -c1 packold/io.c packnew/io.c
+*** packold/io.c	Mon Feb 11 11:27:17 1985
+--- packnew/io.c	Sat Feb 16 23:46:59 1985
+***************
+*** 1,3
+  /*
+!  * io.c: Rog-O-Matic XIV (CMU) Thu Jan 31 18:19:29 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * io.c: Rog-O-Matic XIV (CMU) Sat Feb 16 23:03:48 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 754,755
+    "Rgm commands: <ret>=singlestep, `=summary, /=snapshot, R=replay      [?]",
+    "Rogue cmds: S=Save, Q=Quit, h j k l H J K L b n u y N B U Y f s < >  [?]",
+
+--- 754,756 -----
+    "Rgm commands: <ret>=singlestep, `=summary, /=snapshot, R=replay      [?]",
++   "Rgm commands: m=long term memory display, G=display gene settings    [?]",
+    "Rogue cmds: S=Save, Q=Quit, h j k l H J K L b n u y N B U Y f s < >  [?]",
+***************
+*** 756,758
+    "Wizard: d=debug, !=show items, @=show monsters, #=show level flags   [?]",
+!   "Wizard: ~=version, ^=bowrank, %%=armorrank, $=weaponrank, ==ringrank [?]",
+    "Wizard: (=database, )=cycles, +=possible secret doors, :=chicken     [?]",
+
+--- 757,759 -----
+    "Wizard: d=debug, !=show items, @=show monsters, #=show level flags   [?]",
+!   "Wizard: ~=version, ^=bowrank, %%=armorrank, $=weaponrank, ==ringrank  [?]",
+    "Wizard: (=database, )=cycles, +=possible secret doors, :=chicken     [?]",
+***************
+*** 758,761
+    "Wizard: (=database, )=cycles, +=possible secret doors, :=chicken     [?]",
+!   "Wizard: [=weapstat, r=resetinv, &=object count, *=toggle blind       [?]",
+!   "Wizard: C=toggle cosmic, M=mazedoor, m=monster, A=attempt, {=flags",
+    NULL
+
+--- 759,762 -----
+    "Wizard: (=database, )=cycles, +=possible secret doors, :=chicken     [?]",
+!   "Wizard: [=weapstat, ]=rustproof armor, r=resetinv, &=object count    [?]",
+!   "Wizard: *=toggle blind, C=toggle cosmic, M=mazedoor, A=attempt, {=flags",
+    NULL
+***************
+*** 795,796
+   *            wands.
+   */
+
+--- 796,799 -----
+   *            wands.
++  *
++  * Get version from first 2000 chars of a log file	Feb 9, 1985 - mlm
+   */
+***************
+*** 797,798
+  
+  getrogver ()
+
+--- 800,803 -----
+  
++ # define VERMSG	"ersion "
++ 
+  getrogver ()
+***************
+*** 798,800
+  getrogver ()
+! { char *vstr = versionstr, ch;
+  
+
+--- 803,817 -----
+  getrogver ()
+! { register char *vstr = versionstr, *m = VERMSG;
+!   register int cnt = 2000, ch;
+!  
+!   if (replaying)			/* Look for version string in log */
+!   { while (cnt-- > 0 && *m)
+!     { if (fgetc (logfile) == *m) m++; else m = VERMSG;}
+!   
+!     if (*m == '\0')			/* Found VERMSG, get version string */
+!     { while ((ch = fgetc (logfile)) != ' ') *(vstr++) = ch;
+!       *--vstr = '\0';
+!     }
+!     else				/* Use default version */
+!     { sprintf (versionstr, DEFVER); }
+  
+***************
+*** 800,803
+  
+!   if (replaying)			/* Use default version */
+!   { sprintf (versionstr, DEFVER); }
+  
+
+--- 817,820 -----
+  
+!     rewind (logfile);			/* Put log file back to start */
+!   }
+  
+***************
+*** 871,872
+        cecho = 1;
+      }
+
+--- 888,890 -----
+        cecho = 1;
++       if (*versionstr) command (T_OTHER, "v");
+      }
+***************
+*** 1120,1122
+  
+!   if (*genocided) sprintf (s, "genocided '%s', ", s, genocided);
+  
+
+--- 1138,1140 -----
+  
+!   if (*genocided) sprintf (s, "%sgenocided '%s', ", s, genocided);
+  
+diff -c1 packold/main.c packnew/main.c
+*** packold/main.c	Mon Feb 11 11:28:10 1985
+--- packnew/main.c	Sat Feb 16 23:47:06 1985
+***************
+*** 1,3
+  /*
+!  * main.c: Rog-O-Matic XIV (CMU) Sun Feb  3 17:00:25 1985 - mlm
+   */
+
+--- 1,3 -----
+  /*
+!  * main.c: Rog-O-Matic XIV (CMU) Fri Feb 15 18:27:27 1985 - mlm
+   */
+***************
+*** 112,114
+  /* Characters */
+! char  *logfilename = "";	/* Name of log file */
+  char  afterid = '\0';           /* Letter of obj after identify */
+
+--- 112,114 -----
+  /* Characters */
+! char  logfilename[100];		/* Name of log file */
+  char  afterid = '\0';           /* Letter of obj after identify */
+***************
+*** 339,340
+    sprintf (sumline, "");
+    for (i = 80 * 24; i--; ) screen[0][i] = ' ';
+
+--- 339,341 -----
+    sprintf (sumline, "");
++   sprintf (versionstr, "");
+    for (i = 80 * 24; i--; ) screen[0][i] = ' ';
+***************
+*** 353,355
+      termination = "finis";
+!     logfilename = argv[4];
+      startreplay (&logfile, logfilename);
+
+--- 354,356 -----
+      termination = "finis";
+!     strcpy (logfilename, argv[4]);
+      startreplay (&logfile, logfilename);
+***************
+*** 403,406
+  
+!   sprintf (msg, " %s: version %s, genotype %d, quit at %d.",
+!            roguename, versionstr, geneid, quitat);
+    
+
+--- 404,411 -----
+  
+!   if (replaying)
+!     sprintf (msg, " Replaying log file %s, version %s.", 
+! 	     logfilename, versionstr);
+!   else
+!     sprintf (msg, " %s: version %s, genotype %d, quit at %d.",
+! 	     roguename, versionstr, geneid, quitat);
+    
+***************
+*** 554,558
+  
+!         case '~': saynow
+!                   ("Rogomatic version %s, Rogue version %s (%d), quit at %d",
+!                      RGMVER, versionstr, version, quitat);
+                    break;
+
+--- 559,566 -----
+  
+!         case '~': if (replaying)
+! 		    saynow ("Replaying log file %s, version %s.", 
+! 			    logfilename, versionstr);
+! 		  else
+! 		    saynow (" %s: version %s, genotype %d, quit at %d.",
+! 			    roguename, versionstr, geneid, quitat);
+                    break;
+diff -c1 packold/makefile packnew/makefile
+*** packold/makefile	Mon Feb 11 11:27:21 1985
+--- packnew/makefile	Sat Feb 16 23:47:06 1985
+***************
+*** 1,2
+! # makefile: Rog-O-Matic XIV (CMU) Thu Jan 31 18:23:25 1985 - mlm
+  # Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,2 -----
+! # makefile: Rog-O-Matic XIV (CMU) Wed Feb  6 18:34:24 1985 - mlm
+  # Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 4,7
+  BINARIES=   rogomatic player rgmplot datesub histplot gene
+! BINDIR=     /usr/mlm/bin/test
+! PUBDIR=     /usr/mlm/rgm/src14
+  CCFLAGS=    -g
+
+--- 4,7 -----
+  BINARIES=   rogomatic player rgmplot datesub histplot gene
+! BINDIR=     /usr/mlm/bin/
+! PUBDIR=     /usr/mlm/rgm/src14a
+  CCFLAGS=    -g
+***************
+*** 54,56
+  	cc -c histplot.c
+! io.o: types.h globals.h termtokens.h
+  	cc -c $(CCFLAGS) io.c
+
+--- 54,56 -----
+  	cc -c histplot.c
+! io.o: types.h globals.h install.h termtokens.h
+  	cc -c $(CCFLAGS) io.c
+***************
+*** 60,62
+  	cc -c $(CCFLAGS) learn.c
+! ltm.o: types.h globals.h
+  	cc -c $(CCFLAGS) ltm.c
+
+--- 60,62 -----
+  	cc -c $(CCFLAGS) learn.c
+! ltm.o: types.h globals.h install.h
+  	cc -c $(CCFLAGS) ltm.c
+***************
+*** 96,98
+  	cc -c $(CCFLAGS) survival.c
+! tactics.o: types.h globals.h
+  	cc -c $(CCFLAGS) tactics.c
+
+--- 96,98 -----
+  	cc -c $(CCFLAGS) survival.c
+! tactics.o: types.h globals.h install.h
+  	cc -c $(CCFLAGS) tactics.c
+***************
+*** 106,108
+  	cc -c titler.c
+! utility.o:
+  	cc -c $(CCFLAGS) utility.c
+
+--- 106,108 -----
+  	cc -c titler.c
+! utility.o: install.h
+  	cc -c $(CCFLAGS) utility.c
+diff -c1 packold/mess.c packnew/mess.c
+*** packold/mess.c	Mon Feb 11 11:27:23 1985
+--- packnew/mess.c	Sat Feb 16 23:47:08 1985
+***************
+*** 1,3
+  /*
+!  * mess.c: Rog-O-Matic XIV (CMU) Thu Jan 31 15:33:12 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * mess.c: Rog-O-Matic XIV (CMU) Sat Feb 16 15:41:44 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 63,65
+      for (m = mess;				/* Copy text */
+! 	 s<t && (version < RV53A || *s != '.');
+  	 s++)	
+
+--- 63,65 -----
+      for (m = mess;				/* Copy text */
+! 	 s<t && (version < RV53A || *s != '.' || s[1] != ' ');
+  	 s++)	
+***************
+*** 89,91
+    else if (mend[-1]==')' && mend[-3]=='(')
+!   { inventory (mess, mend); identifying = justreadid = 0; }
+  
+
+--- 89,91 -----
+    else if (mend[-1]==')' && mend[-3]=='(')
+!   { echoit = !inventory (mess, mend); identifying = justreadid = 0; }
+  
+***************
+*** 247,248
+        else if (MATCH("read what*")) echoit=0;
+        else unknown++;
+
+--- 247,249 -----
+        else if (MATCH("read what*")) echoit=0;
++       else if (MATCH("rogue version *")) echoit=0;
+        else unknown++;
+***************
+*** 274,275
+        else if (MATCH("the room is lit")) { setnewgoal (); infer ("light"); }
+        else if (MATCH("the * has confused you")) confused = 1;
+
+--- 275,277 -----
+        else if (MATCH("the room is lit")) { setnewgoal (); infer ("light"); }
++       else if (MATCH("the corridor glows*")) { infer ("light"); }
+        else if (MATCH("the * has confused you")) confused = 1;
+***************
+*** 301,303
+      case 'v':
+!       unknown++;
+        break;
+
+--- 303,306 -----
+      case 'v':
+!       if (MATCH("version *")) echoit=0;
+!       else unknown++;
+        break;
+***************
+*** 311,313
+        else if (MATCH("wait, what's going*")) {infer("confusion"); confused=1;}
+!       else if (MATCH("wait!  that's a *")) ;
+        else if (MATCH("what a*feeling*")) { infer("confusion"); confused=1; }
+
+--- 314,316 -----
+        else if (MATCH("wait, what's going*")) {infer("confusion"); confused=1;}
+!       else if (MATCH("wait*that's a *")) ;
+        else if (MATCH("what a*feeling*")) { infer("confusion"); confused=1; }
+***************
+*** 336,338
+        { echoit=0; set (STUFF); maxobj=objcount; }
+!       else if (MATCH("you can't *")) {echoit=0; curseditem ();}
+        else if (MATCH("you can't")) echoit=0;
+
+--- 339,341 -----
+        { echoit=0; set (STUFF); maxobj=objcount; }
+!       else if (MATCH("you*cursed*")) {echoit=0; curseditem ();}
+        else if (MATCH("you can't")) echoit=0;
+***************
+*** 338,339
+        else if (MATCH("you can't")) echoit=0;
+        else if (MATCH("you begin to feel better")) infer ("healing");
+
+--- 341,343 -----
+        else if (MATCH("you can't")) echoit=0;
++       else if (MATCH("you begin to feel greedy*")) infer ("gold detection");
+        else if (MATCH("you begin to feel better")) infer ("healing");
+***************
+*** 343,344
+        else if (MATCH("you feel a strange sense of loss")) ;
+        else if (MATCH("you feel stronger, now*")) infer ("gain strength");
+
+--- 347,349 -----
+        else if (MATCH("you feel a strange sense of loss")) ;
++       else if (MATCH("you feel a wrenching sensation in your gut")) ;
+        else if (MATCH("you feel stronger, now*")) infer ("gain strength");
+***************
+*** 348,350
+        { infer("raise level"); }
+!       else if (MATCH("your nose tingles")) infer ("food detection");
+        else if (MATCH("you start to float in the air"))
+
+--- 353,355 -----
+        { infer("raise level"); }
+!       else if (MATCH("your nose tingles*")) infer ("food detection");
+        else if (MATCH("you start to float in the air"))
+***************
+*** 368,371
+                 MATCH("you feel in touch with the universal onenes")) 
+!       { infer ("remove curse"); cursedarmor = cursedweapon = 0; 
+!         newarmor = newweapon = 1;}
+        else if (MATCH("your armor weakens"))
+
+--- 373,378 -----
+                 MATCH("you feel in touch with the universal onenes")) 
+!       { infer ("remove curse");
+! 	if (cursedarmor)  {forget (currentarmor, CURSED);  cursedarmor=0;}
+! 	if (cursedweapon) {forget (currentweapon, CURSED); cursedweapon=0;}
+!         newarmor = newweapon = 1; }
+        else if (MATCH("your armor weakens"))
+***************
+*** 417,418
+        if (MATCH( "* gold pieces")) { echoit=0; countgold (res1); }
+        else if (MATCH("'*'*: *")) { echoit=0; mapcharacter (*res1, res3); }
+
+--- 424,426 -----
+        if (MATCH( "* gold pieces")) { echoit=0; countgold (res1); }
++       else if (MATCH("(mctesq was here)")) echoit=0;
+        else if (MATCH("'*'*: *")) { echoit=0; mapcharacter (*res1, res3); }
+***************
+*** 478,480
+  
+!   if (!replaying && version <= RV53A &&
+        (nextid < LETTER (0) || nextid > LETTER (invcount))) 
+
+--- 486,488 -----
+  
+!   if (!replaying && version < RV53A &&
+        (nextid < LETTER (0) || nextid > LETTER (invcount))) 
+***************
+*** 522,524
+      sendnow (" %c;", id);		/* Pick an object to identify */
+!     usesynch = 0; justreadid=1;		/* Must resest inventory */
+    }
+
+--- 530,532 -----
+      sendnow (" %c;", id);		/* Pick an object to identify */
+!     usesynch = 0; justreadid=1;		/* Must reset inventory */
+    }
+diff -c1 packold/pack.c packnew/pack.c
+*** packold/pack.c	Mon Feb 11 11:27:24 1985
+--- packnew/pack.c	Sat Feb 16 23:47:10 1985
+***************
+*** 1,3
+  /*
+!  * pack.c: Rog-O-Matic XIV (CMU) Thu Jan 31 15:04:23 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * pack.c: Rog-O-Matic XIV (CMU) Sat Feb 16 08:58:04 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 231,233
+    char objname[100], *realname();
+!   int  n, ipos, xknow = 0, newitem = 0, inuse = 0;
+    int  plushit = UNKNOWN, plusdam = UNKNOWN, charges = UNKNOWN;
+
+--- 231,233 -----
+    char objname[100], *realname();
+!   int  n, ipos, xknow = 0, newitem = 0, inuse = 0, printed = 0;
+    int  plushit = UNKNOWN, plusdam = UNKNOWN, charges = UNKNOWN;
+***************
+*** 377,378
+          refresh ();
+        }
+
+--- 377,379 -----
+          refresh ();
++ 	printed++;
+        }
+***************
+*** 378,381
+        }
+-       else
+-         say (msgstart);
+      }
+
+--- 379,380 -----
+        }
+      }
+***************
+*** 407,422
+  
+-     /*
+-      * Use retained info to determine cursed attributes when identifying
+-      * or protected status for armor.  DR UTexas 01/05/84
+-      */
+- 
+-     if (inven[ipos].type == what && stlmatch (objname, inven[ipos].str))
+-     { if (xknow != itemis (ipos, KNOWN) &&
+- 	  !itemis (ipos, (UNCURSED | ENCHANTED)) &&
+- 	  ((plushit != UNKNOWN && plushit < 0) ||
+- 	   (plusdam != UNKNOWN && plusdam < 0)))
+-         remember (ipos, CURSED);
+-       if (newitem || what != armor ) forget (ipos, PROTECTED);
+-     }
+- 
+      inven[ipos].type = what;
+
+--- 406,407 -----
+  
+      inven[ipos].type = what;
+***************
+*** 454,455
+    checkrange = 1;
+  }
+
+--- 439,442 -----
+    checkrange = 1;
++   
++   return (printed);
+  }
+diff -c1 packold/search.c packnew/search.c
+*** packold/search.c	Mon Feb 11 11:27:31 1985
+--- packnew/search.c	Sat Feb 16 23:47:15 1985
+***************
+*** 1,3
+  /*
+!  * search.c: Rog-O-Matic XIV (CMU) Mon Jan 28 18:28:07 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * search.c: Rog-O-Matic XIV (CMU) Fri Feb 15 15:08:44 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 107,109
+        onrc (HALL|BEEN, targetrow, targetcol) != HALL|BEEN &&
+!       onrc (HALL,r,c))
+    { fmove (dir); return (1); }
+
+--- 107,110 -----
+        onrc (HALL|BEEN, targetrow, targetcol) != HALL|BEEN &&
+!       onrc (HALL,r,c) &&
+!       !beingstalked)			/* Feb 10, 1985 - mlm */
+    { fmove (dir); return (1); }
+diff -c1 packold/strategy.c packnew/strategy.c
+*** packold/strategy.c	Mon Feb 11 11:27:34 1985
+--- packnew/strategy.c	Sat Feb 16 23:47:18 1985
+***************
+*** 1,3
+  /*
+!  * strategy.c: Rog-O-Matic XIV (CMU) Thu Jan 31 20:51:06 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * strategy.c: Rog-O-Matic XIV (CMU) Sat Feb 16 10:03:16 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 95,97
+  
+!   if (blinded && grope (100))	/* Who turned out the lights */
+    { display ("Blinded, groping..."); return (1); }
+
+--- 95,97 -----
+  
+!   if (blinded && grope (50))	/* Who turned out the lights */
+    { display ("Blinded, groping..."); return (1); }
+***************
+*** 131,133
+  
+!   if (findroom ())	/* Look for another room */
+      return (1);
+
+--- 131,133 -----
+  
+!   if (findroom ())		/* Look for another room */
+      return (1);
+***************
+*** 182,184
+    display ("I would give up, but I am too stubborn, starting over...");
+!   return (grope (100));
+  }
+
+--- 182,184 -----
+    display ("I would give up, but I am too stubborn, starting over...");
+!   return (grope (10));
+  }
+***************
+*** 500,502
+  
+!   if (beingstalked > 1000) { turns = 0; danger += 16; }
+  
+
+--- 500,502 -----
+  
+!   if (beingstalked > INVPRES) { turns = 0; danger += INVDAM; }
+  
+***************
+*** 507,509
+  
+- 
+    /* 
+
+--- 507,508 -----
+  
+    /* 
+***************
+*** 986,991
+  
+- # define INVDAM		(16)
+- # define INVPRES	(INVHIT-100)
+- # define INVLURK	(INVPRES-200)
+- 
+  fightinvisible ()
+
+--- 985,986 -----
+  
+  fightinvisible ()
+***************
+*** 1047,1049
+    if (liberties == 1 || liberties == 2)
+!     sprintf (cmd, "%c%c", keydir[lastdir], keydir[(lastdir+4)&7]);
+  
+
+--- 1042,1046 -----
+    if (liberties == 1 || liberties == 2)
+!   { command (T_FIGHTING, "%c%c", keydir[lastdir], keydir[(lastdir+4)&7]);
+!     return (1);
+!   }
+  
+***************
+*** 1054,1060
+    /* not work, run in a circle (will hit one out of 4)      */
+!   else
+!   { for (dir=0; dir<8; dir += 2)
+!       if ((onrc(CANGO, atdrow(dir), atdcol(dir))) &&
+!           (onrc(CANGO, atrow+2*deltr[dir], atcol+2*deltc[dir])))
+!         break;
+  
+
+--- 1051,1056 -----
+    /* not work, run in a circle (will hit one out of 4)      */
+!   for (dir=0; dir<8; dir += 2)
+!     if ((onrc(CANGO, atdrow(dir), atdcol(dir))) &&
+! 	(onrc(CANGO, atrow+2*deltr[dir], atcol+2*deltc[dir])))
+!       break;
+  
+***************
+*** 1060,1066
+  
+!     if (dir > 7)	command (T_FIGHTING, "hjlk");
+!     else		command (T_FIGHTING, "%c%c%c", keydir[dir],
+! 			         keydir[dir], keydir[(dir+4)&7]);
+!   }
+! 
+    return (1);
+
+--- 1056,1060 -----
+  
+!   if (dir > 7)	command (T_FIGHTING, "hjlk");
+!   else		command (T_FIGHTING, "%c%c%c", keydir[dir],
+! 			 keydir[dir], keydir[(dir+4)&7]);
+    return (1);
+diff -c1 packold/survival.c packnew/survival.c
+*** packold/survival.c	Mon Feb 11 11:27:35 1985
+--- packnew/survival.c	Sat Feb 16 23:47:18 1985
+***************
+*** 1,3
+  /*
+!  * survival.c: Rog-O-Matic XIV (CMU) Mon Jan  7 15:22:23 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * survival.c: Rog-O-Matic XIV (CMU) Sun Feb 10 21:09:58 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 121,125
+    if (on (STAIRS) && !floating)		/* Go up or down */
+!   { if (!goupstairs (RUNNING)) godownstairs (RUNNING); 
+!     return (1);
+!   }
+  
+
+--- 121,123 -----
+    if (on (STAIRS) && !floating)		/* Go up or down */
+!     return (goupstairs (RUNNING) || godownstairs (RUNNING));
+  
+diff -c1 packold/tactics.c packnew/tactics.c
+*** packold/tactics.c	Mon Feb 11 11:28:16 1985
+--- packnew/tactics.c	Sat Feb 16 23:47:20 1985
+***************
+*** 1,3
+  /*
+!  * tactics.c: Rog-O-Matic XIV (CMU) Sat Feb  2 13:01:25 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * tactics.c: Rog-O-Matic XIV (CMU) Sat Feb 16 23:27:48 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 43,45
+  
+!   if (Level > 7 && Level < 19 && 
+        wearing ("maintain armor") == NONE &&
+
+--- 43,45 -----
+  
+!   if (Level > (version < RV52A ? 8 : 7) && Level < 19 && 
+        wearing ("maintain armor") == NONE &&
+***************
+*** 47,52
+        itemis (obj, KNOWN))
+!   { if (Level < 13)
+!       obj = havearmor (1, NOPRINT, RUSTPROOF);
+!     if (Level >= 13 || obj == NONE)
+!       obj = havearmor (2, NOPRINT, ANY);
+    }
+
+--- 47,52 -----
+        itemis (obj, KNOWN))
+!   { obj = NONE;
+!     if (Level<13)		obj = havearmor (1, NOPRINT, RUSTPROOF);
+!     if (Level<13 && obj==NONE)	obj = havearmor (3, NOPRINT, ANY);
+!     if (obj==NONE)		obj = havearmor (2, NOPRINT, ANY);
+    }
+***************
+*** 54,56
+    /* If  the new armor is really bad, then don't bother wearing any */
+!   if (obj != NONE && armorclass (obj) > 9) 
+    { obj = NONE; }
+
+--- 54,56 -----
+    /* If  the new armor is really bad, then don't bother wearing any */
+!   if (obj != NONE && armorclass (obj) > 9 && itemis (obj, KNOWN))
+    { obj = NONE; }
+***************
+*** 89,91
+    /* haveweapon (1) returns the index of the best weapon in the pack */
+!   if ((obj = haveweapon (1, NOPRINT)) < 0) return (0);
+    
+
+--- 89,91 -----
+    /* haveweapon (1) returns the index of the best weapon in the pack */
+!   if ((obj = haveweapon (1, NOPRINT)) == NONE) return (0);
+    
+***************
+*** 92,96
+    /* If we are not wielding our best weapon, do so */
+!   if (obj == currentweapon) { newweapon = 0; return (0); }
+!   else if (obj != NONE)        { return (wield (obj)); }
+!   else                      { newweapon = 0; return (0); }
+  }
+
+--- 92,96 -----
+    /* If we are not wielding our best weapon, do so */
+!   if (obj == currentweapon)	{ newweapon = 0; return (0); }
+!   else if (obj != NONE)		{ return (wield (obj)); }
+!   else				{ newweapon = 0; return (0); }
+  }
+***************
+*** 188,190
+        return (1);
+!     else if (wearing ("sustain strength") < 0 &&
+               (obj2 = havenamed (ring, "sustain strength")) != NONE &&
+
+--- 188,190 -----
+        return (1);
+!     else if (wearing ("sustain strength") == NONE &&
+               (obj2 = havenamed (ring, "sustain strength")) != NONE &&
+***************
+*** 274,276
+          cursedarmor || cursedweapon) &&
+!        (exploredlevel || know ("aggravate monster")) &&
+         (obj = unknown (scroll)) != NONE))
+
+--- 274,276 -----
+          cursedarmor || cursedweapon) &&
+!        (exploredlevel || Level > 18 || know ("aggravate monsters")) &&
+         (obj = unknown (scroll)) != NONE))
+***************
+*** 279,281
+      /* Go to a corner to read the scroll */
+!     if (version <= RV36B && know ("create monster") == '\0' && gotocorner ())
+        return (1);
+
+--- 279,281 -----
+      /* Go to a corner to read the scroll */
+!     if (version <= RV36B && !know ("create monster") && gotocorner ())
+        return (1);
+***************
+*** 363,365
+  
+!   if ((obj = havenamed (ring, name)) < 0 ||
+        wearing (name) != NONE)
+
+--- 363,365 -----
+  
+!   if ((obj = havenamed (ring, name)) == NONE ||
+        wearing (name) != NONE)
+***************
+*** 543,545
+    /* Check for applicability of this rule */
+!   if (stairrow < 0 && !foundtrapdoor) return (0);
+  
+
+--- 543,545 -----
+    /* Check for applicability of this rule */
+!   if (stairrow == NONE && !foundtrapdoor) return (0);
+  
+***************
+*** 545,546
+  
+    if (teleported > (larder+1)*5 && godownstairs (NOTRUNNING))
+
+--- 545,548 -----
+  
++   if (have (amulet) != NONE) return (0);
++ 
+    if (teleported > (larder+1)*5 && godownstairs (NOTRUNNING))
+***************
+*** 619,621
+    /* Check for applicability of this rule */
+!   if (stairrow < 0 || have(amulet) < 0 ||
+        (!running && quitat < BOGUS && Gold <= quitat))
+
+--- 621,623 -----
+    /* Check for applicability of this rule */
+!   if (stairrow == NONE || have(amulet) == NONE ||
+        (!running && quitat < BOGUS && Gold <= quitat))
+***************
+*** 628,631
+      if (Level == 1 && 
+!         ((obj = havearrow ()) != NONE || (obj = haveminus ()) != NONE))
+!     { throw (obj, 0); return (1); }
+  
+
+--- 630,634 -----
+      if (Level == 1 && 
+!         ((obj = havearrow ()) != NONE || (obj = haveminus ()) != NONE) &&
+! 	throw (obj, 0))
+!     { return (1); }
+  
+***************
+*** 795,797
+    /* Fail if we have run out of arrows */
+!   if ((obj = havemissile ()) < 0) return (0);
+  
+
+--- 798,800 -----
+    /* Fail if we have run out of arrows */
+!   if ((obj = havemissile ()) == NONE) return (0);
+  
+***************
+*** 827,829
+    /* Have we a wand to identify? */
+!   if ((obj = unknown (wand)) < 0)
+      return (0);
+
+--- 830,832 -----
+    /* Have we a wand to identify? */
+!   if ((obj = unknown (wand)) == NONE)
+      return (0);
+diff -c1 packold/things.c packnew/things.c
+*** packold/things.c	Mon Feb 11 11:28:18 1985
+--- packnew/things.c	Sat Feb 16 23:47:21 1985
+***************
+*** 1,3
+  /*
+!  * things.c: Rog-O-Matic XIV (CMU) Sat Feb  2 13:02:28 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * things.c: Rog-O-Matic XIV (CMU) Sat Feb 16 12:16:57 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 26,28
+  
+!   command (T_HANDLING, "W%cI%c", LETTER (obj), LETTER (obj));
+    return (1);
+
+--- 26,29 -----
+  
+!   command (T_HANDLING, "W%c", LETTER (obj));
+!   usesynch = 0;
+    return (1);
+***************
+*** 44,45
+    command (T_HANDLING, "T");
+    return (1);
+
+--- 45,47 -----
+    command (T_HANDLING, "T");
++   usesynch = 0;
+    return (1);
+***************
+*** 74,77
+  {
+!   /* Cant if there is not something there */
+!   if (inven[obj].count < 1) return (0);
+  
+
+--- 76,82 -----
+  {
+!   /* Cant if not there, in use, or on something else */
+!   if (inven[obj].count < 1 ||
+!       itemis (obj, INUSE) ||
+!       on (STUFF | TRAP | STAIRS | DOOR))
+!     return (0);
+  
+***************
+*** 77,83
+  
+!   /* read unknown scrolls rather than dropping them */
+!   if (inven[obj].type == scroll && !itemis (obj, KNOWN) && reads (obj))
+!   { prepareident (pickident (), obj);
+!     return (1);
+!   }
+    
+
+--- 82,98 -----
+  
+!   /* read unknown scrolls or good scrolls rather than dropping them */
+!   if (inven[obj].type == scroll &&
+!       (!itemis (obj, KNOWN) ||
+!        stlmatch (inven[obj].str, "identify") &&
+! 	   prepareident (pickident (), obj) ||
+!        stlmatch (inven[obj].str, "enchant") ||
+!        stlmatch (inven[obj].str, "genocide") ||
+!        stlmatch (inven[obj].str, "gold detection") ||
+!        stlmatch (inven[obj].str, "hold monster") ||
+!        stlmatch (inven[obj].str, "light") ||
+!        stlmatch (inven[obj].str, "magic mapping") ||
+!        stlmatch (inven[obj].str, "monster confusion") ||
+!        stlmatch (inven[obj].str, "remove curse")) &&
+!       reads (obj))
+!   { return (1); }
+    
+***************
+*** 83,87
+    
+!   /* quaff unknown potions rather than dropping them */
+!   if (inven[obj].type == potion && !itemis (obj, KNOWN) && quaff (obj))
+!     return (1);
+  
+
+--- 98,112 -----
+    
+!   /* quaff unknown potions or good potions rather than dropping them */
+!   if (inven[obj].type == potion &&
+!       (!itemis (obj, KNOWN) ||
+!        stlmatch (inven[obj].str, "extra healing") ||
+!        stlmatch (inven[obj].str, "gain strength") ||
+!        stlmatch (inven[obj].str, "haste self") && !hasted ||
+!        stlmatch (inven[obj].str, "healing") ||
+!        stlmatch (inven[obj].str, "magic detection") ||
+!        stlmatch (inven[obj].str, "monster detection") ||
+!        stlmatch (inven[obj].str, "raise level") ||
+!        stlmatch (inven[obj].str, "restore strength")) &&
+!       quaff (obj))
+!   { return (1); }
+  
+***************
+*** 87,91
+  
+-   if (itemis (obj, INUSE) || on (STUFF | TRAP | STAIRS | DOOR))
+-     return (0);
+- 
+    command (T_HANDLING, "d%c", LETTER (obj));
+
+--- 112,113 -----
+  
+    command (T_HANDLING, "d%c", LETTER (obj));
+***************
+*** 270,271
+    afterid = (iscroll > obj || inven[iscroll].count > 1) ? nextid : nextid-1;
+  }
+
+--- 292,294 -----
+    afterid = (iscroll > obj || inven[iscroll].count > 1) ? nextid : nextid-1;
++   return (nextid >= 'a' && afterid >= 'a');
+  }
+***************
+*** 486,488
+  	     itemis (obj, PROTECTED) ||
+! 	     stlmatch (inven[obj].str, "leather")));
+  }
+
+--- 509,511 -----
+  	     itemis (obj, PROTECTED) ||
+! 	     stlmatch (inven[obj].str, "leather") && version > RV36B));
+  }
+diff -c1 packold/types.h packnew/types.h
+*** packold/types.h	Mon Feb 11 11:27:38 1985
+--- packnew/types.h	Sat Feb 16 23:47:22 1985
+***************
+*** 1,3
+  /*
+!  * types.h: Rog-O-Matic XIV (CMU) Wed Jan 30 14:57:17 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * types.h: Rog-O-Matic XIV (CMU) Sat Feb 16 09:44:54 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 43,44
+  
+  # define INVHIT		(1000)
+
+--- 43,45 -----
+  
++ # define INVDAM		(16)
+  # define INVHIT		(1000)
+***************
+*** 44,45
+  # define INVHIT		(1000)
+  
+
+--- 45,48 -----
+  # define INVHIT		(1000)
++ # define INVPRES	(INVHIT-100)
++ # define INVLURK	(INVPRES-200)
+  
+diff -c1 packold/worth.c packnew/worth.c
+*** packold/worth.c	Mon Feb 11 11:27:39 1985
+--- packnew/worth.c	Sat Feb 16 23:47:23 1985
+***************
+*** 1,3
+  /*
+!  * worth.c: Rog-O-Matic XIV (CMU) Thu Jan 31 15:54:56 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+
+--- 1,3 -----
+  /*
+!  * worth.c: Rog-O-Matic XIV (CMU) Sun Feb 10 23:16:40 1985 - mlm
+   * Copyright (C) 1985 by A. Appel, G. Jacobson, L. Hamey, and M. Mauldin
+***************
+*** 50,53
+    /* 
+!    * Armor values are based on armor class, bonus for best,
+!    * second best, or leather armor (leather doesnt rust)
+     */
+
+--- 50,53 -----
+    /* 
+!    * Armor values are based on armor class, bonus for best, second
+!    * best, third best, or leather armor (leather doesnt rust)
+     */
+***************
+*** 55,57
+    if (inven[obj].type == armor)
+!   { value = (10 - armorclass (obj)) * 90;
+      
+
+--- 55,57 -----
+    if (inven[obj].type == armor)
+!   { value = (11 - armorclass (obj)) * 120;
+      
+***************
+*** 59,60
+      else if (obj == havearmor (2, NOPRINT, ANY))	value += 1500;
+  
+
+--- 59,61 -----
+      else if (obj == havearmor (2, NOPRINT, ANY))	value += 1500;
++     else if (obj == havearmor (3, NOPRINT, ANY))	value += 800;
+  
+***************
+*** 60,62
+  
+!     if (!willrust (obj))				value += 150;
+    }
+
+--- 61,63 -----
+  
+!     if (stlmatch (inven[obj].str, "leather"))		value += 300;
+    }
+***************
+*** 69,71
+    else if (inven[obj].type == thrower)
+!   { value = (bowclass (obj)) * 5;
+      
+
+--- 70,72 -----
+    else if (inven[obj].type == thrower)
+!   { value = (bowclass (obj));
+      
+***************
+*** 71,74
+      
+!     if (obj == havebow (1, NOPRINT)) value += 1000;
+!     else if (obj == havebow (2, NOPRINT)) value += 500;
+    }
+
+--- 72,75 -----
+      
+!     if (obj == havebow (1, NOPRINT)) value += 1500;
+!     else if (obj == havebow (2, NOPRINT)) value += 300;
+    }
+***************
+*** 79,82
+      
+!     if (obj == haveweapon (1, NOPRINT)) value += 1500;
+!     else if (obj == haveweapon (2, NOPRINT)) value += 1000;
+    }
+
+--- 80,83 -----
+      
+!     if (obj == haveweapon (1, NOPRINT)) value += 2500;
+!     else if (obj == haveweapon (2, NOPRINT)) value += 1500;
+    }
+***************
+*** 106,107
+    else if (stlmatch (inven[obj].str, "restore strength")) value = 800;
+    else if (stlmatch (inven[obj].str, "scare monster")) value = 1400;
+
+--- 107,109 -----
+    else if (stlmatch (inven[obj].str, "restore strength")) value = 800;
++   else if (stlmatch (inven[obj].str, "gain strength")) value = 700;
+    else if (stlmatch (inven[obj].str, "scare monster")) value = 1400;
+***************
+*** 109,110
+    else if (stlmatch (inven[obj].str, "enchant")) value = 800;
+  
+
+--- 111,115 -----
+    else if (stlmatch (inven[obj].str, "enchant")) value = 800;
++   else if (stlmatch (inven[obj].str, "extra healing")) value = 900;
++   else if (stlmatch (inven[obj].str, "healing")) value = 750;
++   else if (stlmatch (inven[obj].str, "protect") && !protected) value = 1000;
+  

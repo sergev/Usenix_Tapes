@@ -1,0 +1,58 @@
+the da11-b as  designed  by  dec  is  great  for  connecting  two
+computers   in   a   master/slave  relationship.   however  newer
+protocols require the following sort of operation: both  machines
+are always in a sort of passive "receive" state, ready to receive
+at any time.  either machine may then decide to transmit whenever
+it wishes.
+
+what is really desired then is an  inter-machine  interface  that
+can  support  independent  transmit and receive transfers.  dec's
+dmc11 does this (although the csr  layout  they  chose  is  still
+half-duplex oriented and thus clumsy).
+
+we more or less got stuck with a da11-b because the dmc11 was not
+available at the time (we now have one of each).  if one is stuck
+with a half-duplex da11-b, there are several things that could be
+improved  in  the hardware to make our type of protocol operation
+easier:
+
+(1) occasionally "collisions" will occur when  both  sides  start
+transmiting  at the same time.  when this happens currently, both
+dma sections become hung and out-interrupts must be exchanged  to
+clear the condition.  an improvement would be to either:
+
+        provide some collision resolution ability in the hardware
+        so  that  a  collision automatically cleans itself up and
+        notifies one of the sides  that  its  transmit  has  been
+        overridden  and  it  must now receive.  the other side is
+        not even aware of the collision.
+
+        allow either side to toggle a bit that cleans itself  up,
+        as it stands now, both sides must exchange out-interrupts
+        to  do  this.   this  would  allow  the   (predetermined)
+        secondary  station  to  abort his transmit and start up a
+        receive instead, the primary station would  continue  his
+        transmit as if nothing happened.
+
+(2) if several blocks are queued for output on both sides of  the
+da,  and  dec's recommendation for setting up both sides with the
+same word count are followed, then it is unknown which side  will
+actually  service  his  completion  interrupt first.  it would be
+best if the sides  of  the  transfer  received  their  completion
+interrupts  in  a  fixed  order  (such  as  receiver  first, then
+transmitter), so that arbitration for the next transfer can  take
+place  in  an  orderly  fashion.   we  have  accomplished this by
+setting the transmit count 2 words (1 is not enough) higher  than
+the receive count, so receive always gets control first.  at this
+time he decides to either transmit his own block that is waiting,
+or  to  pass  control  back  to  transmit for his cleanup.  There
+should be a cleaner way of doing this.
+
+(3) related to the last problem, the one shots  that  adjust  the
+delay  between  transfer  of words must be set less than about 10
+instruction times (10  usecs),  otherwise  the  final  end  cycle
+pulses  that  come  out  on  word  count  complete  may  race the
+interrupt service routine's initiation of the next  transfer  and
+cause the first word of the next transfer to be lost.  this seems
+kludgy, the one-shots should be adjustable to as slow as possible
+(even 100's of usecs) without causing any problems.

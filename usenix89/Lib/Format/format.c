@@ -1,0 +1,496 @@
+/**************************************************************************/
+/***	format.c:	format routines					***/
+/***	Author:		Christopher M. Caldwell of IO Software, Inc.	***/
+/***	Created:	09-Jul-86					***/
+/***	"Do with as ye may"						***/
+/**************************************************************************/
+
+/*
+This package is a set of routines for formatting data in a more flexible
+way than UNIX's printf routines.  In the simplest case:
+
+	format("This is a test.\n");
+
+works the way
+
+	printf("This is a test.\n");
+
+does.  However, printf uses percents (%) to denote substitutions.  Format
+encloses substitutions with braces ({ and }).  I.E. {s} denotes "substitute
+the next argument as a string."  After the letter denoting the substitution
+type, modifiers may be supplied.  {sl5} means print a string left justified
+to 5 characters.  If the value is not supplied, it is taken from the
+argument list.  The EBNF for this is:
+
+	'{' <type-letter> { <modifier-character> [ <modifier-value> ] } '}'
+
+Available type letters so far are:
+
+	s	string (Char *)
+	i	int
+	l	long
+	c	character
+	f	float (double)
+	S	Another format string (I smell recursion)
+
+Available modifers (and their defaults) are:
+
+	l(0)	Number of columns to take up, value will be left justified
+	r(0)	Number of columns to take up, value will be right justified
+	c(0)	Number of columns to take up, value will be centered
+	m(0)	Maximum number of columns display of data
+	.(6)	Number of places to display to the right of the decimal point
+	b(10)	Base of number
+	p(32)	Ascii value of pad character for l, r or c.
+	u(0)	Unsigned status (signed=0, unsigned!=0)
+	n(1)	Count of times to repeat string
+
+If a modifer value is followed by a string of digits then that string is
+converted to an integer and used as the modifier's value, else the value will
+be taken from the next argument to format.
+
+Some ridiculous variable type/modifer combinations exist:
+	What is an unsigned string (or character) of base 8 with 4 trailing
+	    decimal places? (All three modifiers are ignored)
+	Do you really want to see floating point variables in base 3?  (Yes!)
+	What does centering a left or right justifed variable look like?
+	    (The last justification character is the one used)
+
+Now, an example program:
+
+	main()
+	{
+	int i;
+
+	format("Left justified integer:  '{il10}'\n",1234);
+	format("###{f.1c}###\n",123.4,20);
+	format("Octal:  {lb8r11pu1}\n",01234L,'0');
+	format("Truncate this:  {sm10}\n", "This is a test" );
+	format("Print 5 arfs:  {sn5}\n","arf");
+	i = 1;
+	format("Do it {i} time{sn}.\n",i,"s",i!=1);
+	i = 2;
+	format("Do it {i} time{sn}.\n",i,"s",i!=1);
+	format("Center this: ###{Sc20p}###\n","Answer={i}",'$',1234);
+	exit(0);
+	}
+
+and its standard output:
+
+	Left justified integer:  '1234      '
+	###        123.4       ###
+	Octal:  00000001234
+	Truncate this:  This is a 
+	Print 5 arfs:  arfarfarfarfarf
+	Do it 1 time.
+	Do it 2 times.
+	Center this: ###19271927=123419271927###
+
+The following flavors of format are available:
+
+	format( formatstring, args... )		Send to standard out
+	fformat( stream, formatstring, args... )Send to specified stream
+	i = cformat( formatstring, args... )	Calculate number of chars
+	sformat( buf, formatstring, args... )	Send to the character array buf
+	ptr = mformat( formatstring, args... )	Malloc enough space for result
+						(and trailing 0), put the
+						result in malloced space, and
+						return pointer to it
+			    Also, as a kluge:
+	ptr = sformat( NULL, formatstring, args... )
+
+mformat (and sformat with a NULL array), perform the format twice,
+once to find out how many characters needed to malloc, and the next
+time to fill up the array.
+
+Advantages:
+	Easier to understand justification
+	Centering available
+	More flexible padding (instead of just spaces or zeros)
+	Arbitrary base output (2 to 36)
+	Complex formats available ("S")
+	Arbitrarily lengthed everything (up do what you can malloc)
+	And from my point of view, I have the source!
+*/
+
+/**************************************************************************/
+
+#include <stdio.h>
+#include <ctype.h>
+
+#define PF_COUNT	0
+#define PF_ARRAY	1
+#define PF_PUTC		2
+#define then
+#define TRUE		1
+#define FALSE		0
+
+static char *al;
+extern char *malloc();
+
+int lcase(c)	char c;		{ return( isupper(c) ? tolower(c) : c ); }
+int ucase(c)	char c;		{ return( islower(c) ? toupper(c) : c ); }
+int digtobin(c)	char c;		{ return( c<='9' ? c-'0' : lcase(c)-'a'+10 ); }
+char bintodig(i)int i;		{ return( i<=9 ? i+'0' : i+'a'-10 ); }
+
+int isbase( c, b )
+/*	Return TRUE if character c is digit of base b.  Similar to isdigit,
+	but allows bases with letters and won't except "9" in base 8, etc.
+*/
+    char c;
+    int b;
+    {
+    if( !isdigit(c) && !isalpha(c) )
+      then return FALSE;
+      else return( c<='9' ? (c-'0'<b) : (lcase(c)-'a'<b-10) );
+    }
+
+int cformat(fmt,arglist)		char *fmt; int arglist;
+/*	Return number of characters generated by "printing" fmt.  Used by
+	things that need to malloc space for strings.
+*/
+    {
+    int pf_count;
+    al = (char *)&arglist;
+    pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+    return pf_count;
+    }
+
+int cxformat(fmt,arglist)		char *fmt, *arglist;
+/*	Same as above but argument list is pointed to by second argument */
+    {
+    int pf_count;
+    al = arglist;
+    pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+    return pf_count;
+    }
+
+char *mformat(fmt,arglist)		char *fmt; int arglist;
+/*	Return pointer to malloced array of characters	*/
+    {
+    int pf_count;
+    char *res;
+    al = (char *)&arglist;
+    pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+    if( (res=malloc(pf_count+1)) == NULL ) then return NULL;
+    al = (char *)&arglist;
+    pf( fmt, PF_ARRAY, NULL, res, NULL );
+    return res;
+    }
+
+char *mxformat(fmt,arglist)		char *fmt, *arglist;
+/*	Same as above but argument list is pointed to by second argument */
+    {
+    int pf_count;
+    char *res;
+    al = arglist;
+    pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+    if( (res=malloc(pf_count+1)) == NULL ) then return NULL;
+    al = arglist;
+    pf( fmt, PF_ARRAY, NULL, res, NULL );
+    return res;
+    }
+
+char *sformat(res,fmt,arglist)		char *fmt, *res; int arglist;
+/*	Return pointer to malloced array of characters if res==NULL,
+	else fill array res with characters.
+*/
+    {
+    int pf_count;
+    if( res==NULL )
+      then
+	{
+	al = (char *)&arglist;
+	pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+	if( (res=malloc(pf_count+1)) == NULL ) then return NULL;
+	}
+    al = (char *)&arglist;
+    pf( fmt, PF_ARRAY, NULL, res, NULL );
+    return res;
+    }
+
+char *sxformat(res,fmt,arglist)		char *fmt, *res, *arglist;
+/*	Same as above but argument list is pointed to by second argument */
+    {
+    int pf_count;
+    if( res==NULL )
+      then
+	{
+	al = arglist;
+	pf( fmt, PF_COUNT, &pf_count, NULL, NULL );
+	if( (res=malloc(pf_count+1)) == NULL ) then return NULL;
+	}
+    al = arglist;
+    pf( fmt, PF_ARRAY, NULL, res, NULL );
+    return res;
+    }
+
+int format(fmt,arglist)			char *fmt; int arglist;
+/*	Print characters to standard out. */
+    {
+    al = (char *)&arglist;
+    return pf( fmt, PF_PUTC, NULL, NULL, stdout );
+    }
+
+int xformat(fmt,arglist)		char *fmt, *arglist;
+/*	Same as above but argument list is pointed to by second argument */
+    {
+    al = arglist;
+    return pf( fmt, PF_PUTC, NULL, NULL, stdout );
+    }
+
+int fformat(outfile,fmt,arglist)	FILE *outfile; char *fmt; int arglist;
+/*	Print characters to specified file stream. */
+    {
+    al = (char *)&arglist;
+    return pf( fmt, PF_PUTC, NULL, NULL, outfile );
+    }
+
+int fxformat(outfile,fmt,arglist)	FILE *outfile; char *fmt, *arglist;
+/*	Same as above but argument list is pointed to by second argument */
+    {
+    al = arglist;
+    return pf( fmt, PF_PUTC, NULL, NULL, outfile );
+    }
+
+#define NEXT(mode)	((mode *)(al += sizeof(mode)))[-1]
+
+static int pf( fs, pf_func, pf_count, pf_addr, pf_file )
+/*	This routine is called to parse the format string.  If pf_func
+	is PF_COUNT, that would be generated is returned.  If pf_func
+	is PF_ARRAY, an array is filled.  If pf_func is PF_FILE, characters
+	are sent to the stream pf_file.
+*/
+    char *fs;
+    int pf_func;
+    int *pf_count;
+    char *pf_addr;
+    FILE *pf_file;
+    {
+    int pf_right, pf_left, pf_center, pf_dec, pf_max;
+    int pf_base, pf_iter, pf_pad, pf_unsigned;
+    char *pf_string, pf_char;
+    int pf_int;
+    long pf_long;
+    double pf_double;
+    double pnum;
+    int ind;
+    char t, c, buf[512], *cp;
+    int bufcnt;
+    int pbase;
+    int nm;
+    char *saveal;
+
+    while( c = *fs++ )
+	if( c != '{' || (t = *fs++) == '{' )
+	  then
+	    switch( pf_func )
+		{
+		case PF_COUNT:	(*pf_count)++;		break;
+		case PF_ARRAY:	*pf_addr++ = c;		break;
+		case PF_PUTC:	if( putc(c,pf_file) == EOF )
+				  then return EOF;
+				  else break;
+		}
+	  else
+	    {
+	    pf_right	= 0;
+	    pf_left	= 0;
+	    pf_center	= 0;
+	    pf_dec	= 6;
+	    pf_max	= 0;
+	    pf_base	= 10;
+	    pf_iter	= 1;
+	    pf_pad	= ' ';
+	    pf_unsigned	= FALSE;
+	    switch( t )
+		{
+		case 'S':	pf_string	= NEXT(char *);		break;
+		case 's':	pf_string	= NEXT(char *);		break;
+		case 'c':	pf_char		= NEXT(int);		break;
+		case 'i':	pf_int		= NEXT(int);		break;
+		case 'l':	pf_long		= NEXT(long);		break;
+		case 'f':	pf_double	= NEXT(double);		break;
+		break;
+		}
+	    while( (c = *fs++) != '}' )
+		{
+		nm = 0;
+		pbase = 10;
+		if( !isbase(*fs,pbase) )
+		  then nm = NEXT(int);
+		  else
+		    {
+		    while( TRUE )
+			{
+			while( isbase(*fs,pbase) )
+			    nm = pbase*nm + digtobin(*fs++);
+			if( nm<2 || nm>36 || *fs!='_' ) then break;
+			pbase = nm;
+			fs++;
+			}
+		    }
+		switch( c )
+		    {
+		    case 'r':	pf_right = nm;		break;
+		    case 'l':	pf_left = nm;		break;
+		    case 'c':	pf_center = nm;		break;
+		    case '.':	pf_dec = nm;		break;
+		    case 'm':	pf_max = nm;		break;
+		    case 'b':	pf_base = nm;		break;
+		    case 'n':	pf_iter = nm;		break;
+		    case 'p':	pf_pad = nm;		break;
+		    case 'u':	pf_unsigned = nm;	break;
+		    }
+		}
+	    bufcnt = 0;
+	    switch( t )
+		{
+		case 's':	if( pf_string == NULL )
+				  then cp = "(null)";
+				  else cp = pf_string;
+				bufcnt = strlen( cp );
+				break;
+
+		case 'S':	saveal = al;
+				pf(pf_string,PF_COUNT,&bufcnt,NULL,NULL);
+				al = saveal;
+				cp = malloc( bufcnt+1 );
+				pf(pf_string,PF_ARRAY,NULL,cp,NULL);
+				break;
+
+		case 'c':	buf[bufcnt++] = pf_char;
+				cp = buf;
+				break;
+
+		case 'i':	pf_char = ( pf_int < 0 );
+				if( pf_int >= 0 || !pf_unsigned )
+				  then
+				    {
+				    do  {
+					buf[100-(++bufcnt)]
+					    = bintodig( abs(pf_int%pf_base) );
+					pf_int /= pf_base;
+					} while( pf_int != 0 );
+				    if(pf_char) then buf[100-(++bufcnt)]='-';
+				    cp = buf;
+				    cp += (100 - bufcnt);
+				    }
+				  else
+				    {
+				    c = pf_int & 1;
+				    pf_int >>= 1;
+				    pf_int &= (1<<(sizeof(pf_int)-1));
+				    c = c + ((pf_int%(pf_base>>1)) << 1);
+				    pf_int /= (pf_base>>1);
+				    buf[100-(++bufcnt)] = bintodig( c );
+				    while( pf_int != 0 )
+					{
+					buf[100-(++bufcnt)]
+					    = bintodig( abs(pf_int%pf_base) );
+					pf_int /= pf_base;
+					}
+				    cp = buf;
+				    cp += (100 - bufcnt);
+				    }
+				break;
+
+		case 'l':	pf_char = ( pf_long < 0 );
+				if( pf_long >= 0 || !pf_unsigned )
+				  then
+				    {
+				    do  {
+					buf[100-(++bufcnt)] = bintodig(
+					    abs((int)(pf_long%pf_base)) );
+					pf_long /= pf_base;
+					} while( pf_long != 0 );
+				    if(pf_char) then buf[100-(++bufcnt)]='-';
+				    cp = buf;
+				    cp += (100 - bufcnt);
+				    }
+				  else
+				    {
+				    c = pf_long & 1;
+				    pf_long >>= 1;
+				    pf_long &= (1<<(sizeof(pf_long)-1));
+				    c = c + ((pf_long%(pf_base>>1)) << 1);
+				    pf_long /= (pf_base>>1);
+				    buf[100-(++bufcnt)] = bintodig( c );
+				    while( pf_long != 0 )
+					{
+					buf[100-(++bufcnt)] = bintodig(
+					    abs((int)(pf_long%pf_base)) );
+					pf_long /= pf_base;
+					}
+				    cp = buf;
+				    cp += (100 - bufcnt);
+				    }
+				break;
+
+		case 'f':	if( pf_double < 0 )
+				  then
+				    {
+				    buf[bufcnt++] = '-';
+				    pf_double = -pf_double;
+				    }
+				ind = 0;
+				for(pnum=1.0; pnum<=pf_double; pnum*=pf_base)
+				    ind--;
+				pnum /= pf_base;
+				do  {
+				    if( ind++ == 0 ) then buf[bufcnt++]='.';
+				    c = (int)(pf_double/pnum);
+				    buf[bufcnt++] = bintodig( c );
+				    pf_double -= (pnum*c);
+				    pnum /= pf_base;
+				    } while( ind < pf_dec );
+				cp = buf;
+				break;
+		}
+	    if( bufcnt > pf_max && pf_max > 0 ) then bufcnt = pf_max;
+	    if( pf_center > 0 )
+	      then
+		{
+		pf_left = ( pf_center - bufcnt ) / 2;
+		pf_right = pf_center - pf_left - bufcnt;
+		}
+	      else
+		{
+		pf_left -= bufcnt;
+		pf_right -= bufcnt;
+		}
+	    while( pf_iter-- > 0 )
+		{
+		for( ind=0; ind<pf_right; ind++ )
+		    switch( pf_func )
+			{
+			case PF_COUNT:	(*pf_count)++;		break;
+			case PF_ARRAY:	*pf_addr++ = pf_pad;	break;
+			case PF_PUTC:	if( putc(pf_pad,pf_file) == EOF )
+					  then return EOF;
+					  else break;
+			}
+		for( ind=0; ind<bufcnt; ind++ )
+		    switch( pf_func )
+			{
+			case PF_COUNT:	(*pf_count)++;		break;
+			case PF_ARRAY:	*pf_addr++ = cp[ind];	break;
+			case PF_PUTC:	if( putc(cp[ind],pf_file) == EOF )
+					  then return EOF;
+					  else break;
+			}
+		for( ind=0; ind<pf_left; ind++ )
+		    switch( pf_func )
+			{
+			case PF_COUNT:	(*pf_count)++;		break;
+			case PF_ARRAY:	*pf_addr++ = pf_pad;	break;
+			case PF_PUTC:	if( putc(pf_pad,pf_file) == EOF )
+					  then return EOF;
+					  else break;
+			}
+		}
+	    if( t == 'S' ) then free( cp );
+	    }
+    if( pf_func == PF_ARRAY ) then *pf_addr = 0;
+    return 0;
+    }

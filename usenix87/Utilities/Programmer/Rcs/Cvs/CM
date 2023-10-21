@@ -1,0 +1,249 @@
+#!/bin/sh
+#	This file is part of the Concurrent Versions System CVS.
+#	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+#	$Header: CM,v 1.41 86/06/22 18:09:47 dick Exp $
+
+#
+#		C o m m i t
+#	CM commits the present version to the RCS repository, AFTER
+#	having done a test on conflicts.  The call is
+#		CM [ -n ] 'log-message'
+#	for a general commit, and
+#		CM [ -n ] 'log-message' file ...
+#	for a (dangerous) partial commit.
+#
+#	If the present directory contains subdirectories that hold
+#	concurrent versions, these are NOT committed too.  (See, however, UV.)
+#
+#	The -n option restricts the actions to reporting only.
+#
+Name=CM; export Name
+
+# CVSBIN, CVSLIB and RCSBIN directories
+CVSBIN=/user1/dick/cvs
+CVSLIB=/user1/dick/cvs
+RCSBIN=${RCSBIN-/usr/new}
+export CVSBIN CVSLIB RCSBIN
+
+# avoid spurious identifications
+PATH=${CVSPATH-/bin:/usr/bin}; export PATH
+
+# determine the name of the repository
+. $CVSLIB/NR.aux
+
+# to ACT or not to ACT, that is the question
+case "$1" in
+-n)
+	ACT=echo
+	shift
+	;;
+*)
+	ACT=
+	;;
+esac
+
+Message="$1"
+if	# there was no message
+	[ "$Message" = "" ] \
+||	# it was a file name
+	[ -r "$Message" ]
+then
+	echo $Name: no modification message! >&2
+	exit 1
+fi
+shift
+
+#	A T T E M P T   E X C L U S I V E   W R I T E   A C C E S S
+
+LDR=$Repository				# the directory
+LCK=$LDR/\#cvs.lock			# the lock
+TFL=$LDR/\#cvs.tfl			# a temporary test file
+RFL=$LDR/\#cvs.rfl			# pattern of the read flags
+WFL=$LDR/\#cvs.wfl			# the general write flag
+
+# attempt write access at all
+if	# we can write at all
+	cp /dev/null $TFL >/dev/null 2>/dev/null
+then	# okay so far
+	rm $TFL
+else	# not so okay
+	echo $Name: you have no write permission in $LDR >&2
+	exit 1
+fi
+
+# set lock
+. $CVSLIB/SL.aux			# persistently tries to mkdir $LCK
+
+# set trap to remove flag and lock on interrupt and exit
+trap 'rm -f $WFL; rmdir $LCK; exit' 0 1 2 3 15
+
+#	C R I T I C A L   S E C T I O N
+
+# notify others of intention
+cp /dev/null $WFL			# plant write flag
+
+# wait for the readers to disappear
+while	# there are still read flags
+	[ "`echo $RFL.* | grep -v '\*'`" != "" ]
+do
+	echo $Name: `date`: waiting for readers to disappear
+	sleep 60
+done
+
+#	W R I T E   I N   S A F E T Y
+
+# determine the way we are called
+case $# in
+0)
+	# no file names: treat all pertinent files
+	set "`$CVSLIB/FN.aux $Repository`"
+	$ACT cp /dev/null CVS.adm/Mod
+	;;
+esac
+
+# collect the sets of affected files
+
+OK=yes
+. $CVSLIB/CS.aux	# sets CLIST, GLIST, MLIST, OLIST, ALIST, RLIST, WLIST
+
+case $OK in
+no)
+	# this checks for CLIST as well, since CLIST != "" <-> OK=no
+	exit 1
+esac
+
+# everything up to date?
+case "$GLIST$OLIST$WLIST" in
+"")
+	;;
+*)
+	echo $Name: the following files are not up to date\; use UV first >&2
+	echo $GLIST$OLIST$WLIST >&2
+	exit 1
+	;;
+esac
+
+# is there anything to do in the first place?
+case "$MLIST$RLIST$ALIST" in
+"")
+	echo $Name: there is nothing to commit! >&2
+	exit 1
+	;;
+esac
+
+# try to get exclusive control of all files to be affected
+OK=yes
+for User in $MLIST $RLIST
+do
+	Rcs=$Repository/$User,v
+		
+	if	# we can lock $Rcs
+		$ACT $RCSBIN/rcs -q -l $Rcs
+	then	# add it to the list LLIST
+		LLIST="$LLIST $User"
+	else
+		echo $Name: could not lock $Rcs >&2
+		OK=no
+	fi
+done
+
+# try to create all files in the add list
+for User in $ALIST
+do
+	Rcs=$Repository/$User,v
+	
+	if	# create $Rcs, using the description files $User,[pt]
+		$ACT $RCSBIN/rcs -i `cat $User,p` -t$User,t $Rcs
+	then	:
+	else	# something is wrong
+		echo $Name: could not create $Rcs >&2
+		OK=no
+	fi
+done
+
+# did we succeed?
+case $OK in
+no)
+	# something failed; release all locked files & remove all added files
+	for User in $LLIST
+	do	# unlock the RCS file
+		Rcs=$Repository/$User,v
+		if	# unlock $Rcs
+			$ACT $RCSBIN/rcs -q -u $Rcs
+		then	:
+		else	# something very wrong
+			echo $Name: could not UNlock $Rcs >&2
+		fi
+	done
+	
+	for User in $ALIST
+	do	# remove the newly created RCS file
+		Rcs=$Repository/$User,v
+		$ACT rm -f $Rcs
+	done
+	
+	# and give up
+	exit 1
+	;;
+esac
+
+# got them all; now go ahead!
+
+# add the files in the ALIST
+
+# get revision level
+Revision=-r`
+	<CVS.adm/Entries sed 's/[.|].*//' |
+	sort -nr |
+	sed '1q'
+`
+if	# there are initial entries only
+	[ X$Revision = X-r0 ]
+then	# make it level 1
+	Revision=-r1
+fi
+
+for User in $ALIST			# with $Revision set
+do
+	. $CVSLIB/CI.aux		# a careful check-in; may set OK=no
+	$ACT rm -f $User,[pt]		# throw away the info files from AE
+done
+
+# modify the files in the MLIST
+Revision=""
+for User in $MLIST			# with $Revision empty
+do
+	. $CVSLIB/CI.aux		# a careful check-in; may set OK=no
+done
+
+# remove the RCS files in the RLIST
+for User in $RLIST
+do
+	Rcs=$Repository/$User,v
+	Old=$Repository/Attic/$User,v
+	
+	$ACT mkdir $Repository/Attic >/dev/null 2>/dev/null
+	if	# we could move RCS file away
+		(	# we can unlock $Rcs
+			$ACT $RCSBIN/rcs -u -q $Rcs \
+		&&	# we can move it away
+			$ACT mv $Rcs $Old
+		) \
+	||	# the file was already removed
+		( [ ! -r $Rcs -a -r $Old ] )
+	then	# scratch the entry as well
+		$ACT $CVSLIB/SC.aux $User
+	else
+		echo $Name: attempt to move $Rcs to $Old failed >&2
+		OK=no
+	fi
+done
+
+# did we succeed?
+case $OK in
+no)
+	exit 1
+	;;
+esac
+
+exit 0

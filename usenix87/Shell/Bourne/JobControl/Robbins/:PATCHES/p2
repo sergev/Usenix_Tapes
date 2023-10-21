@@ -1,0 +1,2818 @@
+:::::::: Makefile :::::::
+*** ../orig.u/Makefile	Wed May 15 17:13:43 1985
+--- Makefile	Tue Jun  4 17:30:08 1985
+***************
+*** 1,6
+  #	Makefile	4.5	83/07/01
+  #
+! CFLAGS = -O -w
+  
+  all:	sh
+  
+
+--- 1,6 -----
+  #	Makefile	4.5	83/07/01
+  #
+! CFLAGS = -O -w -DJOBS
+  
+  all:	sh
+  
+***************
+*** 12,17
+  	cmp sh /bin/sh
+  	rm sh *.o
+  
+  sh:	setbrk.o
+  sh:	builtin.o blok.o stak.o
+  sh:	cmd.o fault.o main.o
+
+--- 12,21 -----
+  	cmp sh /bin/sh
+  	rm sh *.o
+  
++ expand.o:	expand.c
++ 	@echo ignore the redefiniton of MAX
++ 	$(CC) $(CFLAGS) -c expand.c
++ 
+  sh:	setbrk.o
+  sh:	builtin.o blok.o stak.o
+  sh:	cmd.o fault.o main.o
+***************
+*** 19,24
+  sh:	xec.o service.o error.o io.o
+  sh:	print.o macro.o expand.o
+  sh:	ctype.o msg.o
+  blok.o:		brkincr.h
+  fault.o:	brkincr.h
+  main.o:		brkincr.h
+
+--- 23,29 -----
+  sh:	xec.o service.o error.o io.o
+  sh:	print.o macro.o expand.o
+  sh:	ctype.o msg.o
++ sh:	history.o homedir.o jobs.o signal.o # remove signal.o on pyramid
+  blok.o:		brkincr.h
+  fault.o:	brkincr.h
+  main.o:		brkincr.h
+:::::::: args.c :::::::
+*** ../orig.u/args.c	Wed May 15 17:13:43 1985
+--- args.c	Tue Jun  4 13:20:43 1985
+***************
+*** 16,22
+  PROC STRING *copyargs();
+  LOCAL DOLPTR	dolh;
+  
+! CHAR	flagadr[10];
+  
+  CHAR	flagchar[] = {
+  	'x',	'n',	'v',	't',	's',	'i',	'e',	'r',	'k',	'u',	0
+
+--- 16,26 -----
+  PROC STRING *copyargs();
+  LOCAL DOLPTR	dolh;
+  
+! #if JOBS
+! CHAR	flagadr[15];
+! #else
+! CHAR	flagadr[13];
+! #endif
+  
+  CHAR	flagchar[] = {
+  	'x',	'n',	'v',	't',	's',	'i',	'e',	'r',	'k',	'u',
+***************
+*** 19,25
+  CHAR	flagadr[10];
+  
+  CHAR	flagchar[] = {
+! 	'x',	'n',	'v',	't',	's',	'i',	'e',	'r',	'k',	'u',	0
+  };
+  INT	flagval[]  = {
+  	execpr,	noexec,	readpr,	oneflg,	stdflg,	intflg,	errflg,	rshflg,	keyflg,	setflg,	0
+
+--- 23,37 -----
+  #endif
+  
+  CHAR	flagchar[] = {
+! 	'x',	'n',	'v',	't',	's',	'i',	'e',	'r',	'k',	'u',
+! #if JOBS
+! 	'I',
+! 	'J',
+! #endif
+! 	'E',
+! 	'H',
+! 	'q',
+! 	0
+  };
+  INT	flagval[]  = {
+  	execpr,	noexec,	readpr,	oneflg,	stdflg,	intflg,	errflg,	rshflg,	keyflg,	setflg,
+***************
+*** 22,28
+  	'x',	'n',	'v',	't',	's',	'i',	'e',	'r',	'k',	'u',	0
+  };
+  INT	flagval[]  = {
+! 	execpr,	noexec,	readpr,	oneflg,	stdflg,	intflg,	errflg,	rshflg,	keyflg,	setflg,	0
+  };
+  
+  /* ========	option handling	======== */
+
+--- 34,48 -----
+  	0
+  };
+  INT	flagval[]  = {
+! 	execpr,	noexec,	readpr,	oneflg,	stdflg,	intflg,	errflg,	rshflg,	keyflg,	setflg,
+! #if JOBS
+! 	infoflg,
+! 	jobflg,
+! #endif
+! 	noeotflg,
+! 	nohistflg,
+! 	quickflg,
+! 	0
+  };
+  
+  /* ========	option handling	======== */
+***************
+*** 38,45
+  	STRING		flagp;
+  
+  	IF argc>1 ANDF *argp[1]=='-'
+! 	THEN	cp=argp[1];
+! 		flags &= ~(execpr|readpr);
+  		WHILE *++cp
+  		DO	flagc=flagchar;
+  
+
+--- 58,77 -----
+  	STRING		flagp;
+  
+  	IF argc>1 ANDF *argp[1]=='-'
+! 	THEN
+! 		IF argp[1][1] == '-'
+! 		THEN	/* if first argument is "--" then options are not
+! 			   to be changed.  fix for problems getting $1
+! 			   starting with a "-"
+! 			*/
+! 			argp[1] = argp[0]; argc--;
+! 			return (argc);
+! 		FI
+! 		cp=argp[1];
+! 		IF cp[1] == '\0' THEN flags &= ~(execpr|readpr) FI
+! 		/* step along 'flagchar[]' looking for matches.
+! 		   'sicrq' are not legal with 'set' command.
+! 		*/
+  		WHILE *++cp
+  		DO	flagc=flagchar;
+  
+***************
+*** 45,51
+  
+  			WHILE *flagc ANDF *flagc != *cp DO flagc++ OD
+  			IF *cp == *flagc
+! 			THEN	flags |= flagval[flagc-flagchar];
+  			ELIF *cp=='c' ANDF argc>2 ANDF comdiv==0
+  			THEN	comdiv=argp[2];
+  				argp[1]=argp[0]; argp++; argc--;
+
+--- 77,91 -----
+  
+  			WHILE *flagc ANDF *flagc != *cp DO flagc++ OD
+  			IF *cp == *flagc
+! 			THEN	IF eq(argv[0], "set") ANDF any(*cp, "sicrq")
+! 				THEN	failed(argv[1], badopt);
+! 				ELSE
+! #if JOBS
+! 					IF *cp == 'J' THEN j_init() FI
+! #endif
+! 					flags |= flagval[flagc-flagchar];
+! 					IF flags & errflg THEN eflag = errflg FI
+! 				FI
+  			ELIF *cp=='c' ANDF argc>2 ANDF comdiv==0
+  			THEN	comdiv=argp[2];
+  				argp[1]=argp[0]; argp++; argc--;
+***************
+*** 53,58
+  			FI
+  		OD
+  		argp[1]=argp[0]; argc--;
+  	FI
+  
+  	/* set up $- */
+
+--- 93,123 -----
+  			FI
+  		OD
+  		argp[1]=argp[0]; argc--;
++ 	ELIF argc > 1 ANDF *argp[1] == '+'	/* unset flags x, k , t, n, v, e, u */
++ 	THEN	cp = argp[1];			/* or any other flags */
++ 		WHILE *++cp
++ 		DO
++ 			flagc = flagchar;
++ 			WHILE *flagc ANDF *flagc != *cp DO flagc++ OD
++ 				/* step through flags */
++ 			IF !any(*cp, "sicrq") ANDF *cp == *flagc
++ 			THEN
++ 				IF (flags&flagval[flagc-flagchar])
++ 				/* only turn off if already on */
++ 				THEN
++ #if JOBS
++ 					IF *cp != 'J' ORF !j_finish(FALSE)
++ 					THEN
++ #endif
++ 					flags &= ~(flagval[flagc-flagchar]);
++ #if JOBS
++ 					FI
++ #endif
++ 					IF *cp == 'e' THEN eflag = 0 FI
++ 				FI
++ 			FI
++ 		OD
++ 		argp[1]=argp[0]; argc--;
+  	FI
+  
+  	/* set up $- */
+***************
+*** 126,131
+  
+  	/* clean up io files */
+  	WHILE pop() DONE
+  }
+  
+  DOLPTR	useargs()
+
+--- 191,198 -----
+  
+  	/* clean up io files */
+  	WHILE pop() DONE
++ 	/* clean up temp files */
++ 	WHILE poptemp() DONE
+  }
+  
+  DOLPTR	useargs()
+:::::::: blok.c :::::::
+No differences encountered
+:::::::: brkincr.h :::::::
+No differences encountered
+:::::::: builtin.c :::::::
+No differences encountered
+:::::::: cmd.c :::::::
+*** ../orig.u/cmd.c	Wed May 15 17:13:44 1985
+--- cmd.c	Thu May 30 13:53:25 1985
+***************
+*** 93,98
+  	    case ';':
+  		IF e=cmd(sym,flg|MTFLG)
+  		THEN	i=makelist(TLST, i, e);
+  		FI
+  		break;
+  
+
+--- 93,100 -----
+  	    case ';':
+  		IF e=cmd(sym,flg|MTFLG)
+  		THEN	i=makelist(TLST, i, e);
++ 		ELIF	i == 0
++ 		THEN	synbad();
+  		FI
+  		break;
+  
+***************
+*** 326,332
+  
+  	SWITCH wdval IN
+  
+! 	    case DOCSYM:
+  		iof |= IODOC; break;
+  
+  	    case APPSYM:
+
+--- 328,334 -----
+  
+  	SWITCH wdval IN
+  
+! 	    case DOCSYM:	/* << */
+  		iof |= IODOC; break;
+  
+  	    case APPSYM:	/* >> */
+***************
+*** 329,335
+  	    case DOCSYM:
+  		iof |= IODOC; break;
+  
+! 	    case APPSYM:
+  	    case '>':
+  		IF wdnum==0 THEN iof |= 1 FI
+  		iof |= IOPUT;
+
+--- 331,337 -----
+  	    case DOCSYM:	/* << */
+  		iof |= IODOC; break;
+  
+! 	    case APPSYM:	/* >> */
+  	    case '>':
+  		IF wdnum==0 THEN iof |= 1 FI
+  		iof |= IOPUT;
+***************
+*** 341,346
+  		IF (c=nextc(0))=='&'
+  		THEN	iof |= IOMOV;
+  		ELIF c=='>'
+  		THEN	iof |= IORDW;
+  		ELSE	peekc=c|MARK;
+  		FI
+
+--- 343,350 -----
+  		IF (c=nextc(0))=='&'
+  		THEN	iof |= IOMOV;
+  		ELIF c=='>'
++ 		/*	<> is open for read and write */
++ 		/*	previously unadvertised feature */
+  		THEN	iof |= IORDW;
+  		ELSE	peekc=c|MARK;
+  		FI
+:::::::: ctype.c :::::::
+*** ../orig.u/ctype.c	Wed May 15 17:13:44 1985
+--- ctype.c	Thu May 30 13:59:18 1985
+***************
+*** 13,19
+  
+  #include	"defs.h"
+  
+! char	_ctype1[] {
+  /*	000	001	002	003	004	005	006	007	*/
+  	_EOF,	0,	0,	0,	0,	0,	0,	0,
+  
+
+--- 13,19 -----
+  
+  #include	"defs.h"
+  
+! char	_ctype1[] = {
+  /*	000	001	002	003	004	005	006	007	*/
+  	_EOF,	0,	0,	0,	0,	0,	0,	0,
+  
+***************
+*** 25,30
+  	0,	0,	0,	0,	0,	0,	0,	0,
+  
+  /*	sp	!	"	#	$	%	&	'	*/
+  	_SPC,	0,	_DQU,	0,	_DOL1,	0,	_AMP,	0,
+  
+  /*	(	)	*	+	,	-	.	/	*/
+
+--- 25,33 -----
+  	0,	0,	0,	0,	0,	0,	0,	0,
+  
+  /*	sp	!	"	#	$	%	&	'	*/
++ #if JOBS
++ 	_SPC,	0,	_DQU,	0,	_DOL1,	_PCT,	_AMP,	0,
++ #else
+  	_SPC,	0,	_DQU,	0,	_DOL1,	0,	_AMP,	0,
+  #endif
+  
+***************
+*** 26,31
+  
+  /*	sp	!	"	#	$	%	&	'	*/
+  	_SPC,	0,	_DQU,	0,	_DOL1,	0,	_AMP,	0,
+  
+  /*	(	)	*	+	,	-	.	/	*/
+  	_BRA,	_KET,	0,	0,	0,	0,	0,	0,
+
+--- 29,35 -----
+  	_SPC,	0,	_DQU,	0,	_DOL1,	_PCT,	_AMP,	0,
+  #else
+  	_SPC,	0,	_DQU,	0,	_DOL1,	0,	_AMP,	0,
++ #endif
+  
+  /*	(	)	*	+	,	-	.	/	*/
+  	_BRA,	_KET,	0,	0,	0,	0,	0,	0,
+***************
+*** 62,68
+  };
+  
+  
+! char	_ctype2[] {
+  /*	000	001	002	003	004	005	006	007	*/
+  	0,	0,	0,	0,	0,	0,	0,	0,
+  
+
+--- 66,72 -----
+  };
+  
+  
+! char	_ctype2[] = {
+  /*	000	001	002	003	004	005	006	007	*/
+  	0,	0,	0,	0,	0,	0,	0,	0,
+  
+***************
+*** 95,101
+  	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,
+  
+  /*	X	Y	Z	[	\	]	^	_	*/
+! 	_UPC,	_UPC,	_UPC,	_SQB,	0,	0,	0,	_UPC,
+  
+  /*	`	a	b	c	d	e	f	g	*/
+  	0,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,
+
+--- 99,105 -----
+  	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,	_UPC,
+  
+  /*	X	Y	Z	[	\	]	^	_	*/
+! 	_UPC,	_UPC,	_UPC,	0,	0,	0,	0,	_UPC,
+  
+  /*	`	a	b	c	d	e	f	g	*/
+  	0,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,	_LPC,
+:::::::: ctype.h :::::::
+*** ../orig.u/ctype.h	Wed May 15 17:13:44 1985
+--- ctype.h	Thu May 30 14:01:21 1985
+***************
+*** 51,56
+  #define _BSL	(T_ESC)
+  #define _DQU	(T_QOT)
+  #define _DOL1	(T_SUB|T_ESC)
+  
+  #define _CBR	T_BRC
+  #define _CKT	T_DEF
+
+--- 51,59 -----
+  #define _BSL	(T_ESC)
+  #define _DQU	(T_QOT)
+  #define _DOL1	(T_SUB|T_ESC)
++ #if JOBS
++ #define _PCT	(T_SUB|T_ESC)
++ #endif
+  
+  #define _CBR	T_BRC
+  #define _CKT	T_DEF
+***************
+*** 68,74
+  #define _IDCH	(T_IDC|T_DIG)
+  #define _META	(T_SPC|T_DIP|T_MET|T_EOR)
+  
+! char	_ctype1[];
+  
+  /* nb these args are not call by value !!!! */
+  #define	space(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_SPC))
+
+--- 71,77 -----
+  #define _IDCH	(T_IDC|T_DIG)
+  #define _META	(T_SPC|T_DIP|T_MET|T_EOR)
+  
+! extern char	_ctype1[];
+  
+  /* nb these args are not call by value !!!! */
+  #define	space(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_SPC))
+***************
+*** 79,85
+  #define subchar(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_SUB|T_QOT))
+  #define escchar(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_ESC))
+  
+! char	_ctype2[];
+  
+  #define	digit(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DIG))
+  #define fngchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_FNG))
+
+--- 82,88 -----
+  #define subchar(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_SUB|T_QOT))
+  #define escchar(c)	(((c)&QUOTE)==0 ANDF _ctype1[c]&(T_ESC))
+  
+! extern char	_ctype2[];
+  
+  #define	digit(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DIG))
+  #define dolchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_AST|T_BRC|T_DIG|T_IDC|T_SHN|_PLS))
+***************
+*** 82,89
+  char	_ctype2[];
+  
+  #define	digit(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DIG))
+! #define fngchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_FNG))
+! #define dolchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_AST|T_BRC|T_DIG|T_IDC|T_SHN))
+  #define defchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DEF))
+  #define setchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_SET))
+  #define digchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_AST|T_DIG))
+
+--- 85,91 -----
+  extern char	_ctype2[];
+  
+  #define	digit(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DIG))
+! #define dolchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_AST|T_BRC|T_DIG|T_IDC|T_SHN|_PLS))
+  #define defchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_DEF))
+  #define setchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_SET))
+  #define digchar(c)	(((c)&QUOTE)==0 ANDF _ctype2[c]&(T_AST|T_DIG))
+:::::::: defs.h :::::::
+*** ../orig.u/defs.h	Wed May 15 17:13:44 1985
+--- defs.h	Wed Jun  5 12:11:27 1985
+***************
+*** 8,15
+  /* error exits from various parts of shell */
+  #define ERROR	1
+  #define SYNBAD	2
+! #define SIGFAIL 3
+! #define SIGFLG	0200
+  
+  /* command tree */
+  #define FPRS	020
+
+--- 8,15 -----
+  /* error exits from various parts of shell */
+  #define ERROR	1
+  #define SYNBAD	2
+! #define SIGFAIL 2000
+! #define SIGFLG	1000
+  
+  /* command tree */
+  #define FPRS	020
+***************
+*** 54,59
+  #define SYSREAD 17
+  #define SYSTST	18
+  #define	SYSUMASK	19
+  
+  /* used for input and output of shell */
+  #define INIO 10
+
+--- 54,73 -----
+  #define SYSREAD 17
+  #define SYSTST	18
+  #define	SYSUMASK	19
++ #if JOBS
++ #define SYSJOBS	20
++ #define SYSFG	21
++ #define SYSBG	22
++ #define SYSSUSPEND	23
++ #endif
++ #if pyr
++ #define SYSATT	24
++ #define SYSUCB	25
++ #define SYSUNIVERSE	26
++ #define U_ATT	1	/* ATT is Universe Number 1 */
++ #define U_UCB	2	/* UCB is Universe Number 2 */
++ #endif
++ #define SYSHISTORY	27
+  
+  /* used for input and output of shell */
+  #define INIO 18
+***************
+*** 56,63
+  #define	SYSUMASK	19
+  
+  /* used for input and output of shell */
+! #define INIO 10
+! #define OTIO 11
+  
+  /*io nodes*/
+  #define USERIO	10
+
+--- 70,77 -----
+  #define SYSHISTORY	27
+  
+  /* used for input and output of shell */
+! #define INIO 18
+! #define OTIO 19
+  
+  /*io nodes*/
+  #define USERIO	10
+***************
+*** 78,83
+  #include	"name.h"
+  
+  
+  /* result type declarations */
+  #define alloc malloc
+  ADDRESS		alloc();
+
+--- 92,100 -----
+  #include	"name.h"
+  
+  
++ /* error catching */
++ extern	INT	errno;
++ 
+  /* result type declarations */
+  #define alloc malloc
+  ADDRESS		alloc();
+***************
+*** 108,113
+  VOID		prc();
+  VOID		getenv();
+  STRING		*setenv();
+  
+  #define attrib(n,f)	(n->namflg |= f)
+  #define round(a,b)	(((int)((ADR(a)+b)-1))&~((b)-1))
+
+--- 125,147 -----
+  VOID		prc();
+  VOID		getenv();
+  STRING		*setenv();
++ extern STRING	simple();
++ extern STRING	homedir();
++ extern STRING	username();
++ extern INT	history();
++ #if JOBS
++ extern BOOL	unpost();
++ extern VOID	j_init();
++ extern BOOL	j_finish();
++ extern VOID	j_child_clear();
++ extern VOID	j_child_die();
++ extern VOID	j_child_stop();
++ extern VOID	j_print();
++ extern VOID	j_resume();
++ extern VOID	j_child_post();
++ extern VOID	j_reset_pg();
++ extern STRING	j_macro();
++ #endif
+  
+  #define attrib(n,f)	(n->namflg |= f)
+  #define round(a,b)	(((int)((ADR(a)+b)-1))&~((b)-1))
+***************
+*** 122,127
+  IOPTR		iotemp;		/* files to be deleted sometime */
+  IOPTR		iopend;		/* documents waiting to be read at NL */
+  
+  /* substitution */
+  INT		dolc;
+  STRING		*dolv;
+
+--- 156,175 -----
+  IOPTR		iotemp;		/* files to be deleted sometime */
+  IOPTR		iopend;		/* documents waiting to be read at NL */
+  
++ /* history stuff */
++ INT		event_count;
++ INT		expanded;
++ 
++ /* keep track of the parent process id */
++ INT		ppid;
++ 
++ #if pyr
++ /* keep track of the current universe */
++ INT			cur_univ;
++ extern STRING		univ_name[];	/* from <universe.h> */
++ extern STRING		univ_longname[];
++ #endif
++ 
+  /* substitution */
+  INT		dolc;
+  STRING		*dolv;
+***************
+*** 147,152
+  MSG		unexpected;
+  MSG		endoffile;
+  MSG		synmsg;
+  
+  /* name tree and words */
+  SYSTAB		reserved;
+
+--- 195,252 -----
+  MSG		unexpected;
+  MSG		endoffile;
+  MSG		synmsg;
++ extern MSG		dashi;	/* ADR */
++ #if pyr
++ extern MSG		dashl;	/* ADR */
++ #endif
++ extern MSG		dashr;	/* ADR */
++ extern MSG		dashs;	/* ADR */
++ #if JOBS
++ extern MSG	appdstr;
++ extern MSG	bgdstr;
++ extern MSG	cjpostr;
++ extern MSG	fgdstr;
++ extern MSG	fromastr;	/* DAG */
++ extern MSG	inlnstr;
++ extern MSG	jcoffstr;
++ extern MSG	jinvstr;
++ extern MSG	jpanstr;
++ extern MSG	lotspstr;
++ extern MSG	ncjstr;
++ extern MSG	nstpstr;
++ extern MSG	pipestr;	/* DAG */
++ extern MSG	psgpstr;
++ extern MSG	ptinstr;
++ extern MSG	ptoustr;
++ extern MSG	rdinstr;
++ extern MSG	rsqbrk;
++ extern MSG	spcstr;
++ extern MSG	spspstr;
++ extern MSG	stpdstr;
++ extern MSG	tasjstr;
++ extern MSG	toastr;	/* DAG */
++ extern MSG	amperstr;	/* DAG */
++ extern MSG	andstr;	/* DAG */
++ extern MSG	casestr;	/* DAG */
++ extern MSG	forstr;	/* DAG */
++ extern MSG	iesacstr;
++ extern MSG	ifstr;	/* DAG */
++ extern MSG	insstr;
++ extern MSG	lpnstr;
++ extern MSG	orstr;	/* DAG */
++ extern MSG	forstr;	/* DAG */
++ extern MSG	rpnstr;
++ extern MSG	sdonstr;
++ extern MSG	sdostr;
++ extern MSG	selsstr;
++ extern MSG	semspstr;
++ extern MSG	sfistr;
++ extern MSG	sthnstr;
++ extern MSG	untilstr;	/* DAG */
++ extern MSG	whilestr;	/* DAG */
++ extern MSG	rdwstr;		/* ADR */
++ extern MSG	nosusp;		/* ADR */
++ #endif
+  
+  /* name tree and words */
+  SYSTAB		reserved;
+***************
+*** 160,165
+  MSG		stdprompt;
+  MSG		supprompt;
+  MSG		profile;
+  
+  /* built in names */
+  NAMNOD		fngnod;
+
+--- 260,267 -----
+  MSG		stdprompt;
+  MSG		supprompt;
+  MSG		profile;
++ extern MSG		shrc;
++ extern MSG		savehist;
+  
+  /* built in names */
+  NAMNOD		fngnod;
+***************
+*** 169,174
+  NAMNOD		pathnod;
+  NAMNOD		ps1nod;
+  NAMNOD		ps2nod;
+  
+  /* special names */
+  MSG		flagadr;
+
+--- 271,280 -----
+  NAMNOD		pathnod;
+  NAMNOD		ps1nod;
+  NAMNOD		ps2nod;
++ #if pyr
++ extern NAMNOD		univnod;
++ #endif
++ extern NAMNOD		histfnod;
+  
+  
+  /* special names */
+***************
+*** 170,175
+  NAMNOD		ps1nod;
+  NAMNOD		ps2nod;
+  
+  /* special names */
+  MSG		flagadr;
+  STRING		cmdadr;
+
+--- 276,282 -----
+  #endif
+  extern NAMNOD		histfnod;
+  
++ 
+  /* special names */
+  MSG		flagadr;
+  STRING		cmdadr;
+***************
+*** 177,182
+  STRING		dolladr;
+  STRING		pcsadr;
+  STRING		pidadr;
+  
+  MSG		defpath;
+  
+
+--- 284,290 -----
+  STRING		dolladr;
+  STRING		pcsadr;
+  STRING		pidadr;
++ STRING		ppidadr;
+  
+  MSG		defpath;
+  
+***************
+*** 188,193
+  MSG		ifsname;
+  MSG		ps1name;
+  MSG		ps2name;
+  
+  /* transput */
+  CHAR		tmpout[];
+
+--- 296,305 -----
+  MSG		ifsname;
+  MSG		ps1name;
+  MSG		ps2name;
++ #if pyr
++ extern MSG		univname;	/* UNIVERSE */
++ #endif
++ extern MSG		histfilename;
+  
+  /* transput */
+  CHAR		tmpout[];
+***************
+*** 200,205
+  INT		peekc;
+  STRING		comdiv;
+  MSG		devnull;
+  
+  /* flags */
+  #define		noexec	01
+
+--- 312,323 -----
+  INT		peekc;
+  STRING		comdiv;
+  MSG		devnull;
++ extern BOOL		catcheof;	/* set to catch EOF in reac() */
++ #if JOBS
++ extern	INT		j_original_pg;
++ extern	INT		j_default_pg;
++ extern 	BOOL		j_top_level;
++ #endif
+  
+  /* flags */
+  #define		noexec	01
+***************
+*** 203,208
+  
+  /* flags */
+  #define		noexec	01
+  #define		intflg	02
+  #define		prompt	04
+  #define		setflg	010
+
+--- 321,327 -----
+  
+  /* flags */
+  #define		noexec	01
++ #define		sysflg	01
+  #define		intflg	02
+  #define		prompt	04
+  #define		setflg	010
+***************
+*** 216,222
+  #define		execpr	04000
+  #define		readpr	010000
+  #define		keyflg	020000
+! INT		flags;
+  
+  /* error exits from various parts of shell */
+  #include	<setjmp.h>
+
+--- 335,349 -----
+  #define		execpr	04000
+  #define		readpr	010000
+  #define		keyflg	020000
+! #if JOBS
+! #define		infoflg		040000
+! #define		jobflg		0100000
+! #endif
+! #define		noeotflg	0200000
+! #define		dotflg		0400000
+! #define		quickflg	01000000
+! #define		nohistflg	02000000
+! L_INT		flags;	/* assure more than 16 bits */
+  
+  /* error exits from various parts of shell */
+  #include	<setjmp.h>
+***************
+*** 220,225
+  
+  /* error exits from various parts of shell */
+  #include	<setjmp.h>
+  jmp_buf		subshell;
+  jmp_buf		errshell;
+  jmp_buf		INTbuf;
+
+--- 347,356 -----
+  
+  /* error exits from various parts of shell */
+  #include	<setjmp.h>
++ #if JOBS && !defined(pyr)
++ #define	setjmp(env)		_setjmp(env)
++ #define longjmp(env, val)	_longjmp(env, val)
++ #endif
+  jmp_buf		subshell;
+  jmp_buf		errshell;
+  
+***************
+*** 222,228
+  #include	<setjmp.h>
+  jmp_buf		subshell;
+  jmp_buf		errshell;
+- jmp_buf		INTbuf;
+  
+  /* fault handling */
+  #include	"brkincr.h"
+
+--- 353,358 -----
+  #endif
+  jmp_buf		subshell;
+  jmp_buf		errshell;
+  
+  /* fault handling */
+  #include	"brkincr.h"
+***************
+*** 229,235
+  POS		brkincr;
+  
+  #define MINTRAP	0
+! #define MAXTRAP	17
+  
+  #define INTR	2
+  #define QUIT	3
+
+--- 359,369 -----
+  POS		brkincr;
+  
+  #define MINTRAP	0
+! #if JOBS
+! #define MAXTRAP	32
+! #else
+! #define MAXTRAP	20
+! #endif
+  
+  #define HANGUP	1
+  #define INTR	2
+***************
+*** 231,236
+  #define MINTRAP	0
+  #define MAXTRAP	17
+  
+  #define INTR	2
+  #define QUIT	3
+  #define MEMF	11
+
+--- 365,371 -----
+  #define MAXTRAP	20
+  #endif
+  
++ #define HANGUP	1
+  #define INTR	2
+  #define QUIT	3
+  #define MEMF	11
+***************
+*** 236,241
+  #define MEMF	11
+  #define ALARM	14
+  #define KILL	15
+  #define TRAPSET	2
+  #define SIGSET	4
+  #define SIGMOD	8
+
+--- 371,382 -----
+  #define MEMF	11
+  #define ALARM	14
+  #define KILL	15
++ #if JOBS
++ #define STOP	17
++ #define TSTP	18
++ #define TTIN	21
++ #define	TTOU	22
++ #endif
+  #define TRAPSET	2
+  #define SIGSET	4
+  #define SIGMOD	8
+***************
+*** 239,244
+  #define TRAPSET	2
+  #define SIGSET	4
+  #define SIGMOD	8
+  
+  VOID		fault();
+  BOOL		trapnote;
+
+--- 380,386 -----
+  #define TRAPSET	2
+  #define SIGSET	4
+  #define SIGMOD	8
++ #define SIGCAUGHT	16
+  
+  #define HISTSIZE	4096
+  
+***************
+*** 240,245
+  #define SIGSET	4
+  #define SIGMOD	8
+  
+  VOID		fault();
+  BOOL		trapnote;
+  STRING		trapcom[];
+
+--- 382,389 -----
+  #define SIGMOD	8
+  #define SIGCAUGHT	16
+  
++ #define HISTSIZE	4096
++ 
+  VOID		fault();
+  BOOL		trapnote;
+  STRING		trapcom[];
+***************
+*** 244,250
+  BOOL		trapnote;
+  STRING		trapcom[];
+  BOOL		trapflg[];
+- BOOL		trapjmp[];
+  
+  /* name tree and words */
+  STRING		*environ;
+
+--- 388,393 -----
+  BOOL		trapnote;
+  STRING		trapcom[];
+  BOOL		trapflg[];
+  
+  /* name tree and words */
+  STRING		*environ;
+***************
+*** 289,291
+  
+  #include	"ctype.h"
+  
+
+--- 432,438 -----
+  
+  #include	"ctype.h"
+  
++ INT		wasintr;
++ INT		eflag;
++ INT		stripflg;
++ INT		rwait;
+:::::::: dup.h :::::::
+No differences encountered
+:::::::: error.c :::::::
+*** ../orig.u/error.c	Wed May 15 17:13:44 1985
+--- error.c	Thu May 30 15:55:20 1985
+***************
+*** 28,34
+  	 * no trap has been set.
+  	 */
+  	IF trapnote&SIGSET
+! 	THEN	exitsh(SIGFAIL);
+  	FI
+  }
+  
+
+--- 28,34 -----
+  	 * no trap has been set.
+  	 */
+  	IF trapnote&SIGSET
+! 	THEN	exitsh(exitval ? exitval : SIGFAIL);
+  	FI
+  }
+  
+***************
+*** 59,64
+  	 * Action is to return to command level or exit.
+  	 */
+  	exitval=xno;
+  	IF (flags & (forked|errflg|ttyflg)) != ttyflg
+  	THEN	done();
+  	ELSE	clearup();
+
+--- 59,65 -----
+  	 * Action is to return to command level or exit.
+  	 */
+  	exitval=xno;
++ 	flags |= eflag;
+  	IF (flags & (forked|errflg|ttyflg)) != ttyflg
+  	THEN	done();
+  	ELSE	clearup();
+***************
+*** 62,67
+  	IF (flags & (forked|errflg|ttyflg)) != ttyflg
+  	THEN	done();
+  	ELSE	clearup();
+  		longjmp(errshell,1);
+  	FI
+  }
+
+--- 63,69 -----
+  	IF (flags & (forked|errflg|ttyflg)) != ttyflg
+  	THEN	done();
+  	ELSE	clearup();
++ 		execbrk = breakcnt = 0;
+  		longjmp(errshell,1);
+  	FI
+  }
+***************
+*** 74,79
+  		execexp(t,0);
+  	FI
+  	rmtemp(0);
+  	exit(exitval);
+  }
+  
+
+--- 76,82 -----
+  		execexp(t,0);
+  	FI
+  	rmtemp(0);
++ 	histsave (histfnod.namval);
+  	exit(exitval);
+  }
+  
+:::::::: expand.c :::::::
+*** ../orig.u/expand.c	Wed May 15 17:13:44 1985
+--- expand.c	Tue Jun  4 17:29:43 1985
+***************
+*** 48,61
+  
+  	/* check for meta chars */
+  	BEGIN
+! 	   REG BOOL slash; slash=0;
+! 	   WHILE !fngchar(*cs)
+! 	   DO	IF *cs++==0
+! 		THEN	IF rflg ANDF slash THEN break; ELSE return(0) FI
+! 		ELIF *cs=='/'
+! 		THEN	slash++;
+! 		FI
+! 	   OD
+  	END
+  
+  	LOOP	IF cs==s
+
+--- 48,79 -----
+  
+  	/* check for meta chars */
+  	BEGIN
+! 	   REG BOOL slash, open; open=slash=0;
+! 	   REP
+! 		SWITCH *cs++ IN
+! 		case 0:		IF rflg ANDF slash THEN break;
+! 				ELSE return 0;
+! 				FI
+! 		
+! 		case '/':	slash++;
+! 				open = 0;
+! 				continue;
+! 		
+! 		case '[':	open++;
+! 				continue;
+! 
+! 		case ']':	IF open THEN break FI
+! 				continue;
+! 		
+! 		case '?':
+! 		case '*':
+! 				cs--;
+! 				break;
+! 		
+! 		default:	continue;
+! 		ENDSW
+! 		break;
+! 	   PER TRUE DONE
+  	END
+  
+  	LOOP	IF cs==s
+***************
+*** 67,73
+  			break;
+  		FI
+  	POOL
+! 	IF stat(s,&statb)>=0
+  	    ANDF (statb.st_mode&S_IFMT)==S_IFDIR
+  	    ANDF (dirf=opendir(s)) != NULL
+  	THEN	dir++;
+
+--- 85,92 -----
+  			break;
+  		FI
+  	POOL
+! 	chgquot(s, 0);
+! 	IF stat(*s ? s : ".",&statb)>=0	/* DAG */
+  	    ANDF (statb.st_mode&S_IFMT)==S_IFDIR
+  	    ANDF (dirf=opendir(*s ? s : ".")) != NULL	/* DAG -- fixed Berkeley bug */
+  	THEN	dir++;
+***************
+*** 69,75
+  	POOL
+  	IF stat(s,&statb)>=0
+  	    ANDF (statb.st_mode&S_IFMT)==S_IFDIR
+! 	    ANDF (dirf=opendir(s)) != NULL
+  	THEN	dir++;
+  	FI
+  	count=0;
+
+--- 88,94 -----
+  	chgquot(s, 0);
+  	IF stat(*s ? s : ".",&statb)>=0	/* DAG */
+  	    ANDF (statb.st_mode&S_IFMT)==S_IFDIR
+! 	    ANDF (dirf=opendir(*s ? s : ".")) != NULL	/* DAG -- fixed Berkeley bug */
+  	THEN	dir++;
+  	FI
+  	chgquot(s, 1);
+***************
+*** 72,77
+  	    ANDF (dirf=opendir(s)) != NULL
+  	THEN	dir++;
+  	FI
+  	count=0;
+  	IF *cs==0 THEN *cs++=0200 FI
+  	IF dir
+
+--- 91,97 -----
+  	    ANDF (dirf=opendir(*s ? s : ".")) != NULL	/* DAG -- fixed Berkeley bug */
+  	THEN	dir++;
+  	FI
++ 	chgquot(s, 1);
+  	count=0;
+  	IF *cs==0 THEN *cs++=0200 FI
+  	IF dir
+***************
+*** 81,89
+  		REP	IF *rs=='/' THEN rescan=rs; *rs=0; gchain=0 FI
+  		PER	*rs++ DONE
+  
+! 		IF setjmp(INTbuf) == 0 THEN trapjmp[INTR] = 1; FI
+! 		WHILE (trapnote&SIGSET) == 0 ANDF (dp = readdir(dirf)) != NULL
+! 		DO	IF (*dp->d_name=='.' ANDF *cs!='.')
+  			THEN	continue;
+  			FI
+  			IF gmatch(dp->d_name, cs)
+
+--- 101,108 -----
+  		REP	IF *rs=='/' THEN rescan=rs; *rs=0; gchain=0 FI
+  		PER	*rs++ DONE
+  
+! 		WHILE (dp = readdir(dirf)) ANDF (trapnote&SIGSET) == 0
+! 		DO	IF *dp->d_name=='.' ANDF *cs!='.'
+  			THEN	continue;
+  			FI
+  /*
+***************
+*** 86,91
+  		DO	IF (*dp->d_name=='.' ANDF *cs!='.')
+  			THEN	continue;
+  			FI
+  			IF gmatch(dp->d_name, cs)
+  			THEN	addg(s,dp->d_name,rescan); count++;
+  			FI
+
+--- 105,115 -----
+  		DO	IF *dp->d_name=='.' ANDF *cs!='.'
+  			THEN	continue;
+  			FI
++ /*
++  *	Here lies the fix for the "echo * /." problem when
++  *	there are files with metacharacters in their names.
++  */
++ 			chgquot(dp->d_name, 1);
+  			IF gmatch(dp->d_name, cs)
+  			THEN	addg(s,dp->d_name,rescan); count++;
+  			FI
+***************
+*** 89,94
+  			IF gmatch(dp->d_name, cs)
+  			THEN	addg(s,dp->d_name,rescan); count++;
+  			FI
+  		OD
+  		closedir(dirf); trapjmp[INTR] = 0;
+  
+
+--- 113,119 -----
+  			IF gmatch(dp->d_name, cs)
+  			THEN	addg(s,dp->d_name,rescan); count++;
+  			FI
++ 			chgquot(dp->d_name, 0);
+  		OD
+  		closedir(dirf);
+  
+***************
+*** 90,96
+  			THEN	addg(s,dp->d_name,rescan); count++;
+  			FI
+  		OD
+! 		closedir(dirf); trapjmp[INTR] = 0;
+  
+  		IF rescan
+  		THEN	REG ARGPTR	rchain;
+
+--- 115,121 -----
+  			FI
+  			chgquot(dp->d_name, 0);
+  		OD
+! 		closedir(dirf);
+  
+  		IF rescan
+  		THEN	REG ARGPTR	rchain;
+***************
+*** 129,135
+  	SWITCH c = *p++ IN
+  
+  	    case '[':
+! 		{BOOL ok; INT lc;
+  		ok=0; lc=077777;
+  		WHILE c = *p++
+  		DO	IF c==']'
+
+--- 154,160 -----
+  	SWITCH c = *p++ IN
+  
+  	    case '[':
+! 		{BOOL ok; INT lc; INT notflag=0;
+  		ok=0; lc=077777;
+  		IF *p == '!' THEN notflag=1; p++; FI
+  		WHILE c = *p++
+***************
+*** 131,136
+  	    case '[':
+  		{BOOL ok; INT lc;
+  		ok=0; lc=077777;
+  		WHILE c = *p++
+  		DO	IF c==']'
+  			THEN	return(ok?gmatch(s,p):0);
+
+--- 156,162 -----
+  	    case '[':
+  		{BOOL ok; INT lc; INT notflag=0;
+  		ok=0; lc=077777;
++ 		IF *p == '!' THEN notflag=1; p++; FI
+  		WHILE c = *p++
+  		DO	IF c==']'
+  			THEN	return(ok?gmatch(s,p):0);
+***************
+*** 135,142
+  		DO	IF c==']'
+  			THEN	return(ok?gmatch(s,p):0);
+  			ELIF c==MINUS
+! 			THEN	IF lc<=scc ANDF scc<=(*p++) THEN ok++ FI
+! 			ELSE	IF scc==(lc=(c&STRIP)) THEN ok++ FI
+  			FI
+  		OD
+  		return(0);
+
+--- 161,180 -----
+  		DO	IF c==']'
+  			THEN	return(ok?gmatch(s,p):0);
+  			ELIF c==MINUS
+! 			THEN	IF notflag
+! 				THEN	IF lc>scc ORF scc>*(p++)
+! 					THEN ok++;
+! 					ELSE return(0)
+! 					FI
+! 				ELSE IF lc<=scc ANDF scc<=(*p++) THEN ok++ FI
+! 				FI
+! 			ELSE	IF notflag
+! 				THEN	IF scc!=(lc=(c&STRIP))
+! 					THEN ok++;
+! 					ELSE return(0)
+! 					FI
+! 				ELSE IF scc==(lc=(c&STRIP)) THEN ok++ FI
+! 				FI
+  			FI
+  		OD
+  		return(0);
+***************
+*** 192,194
+  	gchain=args;
+  }
+  
+
+--- 230,258 -----
+  	gchain=args;
+  }
+  
++ chgquot(str, flg)
++ REG STRING	str;
++ REG INT		flg;
++ {
++ 	REG INT i;
++ 
++ 	FOR i = 0 ; ; i++
++ 	DO
++ 		SWITCH str[i] IN
++ 		case '\0':
++ 			return;
++ 		case '*':
++ 		case '?':
++ 		case '[':
++ 		case '*'|0200:
++ 		case '?'|0200:
++ 		case '['|0200:
++ 			IF flg==0
++ 			THEN
++ 				str[i] &= (~QUOTE);
++ 			ELSE
++ 				str[i] |= QUOTE;
++ 			FI
++ 		ENDSW
++ 	OD
++ }
+:::::::: fault.c :::::::
+*** ../orig.u/fault.c	Wed May 15 17:13:44 1985
+--- fault.c	Tue Jun  4 13:44:16 1985
+***************
+*** 15,22
+  
+  
+  STRING		trapcom[MAXTRAP];
+! BOOL		trapflg[MAXTRAP];
+! BOOL		trapjmp[MAXTRAP];
+  
+  /* ========	fault handling routines	   ======== */
+  
+
+--- 15,42 -----
+  
+  
+  STRING		trapcom[MAXTRAP];
+! BOOL	trapflg[MAXTRAP] = {
+! 				0,
+! 				SIGCAUGHT,	/* hangup */
+! 				SIGCAUGHT,	/* interrupt */
+! 				SIGCAUGHT,	/* quit */
+! 				0,		/* illegal instr */
+! 				0,		/* trace trap */
+! 				0,		/* IOT */
+! 				0,		/* EMT */
+! 				0,		/* float pt. exp */
+! 				0,		/* kill */
+! 				0,		/* bus error */
+! 				0,		/* memory faults */
+! 				0,		/* bad sys call */
+! 				0,		/* bad pipe call */
+! 				SIGCAUGHT,	/* alarm */
+! 				SIGCAUGHT,	/* software termination */
+! 				0,		/* unassigned */
+! 				0,		/* unassigned */
+! 				0,		/* death of a child */
+! 				0,		/* power fail */
+! 				};
+  
+  /* ========	fault handling routines	   ======== */
+  
+***************
+*** 26,31
+  {
+  	REG INT		flag;
+  
+  	IF sig==MEMF
+  	THEN	IF setbrk(brkincr) == -1
+  		THEN	error(nospace);
+
+--- 46,52 -----
+  {
+  	REG INT		flag;
+  
++ 	signal(sig, fault);
+  	IF sig==MEMF
+  	THEN	IF setbrk(brkincr) == -1
+  		THEN	error(nospace);
+***************
+*** 32,38
+  		FI
+  	ELIF sig==ALARM
+  	THEN	IF flags&waiting
+! 		THEN	done();
+  		FI
+  	ELSE	flag = (trapcom[sig] ? TRAPSET : SIGSET);
+  		trapnote |= flag;
+
+--- 53,59 -----
+  		FI
+  	ELIF sig==ALARM
+  	THEN	IF flags&waiting
+! 		THEN	newline(); done();
+  		FI
+  	ELSE	flag = (trapcom[sig] ? TRAPSET : SIGSET);
+  		trapnote |= flag;
+***************
+*** 37,42
+  	ELSE	flag = (trapcom[sig] ? TRAPSET : SIGSET);
+  		trapnote |= flag;
+  		trapflg[sig] |= flag;
+  	FI
+  	IF trapjmp[sig] ANDF sig==INTR
+  	THEN
+
+--- 58,64 -----
+  	ELSE	flag = (trapcom[sig] ? TRAPSET : SIGSET);
+  		trapnote |= flag;
+  		trapflg[sig] |= flag;
++ 		IF sig == INTR THEN wasintr++; FI
+  	FI
+  }
+  
+***************
+*** 38,48
+  		trapnote |= flag;
+  		trapflg[sig] |= flag;
+  	FI
+- 	IF trapjmp[sig] ANDF sig==INTR
+- 	THEN
+- 		trapjmp[sig] = 0;
+- 		longjmp(INTbuf, 1);
+- 	FI
+  }
+  
+  stdsigs()
+
+--- 60,65 -----
+  		trapflg[sig] |= flag;
+  		IF sig == INTR THEN wasintr++; FI
+  	FI
+  }
+  
+  stdsigs()
+***************
+*** 47,52
+  
+  stdsigs()
+  {
+  	ignsig(QUIT);
+  	getsig(INTR);
+  	getsig(MEMF);
+
+--- 64,70 -----
+  
+  stdsigs()
+  {
++ 	signal(MEMF, fault);
+  	ignsig(QUIT);
+  	getsig(INTR);
+  	getsig(ALARM);
+***************
+*** 49,55
+  {
+  	ignsig(QUIT);
+  	getsig(INTR);
+- 	getsig(MEMF);
+  	getsig(ALARM);
+  }
+  
+
+--- 67,72 -----
+  	signal(MEMF, fault);
+  	ignsig(QUIT);
+  	getsig(INTR);
+  	getsig(ALARM);
+  }
+  
+***************
+*** 57,63
+  {
+  	REG INT		s, i;
+  
+! 	IF (s=signal(i=n,1)&01)==0
+  	THEN	trapflg[i] |= SIGMOD;
+  	FI
+  	return(s);
+
+--- 74,83 -----
+  {
+  	REG INT		s, i;
+  
+! 	IF (i=n)==MEMF
+! 	THEN	clrsig(i);
+! 		failed(badtrap, "cannot trap 11");
+! 	ELIF (s=signal(i,1)&01)==0
+  	THEN	trapflg[i] |= SIGMOD;
+  	FI
+  	return(s);
+***************
+*** 93,99
+  {
+  	free(trapcom[i]); trapcom[i]=0;
+  	IF trapflg[i]&SIGMOD
+! 	THEN	signal(i,fault);
+  		trapflg[i] &= ~SIGMOD;
+  	FI
+  }
+
+--- 113,122 -----
+  {
+  	free(trapcom[i]); trapcom[i]=0;
+  	IF trapflg[i]&SIGMOD
+! 	THEN	IF trapflg[i]&SIGCAUGHT
+! 		THEN signal(i,fault);
+! 		ELSE signal(i,0);
+! 		FI
+  		trapflg[i] &= ~SIGMOD;
+  	FI
+  }
+:::::::: io.c :::::::
+*** ../orig.u/io.c	Wed May 15 17:13:45 1985
+--- io.c	Mon Jun  3 17:03:11 1985
+***************
+*** 22,28
+  {
+  	REG FILE	f=standin;
+  
+! 	f->fdes=fd; f->fsiz=((flags&(oneflg|ttyflg))==0 ? BUFSIZ : 1);
+  	f->fnxt=f->fend=f->fbuf; f->feval=0; f->flin=1;
+  	f->feof=FALSE;
+  }
+
+--- 22,28 -----
+  {
+  	REG FILE	f=standin;
+  
+! 	f->fdes=fd; f->fsiz=((flags&oneflg)==0 ? BUFSIZ : 1);
+  	f->fnxt=f->fend=f->fbuf; f->feval=0; f->flin=1;
+  	f->feof=FALSE;
+  }
+***************
+*** 60,65
+  	FI
+  }
+  
+  chkpipe(pv)
+  	INT		*pv;
+  {
+
+--- 60,86 -----
+  	FI
+  }
+  
++ TEMPBPTR	tmpfptr;
++ 
++ pushtemp(fd, tb)
++ 	UFD	fd;
++ 	TEMPBPTR	tb;
++ {
++ 	tb->fdes = fd;
++ 	tb->fstak = tmpfptr;
++ 	tmpfptr = tb;
++ }
++ 
++ poptemp()
++ {
++ 	IF tmpfptr
++ 	THEN	close(tmpfptr->fdes);
++ 		tmpfptr = tmpfptr->fstak;
++ 		return(TRUE);
++ 	ELSE	return (FALSE);
++ 	FI
++ }
++ 
+  chkpipe(pv)
+  	INT		*pv;
+  {
+***************
+*** 100,106
+  	FI
+  }
+  
+! tmpfil()
+  {
+  	itos(serial++); movstr(numbuf,tmpnam);
+  	return(create(tmpout));
+
+--- 121,128 -----
+  	FI
+  }
+  
+! tmpfil(tb)
+! 	TEMPBPTR tb;
+  {
+  	INT fd;
+  
+***************
+*** 102,107
+  
+  tmpfil()
+  {
+  	itos(serial++); movstr(numbuf,tmpnam);
+  	return(create(tmpout));
+  }
+
+--- 124,131 -----
+  tmpfil(tb)
+  	TEMPBPTR tb;
+  {
++ 	INT fd;
++ 
+  	itos(serial++); movstr(numbuf,tmpnam);
+  	fd = create(tmpout);
+  	pushtemp(fd, tb);
+***************
+*** 103,109
+  tmpfil()
+  {
+  	itos(serial++); movstr(numbuf,tmpnam);
+! 	return(create(tmpout));
+  }
+  
+  /* set by trim */
+
+--- 127,135 -----
+  	INT fd;
+  
+  	itos(serial++); movstr(numbuf,tmpnam);
+! 	fd = create(tmpout);
+! 	pushtemp(fd, tb);
+! 	return (fd);
+  }
+  
+  /* set by trim */
+***************
+*** 118,124
+  	REG IOPTR	iop;
+  
+  	IF iop=ioparg
+! 	THEN	copy(iop->iolst);
+  		ends=mactrim(iop->ioname); IF nosubst THEN iop->iofile &= ~IODOC FI
+  		fd=tmpfil();
+  		iop->ioname=cpystak(tmpout);
+
+--- 144,151 -----
+  	REG IOPTR	iop;
+  
+  	IF iop=ioparg
+! 	THEN	TEMPBLK	tb;
+! 		copy(iop->iolst);
+  		ends=mactrim(iop->ioname); IF nosubst THEN iop->iofile &= ~IODOC FI
+  		fd=tmpfil(&tb);
+  		iop->ioname=cpystak(tmpout);
+***************
+*** 120,126
+  	IF iop=ioparg
+  	THEN	copy(iop->iolst);
+  		ends=mactrim(iop->ioname); IF nosubst THEN iop->iofile &= ~IODOC FI
+! 		fd=tmpfil();
+  		iop->ioname=cpystak(tmpout);
+  		iop->iolst=iotemp; iotemp=iop;
+  		cline=locstak();
+
+--- 147,153 -----
+  	THEN	TEMPBLK	tb;
+  		copy(iop->iolst);
+  		ends=mactrim(iop->ioname); IF nosubst THEN iop->iofile &= ~IODOC FI
+! 		fd=tmpfil(&tb);
+  		iop->ioname=cpystak(tmpout);
+  		iop->iolst=iotemp; iotemp=iop;
+  		cline=locstak();
+***************
+*** 125,130
+  		iop->iolst=iotemp; iotemp=iop;
+  		cline=locstak();
+  
+  		LOOP	clinep=cline; chkpr(NL);
+  			WHILE (c = (nosubst ? readc() :  nextc(*ends)),  !eolchar(c)) DO *clinep++ = c OD
+  			*clinep=0;
+
+--- 152,160 -----
+  		iop->iolst=iotemp; iotemp=iop;
+  		cline=locstak();
+  
++ 		IF stripflg
++ 		THEN	WHILE *ends=='\t' DO ends++ OD
++ 		FI
+  		LOOP	clinep=cline; chkpr(NL);
+  			IF stripflg
+  			THEN
+***************
+*** 126,132
+  		cline=locstak();
+  
+  		LOOP	clinep=cline; chkpr(NL);
+! 			WHILE (c = (nosubst ? readc() :  nextc(*ends)),  !eolchar(c)) DO *clinep++ = c OD
+  			*clinep=0;
+  			IF eof ORF eq(cline,ends) THEN break FI
+  			*clinep++=NL;
+
+--- 156,172 -----
+  		THEN	WHILE *ends=='\t' DO ends++ OD
+  		FI
+  		LOOP	clinep=cline; chkpr(NL);
+! 			IF stripflg
+! 			THEN
+! 				WHILE (c=(nosubst ? readc() : nextc(*ends)), !eolchar(c))
+! 				&& cline == clinep && c == '\t' DONE
+! 				WHILE (!eolchar(c))
+! 				DO
+! 					*clinep++=c;
+! 					c=(nosubst ? readc() : nextc(*ends));
+! 				OD
+! 			ELSE WHILE (c = (nosubst ? readc() :  nextc(*ends)),  !eolchar(c)) DO *clinep++ = c OD
+! 			FI
+  			*clinep=0;
+  			IF eof ORF eq(cline,ends) THEN break FI
+  			*clinep++=NL;
+***************
+*** 132,137
+  			*clinep++=NL;
+  			write(fd,cline,clinep-cline);
+  		POOL
+! 		close(fd);
+  	FI
+  }
+
+--- 172,179 -----
+  			*clinep++=NL;
+  			write(fd,cline,clinep-cline);
+  		POOL
+! 		IF stripflg THEN stripflg-- FI
+! 		poptemp();	/* pushed in tmpfil -- bug fix for problem
+! 				   deleting in-line scripts */
+  	FI
+  }
+:::::::: mac.h :::::::
+*** ../orig.u/mac.h	Wed May 15 17:13:45 1985
+--- mac.h	Thu May 30 16:54:52 1985
+***************
+*** 59,63
+  #define RQ	'\''
+  #define MINUS	'-'
+  #define COLON	':'
+  
+  #define MAX(a,b)	((a)>(b)?(a):(b))
+
+--- 59,64 -----
+  #define RQ	'\''
+  #define MINUS	'-'
+  #define COLON	':'
++ #define SQUIGGLE	'~'	/* BSD tty driver defines TILDE */
+  
+  #define MAX(a,b)	((a)>(b)?(a):(b))
+:::::::: macro.c :::::::
+*** ../orig.u/macro.c	Wed May 15 17:13:45 1985
+--- macro.c	Tue Jun  4 10:25:36 1985
+***************
+*** 60,65
+  	IF !subchar(d)
+  	THEN	return(d);
+  	FI
+  	IF d==DOLLAR
+  	THEN	REG INT	c;
+  		IF (c=readc(), dolchar(c))
+
+--- 60,79 -----
+  	IF !subchar(d)
+  	THEN	return(d);
+  	FI
++ #if JOBS
++ 	IF d==PERCENT ANDF (flags&jobflg)
++ 	THEN	REG INT c;
++ 		IF (peekc = (c=readc())|MARK, digchar(c) ORF c==PERCENT)
++ 		THEN	REG STRING v;
++ 
++ 			IF v=j_macro()	/* %number or %% handled */
++ 			THEN	WHILE c = *v++ DO pushstak(c|quote); OD
++ 			/* else expands to nothingness */
++ 			FI
++ 			goto retry;
++ 		FI
++ 	ELIF d==DOLLAR
++ #else
+  	IF d==DOLLAR
+  #endif
+  	THEN	REG INT	c;
+***************
+*** 61,66
+  	THEN	return(d);
+  	FI
+  	IF d==DOLLAR
+  	THEN	REG INT	c;
+  		IF (c=readc(), dolchar(c))
+  		THEN	NAMPTR		n=NIL;
+
+--- 75,81 -----
+  	ELIF d==DOLLAR
+  #else
+  	IF d==DOLLAR
++ #endif
+  	THEN	REG INT	c;
+  		IF (c=readc(), dolchar(c))
+  		THEN	NAMPTR		n=NIL;
+***************
+*** 66,71
+  		THEN	NAMPTR		n=NIL;
+  			INT		dolg=0;
+  			BOOL		bra;
+  			REG STRING	argp, v;
+  			CHAR		idb[2];
+  			STRING		id=idb;
+
+--- 81,87 -----
+  		THEN	NAMPTR		n=NIL;
+  			INT		dolg=0;
+  			BOOL		bra;
++ 			BOOL		nulflg;
+  			REG STRING	argp, v;
+  			CHAR		idb[2];
+  			STRING		id=idb;
+***************
+*** 87,92
+  				v=((c==0) ? cmdadr : (c<=dolc) ? dolv[c] : (dolg=0));
+  			ELIF c=='$'
+  			THEN	v=pidadr;
+  			ELIF c=='!'
+  			THEN	v=pcsadr;
+  			ELIF c=='#'
+
+--- 103,114 -----
+  				v=((c==0) ? cmdadr : (c<=dolc) ? dolv[c] : (dolg=0));
+  			ELIF c=='$'
+  			THEN	v=pidadr;
++ 			ELIF c=='+'
++ 			THEN	IF ppid != getppid()	/* parent died */
++ 				THEN	ppid = getppid();
++ 					assnum (&ppidadr, ppid);
++ 				FI
++ 				v = ppidadr;
+  			ELIF c=='!'
+  			THEN	v=pcsadr;
+  			ELIF c=='#'
+***************
+*** 99,104
+  			ELSE	goto retry;
+  			FI
+  			c = readc();
+  			IF !defchar(c) ANDF bra
+  			THEN	error(badsub);
+  			FI
+
+--- 121,130 -----
+  			ELSE	goto retry;
+  			FI
+  			c = readc();
++ 			IF c==':' ANDF bra	/* null and unset fix */
++ 			THEN	nulflg=1; c=readc();
++ 			ELSE	nulflg=0;
++ 			FI
+  			IF !defchar(c) ANDF bra
+  			THEN	error(badsub);
+  			FI
+***************
+*** 106,112
+  			IF bra
+  			THEN	IF c!='}'
+  				THEN	argp=relstak();
+! 					IF (v==0)NEQ(setchar(c))
+  					THEN	copyto('}');
+  					ELSE	skipto('}');
+  					FI
+
+--- 132,138 -----
+  			IF bra
+  			THEN	IF c!='}'
+  				THEN	argp=relstak();
+! 					IF (v==0 ORF (nulflg ANDF *v==0))NEQ(setchar(c))
+  					THEN	copyto('}');
+  					ELSE	skipto('}');
+  					FI
+***************
+*** 114,120
+  				FI
+  			ELSE	peekc = c|MARK; c = 0;
+  			FI
+! 			IF v
+  			THEN	IF c!='+'
+  				THEN	LOOP WHILE c = *v++
+  					     DO pushstak(c|quote); OD
+
+--- 140,146 -----
+  				FI
+  			ELSE	peekc = c|MARK; c = 0;
+  			FI
+! 			IF v ANDF (!nulflg ORF *v)
+  			THEN	IF c!='+'
+  				THEN	LOOP WHILE c = *v++
+  					     DO pushstak(c|quote); OD
+***************
+*** 129,135
+  				THEN	failed(id,*argp?argp:badparam);
+  				ELIF c=='='
+  				THEN	IF n
+! 					THEN	assign(n,argp);
+  					ELSE	error(badsub);
+  					FI
+  				FI
+
+--- 155,162 -----
+  				THEN	failed(id,*argp?argp:badparam);
+  				ELIF c=='='
+  				THEN	IF n
+! 					THEN	trim(argp);
+! 						assign(n,argp);
+  					ELSE	error(badsub);
+  					FI
+  				FI
+***************
+*** 185,190
+  	   trim(argc=fixstak());
+  	   push(&cb); estabf(argc);
+  	END
+  	BEGIN
+  	   REG TREPTR	t = makefork(FPOU,cmd(EOFSYM,MTFLG|NLFLG));
+  	   INT		pv[2];
+
+--- 212,220 -----
+  	   trim(argc=fixstak());
+  	   push(&cb); estabf(argc);
+  	END
++ #if JOBS
++ 	set_wfence();
++ #endif
+  	BEGIN
+  	   REG TREPTR	t = makefork(FPOU,cmd(EOFSYM,MTFLG|NLFLG));
+  	   INT		pv[2];
+***************
+*** 194,200
+  	    */
+  	   chkpipe(pv);
+  	   initf(pv[INPIPE]);
+! 	   execute(t, 0, 0, pv);
+  	   close(pv[OTPIPE]);
+  	END
+  	tdystak(savptr); staktop=movstr(savptr,stakbot);
+
+--- 224,230 -----
+  	    */
+  	   chkpipe(pv);
+  	   initf(pv[INPIPE]);
+! 	   execute(t, 0, flags & errflg, 0, pv);
+  	   close(pv[OTPIPE]);
+  	END
+  	tdystak(savptr); staktop=movstr(savptr,stakbot);
+***************
+*** 198,205
+  	   close(pv[OTPIPE]);
+  	END
+  	tdystak(savptr); staktop=movstr(savptr,stakbot);
+! 	WHILE d=readc() DO locstak(); pushstak(d|quote) OD
+! 	await(0);
+  	WHILE stakbot!=staktop
+  	DO	IF (*--staktop&STRIP)!=NL
+  		THEN	++staktop; break;
+
+--- 228,235 -----
+  	   close(pv[OTPIPE]);
+  	END
+  	tdystak(savptr); staktop=movstr(savptr,stakbot);
+! 	WHILE d=readc() DO pushstak(d|quote) OD
+! 	await(0, 0);
+  	WHILE stakbot!=staktop
+  	DO	IF (*--staktop&STRIP)!=NL
+  		THEN	++staktop; break;
+:::::::: main.c :::::::
+*** ../orig.u/main.c	Wed May 15 17:13:45 1985
+--- main.c	Tue Jun  4 14:32:21 1985
+***************
+*** 24,29
+  CHAR		tmpout[20] = "/tmp/sh-";
+  FILEBLK		stdfile;
+  FILE		standin = &stdfile;
+  #ifdef stupid
+  #include	<execargs.h>
+  #endif
+
+--- 24,30 -----
+  CHAR		tmpout[20] = "/tmp/sh-";
+  FILEBLK		stdfile;
+  FILE		standin = &stdfile;
++ BOOL		catcheof = FALSE;
+  #ifdef stupid
+  #include	<execargs.h>
+  #endif
+***************
+*** 33,39
+  
+  
+  
+! main(c, v)
+  	INT		c;
+  	STRING		v[];
+  {
+
+--- 34,40 -----
+  
+  
+  
+! main(c, v, e)
+  	INT		c;
+  	STRING		v[];
+  	STRING		e[];
+***************
+*** 36,41
+  main(c, v)
+  	INT		c;
+  	STRING		v[];
+  {
+  	REG INT		rflag=ttyflg;
+  
+
+--- 37,43 -----
+  main(c, v, e)
+  	INT		c;
+  	STRING		v[];
++ 	STRING		e[];
+  {
+  	REG INT		rflag=ttyflg;
+  	STRING	sim;
+***************
+*** 38,43
+  	STRING		v[];
+  {
+  	REG INT		rflag=ttyflg;
+  
+  	/* initialise storage allocation */
+  	stdsigs();
+
+--- 40,46 -----
+  	STRING		e[];
+  {
+  	REG INT		rflag=ttyflg;
++ 	STRING	sim;
+  
+  	/* initialise storage allocation */
+  	stdsigs();
+***************
+*** 58,63
+  	FI
+  	dolv=v+c-dolc; dolc--;
+  
+  	/* return here for shell file execution */
+  	setjmp(subshell);
+  
+
+--- 61,84 -----
+  	FI
+  	dolv=v+c-dolc; dolc--;
+  
++ #if JOBS
++ 	j_default_pg = getpid();
++ 	j_original_pg = getpgrp();
++ 	/* enable job control if argv[0] has a 'j' in its simple name */
++ 
++ 	IF (flags & jobflg) == 0 ANDF c > 0 ANDF any('j', simple(*v))
++ 		ANDF comdiv == 0 ANDF flags & stdflg
++ 	THEN
++ 		STRING	pointer;
++ 
++ 		j_init();
++ 		flags |= jobflg;
++ 		pointer = flagadr;
++ 		WHILE *pointer DO pointer++; OD
++ 		*pointer++ = 'J'; *pointer = 0;
++ 	FI
++ #endif
++ 
+  	/* return here for shell file execution */
+  	/* but not for parenthesis subshells	*/
+  	setjmp(subshell);
+***************
+*** 59,64
+  	dolv=v+c-dolc; dolc--;
+  
+  	/* return here for shell file execution */
+  	setjmp(subshell);
+  
+  	/* number of positional parameters */
+
+--- 80,86 -----
+  #endif
+  
+  	/* return here for shell file execution */
++ 	/* but not for parenthesis subshells	*/
+  	setjmp(subshell);
+  
+  	/* number of positional parameters */
+***************
+*** 63,69
+  
+  	/* number of positional parameters */
+  	assnum(&dolladr,dolc);
+! 	cmdadr=dolv[0];
+  
+  	/* set pidname */
+  	assnum(&pidadr, getpid());
+
+--- 85,91 -----
+  
+  	/* number of positional parameters */
+  	assnum(&dolladr,dolc);
+! 	cmdadr=dolv[0];	/* cmdadr is $0 */
+  
+  	/* set pidname */
+  	assnum(&pidadr, getpid());
+***************
+*** 68,73
+  	/* set pidname */
+  	assnum(&pidadr, getpid());
+  
+  	/* set up temp file names */
+  	settmp();
+  
+
+--- 90,99 -----
+  	/* set pidname */
+  	assnum(&pidadr, getpid());
+  
++ 	/* set ppidname */
++ 	ppid = getppid();
++ 	assnum(&ppidadr, ppid);
++ 
+  	/* set up temp file names */
+  	settmp();
+  
+***************
+*** 74,80
+  	/* default ifs */
+  	dfault(&ifsnod, sptbnl);
+  
+! 	IF (beenhere++)==FALSE
+  	THEN	/* ? profile */
+  		IF *cmdadr=='-'
+  		    ANDF (input=pathopen(nullstr, profile))>=0
+
+--- 100,129 -----
+  	/* default ifs */
+  	dfault(&ifsnod, sptbnl);
+  
+! #if pyr
+! 	/* find out current universe, initialize $UNIVERSE */
+! 	cur_univ = setuniverse (U_UCB);	/* retrieve old and set to UCB */
+! 	IF cur_univ == -1
+! 	THEN	/* unknown current default to UCB */
+! 		cur_univ = U_UCB;
+! 		setuniverse (U_UCB);
+! 	ELIF cur_univ != U_UCB
+! 	THEN	setuniverse (cur_univ);	/* restore to what it was */
+! 	FI
+! 
+! 	/* force value of UNIVERSE, ignore environment */
+! 	univnod.namflg &= ~N_RDONLY;	/* for subshells ... */
+! 	assign (&univnod, univ_name[cur_univ - 1]);
+! 	attrib ((&univnod), N_RDONLY);
+! #endif
+! 
+! 	/* assign default value to HISTFILE */
+! 	(VOID) catpath("~", savehist);
+! 	dfault (& histfnod, curstak());
+! 
+! 	event_count = 1;
+! 
+! 	IF beenhere==FALSE
+  	THEN	/* ? profile */
+  		beenhere++;	/* DAG -- only increment once */
+  		IF *(sim = simple(cmdadr))=='-'
+***************
+*** 76,83
+  
+  	IF (beenhere++)==FALSE
+  	THEN	/* ? profile */
+! 		IF *cmdadr=='-'
+! 		    ANDF (input=pathopen(nullstr, profile))>=0
+  		THEN	exfile(rflag); flags &= ~ttyflg;
+  		FI
+  		IF rflag==0 THEN flags |= rshflg FI
+
+--- 125,139 -----
+  
+  	IF beenhere==FALSE
+  	THEN	/* ? profile */
+! 		beenhere++;	/* DAG -- only increment once */
+! 		IF *(sim = simple(cmdadr))=='-'
+! 		THEN	IF getuid() != geteuid() THEN setuid(getuid()) FI
+! 			IF getgid() != getegid() THEN setgid(getgid()) FI
+! 		FI
+! 
+! 		/* to read /etc/profile, add code here */
+! 
+! 		IF *sim=='-' ANDF (input=pathopen(nullstr, profile))>=0
+  		THEN	exfile(rflag); flags &= ~ttyflg;
+  		FI
+  		IF rflag==0 THEN flags |= rshflg FI
+***************
+*** 82,87
+  		FI
+  		IF rflag==0 THEN flags |= rshflg FI
+  
+  		/* open input file if specified */
+  		IF comdiv
+  		THEN	estabf(comdiv); input = -1;
+
+--- 138,156 -----
+  		FI
+  		IF rflag==0 THEN flags |= rshflg FI
+  
++ 		/* if all OK, process $HOME/.shrc */
++ 		IF geteuid() == getuid() ANDF getegid() == getgid()
++ 			ANDF (flags&(rshflg|quickflg)) == 0
++ 			ANDF (input = pathopen("~", shrc)) >= 0
++ 		THEN
++ 			INT promptflags = (flags & (ttyflg|intflg|prompt));
++ 
++ 			/* turn off anything that will cause prompting */
++ 			flags &= ~promptflags;
++ 			exfile(rflag);
++ 			flags |= promptflags;
++ 		FI
++ 
+  		/* open input file if specified */
+  		IF comdiv
+  		THEN	estabf(comdiv); input = -1;
+***************
+*** 119,125
+  	userid=getuid();
+  
+  	/* decide whether interactive */
+! 	IF (flags&intflg) ORF ((flags&oneflg)==0 ANDF gtty(output,&statb)==0 ANDF gtty(input,&statb)==0)
+  	THEN	dfault(&ps1nod, (userid?stdprompt:supprompt));
+  		dfault(&ps2nod, readmsg);
+  		flags |= ttyflg|prompt; ignsig(KILL);
+
+--- 188,194 -----
+  	userid=getuid();
+  
+  	/* decide whether interactive */
+! 	IF (flags&intflg) ORF ((flags&oneflg)==0 ANDF isatty(output) ANDF isatty(input))
+  	THEN	dfault(&ps1nod, (userid?stdprompt:supprompt));
+  		dfault(&ps2nod, readmsg);
+  		flags |= ttyflg|prompt; ignsig(KILL);
+***************
+*** 123,136
+  	THEN	dfault(&ps1nod, (userid?stdprompt:supprompt));
+  		dfault(&ps2nod, readmsg);
+  		flags |= ttyflg|prompt; ignsig(KILL);
+! /*
+! 		{
+! 	#include <signal.h>
+! 		signal(SIGTTIN, SIG_IGN);
+! 		signal(SIGTTOU, SIG_IGN);
+! 		signal(SIGTSTP, SIG_IGN);
+! 		}
+! */
+  	ELSE	flags |= prof; flags &= ~prompt;
+  	FI
+  
+
+--- 192,199 -----
+  	THEN	dfault(&ps1nod, (userid?stdprompt:supprompt));
+  		dfault(&ps2nod, readmsg);
+  		flags |= ttyflg|prompt; ignsig(KILL);
+! 		/* restore previous history */
+! 		histrest (histfnod.namval);
+  	ELSE	flags |= prof; flags &= ~prompt;
+  	FI
+  
+***************
+*** 148,157
+  		exitset();
+  		IF (flags&prompt) ANDF standin->fstak==0 ANDF !eof
+  		THEN	IF mailnod.namval
+! 			    ANDF stat(mailnod.namval,&statb)>=0 ANDF statb.st_size
+! 			    ANDF (statb.st_mtime != mailtime)
+! 			    ANDF mailtime
+! 			THEN	prs(mailmsg)
+  			FI
+  			mailtime=statb.st_mtime;
+  			prs(ps1nod.namval);
+
+--- 211,225 -----
+  		exitset();
+  		IF (flags&prompt) ANDF standin->fstak==0 ANDF !eof
+  		THEN	IF mailnod.namval
+! 			    ANDF *mailnod.namval
+! 			THEN IF stat(mailnod.namval,&statb)>=0 ANDF statb.st_size
+! 					ANDF mailtime
+! 					ANDF (statb.st_mtime != mailtime)
+! 				THEN	prs(mailmsg)
+! 				FI
+! 				mailtime=statb.st_mtime;
+! 			ELIF mailtime==0
+! 			THEN mailtime=1
+  			FI
+  			pr_prompt(ps1nod.namval);
+  			IF userid==0 ANDF !eq(ps1nod.namval, supprompt)
+***************
+*** 153,160
+  			    ANDF mailtime
+  			THEN	prs(mailmsg)
+  			FI
+! 			mailtime=statb.st_mtime;
+! 			prs(ps1nod.namval);
+  		FI
+  
+  		trapnote=0; peekc=readc();
+
+--- 221,230 -----
+  			ELIF mailtime==0
+  			THEN mailtime=1
+  			FI
+! 			pr_prompt(ps1nod.namval);
+! 			IF userid==0 ANDF !eq(ps1nod.namval, supprompt)
+! 			THEN	prs(supprompt);
+! 			FI
+  		FI
+  
+  		catcheof = TRUE;
+***************
+*** 157,162
+  			prs(ps1nod.namval);
+  		FI
+  
+  		trapnote=0; peekc=readc();
+  		IF eof
+  		THEN	return;
+
+--- 227,233 -----
+  			FI
+  		FI
+  
++ 		catcheof = TRUE;
+  		trapnote=0; peekc=readc();
+  		catcheof = FALSE;
+  		IF eof
+***************
+*** 158,163
+  		FI
+  
+  		trapnote=0; peekc=readc();
+  		IF eof
+  		THEN	return;
+  		FI
+
+--- 229,235 -----
+  
+  		catcheof = TRUE;
+  		trapnote=0; peekc=readc();
++ 		catcheof = FALSE;
+  		IF eof
+  		THEN	return;
+  		FI
+***************
+*** 161,167
+  		IF eof
+  		THEN	return;
+  		FI
+! 		execute(cmd(NL,MTFLG),0);
+  		eof |= (flags&oneflg);
+  	POOL
+  }
+
+--- 233,239 -----
+  		IF eof
+  		THEN	return;
+  		FI
+! 		execute(cmd(NL,MTFLG),0, eflag);
+  		eof |= (flags&oneflg);
+  	POOL
+  }
+:::::::: mode.h :::::::
+*** ../orig.u/mode.h	Wed May 15 17:13:45 1985
+--- mode.h	Thu May 30 17:59:10 1985
+***************
+*** 26,31
+  STRUCT stat	STATBUF;	/* defined in /usr/sys/stat.h */
+  STRUCT blk	*BLKPTR;
+  STRUCT fileblk	FILEBLK;
+  STRUCT filehdr	FILEHDR;
+  STRUCT fileblk	*FILE;
+  STRUCT trenod	*TREPTR;
+
+--- 26,33 -----
+  STRUCT stat	STATBUF;	/* defined in /usr/sys/stat.h */
+  STRUCT blk	*BLKPTR;
+  STRUCT fileblk	FILEBLK;
++ STRUCT tempblk	TEMPBLK;
++ STRUCT tempblk	*TEMPBPTR;
+  STRUCT filehdr	FILEHDR;
+  STRUCT fileblk	*FILE;
+  STRUCT trenod	*TREPTR;
+***************
+*** 96,101
+  	STRING	*feval;
+  	FILE	fstak;
+  	CHAR	fbuf[BUFSIZ];
+  };
+  
+  /* for files not used with file descriptors */
+
+--- 98,108 -----
+  	STRING	*feval;
+  	FILE	fstak;
+  	CHAR	fbuf[BUFSIZ];
++ };
++ 
++ struct tempblk {
++ 	UFD	fdes;
++ 	struct	tempblk *fstak;
+  };
+  
+  /* for files not used with file descriptors */
+:::::::: msg.c :::::::
+*** ../orig.u/msg.c	Wed May 15 17:13:45 1985
+--- msg.c	Tue Jun  4 18:01:36 1985
+***************
+*** 15,20
+  #include	"defs.h"
+  #include	"sym.h"
+  
+  MSG		version = "\nVERSION sys137	DATE 1978 Nov 6 14:29:22\n";
+  
+  /* error messages */
+
+--- 15,23 -----
+  #include	"defs.h"
+  #include	"sym.h"
+  
++ #if JOBS
++ MSG	version = "@(#)Bourne shell, BRL + GT mods\t30-May-1985";
++ #else
+  MSG		version = "\nVERSION sys137	DATE 1978 Nov 6 14:29:22\n";
+  #endif
+  
+***************
+*** 16,21
+  #include	"sym.h"
+  
+  MSG		version = "\nVERSION sys137	DATE 1978 Nov 6 14:29:22\n";
+  
+  /* error messages */
+  MSG	badopt		= "bad option(s)";
+
+--- 19,25 -----
+  MSG	version = "@(#)Bourne shell, BRL + GT mods\t30-May-1985";
+  #else
+  MSG		version = "\nVERSION sys137	DATE 1978 Nov 6 14:29:22\n";
++ #endif
+  
+  /* error messages */
+  MSG	badopt		= "bad option(s)";
+***************
+*** 19,24
+  
+  /* error messages */
+  MSG	badopt		= "bad option(s)";
+  MSG	mailmsg		= "you have mail\n";
+  MSG	nospace		= "no space";
+  MSG	synmsg		= "syntax error";
+
+--- 23,31 -----
+  
+  /* error messages */
+  MSG	badopt		= "bad option(s)";
++ #if JOBS
++ MSG	mailmsg		= "You have new mail.\n";
++ #else
+  MSG	mailmsg		= "you have mail\n";
+  #endif
+  MSG	nospace		= "no space";
+***************
+*** 20,25
+  /* error messages */
+  MSG	badopt		= "bad option(s)";
+  MSG	mailmsg		= "you have mail\n";
+  MSG	nospace		= "no space";
+  MSG	synmsg		= "syntax error";
+  
+
+--- 27,33 -----
+  MSG	mailmsg		= "You have new mail.\n";
+  #else
+  MSG	mailmsg		= "you have mail\n";
++ #endif
+  MSG	nospace		= "no space";
+  MSG	synmsg		= "syntax error";
+  
+***************
+*** 52,57
+  MSG	ifsname		= "IFS";
+  MSG	ps1name		= "PS1";
+  MSG	ps2name		= "PS2";
+  
+  /* string constants */
+  MSG	nullstr		= "";
+
+--- 60,69 -----
+  MSG	ifsname		= "IFS";
+  MSG	ps1name		= "PS1";
+  MSG	ps2name		= "PS2";
++ #if pyr
++ MSG	univname	= "UNIVERSE";
++ #endif
++ MSG	histfilename	= "HISTFILE";
+  
+  /* string constants */
+  MSG	nullstr		= "";
+***************
+*** 68,73
+  MSG	stdprompt	= "$ ";
+  MSG	supprompt	= "# ";
+  MSG	profile		= ".profile";
+  
+  
+  /* tables */
+
+--- 80,138 -----
+  MSG	stdprompt	= "$ ";
+  MSG	supprompt	= "# ";
+  MSG	profile		= ".profile";
++ MSG	shrc		= ".shrc";
++ MSG	savehist	= ".history";
++ MSG	dashi		= "-i";
++ #if pyr
++ MSG	dashl		= "-l";
++ #endif
++ MSG	dashr		= "-r";
++ MSG	dashs		= "-s";
++ #if JOBS
++ MSG	amperstr	= " &";				/* DAG */
++ MSG	andstr		= " && ";			/* DAG */
++ MSG	appdstr		= ">> ";
++ MSG	bgdstr		= "background \ \ \ \ \ \ ";
++ MSG	casestr		= "case ";			/* DAG */
++ MSG	cjpostr		= ": couldn't jpost\n";
++ MSG	fgdstr		= "foreground \ \ \ \ \ \ ";
++ MSG	forstr		= "for ";			/* DAG */
++ MSG	fromastr	= "<&";				/* DAG */
++ MSG	iesacstr	= " in ... esac";
++ MSG	ifstr		= "if ";			/* DAG */
++ MSG	inlnstr		= "<< ";
++ MSG	insstr		= " in ";
++ MSG	jcoffstr	= "job control not enabled\n";
++ MSG	jinvstr		= "invalid job number\n";
++ MSG	jpanstr		= "sh bug: j_print_ent--no number ";
++ MSG	lotspstr	= " \ \ \ \ \ \ \ \ \ ";
++ MSG	lpnstr		= "(";
++ MSG	ncjstr		= "no current job\n";
++ MSG	nstpstr		= ": not stopped\n";
++ MSG	orstr		= " || ";			/* DAG */
++ MSG	pipestr		= " | ";			/* DAG */
++ MSG	psgpstr		= " (signal) ";
++ MSG	ptinstr		= " (tty in) ";
++ MSG	ptoustr		= " (tty out)";
++ MSG	rdinstr		= "< ";
++ MSG	rpnstr		= ")";
++ MSG	rsqbrk		= "] ";
++ MSG	sdonstr		= "; done";
++ MSG	sdostr		= "; do ";
++ MSG	selsstr		= "; else ";
++ MSG	semspstr	= "; ";
++ MSG	sfistr		= "; fi";
++ MSG	spcstr		= " ";
++ MSG	spspstr		= " \ ";
++ MSG	sthnstr		= "; then ";
++ MSG	stpdstr		= "stopped";
++ MSG	tasjstr		= "There are stopped jobs.\n";
++ MSG	toastr		= ">&";				/* DAG */
++ MSG	untilstr	= "until ";			/* DAG */
++ MSG	whilestr	= "while ";			/* DAG */
++ MSG	rdwstr		= "<> ";			/* ADR */
++ MSG	nosusp		= "cannot suspend a login shell\n";	/* yet... */
++ #endif
+  
+  
+  /* tables */
+***************
+*** 71,77
+  
+  
+  /* tables */
+! SYSTAB reserved {
+  		{"in",		INSYM},
+  		{"esac",	ESSYM},
+  		{"case",	CASYM},
+
+--- 136,142 -----
+  
+  
+  /* tables */
+! SYSTAB reserved  = {
+  		{"in",		INSYM},
+  		{"esac",	ESSYM},
+  		{"case",	CASYM},
+***************
+*** 90,96
+  		{0,	0},
+  };
+  
+! STRING	sysmsg[] {
+  		0,
+  		"Hangup",
+  		0,	/* Interrupt */
+
+--- 155,161 -----
+  		{0,	0},
+  };
+  
+! STRING	sysmsg[] = {
+  		0,
+  		"Hangup",
+  		0,	/* Interrupt */
+***************
+*** 97,103
+  		"Quit",
+  		"Illegal instruction",
+  		"Trace/BPT trap",
+! 		"IOT trap",
+  		"EMT trap",
+  		"Floating exception",
+  		"Killed",
+
+--- 162,168 -----
+  		"Quit",
+  		"Illegal instruction",
+  		"Trace/BPT trap",
+! 		"abort",
+  		"EMT trap",
+  		"Floating exception",
+  		"Killed",
+***************
+*** 108,113
+  		"Alarm call",
+  		"Terminated",
+  		"Signal 16",
+  };
+  
+  MSG		export = "export";
+
+--- 173,200 -----
+  		"Alarm call",
+  		"Terminated",
+  		"Signal 16",
++ #if JOBS
++ 		"Stop",
++ 		"Stop from keyboard",
++ 		"Continue",
++ 		"Child status change",
++ 		"Background read",
++ 		"Background write",
++ 		"I/O possible",
++ 		"CPU time limit",
++ 		"File size limit",
++ 		"Virtual time alarm",
++ 		"Profiling timer alarm",
++ 		"Signal 28",
++ 		"Signal 29",
++ 		"Signal 30",
++ 		"Signal 31",
++ 		"Signal 32",
++ #else
++ 		"Signal 17",
++ 		"Signal 18",
++ 		"Signal 19",
++ #endif
+  };
+  
+  MSG		export = "export";
+***************
+*** 112,118
+  
+  MSG		export = "export";
+  MSG		readonly = "readonly";
+! SYSTAB	commands {
+  		{"cd",		SYSCD},
+  		{"read",	SYSREAD},
+  /*
+
+--- 199,205 -----
+  
+  MSG		export = "export";
+  MSG		readonly = "readonly";
+! SYSTAB	commands = {
+  		{"cd",		SYSCD},
+  		{"read",	SYSREAD},
+  /*
+***************
+*** 135,139
+  		{"exec",	SYSEXEC},
+  		{"times",	SYSTIMES},
+  		{"umask",	SYSUMASK},
+  		{0,	0},
+  };
+
+--- 222,239 -----
+  		{"exec",	SYSEXEC},
+  		{"times",	SYSTIMES},
+  		{"umask",	SYSUMASK},
++ #if JOBS
++ 		{"jobs",	SYSJOBS},
++ 		{"fg",		SYSFG},
++ 		{"bg",		SYSBG},
++ 		{"suspend",	SYSSUSPEND},
++ #endif
++ #if pyr
++ 		{"att",		SYSATT},
++ 		{"ucb",		SYSUCB},
++ 		{"universe",	SYSUNIVERSE},
++ #endif
++ 		{"history",	SYSHISTORY},
+  		{0,	0},
+  };
+  
+***************
+*** 137,139
+  		{"umask",	SYSUMASK},
+  		{0,	0},
+  };
+
+--- 236,244 -----
+  		{"history",	SYSHISTORY},
+  		{0,	0},
+  };
++ 
++ #if pyr
++ #include <sys/types.h>	/* to get sys/inode.h to work (sigh) */
++ #include <sys/inode.h>	/* NUMUNIV is defined to be NCLNK */
++ #include <universe.h>	/* gets char *univ_name[] && char *univ_longname[] */
++ #endif

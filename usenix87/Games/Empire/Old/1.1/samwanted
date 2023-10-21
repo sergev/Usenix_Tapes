@@ -1,0 +1,798 @@
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	COMMANDS/cens.c
+#	COMMANDS/map.c
+#	COMMANDS/powe.c
+#	COMMANDS/rout.c
+#	EMPN/emp1.c
+#	EMPN/emp2.c
+#	EMPN/emp3.c
+#	EMPN/emp4.c
+#	EMPN/emp5.c
+#	EMPN/emp7.c
+#	hdrs/makeup.h
+# This archive created: Mon May 11 07:08:38 1987
+export PATH; PATH=/bin:$PATH
+mv COMMANDS/cens.c COMMANDS/cens.c.orig
+mv COMMANDS/map.c COMMANDS/map.c.orig
+mv COMMANDS/powe.c COMMANDS/powe.c.orig
+mv COMMANDS/rout.c COMMANDS/rout.c.orig
+mv EMPN/emp1.c EMPN/emp1.c.orig
+mv EMPN/emp2.c EMPN/emp2.c.orig
+mv EMPN/emp3.c EMPN/emp3.c.orig
+mv EMPN/emp4.c EMPN/emp4.c.orig
+mv EMPN/emp5.c EMPN/emp5.c.orig
+mv EMPN/emp7.c EMPN/emp7.c.orig
+mv hdrs/makeup.h hdrs/makeup.h.orig
+if test -f 'COMMANDS/cens.c'
+then
+	echo shar: will not over-write existing file "'COMMANDS/cens.c'"
+else
+cat << \SHAR_EOF > 'COMMANDS/cens.c'
+#define D_UPDATE
+#define D_NATSTAT
+#define D_SECTDES
+#define D_SCTSTR
+#define D_DCHRSTR
+#define D_ICHRSTR
+#define D_NSCSTR
+#define D_FILES
+#include        "empdef.h"
+#include <ctype.h>
+
+cens()
+{
+        char    *del, *splur(), temp;
+        int     nsects, dpkg, i;
+        struct  nstr    nsct;
+
+        if( snxtsct(&nsct, argp[1]) >= 0 ) goto X44;
+        return(SYN_RETURN);
+X44:    
+        prdate();
+        del = ".4$023.1....65.7";
+        nsects = 0;
+        goto X1712;
+X66:    
+        if( owner != 0 ) goto X100;
+        goto X1712;
+X100:   
+        if( nsects++ != 0 ) goto X154;
+        if( nstat != STAT_GOD ) goto X134;
+        printf("   ");
+X134:   
+        printf("  sect  cmsgpob des eff min gold mob");
+        printf("  civ mil   sh  gun  pl  ore bar prod\n");
+X154:   
+        if( nstat != STAT_GOD ) goto X212;
+        printf("%2d ", sect.sct_owned);
+X212:   
+        printf("%3d,%-3d", nsct.n_x, nsct.n_y);
+        printf("%c", (sect.sct_chkpt != 0) ? '*' : ' ');
+        printf("%c", del[sect.sct_c_use & 017]);
+        printf("%c", del[sect.sct_m_use & 017]);
+        printf("%c", del[sect.sct_s_use & 017]);
+        printf("%c", del[sect.sct_g_use & 017]);
+        printf("%c", del[sect.sct_p_use & 017]);
+        printf("%c", del[sect.sct_o_use & 017]);
+        printf("%c", del[sect.sct_b_use & 017]);
+        printf("%c", (sect.sct_dfend != 0) ? '%' : ' ');
+        if (!((sect.sct_p_stage!=1)&&(sect.sct_p_stage!=2)))
+            printf("%c",'p');
+        else
+            printf("%c",' ');
+		temp=dchr[sect.sct_desig].d_mnem;
+        if (sect.sct_effic>60) temp=makeupper(temp);
+		if ((temp=='.')&&((sect.sct_civil!=0)||(sect.sct_milit!=0))) temp=':';
+        printf("%c", temp);
+        printf("%4d%%%4d", sect.sct_effic, sect.sct_miner);
+        printf("%5d%4d", sect.sct_gmin, sect.sct_mobil);
+        dpkg = dchr[sect.sct_desig].d_pkg;
+        i = 12;
+        printf("%5d", ichr[i].i_pkg[dpkg] * sect.sct_civil);
+        i = 13;
+        printf("%4d", ichr[i].i_pkg[dpkg] * sect.sct_milit);
+        i = 14;
+        printf("%5d", ichr[i].i_pkg[dpkg] * sect.sct_shell);
+        i = 15;
+        printf("%5d", ichr[i].i_pkg[dpkg] * sect.sct_guns);
+        i = 16;
+        printf("%4d", ichr[i].i_pkg[dpkg] * sect.sct_plane);
+        i = 17;
+        printf("%5d", ichr[i].i_pkg[dpkg] * sect.sct_ore);
+        i = 18;
+        printf("%4d", ichr[i].i_pkg[dpkg] * sect.sct_gold);
+        if( sect.sct_contr == 0 ) goto X1652;
+        if( sect.sct_desig == S_MINE ) goto X1652;
+        if( sect.sct_desig != S_GMINE ) goto X1702;
+X1652:  
+        printf("%4d\n", sect.sct_prdct);
+        goto X1712;
+X1702:  
+        printf("  $\n");
+X1712:  
+        if( nxtsct(&nsct, UP_OWN) <= 0 ) goto X1742;
+        goto X66;
+X1742:  
+        printf("    %d sector%s\n", nsects, splur(nsects));
+        return(NORM_RETURN);
+}
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'COMMANDS/map.c'
+then
+	echo shar: will not over-write existing file "'COMMANDS/map.c'"
+else
+cat << \SHAR_EOF > 'COMMANDS/map.c'
+#define D_UPDATE
+#define D_SECTDES
+#define D_SCTSTR
+#define D_DCHRSTR
+#define D_FILES
+#include        "empdef.h"
+#include <ctype.h>
+
+map()
+{
+        register        i, j, bit;
+        int     bitmap[1024];
+        int     ybit;
+
+        if( sargs(argp[1]) != -1 ) goto X36;
+        return(SYN_RETURN);
+X36:    
+        i = 1024;
+        while( --i >= 0 ) bitmap[i] = 0;
+        j = ly;
+        goto X1464;
+X242:   
+        ybit = j<<07;
+        i = lx;
+        goto X1446;
+X264:   
+        if( getsect(i, j, UP_NONE) >= 0 ) goto X310;
+        goto X1442;
+X310:   
+        if( owner != 0 ) goto X322;
+        goto X1442;
+X322:   
+        bit = i;
+        bit += ybit;
+        setbit(bit, bitmap, 01);
+        setbit(bit - 1, bitmap, 01);
+        setbit(bit - 128, bitmap, 01);
+        setbit(bit + 128, bitmap, 01);
+        setbit(bit + 1, bitmap, 01);
+        if( sect.sct_effic >= 20 ) goto X512;
+        goto X1442;
+X512:   
+        setbit(bit - 129, bitmap, 01);
+        setbit(bit + 127, bitmap, 01);
+        setbit(bit - 127, bitmap, 01);
+        setbit(bit + 129, bitmap, 01);
+        if( sect.sct_effic >= 40 ) goto X656;
+        goto X1442;
+X656:   
+        setbit(bit - 2, bitmap, 01);
+        setbit(bit - 256, bitmap, 01);
+        setbit(bit + 256, bitmap, 01);
+        setbit(bit + 2, bitmap, 01);
+        if( sect.sct_effic >= 60 ) goto X1022;
+        goto X1442;
+X1022:  
+        setbit(bit - 130, bitmap, 01);
+        setbit(bit + 126, bitmap, 01);
+        setbit(bit - 257, bitmap, 01);
+        setbit(bit + 255, bitmap, 01);
+        setbit(bit - 255, bitmap, 01);
+        setbit(bit + 257, bitmap, 01);
+        setbit(bit - 126, bitmap, 01);
+        setbit(bit + 130, bitmap, 01);
+        if( sect.sct_effic < 80 ) goto X1442;
+        setbit(bit - 258, bitmap, 01);
+        setbit(bit + 254, bitmap, 01);
+        setbit(bit - 254, bitmap, 01);
+        setbit(bit + 258, bitmap, 01);
+X1442:  
+        i += ix;
+X1446:  
+        if( i == hx ) goto X1460;
+        goto X264;
+X1460:  
+        j += iy;
+X1464:  
+        if( j == hy ) goto X1476;
+        goto X242;
+X1476:  
+        border(lx, hx, ix, "    ");
+        j = ly;
+        goto X1646;
+X1534:  
+        printf("%3d ", j);
+        ybit = j<<07;
+        i = lx;
+        goto X1612;
+X1576:  
+        printf("  ");
+X1602:  
+        i += ix;
+X1612:  
+        if( i != hx ) goto X1712;
+        printf(" %d\n", j);
+        j += iy;
+X1646:  
+        if( j != hy ) goto X1534;
+        border(lx, hx, ix, "    ");
+        return(NORM_RETURN);
+X1712:  
+        if( getbit(i + ybit, bitmap) == 0 ) goto X1576;
+        getsect(i, j, UP_NONE);
+        switch( sect.sct_desig ) {
+        case S_WATER:
+/* changes to make display more visual.  changed water from . to ~ */
+                printf(" ~");
+                goto X1602;
+        case S_MOUNT:
+                printf(" ^");
+                goto X1602;
+        case S_SANCT:
+				if (sect.sct_effic>60)
+                    printf(" S");
+                else
+                    printf(" s");
+                goto X1602;
+        case S_RURAL:
+                if( sect.sct_owned == 0 ) goto X2032;
+                if( owner == 0 ) goto X2040;
+X2032:  
+/* changes to make display more visual.  changed land from - to . */
+/* also changed a wilderness sector with people on it to display as a : instead
+	of . */
+				if ((sect.sct_civil!=0)||(sect.sct_milit!=0))
+					printf(" :");
+				else
+                	printf(" .");
+                goto X1602;
+X2040:  
+                printf(" ?");
+                goto X1602;
+        }
+        if( sect.sct_desig > S_XCHNG ) {
+                printf("??");
+                goto X1602;
+        }
+        if( owner == 0 ) goto X2132;
+        if (sect.sct_effic>60)
+            printf(" %c", makeupper(dchr[sect.sct_desig].d_mnem));
+        else
+            printf(" %c", dchr[sect.sct_desig].d_mnem);
+        goto X1602;
+X2132:  
+        printf(" ?");
+        goto X1602;
+}
+
+border(lowx, hix, incx, in)
+int     lowx, hix, incx;
+char    *in;
+{
+        register        i;
+
+        printf("%s", in);
+        i = lowx;
+        goto X120;
+X22:    
+        if( i >= 0 ) goto X46;
+        if( i <= -10 ) goto X46;
+        printf(" -");
+        goto X114;
+X46:    
+        printf(" %d", ((i >= 0) ? i : -i)/10);
+X114:   
+        i += incx;
+X120:   
+        if( i != hix ) goto X22;
+        printf("\n");
+        printf("%s", in);
+        i = lowx;
+        goto X226;
+X154:   
+        printf(" %d", ((i >= 0) ? i : -i)%10);
+        i += incx;
+X226:   
+        if( i != hix ) goto X154;
+        printf("\n");
+        return;
+}
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'COMMANDS/powe.c'
+then
+	echo shar: will not over-write existing file "'COMMANDS/powe.c'"
+else
+cat << \SHAR_EOF > 'COMMANDS/powe.c'
+#define D_UPDATE
+#define D_NATSTAT
+#define D_SECTDES
+#define D_NEWSVERBS
+#define D_NATSTR
+#define D_SCTSTR
+#define D_SHPSTR
+#define D_POWSTR
+#define D_DCHRSTR
+#define D_ICHRSTR
+#define D_MCHRSTR
+#define D_FILES
+#include        "empdef.h"
+#include <ctype.h>
+
+powe()
+{
+        register struct sctstr  *s;
+        char     *ctime(), *cname();
+        long    ldround();
+        int     i, j, ii, pkgs, ownr;
+		unsigned	readsize;
+        long    now, ndate;
+        float   pmax, *fp, *tp;
+        struct  sctstr  sct[MAX_W_XSIZE];
+        struct  powstr  pow[MAX_MAXNOC], *k;
+
+        printf("     - = [   Empire Power Report   ] = -\n");
+        powf = open(powfil, O_RDWR);
+        read(powf, &ndate, sizeof(long));
+        read(powf, pow, sizeof(pow));
+        time(&now);
+        if( 3600. <= now - ndate ) goto X210;
+        if( nstat == STAT_GOD ) goto X210;
+        goto X2632;
+X210:
+        i = 0;
+        goto X306;
+X216:
+        fp = &pow[i].p_power;
+        goto X256;
+X242:
+        *fp-- = 0.;
+X256:
+        if( fp >= &pow[i].p_sects ) goto X242;
+        i++;
+X306:
+        if( i < maxnoc ) goto X216;
+        lseek(sectf, 0L, 0);
+        readsize = (unsigned)w_xsize * sizeof(sect);
+        j = 0;
+        goto X1336;
+X362:
+        read(sectf, sct, readsize);
+        i = 0;
+        goto X1316;
+X420:
+        if( sct[i].sct_owned != 0 ) goto X444;
+        goto X1312;
+X444:
+        s = &sct[i];
+        pkgs = dchr[s->sct_desig].d_pkg;
+        k = &pow[s->sct_owned];
+        k->p_sects += 1.;
+        k->p_effic += s->sct_effic;
+        ii = 12;
+        k->p_civil += ichr[ii].i_pkg[pkgs] * s->sct_civil;
+        ii = 13;
+        k->p_milit += ichr[ii].i_pkg[pkgs] * s->sct_milit;
+        ii = 14;
+        k->p_shell += ichr[ii].i_pkg[pkgs] * s->sct_shell;
+        ii = 15;
+        k->p_guns += ichr[ii].i_pkg[pkgs] * s->sct_guns;
+        ii = 16;
+        k->p_plane += ichr[ii].i_pkg[pkgs] * s->sct_plane;
+        ii = 17;
+        k->p_ore += ichr[ii].i_pkg[pkgs] * s->sct_ore;
+        ii = 18;
+        k->p_gold += ichr[ii].i_pkg[pkgs] * s->sct_gold;
+X1312:
+        i++;
+X1316:
+        if( i >= w_xsize ) goto X1332;
+        goto X420;
+X1332:
+        j++;
+X1336:
+        if( j >= w_ysize ) goto X1352;
+        goto X362;
+X1352:
+        i = 0;
+        goto X2002;
+X1362:
+        if( ship.shp_own != 0 ) goto X1374;
+        goto X1776;
+X1374:
+        k = &pow[ship.shp_own];
+        if( mchr[ship.shp_type].m_civil == 0 ) goto X1464;
+        k->p_civil += ship.shp_crew;
+        goto X1512;
+X1464:
+        k->p_milit += ship.shp_crew;
+X1512:
+        k->p_shell += ship.shp_shels;
+        k->p_guns += ship.shp_gun;
+        k->p_plane += ship.shp_plns;
+        k->p_ore += ship.shp_or;
+        k->p_gold += ship.shp_gld;
+        k->p_ships += 1.;
+        k->p_power += mchr[ship.shp_type].m_prdct/10.;
+X1776:
+        i++;
+X2002:
+        if( getship(i, &ship) == -1 ) goto X2032;
+        goto X1362;
+X2032:
+        i = 1;
+        goto X2060;
+X2042:
+        k->p_power = 0.;
+X2054:
+        i++;
+X2060:
+        if( i < maxnoc ) goto X2074;
+        goto X2524;
+X2074:
+        getnat(i);
+        k = &pow[i];
+        if( nat.nat_stat < STAT_NOCAP ) goto X2042;
+        k->p_money = nat.nat_money / 1000.;
+        k->p_power += (k->p_civil + k->p_milit + k->p_shell) / 10.;
+        k->p_power += (k->p_guns + k->p_sects*k->p_effic) / 3.;
+        k->p_power += k->p_plane + k->p_ships;
+	k->p_power += k->p_gold * 5. + k->p_money * 10.;
+        tp = &pow[0].p_power;
+        fp = &k->p_power;
+X2452:
+        fp--;
+        if( fp >= (float *)k ) goto X2474;
+        goto X2054;
+X2474:
+        tp--;
+        *tp += *fp;
+        goto X2452;
+X2524:
+        lseek(powf, 0L, 0);
+        time(&ndate);
+        write(powf, &ndate, sizeof(long));
+        write(powf, pow, sizeof(pow));
+X2632:
+        close(powf);
+        printf("      as of %s", ctime(&ndate));
+        printf("\n\t   sects  eff  civil  milit  shell  guns plane  ore  gold ship  money\n");
+        i = 0;
+        goto X4766;
+X2720:
+        pmax = 0.;
+        j = 1;
+        goto X3022;
+X2736:
+        k = &pow[j];
+        if( pmax >= k->p_power ) goto X3016;
+        pmax = k->p_power;
+        ii = j;
+X3016:  
+        j++;
+X3022:  
+        if( j < maxnoc ) goto X2736;
+        if( pmax != 0 ) goto X3046;
+        goto X5002;
+X3046:  
+        k = &pow[ii];
+        if( ii == cnum || cnum == 0 ) {
+                ownr = 1;
+        } else {
+                ownr = 0;
+        }
+        printf("\n%11.11s", cname(ii));
+        if( ownr != 0 ) goto X3176;
+        if( k->p_sects >= 23. ) goto X3226;
+X3176:  
+        printf("%5.0f", k->p_sects, 10);
+        goto X3270;
+X3226:  
+        printf("%5ld", ldround(k->p_sects, 10));
+X3270:  
+        printf("%4.0f%%", k->p_effic / (k->p_sects + .1));
+        if( ownr != 0 ) goto X3374;
+        if( k->p_civil >= 299 ) goto X3424;
+X3374:  
+        printf("%7.0f", k->p_civil);
+        goto X3472;
+X3424:  
+        printf("%7ld", ldround(k->p_civil, 100));
+X3472:  
+        if( ownr != 0 ) goto X3530;
+        if( k->p_milit >= 299 ) goto X3560;
+X3530:  
+        printf("%7.0f", k->p_milit);
+        goto X3626;
+X3560:  
+        printf("%7ld", ldround(k->p_milit, 100));
+X3626:  
+        if( ownr == 0 ) goto X3672;
+        printf("%7.0f", k->p_shell);
+        goto X3740;
+X3672:  
+        printf("%7ld", ldround(k->p_shell, 100));
+X3740:  
+        if( ownr == 0 ) goto X4004;
+        printf("%6.0f", k->p_guns);
+        goto X4052;
+X4004:  
+        printf("%6ld", ldround(k->p_guns, 10));
+X4052:  
+        if( ownr == 0 ) goto X4116;
+        printf("%5.0f", k->p_plane);
+        goto X4164;
+X4116:  
+        printf("%5ld", ldround(k->p_plane, 10));
+X4164:  
+        if( ownr != 0 ) goto X4222;
+        if( k->p_ore >= 299 ) goto X4252;
+X4222:  
+        printf("%7.0f", k->p_ore);
+        goto X4320;
+X4252:  
+        printf("%7ld", ldround(k->p_ore, 100));
+X4320:  
+        if( ownr == 0 ) goto X4364;
+        printf("%5.0f", k->p_gold);
+        goto X4432;
+X4364:  
+        printf("%5ld", ldround(k->p_gold, 10));
+X4432:  
+        if( ownr == 0 ) goto X4476;
+        printf("%5.0f", k->p_ships);
+        goto X4544;
+X4476:  
+        printf("%5ld", ldround(k->p_ships, 10));
+X4544:  
+        if( ownr != 0 ) goto X4600;
+        if( k->p_money >= 13. ) goto X4630;
+X4600:  
+        printf("%6.0fk\n", k->p_money);
+        goto X4676;
+X4630:  
+        printf("%6ldk\n", ldround(k->p_money, 10));
+X4676:  
+        if( nstat != STAT_GOD ) goto X4750;
+        printf("%9.2f\n", k->p_power);
+X4750:  
+        k->p_power = 0.;
+        i++;
+X4766:  
+        if( i >= maxcno ) goto X5002;
+        goto X2720;
+X5002:  
+        printf("\t    ---- ---- ------ ------ ------ ----- ---- ------ ---- ---- -----\n");
+        k = &pow[0];
+        printf("worldwide  ");
+        printf("%5ld", ldround(k->p_sects, 10));
+        printf("%4.0f%%", k->p_effic / (k->p_sects + .01));
+        printf("%7ld", ldround(k->p_civil, 100));
+        printf("%7ld", ldround(k->p_milit, 100));
+        printf("%7ld", ldround(k->p_shell, 100));
+        printf("%6ld", ldround(k->p_guns, 10));
+        printf("%5ld", ldround(k->p_plane, 10));
+        printf("%7ld", ldround(k->p_ore, 100));
+        printf("%5ld", ldround(k->p_gold, 10));
+        printf("%5ld", ldround(k->p_ships, 10));
+        printf("%6ldk\n", ldround(k->p_money, 10));
+        return(NORM_RETURN);
+}
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'COMMANDS/rout.c'
+then
+	echo shar: will not over-write existing file "'COMMANDS/rout.c'"
+else
+cat << \SHAR_EOF > 'COMMANDS/rout.c'
+#define D_UPDATE
+#define D_SECTDES
+#define D_SCTSTR
+#define D_DCHRSTR
+#define D_ICHRSTR
+#define D_FILES
+#include        "empdef.h"
+#include <ctype.h>
+
+rout()
+{
+        register char   *cp, *dp;
+        register        i;
+        char    c, line[132], *getstar();
+        int     j;
+        short   dx, dy;
+
+        if( sargs(argp[2]) != -1 ) goto X36;
+        return(SYN_RETURN);
+X36:    
+        if( (hx - lx) * ix <= 41 ) goto X104;
+        printf("Max width (in sectors) is %d", 41);
+        return(SYN_RETURN);
+X104:   
+        cp = getstar(argp[1], "item? ");
+        for( i = 12; (c = ichr[i].i_mnem) != '\0'; i++ ) {
+                if( c == *cp ) break;
+        }
+        if( c != 0 ) goto X212;
+        printf("'%s'? The union won't let us deliver them!", cp);
+        return(SYN_RETURN);
+X212:   
+        dp = (char *)&sect.sct_c_use + i - 12;
+        printf("    ");
+        for( i = lx; i != hx; i += ix ) {
+        printf((i < -9) ? "%3d" : "%2d ", i);
+        }
+        printf("\n");
+        for( j = ly; j != hy; j += iy ) {
+                cp = line;
+                for( i = lx; i != hx; i += ix ) {
+                        if( getsect(i, j, UP_NONE) == -1 || owner == 0 ) {
+                                *cp++ = ' ';
+                                *cp++ = ' ';
+                                *cp++ = ' ';
+                                continue;
+                        }
+                        c = dchr[sect.sct_desig].d_mnem;
+                        if (sect.sct_effic>60)
+                            c=makeupper(c);
+						if ((c=='.')&&((sect.sct_milit!=0)||(sect.sct_civil!=0)) ) c=':';
+                        if( *dp == 2 ) {
+                                *cp++ = '$';
+                                *cp++ = c;
+                                *cp++ = '$';
+                                continue;
+                        }
+                        dx = (*dp)<<12;
+                        dx = dx>>14;
+                        dy = (*dp)<<14;
+                        dy = (dy>>14) + 1;
+                        switch( dx ) {
+                        case -1:
+                                *cp++ = "\\</"[dy];
+                                *cp++ = c;
+                                *cp++ = ' ';
+                                break;
+                        case 0:
+                                *cp++ = "^ v"[dy];
+                                *cp++ = c;
+                                *cp++ = "^ v"[dy];
+                                break;
+                        case 1:
+                                *cp++ = ' ';
+                                *cp++ = c;
+                                *cp++ = "/>\\"[dy];
+                                break;
+                        }
+                }
+                *cp = '\0';
+                printf("%3d %s %d\n", j, line, j);
+        }
+        printf("    ");
+        for( i=lx; i != hx; i += ix ) {
+                printf((i < -9) ? "%3d" : "%2d ", i);
+        }
+        printf("\n");
+        return(NORM_RETURN);
+}
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp1.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp1.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp1.c'
+#include "makeup.h"
+int thisprog = 1;
+
+int acce, add, assa, atta, boar, buil, chan, chec, coll, cont,
+    decl, defe, diss, enli, fire, flee, fly, gran, head, ledg,
+    lend, load, look, mine, navi, news, offe, powe, rada, repa,
+    set, shi, spy, tend, torp, trea, trad, turn, vers, vote;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp2.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp2.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp2.c'
+#include "makeup.h"
+#include <ctype.h>
+int thisprog = 2;
+
+int acce, add, assa, atta, boar, buil, cens, coll, cont, coun,
+    deli, desi, diss, fire, flee, fly, fore, info, ledg, lend,
+    load, look, map, mine, move, nati, navi, rada, rea, real,
+    repa, rout, set, shi, tele, tend, torp, trad, turn, upda,
+    vers, weat;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp3.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp3.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp3.c'
+#include "makeup.h"
+int thisprog = 3;
+
+int acce, add, buil, cens, chan, chec, coll, cont, coun, decl,
+    defe, deli, desi, diss, enli, flee, fly, fore, gran, head,
+    info, ledg, lend, load, look, map, mine, move, nati, navi,
+    news, offe, powe, rada, rea, real, repa, rout, set, shi,
+    spy, tele, tend, trea, trad, turn, upda, vers, vote, weat;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp4.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp4.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp4.c'
+#include "makeup.h"
+int thisprog = 4;
+
+int acce, add, assa, atta, boar, cens, chan, chec, coll, cont,
+    coun, decl, defe, deli, desi, diss, enli, fire, fly, fore,
+    gran, head, info, ledg, lend, map, move, nati, news, offe,
+    powe, rea, real, repa, rout, set, spy, tele, torp, trea,
+    trad, turn, upda, vers, vote, weat;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp5.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp5.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp5.c'
+#include "makeup.h"
+int thisprog = 5;
+
+int add, assa, atta, boar, buil, cens, chan, chec, coun, decl,
+    defe, deli, desi, diss, enli, fire, flee, fly, fore, gran,
+    head, info, load, look, map, mine, move, nati, navi, news,
+    offe, powe, rada, rea, real, rout, shi, spy, tele, tend,
+    torp, trea, turn, upda, vers, vote, weat;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'EMPN/emp7.c'
+then
+	echo shar: will not over-write existing file "'EMPN/emp7.c'"
+else
+cat << \SHAR_EOF > 'EMPN/emp7.c'
+#include "makeup.h"
+int thisprog = 7;
+
+int acce, assa, atta, boar, buil, cens, chan, chec, coll, cont,
+    coun, decl, defe, deli, desi, enli, fire, flee, fore, gran,
+    head, info, ledg, lend, load, look, map, mine, move, nati,
+    navi, news, offe, powe, rada, rea, real, repa, rout, set,
+    shi, spy, tele, tend, torp, trea, trad, upda, vote, weat;
+SHAR_EOF
+fi # end of overwriting check
+if test -f 'hdrs/makeup.h'
+then
+	echo shar: will not over-write existing file "'hdrs/makeup.h'"
+else
+cat << \SHAR_EOF > 'hdrs/makeup.h'
+#include <ctype.h>
+
+makeupper(c)
+int	c;
+
+{
+	if (islower(c)) 
+		return (c-32);
+	else 
+		return (c);
+}
+SHAR_EOF
+fi # end of overwriting check
+#	End of shell archive
+exit 0

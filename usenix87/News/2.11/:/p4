@@ -1,0 +1,1358 @@
+From: rick@seismo.UUCP
+Newsgroups: news.software.b
+Subject: Patch #4 for 2.11 news src
+Message-ID: <43111@beno.seismo.CSS.GOV>
+Date: 24 Feb 87 04:08:51 GMT
+Sender: news@seismo.CSS.GOV
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 1346
+Posted: Mon Feb 23 23:08:51 1987
+
+Description:
+	This is patch #4 for news 2.11 source. It addresses the following
+	problems:
+
+	A minor optimization for checknews.
+	Handle trailing white space better in control messages.
+	If you are running with history subdirectories (i.e. you don't have
+	dbm), you don't need the history file anymore.
+	Fix the STUPID typo in patch#3 that could have unlinked the active file.
+	Fix some portability problems with the readnews/vnews 'l' command.
+	A few minor cleanups.
+
+Fix:
+	cd to the src directory and apply the following patch
+
+Index: checknews.c
+Prereq: 2.27
+*** .d/checknews.c	Wed Dec 17 18:23:00 1986
+--- checknews.c	Mon Feb 23 22:28:20 1987
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.27	12/16/86";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.28	2/22/87";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+***************
+*** 238,243 ****
+--- 238,245 ----
+  #ifdef DEBUG
+  		fprintf(stderr, "bfr = '%s'\n", bfr);
+  #endif
++ 		if (narts == 0)
++ 			continue;
+  		ngcat(bfr);
+  		if (!ngmatch(bfr, nflag ? narggrp : header.nbuf))
+  			continue;
+
+Index: control.c
+Prereq: 2.50
+*** .d/control.c	Mon Dec 29 18:34:10 1986
+--- control.c	Mon Feb 23 22:28:30 1987
+***************
+*** 19,25 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.50	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 19,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.51	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 127,140 ****
+  
+  	while (*str) {
+  		if (*str <= ' ') {
+- 			*nextfree++ = 0;
+- 			cargv[cargc] = nextfree;
+- 			cargc++;
+  			/* skip over white space */
+  			while (*str != '\0' && *str <= ' ')
+  				str++;
+  			if (*str == '\0')	/* line ends in white space */
+  				return;
+  		} else
+  			*nextfree++ = *str++;
+  	}
+--- 127,140 ----
+  
+  	while (*str) {
+  		if (*str <= ' ') {
+  			/* skip over white space */
+  			while (*str != '\0' && *str <= ' ')
+  				str++;
+  			if (*str == '\0')	/* line ends in white space */
+  				return;
++ 			*nextfree++ = 0;
++ 			cargv[cargc] = nextfree;
++ 			cargc++;
+  		} else
+  			*nextfree++ = *str++;
+  	}
+
+Index: expire.c
+Prereq: 2.49
+*** .d/expire.c	Wed Dec 17 18:23:08 1986
+--- expire.c	Mon Feb 23 22:28:40 1987
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.49	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.50	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 54,67 ****
+  char	recdate[BUFLEN];
+  long	rectime, exptime;
+  extern char *OLDNEWS;
+! int	verbose = 0;
+! int	ignorexp = 0;
+! int	doarchive = 0;
+! int	nohistory = 0;
+! int	dorebuild = 0;
+! int	usepost = 0;
+! int	frflag = 0;
+! int	updateactive = 0;
+  char	baduser[BUFLEN];
+  extern 	char filename[], nbuf[];
+  
+--- 54,68 ----
+  char	recdate[BUFLEN];
+  long	rectime, exptime;
+  extern char *OLDNEWS;
+! int	verbose = 0;		/* output trace information */
+! int	ignorexp = 0;		/* ignore Expire: lines */
+! int	doarchive = 0;		/* archive articles in SPOOL/oldnews */
+! int	nohistory = 0;		/* ignore history file */
+! int	dorebuild = 0;		/* rebuild history file */
+! int	dorbldhistory = 0;	/* rebuild history.d directory */
+! int	usepost = 0;		/* use posting date to expire */
+! int	frflag = 0;		/* expire specific user */
+! int	doupdateactive = 0;	/* update ACTIVE file */
+  char	baduser[BUFLEN];
+  extern 	char filename[], nbuf[];
+  
+***************
+*** 79,88 ****
+--- 80,93 ----
+  char *realloc();
+  struct tm *gmtime();
+  
++ #ifdef DBM
+  typedef struct {
+  	char *dptr;
+  	int dsize;
+  } datum;
++ #else
++ FILE *nexthistfile();
++ #endif /* !DBM */
+  
+  long	expincr;
+  long	dropincr;
+***************
+*** 99,123 ****
+  char	grpsleft[BUFLEN];
+  struct hbuf h;
+  int	ExpireLock;
+  
+  main(argc, argv)
+  int	argc;
+  char	**argv;
+  {
+- 	register char	*p1, *p2, *p3;
+- 	register time_t newtime, today;
+- 	register FILE *fp = NULL;
+- 	FILE	*ohfd, *nhfd;
+- 	DIR	*ngdirp = NULL;
+- 	static struct direct *ngdir;
+- 	char fn[BUFLEN];
+- 	int i, LockFd;
+- #ifndef DBM
+- 	char *ptr, chr;
+- 	FILE *subfd[10];
+- 	char *histfile();
+- #endif /* !DBM */
+- 
+  	pathinit();
+  	(void) umask(N_UMASK);
+  
+--- 104,116 ----
+  char	grpsleft[BUFLEN];
+  struct hbuf h;
+  int	ExpireLock;
++ int	rmlock();
++ time_t	today;
+  
+  main(argc, argv)
+  int	argc;
+  char	**argv;
+  {
+  	pathinit();
+  	(void) umask(N_UMASK);
+  
+***************
+*** 134,139 ****
+--- 127,136 ----
+  	(void) setgid(gid);
+  	(void) setuid(uid);
+  
++ 	if (signal(SIGHUP, SIG_IGN) != SIG_IGN)
++ 		signal(SIGHUP, rmlock);
++ 	if (signal(SIGINT, SIG_IGN) != SIG_IGN)
++ 		signal(SIGINT, rmlock);
+  	expincr = DFLTEXP;
+  	dropincr = HISTEXP;
+  	ngpat[0] = ',';
+***************
+*** 233,242 ****
+  			dorebuild++;
+  			nohistory++;
+  			break;
+! 		case 'p':
+  			usepost++;
+  			break;
+! 		case 'f':
+  			frflag++;
+  			if (argc > 2) {
+  				strcpy(baduser, argv[2]);
+--- 230,239 ----
+  			dorebuild++;
+  			nohistory++;
+  			break;
+! 		case 'p':	/* use posting date to expire */
+  			usepost++;
+  			break;
+! 		case 'f':	/* expire messages from baduser */
+  			frflag++;
+  			if (argc > 2) {
+  				strcpy(baduser, argv[2]);
+***************
+*** 244,259 ****
+  				argc--;
+  			}
+  			break;
+! 		case 'u':
+! 			updateactive++;
+  			break;
+  		default:
+! 			printf("Usage: expire [ -v [level] ] [-e days ] [-i] [-a] [-r] [-h] [-p] [-u] [-f username] [-n newsgroups]\n");
+  			xxit(1);
+  		}
+  		argc--;
+  		argv++;
+  	}
+  	if (dropincr < expincr) {
+  		dropincr = HISTEXP;
+  		fprintf(stderr, "History expiration time < article expiration time. Default used.\n");
+--- 241,265 ----
+  				argc--;
+  			}
+  			break;
+! 		case 'u':	/* update the active file from 2.10.1 fmt */
+! 			doupdateactive++;
+  			break;
++ 		case 'H':	/* convert to history.d format */
++ 			dorbldhistory++;
++ 			break;
+  		default:
+! 			printf("Usage: expire [ -v [level] ] [-e days ] [-i] [-a] [-r] [-h] [-p] [-u] [-f username] [-n newsgroups] [-H]\n");
+  			xxit(1);
+  		}
+  		argc--;
+  		argv++;
+  	}
++ 	if (dorbldhistory) {
++ #ifndef DBM
++ 		rebuildhistorydir();
++ #endif /* !DBM */
++ 		exit(0);
++ 	}
+  	if (dropincr < expincr) {
+  		dropincr = HISTEXP;
+  		fprintf(stderr, "History expiration time < article expiration time. Default used.\n");
+***************
+*** 275,289 ****
+  			printf("archiving: %s\n",arpat);
+  	}
+  
+  	(void) sprintf(OARTFILE, "%s/%s", LIB, "ohistory");
+  	(void) sprintf(NARTFILE, "%s/%s", LIB, "nhistory");
+  
+  	(void) sprintf(OACTIVE, "%s/%s", LIB, "oactive");
+  	(void) sprintf(NACTIVE, "%s/%s", LIB, "nactive");
+  
+! 	if (updateactive)
+! 		goto doupdateactive;
+  
+  #ifdef DBM
+  	if (!dorebuild) {
+  		(void) sprintf(PAGFILE, "%s/%s", LIB, "nhistory.pag");
+--- 281,327 ----
+  			printf("archiving: %s\n",arpat);
+  	}
+  
++ #ifdef DBM
+  	(void) sprintf(OARTFILE, "%s/%s", LIB, "ohistory");
++ #endif /* DBM */
+  	(void) sprintf(NARTFILE, "%s/%s", LIB, "nhistory");
+  
+  	(void) sprintf(OACTIVE, "%s/%s", LIB, "oactive");
+  	(void) sprintf(NACTIVE, "%s/%s", LIB, "nactive");
+  
+! 	if (!doupdateactive) {
+! 		expire();
+! #ifndef DBM
+! 		rebuildhistorydir();
+! #endif
+! 	}
+  
++ 	updateactive();
++ 	rmlock();
++ 
++ 	/*
++ 	 * Now read in any saved news.
++ 	 */
++ #ifdef PROFILING
++ 	monitor((int(*)())0,(int(*)())0,0,0,0);
++ #endif /* PROFILING */
++ 	execl(RNEWS, "rnews", "-U", (char *)NULL);
++ 	perror(RNEWS);
++ 	xxit(1);
++ 	/* NOTREACHED */
++ }
++ 
++ expire()
++ {
++ 	register char	*p1, *p2, *p3;
++ 	register time_t newtime;
++ 	register FILE *fp = NULL;
++ 	FILE	*ohfd, *nhfd;
++ 	int i;
++ 	char	fn[BUFLEN];
++ 	DIR	*ngdirp = NULL;
++ 	static struct direct *ngdir;
++ 
+  #ifdef DBM
+  	if (!dorebuild) {
+  		(void) sprintf(PAGFILE, "%s/%s", LIB, "nhistory.pag");
+***************
+*** 290,296 ****
+  		(void) sprintf(DIRFILE, "%s/%s", LIB, "nhistory.dir");
+  		(void) close(creat(PAGFILE, 0666));
+  		(void) close(creat(DIRFILE, 0666));
+!  		initdbm(NARTFILE);
+  	}
+  #endif
+  
+--- 328,334 ----
+  		(void) sprintf(DIRFILE, "%s/%s", LIB, "nhistory.dir");
+  		(void) close(creat(PAGFILE, 0666));
+  		(void) close(creat(DIRFILE, 0666));
+! 		initdbm(NARTFILE);
+  	}
+  #endif
+  
+***************
+*** 297,304 ****
+  	if (nohistory) {
+  		ohfd = xfopen(ACTIVE, "r");
+  		if (dorebuild) {
+! 			/* Allocate initial space for multiple newsgroup (for an
+! 			   article) array */
+  			multhist = (struct multhist *)calloc (SPACE_INCREMENT,
+  					sizeof (struct multhist));
+  			mh_size = SPACE_INCREMENT;
+--- 335,342 ----
+  	if (nohistory) {
+  		ohfd = xfopen(ACTIVE, "r");
+  		if (dorebuild) {
+! 			/* Allocate initial space for multiple newsgroup (for
+! 			   an article) array */
+  			multhist = (struct multhist *)calloc (SPACE_INCREMENT,
+  					sizeof (struct multhist));
+  			mh_size = SPACE_INCREMENT;
+***************
+*** 309,336 ****
+  		} else
+  			nhfd = xfopen("/dev/null", "w");
+  	} else {
+  		ohfd = xfopen(ARTFILE, "r");
+  		nhfd = xfopen(NARTFILE, "w");
+  	}
+  
+! 	/* set up exclusive locking so inews doesn't run while expire does */
+! #if defined(BSD4_2) || defined(LOCKF)
+! 	LockFd = open(ACTIVE, 2);
+! #ifdef	LOCKF
+! 	(void) lockf(LockFd, F_LOCK, 0);
+! #else	/* BSD4_2 */
+! 	(void) flock(LockFd, LOCK_EX);
+! #endif	/* BSd4_2 */
+! #else	/* !BSD4_2 && !LOCKF */
+! 	i = 0;
+! 	sprintf(afline,"%s.lock", ACTIVE);
+! 	while (LINK(ACTIVE, afline) < 0 && errno == EEXIST) {
+! 		if (i++ > 5)
+! 			xerror("Can't get lock for expire");
+! 		sleep(i*2);
+! 	}
+! 		
+! #endif	/* !BSD4_2  && !LOCKF */
+  
+  	for(i=0;i<NUNREC;i++)
+  		h.unrec[i] = NULL;
+--- 347,361 ----
+  		} else
+  			nhfd = xfopen("/dev/null", "w");
+  	} else {
++ #ifdef DBM
+  		ohfd = xfopen(ARTFILE, "r");
++ #else
++ 		ohfd = nexthistfile((FILE *)NULL);
++ #endif /* DBM */
+  		nhfd = xfopen(NARTFILE, "w");
+  	}
+  
+! 	dolock();
+  
+  	for(i=0;i<NUNREC;i++)
+  		h.unrec[i] = NULL;
+***************
+*** 375,382 ****
+--- 400,415 ----
+  			fp = access(filename, 04) ? NULL : art_open(filename, "r");
+  		} else {
+  			char dc;
++ #ifdef DBM
+  			if (fgets(afline, BUFLEN, ohfd) == NULL)
+  				break;
++ #else
++ 			if (fgets(afline, BUFLEN, ohfd) == NULL)
++ 				if (!(ohfd = nexthistfile(ohfd)))
++ 					break;
++ 				else
++ 					continue;
++ #endif /* DBM */
+  			if (verbose > 2)
+  				printf("article: %s", afline);
+  			p1 = index(afline, '\t');
+***************
+*** 429,438 ****
+  			} else {
+  				/*
+  				 * Nothing after the 2nd tab.  This happens
+! 				 * when there's no message left in the spool
+  				 * directory, only the memory of it in the
+! 				 * history file. Use date in the history file
+! 				 * to decide if we should keep this article.
+  				 */
+  				grpsleft[0] = '\0';
+  				goto checkdate;
+--- 462,472 ----
+  			} else {
+  				/*
+  				 * Nothing after the 2nd tab.  This happens
+! 				 * when there is no message left in the spool
+  				 * directory, only the memory of it in the
+! 				 * history file. (That is, it got cancelled
+! 				 * or expired.) Use date in the history file
+! 				 * to decide if we should keep the memory.
+  				 */
+  				grpsleft[0] = '\0';
+  				goto checkdate;
+***************
+*** 439,445 ****
+  			}
+  			if (!ngmatch(nbuf, ngpat) ||
+  			     ((rectime+expincr > today) && !dorebuild &&
+! 			         !frflag && !usepost && recdate[0] != ' '))
+  				goto keephist;
+  			if (!dorebuild && !frflag && !usepost &&
+  				recdate[0] != ' ') {
+--- 473,479 ----
+  			}
+  			if (!ngmatch(nbuf, ngpat) ||
+  			     ((rectime+expincr > today) && !dorebuild &&
+! 				 !frflag && !usepost && recdate[0] != ' '))
+  				goto keephist;
+  			if (!dorebuild && !frflag && !usepost &&
+  				recdate[0] != ' ') {
+***************
+*** 526,533 ****
+  			 * and this code changes it to a.b.c/4 (the correct
+  			 * kind of entry in the history file.)
+  			 *
+! 			 * This can't be a strcpy because the addresses overlap
+! 			 * and some machines can't handle that.
+  			 */
+  			p1 = filename;
+  			cp = p1 + strlen(SPOOL);
+--- 560,567 ----
+  			 * and this code changes it to a.b.c/4 (the correct
+  			 * kind of entry in the history file.)
+  			 *
+! 			 * This cannot be a strcpy because the addresses
+! 			 * overlap and some machines cannot handle that.
+  			 */
+  			p1 = filename;
+  			cp = p1 + strlen(SPOOL);
+***************
+*** 578,584 ****
+  
+  			/*
+  			 * Here is where we realloc the multhist space rather
+! 			 * than the old way of static allocation.  It's
+  			 * really trivial.  We just clear out the space
+  			 * in case it was reused.  The old static array was
+  			 * guaranteed to be cleared since it was cleared when
+--- 612,618 ----
+  
+  			/*
+  			 * Here is where we realloc the multhist space rather
+! 			 * than the old way of static allocation.  It is
+  			 * really trivial.  We just clear out the space
+  			 * in case it was reused.  The old static array was
+  			 * guaranteed to be cleared since it was cleared when
+***************
+*** 648,656 ****
+--- 682,694 ----
+  				printf("Drop history of %s - %s\n",
+  				    h.ident, recdate);
+  		} else {
++ #ifdef DBM
+  			long hpos;
++ #endif /* DBM */
+  keephist:
++ #ifdef DBM
+  			hpos = ftell(nhfd);
++ #endif /* DBM */
+  
+  			if (verbose > 3)
+  				printf("Retain history of %s - %s\n",
+***************
+*** 693,703 ****
+  						rectime = statb.st_mtime;
+  				}
+  				tm = gmtime(&rectime);
+! 				if (
+  #ifdef USG
+! 					fprintf(nhfd,"%s\t%s%2.2d/%2.2d/%d %2.2d:%2.2d\t%s\n",
+  #else /* !USG */
+! 					fprintf(nhfd,"%s\t%s%02d/%02d/%d %02d:%02d\t%s\n",
+  #endif /* !USG */
+  					h.ident, h.expdate[0] ? " " : "",
+  					tm->tm_mon+1, tm->tm_mday, tm->tm_year,
+--- 731,741 ----
+  						rectime = statb.st_mtime;
+  				}
+  				tm = gmtime(&rectime);
+! 				if ( fprintf(nhfd,
+  #ifdef USG
+! 					"%s\t%s%2.2d/%2.2d/%d %2.2d:%2.2d\t%s\n",
+  #else /* !USG */
+! 					"%s\t%s%02d/%02d/%d %02d:%02d\t%s\n",
+  #endif /* !USG */
+  					h.ident, h.expdate[0] ? " " : "",
+  					tm->tm_mon+1, tm->tm_mday, tm->tm_year,
+***************
+*** 714,720 ****
+--- 752,760 ----
+  			xerror("History write failed, %s", errmsg(errno));
+  
+  	if (dorebuild || !nohistory) {
++ #ifndef DBM
+  		(void) rename(ARTFILE, OARTFILE);
++ #endif /* !DBM */
+  		(void) rename(NARTFILE, ARTFILE);
+  #ifdef DBM
+  		if (dorebuild)
+***************
+*** 730,759 ****
+  		}
+  #endif
+  	}
+! #ifndef DBM
+! 	/* rebuild history subfiles */
+! 	for (i = 0; i < 10; i++) {
+! 		(void) sprintf(fn, "%s.d/%c", ARTFILE, i + '0');
+! 		close(creat(fn, 0644));
+! 		subfd[i] = xfopen(fn, "w+");
+  	}
+- 	ohfd = xfopen(ARTFILE, "r");
+- 	while (fgets(fn, BUFLEN, ohfd) != NULL) {
+- 		ptr = histfile(fn);
+- 		chr = *(ptr + strlen(ptr) - 1);
+- 		if (isdigit(chr))
+- 			i = chr - '0';
+- 		else
+- 			i = 0;
+- 		fputs(fn, subfd[i]);
+- 	}
+- 	(void) fclose(ohfd);
+- 	for (i = 0; i < 10; i++)
+- 		if (ferror(subfd[i]) || fclose(subfd[i]))
+- 			xerror("History subfile write");
+- #endif /* !DBM */
+  
+! doupdateactive:
+  	ohfd = xfopen(ACTIVE, "r");
+  	nhfd = xfopen(NACTIVE, "w");
+  	do {
+--- 770,822 ----
+  		}
+  #endif
+  	}
+! }
+! 
+! #if defined(BSD4_2) || defined(LOCKF)
+! static int LockFd = -1;
+! #endif
+! 
+! dolock()
+! {
+! 	/* set up exclusive locking so inews does not run while expire does */
+! #if defined(BSD4_2) || defined(LOCKF)
+! 	LockFd = open(ACTIVE, 2);
+! # ifdef	LOCKF
+! 	(void) lockf(LockFd, F_LOCK, 0);
+! # else	/* BSD4_2 */
+! 	(void) flock(LockFd, LOCK_EX);
+! # endif	/* BSd4_2 */
+! #else	/* !BSD4_2 && !LOCKF */
+! 	int i = 0;
+! 	sprintf(afline,"%s.lock", ACTIVE);
+! 	while (LINK(ACTIVE, afline) < 0 && errno == EEXIST) {
+! 		if (i++ > 5)
+! 			xerror("Can't get lock for expire");
+! 		sleep(i*2);
+  	}
+  
+! #endif	/* !BSD4_2  && !LOCKF */
+! }
+! 
+! rmlock()
+! {
+! #if defined(BSD4_2) || defined(LOCKF)
+! 	close(LockFd);
+! #else
+! 	sprintf(bfr, "%s.lock", ACTIVE);
+! 	(void) UNLINK(bfr);
+! #endif	/* !BSD4_2 */
+! }
+! 
+! updateactive()
+! {
+! 	register char	*p1;
+! 	FILE	*ohfd, *nhfd;
+! 	DIR	*ngdirp = NULL;
+! 	static struct direct *ngdir;
+! 
+! 	if (verbose)
+! 		printf("updating active file %s\n", ACTIVE);
+  	ohfd = xfopen(ACTIVE, "r");
+  	nhfd = xfopen(NACTIVE, "w");
+  	do {
+***************
+*** 768,773 ****
+--- 831,838 ----
+  		if (sscanf(afline,"%s %ld %ld %c",nbuf,&maxart, &minart,
+  		    &cansub) < 4)
+  			xerror("Active file corrupt");
++ 		if (verbose > 3)
++ 			printf("looking at group %s\n", nbuf);
+  		if (!ngmatch(nbuf, ngpat)) {
+  			if (fputs(afline, nhfd) == EOF)
+  				xerror("active file write failed");
+***************
+*** 800,823 ****
+  		afline[gdsize] = '\0';
+  		if (minart > maxart)
+  			minart = maxart;
+  		if (fprintf(nhfd,"%s %05ld %05ld %c\n", afline, maxart,
+  			minart, cansub) == EOF)
+  			xerror("Active file write failed");
+  	} while (!feof(ohfd));
+  	if (fclose(nhfd))
+  		xerror("Active file write failed, %s", errmsg(errno));
+! 	(void) fclose(ohfd); /* unlocking inews as a side effect */
+! #ifndef BSD4_2
+! 	sprintf(bfr, "%s.lock", ACTIVE);
+! 	(void) UNLINK(bfr);
+! #endif	/* !BSD4_2 */
+  
+  	(void) rename(ACTIVE, OACTIVE);
+  	(void) rename(NACTIVE, ACTIVE);
+- 
+- 	execl(RNEWS, "rnews", "-U", (char *)NULL);
+- 	perror(RNEWS);
+- 	xxit(1);
+  }
+  
+  /* Unlink (using unwound tail recursion) all the articles in 'artlist'. */
+--- 865,892 ----
+  		afline[gdsize] = '\0';
+  		if (minart > maxart)
+  			minart = maxart;
++ #ifdef USG
++ 		if (verbose > 4)
++ 			printf("\tmaxart = %5.5ld, minart = %5.5ld\n",
++ 				maxart, minart);
++ 		if (fprintf(nhfd,"%s %5.5ld %5.5ld %c\n", afline, maxart,
++ 			minart, cansub) == EOF)
++ 			xerror("Active file write failed");
++ #else
++ 		if (verbose > 4)
++ 			printf("\tmaxart = %05ld, minart = %05ld\n",
++ 				maxart, minart);
+  		if (fprintf(nhfd,"%s %05ld %05ld %c\n", afline, maxart,
+  			minart, cansub) == EOF)
+  			xerror("Active file write failed");
++ #endif /* !USG */
+  	} while (!feof(ohfd));
+  	if (fclose(nhfd))
+  		xerror("Active file write failed, %s", errmsg(errno));
+! 	(void) fclose(ohfd); /* this might unlock inews as a side effect */
+  
+  	(void) rename(ACTIVE, OACTIVE);
+  	(void) rename(NACTIVE, ACTIVE);
+  }
+  
+  /* Unlink (using unwound tail recursion) all the articles in 'artlist'. */
+***************
+*** 928,934 ****
+  	return 0;
+  }
+  
+! /* 
+   * Count instances of c in s
+   */
+  chrcnt(s, c)
+--- 997,1003 ----
+  	return 0;
+  }
+  
+! /*
+   * Count instances of c in s
+   */
+  chrcnt(s, c)
+***************
+*** 969,975 ****
+  	return rc;
+  }
+  
+- 
+  /*	Make sure this file is a legal article. */
+  islegal(fullname, path, name)
+  register char *fullname;
+--- 1038,1043 ----
+***************
+*** 1065,1075 ****
+  	if (store(lhs, rhs) < 0)
+  		xerror("dbm store failed");
+  }
+! #endif /* DBM */
+  
+  xxit(i)
+  {
+! 	sprintf(bfr,"%s.lock", ACTIVE);
+! 	(void) UNLINK(bfr);
+  	exit(i);
+  }
+--- 1133,1201 ----
+  	if (store(lhs, rhs) < 0)
+  		xerror("dbm store failed");
+  }
+! #else
+! /*
+!  * Open the next history subdirectory file
+!  */
+  
++ FILE *nexthistfile(ofp)
++ FILE *ofp;
++ {
++ 	static int histfilecounter = -1;
++ 
++ 	if (ofp)
++ 		fclose(ofp);
++ 	do {
++ 		if (++histfilecounter > 9)
++ 			return NULL;
++ 		sprintf(bfr, "%s.d/%d", ARTFILE, histfilecounter);
++ 		if (verbose > 3)
++ 			printf("reading history file %s\n", bfr);
++ 		ofp = xfopen(bfr, "r");
++ 	} while (ofp == NULL);
++ 	return ofp;
++ }
++ 
++ /*
++  * Rebuild the history subdirectory from LIBDIR/history
++  */
++ rebuildhistorydir()
++ {
++ 	char fn[BUFLEN], ofn[BUFLEN];
++ 	register int i;
++ 	FILE *subfd[10], *ohfd;
++ 
++ 	/* rebuild history subfiles */
++ 	(void) sprintf(fn, "%s.od", ARTFILE);
++ 	if (access(fn,0) != 0)
++ 		(void) mkdir(fn, 0755);
++ 	(void) sprintf(fn, "%s.d", ARTFILE);
++ 	if (verbose)
++ 		printf("Rebuilding history subfile directory %d.\n", fn);
++ 	if (access(fn,0) != 0)
++ 		(void) mkdir(fn, 0755);
++ 	for (i = 0; i < 10; i++) {
++ 		(void) sprintf(fn, "%s.d/%c", ARTFILE, i + '0');
++ 		(void) sprintf(ofn, "%s.od/%c", ARTFILE, i + '0');
++ 		(void) rename(fn, ofn);
++ 		close(creat(fn, 0644));
++ 		subfd[i] = xfopen(fn, "w+");
++ 	}
++ 	ohfd = xfopen(ARTFILE, "r");
++ 	while (fgets(fn, BUFLEN, ohfd) != NULL) {
++ 		i = findhfdigit(fn) - '0';
++ 		fputs(fn, subfd[i]);
++ 	}
++ 	(void) fclose(ohfd);
++ 	for (i = 0; i < 10; i++)
++ 		if (ferror(subfd[i]) || fclose(subfd[i]))
++ 			xerror("History subfile write");
++ 	(void) UNLINK(ARTFILE);
++ }
++ #endif /* !DBM */
++ 
+  xxit(i)
+  {
+! 	rmlock();
+  	exit(i);
+  }
+
+Index: funcs2.c
+Prereq: 1.18
+*** .d/funcs2.c	Mon Dec 29 18:34:15 1986
+--- funcs2.c	Mon Feb 23 22:28:47 1987
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.18	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs2.c	1.19	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 596,616 ****
+  histfile(hline)
+  char *hline;
+  {
+- 	char *p;
+  	char chr;	/* least significant digit of article number */
+  	static char subfile[BUFLEN];
+  
+! 	p = strchr(hline, '@');
+! 	if (p != NULL && p > hline)
+  		chr = *(p - 1);
+  	else
+  		chr = '0';
+  	if (!isdigit(chr))
+  		chr = '0';
+! 	sprintf(subfile, "%s.d/%c", ARTFILE, chr);
+! 	if (access(subfile, 04) < 0)
+! 		return(ARTFILE);
+! 	return(subfile);
+  }
+  #endif /* !DBM */
+  
+--- 596,625 ----
+  histfile(hline)
+  char *hline;
+  {
+  	char chr;	/* least significant digit of article number */
+  	static char subfile[BUFLEN];
+  
+! 	chr = findhfdigit(hline);
+! 	sprintf(subfile, "%s.d/%c", ARTFILE, chr);
+! 	if (access(subfile, 04) < 0)
+! 		return(ARTFILE);
+! 	return(subfile);
+! }
+! 
+! findhfdigit(fn)
+! char *fn;
+! {
+! 	register char *p;
+! 	register int chr;
+! 
+! 	p = index(fn, '@');
+! 	if (p != NULL && p > fn)
+  		chr = *(p - 1);
+  	else
+  		chr = '0';
+  	if (!isdigit(chr))
+  		chr = '0';
+! 	return chr;
+  }
+  #endif /* !DBM */
+  
+Index: header.h
+Prereq: 2.19
+*** .d/header.h	Thu Oct 30 16:12:05 1986
+--- header.h	Mon Feb 23 22:28:50 1987
+***************
+*** 2,8 ****
+   * header.h - Article header format
+   */
+  
+! /*	@(#)header.h	2.19	1/17/86	*/
+  
+  #define NUNREC 50
+  
+--- 2,8 ----
+   * header.h - Article header format
+   */
+  
+! /*	@(#)header.h	2.20	2/22/87	*/
+  
+  #define NUNREC 50
+  
+***************
+*** 10,16 ****
+  struct	hbuf {
+  	char	from[BUFLEN];		/* From:		*/
+  	char	path[PATHLEN];		/* Path:		*/
+! 	char	nbuf[BUFLEN];		/* Newsgroups:		*/
+  	char	title[BUFLEN];		/* Subject:		*/
+  	char	ident[BUFLEN];		/* Message-ID:		*/
+  	char	replyto[BUFLEN];	/* Reply-To:		*/
+--- 10,16 ----
+  struct	hbuf {
+  	char	from[BUFLEN];		/* From:		*/
+  	char	path[PATHLEN];		/* Path:		*/
+! 	char	nbuf[LBUFLEN];		/* Newsgroups:		*/
+  	char	title[BUFLEN];		/* Subject:		*/
+  	char	ident[BUFLEN];		/* Message-ID:		*/
+  	char	replyto[BUFLEN];	/* Reply-To:		*/
+
+Index: ifuncs.c
+Prereq: 2.59
+*** .d/ifuncs.c	Wed Dec 17 18:23:15 1986
+--- ifuncs.c	Mon Feb 23 22:28:59 1987
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.59	12/16/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.60	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 603,618 ****
+  char *hline;
+  {
+  	register FILE *hfp;
+- 	datum lhs, rhs;
+- 	long fpos;
+  	register char *p;
+  
+  	hfp = xfopen(ARTFILE, "a");
+  	(void) fseek(hfp, 0L, 2); /* Unisoft 5.1 doesn't seek to EOF on 'a' */
+  	fpos = ftell(hfp);
+  	fprintf(hfp, "%s\n", hline);
+  	(void) fclose(hfp);
+  #ifdef DBM
+  	/* We assume that history has already been called, calling dbminit. */
+  	p = index(hline, '\t');
+  	if (p)
+--- 603,635 ----
+  char *hline;
+  {
+  	register FILE *hfp;
+  	register char *p;
++ #ifdef DBM
++ 	long fpos;
++ #endif /* !DBM */
+  
++ #ifndef DBM
++ 	if (strcmp((p = histfile(hline)), ARTFILE) != 0) {
++ 	/* If the history subfile is accessible */
++ 		if ((hfp = xfopen(p, "a")) != NULL ) { /* If we can append */
++ 			fprintf(hfp, "%s\n", hline);   /* Append */
++ 			(void) fclose(hfp);
++ 		} else
++ 			logerr("Unable to append to %s: %s", p, errmsg(errno));
++ 	} else
++ #endif /* !DBM */
++ 	{
+  	hfp = xfopen(ARTFILE, "a");
+  	(void) fseek(hfp, 0L, 2); /* Unisoft 5.1 doesn't seek to EOF on 'a' */
++ #ifdef DBM
+  	fpos = ftell(hfp);
++ #endif /* !DBM */
+  	fprintf(hfp, "%s\n", hline);
+  	(void) fclose(hfp);
++ 	}
+  #ifdef DBM
++ 	{
++ 	datum lhs, rhs;
+  	/* We assume that history has already been called, calling dbminit. */
+  	p = index(hline, '\t');
+  	if (p)
+***************
+*** 623,638 ****
+  	rhs.dptr = (char *)&fpos;
+  	rhs.dsize = sizeof fpos;
+  	store(lhs, rhs);
+! #else /* !DBM */
+! 	if (strcmp(p = histfile(hline), ARTFILE) != 0)
+! 	/* If the history subfile is accessible */
+! 		if ((hfp = xfopen(p, "a")) != NULL ) { /* If we can append */
+! 			fprintf(hfp, "%s\n", hline);   /* Append */
+! 			(void) fclose(hfp);
+! 		} else
+! 			logerr("Unable to append to %s: %s", p, errmsg(errno));
+! 
+! #endif /* !DBM */
+  	idunlock();
+  }
+  
+--- 640,647 ----
+  	rhs.dptr = (char *)&fpos;
+  	rhs.dsize = sizeof fpos;
+  	store(lhs, rhs);
+! 	}
+! #endif /* DBM */
+  	idunlock();
+  }
+  
+Index: inews.c
+Prereq: 2.73
+*** .d/inews.c	Mon Dec 29 18:34:08 1986
+--- inews.c	Mon Feb 23 22:29:09 1987
+***************
+*** 17,27 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.73	12/29/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+- #include <errno.h>
+  
+  #ifdef BSD4_2
+  # include <sys/dir.h>
+--- 17,26 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.74	2/22/87";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+  
+  #ifdef BSD4_2
+  # include <sys/dir.h>
+***************
+*** 114,120 ****
+  	struct group	*gp;	/* struct for group lookup		*/
+  	register int	i;
+  	FILE	*mfd;		/* mail file file-descriptor		*/
+- 	char	cbuf[BUFLEN];	/* command buffer			*/
+  
+  	/* uuxqt doesn't close all it's files */
+  	for (i = 3; !close(i); i++)
+--- 113,118 ----
+***************
+*** 156,162 ****
+  #ifdef	LOCKF
+  	lockf(fileno(actfp), F_ULOCK, 0);
+  #else	/* !LOCKF */
+! 	UNLINK(ACTIVE, bfr);
+  #endif /* V7 */
+  #endif	/* !BSD4_2 */
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+--- 154,160 ----
+  #ifdef	LOCKF
+  	lockf(fileno(actfp), F_ULOCK, 0);
+  #else	/* !LOCKF */
+! 	UNLINK(bfr);
+  #endif /* V7 */
+  #endif	/* !BSD4_2 */
+  	if (argc > 1 && !strcmp(*(argv+1), "-U")) {
+***************
+*** 184,223 ****
+  	header.title[0] = header.nbuf[0] = filename[0] = '\0';
+  
+  	/* check for existence of special files */
+! 	if (!rwaccess(ARTFILE)) {
+! 		mfd = mailhdr((struct hbuf *)NULL, exists(ARTFILE) ? "Unwritable files!" : "Missing files!");
+! 		if (mfd != NULL) {
+! #ifdef HIDDENNET
+! 			fprintf(mfd,"System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, ARTFILE);
+! #else /* !HIDDENNET */
+! 			fprintf(mfd,"System: %s\n\nThere was a problem with %s!!\n", FULLSYSNAME, ARTFILE);
+! #endif /* !HIDDENNET */
+! 			(void) sprintf(cbuf, "touch %s;chmod 666 %s", ARTFILE, ARTFILE);
+! 			(void) system(cbuf);
+! 			if (rwaccess(ARTFILE))
+! 				fprintf(mfd, "The problem has been taken care of.\n");
+! 			else
+! 				fprintf(mfd, "Corrective action failed - check suid bits.\n");
+! 			(void) mclose(mfd);
+! 		}
+! 	}
+! 	if (!rwaccess(ACTIVE)) {
+! 		mfd = mailhdr((struct hbuf *)NULL, exists(ACTIVE) ? "Unwritable files!" : "Missing files!");
+! 		if (mfd != NULL) {
+! #ifdef HIDDENNET
+! 			fprintf(mfd,"System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, ARTFILE);
+! #else /* !HIDDENNET */
+! 			fprintf(mfd, "System: %s\n\nThere was a problem with %s!!\n", FULLSYSNAME, ACTIVE);
+! #endif /* !HIDDENNET */
+! 			(void) sprintf(cbuf, "touch %s;chmod 666 %s", ACTIVE, ACTIVE);
+! 			(void) system(cbuf);
+! 			if (rwaccess(ACTIVE))
+! 				fprintf(mfd, "The problem has been taken care of.\n");
+! 			else
+! 				fprintf(mfd, "Corrective action failed - check suid bits.\n");
+! 			(void) mclose(mfd);
+! 		}
+! 	}
+  	SigTrap = FALSE;	/* true if a signal has been caught */
+  	if (mode != PROC) {
+  		(void) signal(SIGHUP, onsig);
+--- 182,193 ----
+  	header.title[0] = header.nbuf[0] = filename[0] = '\0';
+  
+  	/* check for existence of special files */
+! #ifdef DBM
+! 	chkfile(ARTFILE);
+! #else
+! 	chkdir(ARTFILE);
+! #endif DBM
+! 	chkfile(ACTIVE);
+  	SigTrap = FALSE;	/* true if a signal has been caught */
+  	if (mode != PROC) {
+  		(void) signal(SIGHUP, onsig);
+***************
+*** 487,493 ****
+--- 457,562 ----
+  
+  	/* Do the actual insertion. */
+  	insert();
++ 	/* NOTREACHED */
+  }
++ 
++ /* check for existence of file */
++ static chkfile(f)
++ char *f;
++ {
++ 	FILE	*mfd;		/* mail file file-descriptor		*/
++ 	char	cbuf[BUFLEN];	/* command buffer			*/
++ 
++ 	if (!rwaccess(f)) {
++ 		mfd = mailhdr((struct hbuf *)NULL, exists(f) ? "Unwritable files!" : "Missing files!");
++ 		if (mfd != NULL) {
++ #ifdef HIDDENNET
++ 			fprintf(mfd, "System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, f);
++ #else /* !HIDDENNET */
++ 			fprintf(mfd, "System: %s\n\nThere was a problem with %s!!\n", FULLSYSNAME, f);
++ #endif /* !HIDDENNET */
++ 			(void) sprintf(cbuf, "touch %s;chmod 666 %s", f, f);
++ 			(void) system(cbuf);
++ 			if (rwaccess(f))
++ 				fprintf(mfd, "The problem has been taken care of.\n");
++ 			else
++ 				fprintf(mfd, "Corrective action failed - check suid bits.\n");
++ 			(void) mclose(mfd);
++ 		}
++ 	}
++ }
++ 
++ #ifndef DBM
++ /* check for existence of directory */
++ static chkdir(d)
++ char *d;
++ {
++ 	FILE	*mfd;		/* mail file file-descriptor		*/
++ 	char	dir[BUFLEN];	/* holds directory name			*/
++ 
++ 	sprintf(dir, "%s.d", d);
++ 	if (eaccess(dir, 07) != 0) {
++ 		mfd = mailhdr((struct hbuf *)NULL, exists(dir) ? "Unwritable diretories!" : "Missing directories!");
++ 		if (mfd != NULL) {
++ #ifdef HIDDENNET
++ 			fprintf(mfd, "System: %s.%s\n\nThere was a problem with %s!!\n", LOCALSYSNAME, FULLSYSNAME, dir);
++ #else /* !HIDDENNET */
++ 			fprintf(mfd, "System: %s\n\nThere was a problem with %s!!\n", FULLSYSNAME, dir);
++ #endif /* !HIDDENNET */
++ 			(void) mkdir(dir, 0775);
++ 			if (eaccess(dir, 07) == 0)
++ 				fprintf(mfd, "The problem has been taken care of.\n");
++ 			else
++ 				fprintf(mfd, "Corrective action failed - check suid bits.\n");
++ 			(void) mclose(mfd);
++ 		}
++ 	}
++ }
++ 
++ /*
++  * This version of access checks against effective uid and effective gid
++  */
++ 
++ eaccess(name, mode)
++ register char *name;
++ register int mode;
++ {	
++ 	struct stat statb;
++ 	int euserid = geteuid();
++ 	int egroupid = getegid();
++ 
++ 	if (stat(name, &statb) == 0) {
++ 		if (euserid == 0) {
++ 			if ((statb.st_mode&S_IFMT) != S_IFREG || mode != 1)
++ 				return 0;
++ 		    	/* root needs execute permission for someone */
++ 			mode = (S_IEXEC|(S_IEXEC>>3)|(S_IEXEC>>6));
++ 		}
++ 		else if (euserid == statb.st_uid)
++ 			mode <<= 6;
++ 		else if (egroupid == statb.st_gid)
++ 			mode <<= 3;
++ #ifdef BSD4_2
++ 		/* in BSD4_2 you can be in several groups */
++ 		else {
++ 			int groups[NGROUPS];
++ 			register int n;
++ 			n = getgroups(NGROUPS,groups);
++ 			while(--n >= 0) {
++ 				if(groups[n] == statb.st_gid) {
++ 					mode <<= 3;
++ 					break;
++ 				}
++ 			}
++ 		}
++ #endif /* BSD4_2 */
++ 
++ 		if (statb.st_mode & mode)
++ 			return 0;
++ 	}
++ 	return -1;
++ }
++ #endif /* DBM */
+  
+  dospool(batchcmd, dolhwrite)
+  char *batchcmd;
+
+Index: patchlevel.h
+Prereq: 3
+*** .d/patchlevel.h	Mon Dec 29 18:34:15 1986
+--- patchlevel.h	Mon Feb 23 22:29:11 1987
+***************
+*** 1,3 ****
+! #define	PATCHLEVEL	3
+  
+! #define NEWS_VERSION   "B 2.11 12/29/86"
+--- 1,3 ----
+! #define	PATCHLEVEL	4
+  
+! #define NEWS_VERSION   "B 2.11 2/22/87"
+Index: rfuncs.c
+Prereq: 2.39
+*** .d/rfuncs.c	Mon Dec 29 18:34:11 1986
+--- rfuncs.c	Mon Feb 23 22:29:19 1987
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.39	12/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rfuncs.c	2.40	2/22/87";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 728,734 ****
+  lg_cmp(p1, p2)
+  int *p1, *p2;
+  {
+! 	return *p1 > *p2;
+  }
+  
+  list_group(lgroup, displines, flag, pngsize)
+--- 728,734 ----
+  lg_cmp(p1, p2)
+  int *p1, *p2;
+  {
+! 	return *p1 - *p2;
+  }
+  
+  list_group(lgroup, displines, flag, pngsize)
+***************
+*** 831,836 ****
+--- 831,837 ----
+  			break;
+  	}
+  	(void) free(lg_array);
++ 	lg_array = NULL;
+  
+  }
+  
+
+

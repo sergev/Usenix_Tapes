@@ -1,0 +1,311 @@
+.TH DTEST 1 "18 May 1985"
+.SH NAME
+dtest \- disk test and maintenance for MS/PC\-DOS
+.SH SYNOPSIS
+.B dtest
+.SH DESCRIPTION
+.I Dtest
+is a disk utility that allows you to fiddle with and examine DOS
+compatible disks.  Its main purpose for being is to allow hard disk
+users to continue to use the disk without re\-formatting, in spite
+of any bad spots that may pop up.  However, it can also be used by those
+who are curious about the disk structure and like to  poke around and
+look at things.
+.PP
+.B Compatiblity
+.br
+.I Dtest
+requires DOS V2.00 or higher to run.  It
+.I does
+use un\-documented DOS
+function calls, so it may not work with versions of DOS greater than
+V3.1.  It is known to work on floppies and the enchanced IBM\-AT.  It
+should work with other drives, but this is not guaranteed.  It will
+.B not
+work with drives that have a FAT larger than ~32k bytes (you lucky slobs
+with Maxtor drives beware!).
+.PP
+.B Invocation
+.br
+.I Dtest
+has no command line options.  To start it up, just type `dtest'.  The
+program will then come up and display some sign\-on messages.  The prompt
+for input from the user is `dtest>', at which point a command may be
+typed in.
+.PP
+.B Command recognition
+.br
+.I Dtest
+currently supports 16 commands.  In order to simplify the user interface,
+a package called the `command recognizer' has been used.  This package
+has a list of known commands which it tries to match with the command
+typed in by the user.  Abbreviation is allowed as long as the command
+typed in is uniquely distinguishable from any other command.  For example,
+the command `READ TEST' may be entered as `read test' or `rea' or `r t',
+etc., but not simply as `r' or `re', since this conflicts with the
+`REWRITE' command.
+.PP
+Additionally, some of the commands have arguments that must be passed.
+These arguments are enclosed in parentheses immediately following
+the command.  For instance, the `MARK CLUSTER' command needs to know which
+cluster(s) to mark as bad.  This could be entered as `mark cluster(1234)'.
+In actuality, the closing parenthesis is optional, so you could also type
+`mark cluster(1234'.  The radix of numeric arguments may be over\-ridden
+from the default of 10 to either hex or octal by appending an `h' or an
+`o' to the number.  For example `mark cluster(0abcdh,377o,345,1234h)'.
+Note that the first character
+.B must
+be a digit (1 thru 9) regardless of the radix selected.  Unless otherwise
+specified, all numbers are displayed in decimal.
+.PP
+Some of the commands allow an optional character string that changes the
+characteristics of the tests or modifies how numeric arguments are
+interpreted.  Only the first character is significant, so you don't have
+to type out the whole string.  For example, `read test(skip,continuous)'
+is equivalent to `r t(s,c' which is equivalent to `r t(c,s)'.
+.PP
+.B Commands
+.PP
+.B DISPLAY CHAIN(filename)
+.br
+.in +3
+This command displays the cluster numbers occupied by the file
+.I filename.
+This name can also include a path name, such as `/usr/bin/grep.exe'.
+.I filename
+can also be the name of a directory, like `/usr/bin'.  Wildcards are
+also allowed, in which case the cluster chain for each file matching
+the pattern will be displayed.  The cluster numbers are given in hexadecimal.
+.PP
+.B DISPLAY FAT
+.br
+.in +3
+Displays the contents of the FAT of the current drive.  The left\-most
+column is the `address' of the first entry on that line (similar to the
+DEBUG DUMP command).  Hitting any key while the display is scrolling
+by will abort this command (useful if you've got a large hard disk).
+All numbers are in hexadecimal.
+.PP
+.B DISPLAY MARKED CLUSTERS
+.br
+.in +3
+Displays the cluster numbers and associated sectors that are marked as
+being bad in the FAT.
+.PP
+.B DISPLAY PARAMETERS
+.br
+.in +3
+Displays the disk parameter block of the current disk.  This structure
+is not documented in any of the DOS manuals, so its contents must be
+viewed with a grain of salt.
+.PP
+.B DUMP(start sector[,end sector])
+.br
+.B DUMP(cluster,start cluster[,end cluster])
+.br
+.in +3
+Displays in DEBUG DUMP format the contents of all the sectors from
+.I start sector
+to
+.I end sector.
+If
+.I end sector
+is not present, just
+.I start sector
+will be displayed.  If the first argument is the string
+.I cluster,
+then the numbers given are assumed to be cluster numbers instead of
+sector numbers.  This also provides a round\-about way to translate
+sector numbers to cluster numbers (or vice versa), as the cluster and
+sector number is displayed just before the data is dumped. Hitting
+any key during the dump returns control to the user. Examples:
+dump(123), dump(123,150), dump(cluster,200
+.PP
+.B FINISHED
+.br
+.B QUIT
+.br
+.in +3
+These commands return you to the DOS command interpreter.  There is
+no difference between the two.
+.PP
+.B HELP
+.br
+.B HELP(command)
+.br
+.in +3
+Without arguments,
+.I help
+displays all of the available commands.  When
+.I command
+is present, specific help about that command is printed.  Typing
+`help(help)' provides general information about how to invoke commands.
+.PP
+.B MARK CLUSTER(cluster #1[,cluster #2,cluster #3,...])
+.br
+.B MARK CLUSTER(unmark,cluster #1[,...])
+.br
+.in +3
+Marks the given cluster(s) as being bad in the FAT. When this is done, those
+clusters can no longer be used by DOS.  If the first argument is the
+string
+.I unmark,
+then the given clusters are marked as being available for use by DOS.
+It is a good idea to be careful with this command, as it is possible to
+inadvertently destroy the chain of a perfectly good file with a typo.
+.B WARNING:
+before marking a cluster as bad, the file containing the cluster
+(if any) will be
+.B removed.
+This is to prevent possible corruption of the FAT if you forget to
+remove the file yourself.
+Examples: mark cluster(3425), m c(123h,3241,221), m c(u,123h,3241).
+.PP
+.B MARK SECTOR(sector #1[,sector #2,sector #3,...])
+.br
+.B MARK SECTOR(unmark,sector #1[,...])
+.br
+.in +3
+This command is identical to the MARK CLUSTER command, except that the
+arguments are assumed to be sector numbers instead of cluster numbers.
+.PP
+.B READ TEST
+.br
+.B READ TEST(skip,[continuous])
+.br
+.in +3
+Performs a simple read test of the current drive.  All the sectors are read.
+Any bad sectors are reported to the terminal along with the type of error
+encountered.  If the argument string
+.I skip
+is given, then sectors that are marked as bad by the FAT are not read.
+If the string
+.I continuous
+is present, then the read test is done over and over until the user hits
+a key on the keyboard.  Typically, when a CRC error is found, simply
+re\-writing the sector is enough to make the error go away, though the
+contents of that sector should be regarded with the utmost skepticism.
+Some `Address mark not found' errors can be corrected as well, but not
+as reliably.
+.PP
+.B REWRITE(sector[,end sector])
+.br
+.B REWRITE(cluster,cluster number[,end cluster])
+.br
+.B REWRITE(skip,...)
+.br
+.in +3
+This command reads in sector
+.I sector
+and then writes the sector back.  This is mainly useful for trying
+to "fix" bad sectors.  If two numbers are present, then all the sectors
+from
+.I sector
+to
+.I end sector
+are re\-written.  If the first argument is the string
+.I cluster,
+then the numbers that follow are assumed to be cluster numbers, in which
+case the entire cluster is re\-written.  If the string
+.I skip
+is present, then clusters that are known to be bad are not re\-written.
+This is useful when large portions of the disk are being re\-written.
+This command can also be used as a read/write test.  Hitting any key
+during the re\-write process returns control to the user. Examples:
+rewrite(26045), rew(11231,11400), rew(cluster,123,345), rew(s,0,719),
+rew(s,c,2,354).
+.PP
+.B SELECT DRIVE(drive letter)
+.br
+.in +3
+Selects the desired drive for subsequent operations.  When selecting
+a drive, you may get the message "Couldn't read FAT #n. Error xxH".
+Occasionally, one or more of the FATs may go bad.  DOS automatically
+tries to switch to a good FAT when this occurs, but performance decreases
+drastically.  When this message appears, you will be given the option of
+trying to "fix" the bad FAT(s).  This is done by over\-writing all the
+bad FATs with a known good FAT.  If none of FATs are good, no attempt
+is made to fix any of the FATs.
+Examples: select(a), s d(c)
+.PP
+.B SHELL(command string)
+.br
+.in +3
+This command executes the command
+.I command string
+in a sub\-shell as though you had typed it in while at the DOS command level.
+Examples: shell(dir a:), sh(del *.xyz), sh(echo hello, world!)
+.PP
+.B WHO OWNS CLUSTER(cluster #1[,cluster #2,...])
+.br
+.B WHO OWNS CLUSTER(sector,sector #1[,sector #2,...])
+.br
+.in +3
+Scans all the directories of the current drive for a file that
+contains
+.I cluster #1.
+If more than one cluster number is present, then the directory is
+re\-scanned for each cluster given.  If the first argument is the
+string
+.I sector,
+then the numbers that follow are assumed to be sector numbers instead
+of cluster numbers.  Examples: who(343h), w o(123,234,456), w o(s,12342)
+.PP
+.B WRITE TEST
+.br
+.B WRITE TEST(skip)
+.br
+.in +3
+Performs a non\-destructive write test of the current drive.  For each
+sector it does the following steps:
+.PP
+.in +7
+1. Reads a sector.
+.br
+2. Writes all FF bytes.
+.br
+3. Reads the sector and verifies that all the bytes are FFs.
+.br
+4. Writes all 00 bytes.
+.br
+5. Reads the sector and verifies that all the bytes are 0s.
+.br
+6. Writes back the original contents of the sector.
+.PP
+If the
+.I skip
+argument is given, sectors that are known to be bad are not tested.  Hitting
+any key during the test causes the test to abort.
+.PP
+.SH AUTHOR
+.nf
+Gary Gilbreath
+7266 Courtney Drive
+San Diego, California  92111
+(619) 277\-7863
+sdcsvax!sdcc3!29034588 until mid\-June 1985
+/dev/null after June
+.fi
+.SH FILES
+.nf
+dtest.exe		executable file
+dtest.c		main routines
+dfunc.c		nitty gritty functions
+dmisc.c		miscellaneous support routines
+dhelp.c		help messages
+dtest.h		header file for *.c
+stdc.lib		library for cdr(), gnum(), help(), etc.
+.fi
+.SH BUGS
+The entire FAT is loaded into memory when the disk drive is selected.  The
+FAT for some high capacity drives may not fit into memory, which can
+cause unexpected results.  The FAT for the IBM AT occupies 20,992 bytes.
+.LP
+The range of numeric of arguments is not checked.  This can cause unexpected
+results when you supply an illegal value to a command (like marking sector
+65535 as bad on a floppy that only has 719 sectors).  Care should also be
+taken to ensure that when a range of values is given the lesser of the two
+values occurs
+.I first,
+e.g. `rewrite(0,345)', not `rewrite(345,0)'.
+

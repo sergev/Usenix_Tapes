@@ -1,0 +1,598 @@
+RCS file: RCS/main.c,v
+retrieving revision 1.1
+diff -c -r1.1 main.c
+*** /tmp/,RCSt1001795	Thu Oct 31 18:03:04 1985
+--- main.c	Fri Oct 18 19:39:15 1985
+***************
+*** 778,783 ****
+--- 778,784 ----
+  
+  	/* these are RHS metasymbols */
+  	'#', CANONNET,	'@', CANONHOST,	':', CANONUSER,	'>', CALLSUBR,
++ 	'&', EQUIVREPL,
+  
+  	/* the conditional operations */
+  	'?', CONDIF,	'|', CONDELSE,	'.', CONDFI,
+===================================================================
+RCS file: RCS/parseaddr.c,v
+retrieving revision 1.1
+diff -c -r1.1 parseaddr.c
+*** /tmp/,RCSt1001795	Thu Oct 31 18:03:12 1985
+--- parseaddr.c	Fri Oct 18 19:39:19 1985
+***************
+*** 213,218 ****
+--- 213,222 ----
+  **
+  **	Side Effects:
+  **		none.
++ **
++ **	N.B.: prescan's work is all done by the internal routine
++ **	_prescan, which merely has one additional parameter:
++ **		av -- place to put the pointers.
+  */
+  
+  /* states and character types */
+***************
+*** 250,255 ****
+--- 254,272 ----
+  	char delim;
+  	char pvpbuf[];
+  {
++ 	static char *av[MAXATOM+1];
++ 	char **_prescan();
++ 
++ 	return (_prescan(addr, delim, pvpbuf, av));
++ }
++ 
++ static char **
++ _prescan(addr, delim, pvpbuf, av)
++ 	char *addr;
++ 	char delim;
++ 	char pvpbuf[];
++ 	char *av[];
++ {
+  	register char *p;
+  	register char *q;
+  	register int c;
+***************
+*** 260,266 ****
+  	char *tok;
+  	int state;
+  	int newstate;
+- 	static char *av[MAXATOM+1];
+  	extern int errno;
+  
+  	/* make sure error messages don't have garbage on them */
+--- 277,282 ----
+***************
+*** 443,449 ****
+  		expand("\001o", buf, &buf[sizeof buf - 1], CurEnv);
+  		(void) strcat(buf, DELIMCHARS);
+  	}
+! 	if (c == MATCHCLASS || c == MATCHREPL || c == MATCHNCLASS)
+  		return (ONE);
+  	if (c == '"')
+  		return (QST);
+--- 459,466 ----
+  		expand("\001o", buf, &buf[sizeof buf - 1], CurEnv);
+  		(void) strcat(buf, DELIMCHARS);
+  	}
+! 	if (c == MATCHCLASS || c == MATCHREPL || c == MATCHNCLASS ||
+! 	    c == EQUIVREPL)
+  		return (ONE);
+  	if (c == '"')
+  		return (QST);
+***************
+*** 491,496 ****
+--- 508,514 ----
+  {
+  	char	**first;	/* first token matched */
+  	char	**last;		/* last token matched */
++ 	char	*equiv;		/* equivalence name for match */ /* XXX */
+  };
+  
+  # define MAXMATCH	9	/* max params per rewrite */
+***************
+*** 576,582 ****
+  				}
+  				else if (*rp == MATCHNCLASS)
+  					goto backup;
+! 
+  				/* explicit fall-through */
+  
+  			  case MATCHONE:
+--- 594,604 ----
+  				}
+  				else if (*rp == MATCHNCLASS)
+  					goto backup;
+! 				/*
+! 				 * XXX	Should only note equiv parameters
+! 				 *	here, and do translation later.
+! 				 */
+! 				mlp->equiv = getequiv(rp[1], s);
+  				/* explicit fall-through */
+  
+  			  case MATCHONE:
+***************
+*** 585,590 ****
+--- 607,613 ----
+  				mlp->first = avp;
+  				mlp->last = avp++;
+  				mlp++;
++ 				mlp->equiv = NULL;
+  				break;
+  
+  			  case MATCHZANY:
+***************
+*** 592,597 ****
+--- 615,621 ----
+  				mlp->first = avp;
+  				mlp->last = avp - 1;
+  				mlp++;
++ 				mlp->equiv = NULL;
+  				break;
+  
+  			  default:
+***************
+*** 625,630 ****
+--- 649,655 ----
+  				{
+  					/* back out binding */
+  					mlp--;
++ 					mlp->equiv = NULL;
+  				}
+  			}
+  
+***************
+*** 679,689 ****
+  			register char **pp;
+  
+  			rp = *rvp;
+! 			if (*rp == MATCHREPL)
+  			{
+  				/* substitute from LHS */
+  				m = &mlist[rp[1] - '1'];
+! 				if (m >= mlp)
+  				{
+  					syserr("rewrite: ruleset %d: replacement out of bounds", ruleset);
+  					return;
+--- 704,714 ----
+  			register char **pp;
+  
+  			rp = *rvp;
+! 			if (*rp == MATCHREPL || *rp == EQUIVREPL)
+  			{
+  				/* substitute from LHS */
+  				m = &mlist[rp[1] - '1'];
+! 				if (rp[1] < '1' || rp[1] > '9' || m >= mlp)
+  				{
+  					syserr("rewrite: ruleset %d: replacement out of bounds", ruleset);
+  					return;
+***************
+*** 691,697 ****
+  # ifdef DEBUG
+  				if (tTd(21, 15))
+  				{
+! 					printf("$%c:", rp[1]);
+  					pp = m->first;
+  					while (pp <= m->last)
+  					{
+--- 716,725 ----
+  # ifdef DEBUG
+  				if (tTd(21, 15))
+  				{
+! 					if (*rp == EQUIVREPL)
+! 						printf("$&%c:", rp[1]);
+! 					else
+! 						printf("$%c:", rp[1]);
+  					pp = m->first;
+  					while (pp <= m->last)
+  					{
+***************
+*** 699,716 ****
+  						(void) fflush(stdout);
+  						printf("%s\"", *pp++);
+  					}
+  					printf("\n");
+  				}
+  # endif DEBUG
+! 				pp = m->first;
+! 				while (pp <= m->last)
+  				{
+! 					if (avp >= &npvp[MAXATOM])
+  					{
+! 						syserr("rewrite: expansion too long");
+! 						return;
+  					}
+! 					*avp++ = *pp++;
+  				}
+  			}
+  			else
+--- 727,770 ----
+  						(void) fflush(stdout);
+  						printf("%s\"", *pp++);
+  					}
++ 					if (*rp == EQUIVREPL)
++ 						printf(" => \"%s\"",
++ 							m->equiv);
+  					printf("\n");
+  				}
+  # endif DEBUG
+! 				if (*rp == EQUIVREPL)
+  				{
+! 					char equivbuf[PSBUFSIZE];
+! 					char *equivav[MAXATOM+1];
+! 					char *saveDelim = DelimChar;
+! 					extern char **copyplist();
+! 
+! 					/*
+! 					 * XXX	waste of memory!
+! 					 */
+! 					pp = copyplist(_prescan(m->equiv,
+! 								'\0',
+! 								equivbuf,
+! 								equivav),
+! 							TRUE);
+! 					DelimChar = saveDelim;
+! 					while (*pp)
+  					{
+! 						if (avp >= &npvp[MAXATOM])
+! 							goto toolong;
+! 						*avp++ = *pp++;
+  					}
+! 				}
+! 				else
+! 				{
+! 					pp = m->first;
+! 					while (pp <= m->last)
+! 					{
+! 						if (avp >= &npvp[MAXATOM])
+! 							goto toolong;
+! 						*avp++ = *pp++;
+! 					}
+  				}
+  			}
+  			else
+===================================================================
+RCS file: RCS/readcf.c,v
+retrieving revision 1.1
+diff -c -r1.1 readcf.c
+*** /tmp/,RCSt1001795	Thu Oct 31 18:03:23 1985
+--- readcf.c	Fri Oct 18 19:39:22 1985
+***************
+*** 164,189 ****
+  			(void) chompheader(&buf[1], TRUE);
+  			break;
+  
+- 		  case 'C':		/* word class */
+  		  case 'F':		/* word class from file */
+  			/* read list of words from argument or file */
+! 			if (buf[0] == 'F')
+  			{
+! 				/* read from file */
+! 				for (p = &buf[2]; *p != '\0' && !isspace(*p); p++)
+  					continue;
+- 				if (*p == '\0')
+- 					p = "%s";
+- 				else
+- 				{
+- 					*p = '\0';
+- 					while (isspace(*++p))
+- 						continue;
+- 				}
+- 				fileclass(buf[1], &buf[2], p);
+- 				break;
+  			}
+  
+  			/* scan the list of words and set class for all */
+  			for (p = &buf[2]; *p != '\0'; )
+  			{
+--- 164,186 ----
+  			(void) chompheader(&buf[1], TRUE);
+  			break;
+  
+  		  case 'F':		/* word class from file */
+  			/* read list of words from argument or file */
+! 			/* read from file */
+! 			for (p = &buf[2]; *p != '\0' && !isspace(*p); p++)
+! 				continue;
+! 			if (*p == '\0')
+! 				p = "%s";
+! 			else
+  			{
+! 				*p = '\0';
+! 				while (isspace(*++p))
+  					continue;
+  			}
++ 			fileclass(buf[1], &buf[2], p);
++ 			break;
+  
++ 		  case 'C':		/* word class */
+  			/* scan the list of words and set class for all */
+  			for (p = &buf[2]; *p != '\0'; )
+  			{
+***************
+*** 203,208 ****
+--- 200,247 ----
+  			}
+  			break;
+  
++ /* BEGIN STRANGE */
++ /* Do we actually use this??? */
++ 		  case 'E':		/* word equivalence class */
++ 			for (p = &buf[2]; *p != '\0'; )
++ 			{
++ 				register char *wd;
++ 				register char *eqwd;
++ 				char delim;
++ 				register STAB *s;
++ 
++ 				while (*p != '\0' && isspace(*p))
++ 					p++;
++ 				wd = p;
++ 				while (*p != '\0' && !isspace(*p))
++ 					p++;
++ 				delim = *p;
++ 				*p = '\0';
++ 				if (wd[0] == 0)
++ 				{
++ 					*p = delim;
++ 					break;
++ 				}
++ 				/*
++ 				 * Cannot use setclass here as we
++ 				 * need the sym entry
++ 				 */
++ 				s = stab(wd, ST_CLASS, ST_ENTER);
++ 				setbitn(buf[1], s->s_class);
++ 				*p = delim;
++ 				while (*p != '\0' && isspace(*p))
++ 					p++;
++ 				eqwd = p;
++ 				while (*p != '\0' && !isspace(*p))
++ 					p++;
++ 				delim = *p;
++ 				*p = 0;
++ 				makeequiv(buf[1], eqwd, s);
++ 				*p = delim;
++ 			}
++ 			break;
++ /* END STRANGE */
++ 
+  		  case 'M':		/* define mailer */
+  			makemailer(&buf[1]);
+  			break;
+***************
+*** 314,324 ****
+  	{
+  		register STAB *s;
+  		char wordbuf[MAXNAME+1];
+! 
+! 		if (sscanf(buf, fmt, wordbuf) != 1)
+  			continue;
+  		s = stab(wordbuf, ST_CLASS, ST_ENTER);
+  		setbitn(class, s->s_class);
+  	}
+  
+  	(void) fclose(f);
+--- 353,382 ----
+  	{
+  		register STAB *s;
+  		char wordbuf[MAXNAME+1];
+! 		char equivbuf[MAXNAME+1];
+! 		int nscanned;
+! 		
+! 		if ((nscanned = sscanf(buf, fmt, wordbuf, equivbuf)) < 1)
+! 		{
+! #ifdef DEBUG
+! 			if (tTd(86, 8))
+! 				printf("fileclass: found nothing on line.\n");
+! #endif DEBUG
+  			continue;
++ 		}
++ #ifdef DEBUG
++ 		if (tTd(86, 8))
++ 		{
++ 			printf("fileclass: found word \"%s\"", wordbuf);
++ 			if (nscanned > 1)
++ 				printf(" => \"%s\"", equivbuf);
++ 			printf(".\n");
++ 		}
++ #endif DEBUG
+  		s = stab(wordbuf, ST_CLASS, ST_ENTER);
+  		setbitn(class, s->s_class);
++ 		if (nscanned > 1)
++ 			makeequiv(class, equivbuf, s);
+  	}
+  
+  	(void) fclose(f);
+===================================================================
+RCS file: RCS/sendmail.h,v
+retrieving revision 1.1
+diff -c -r1.1 sendmail.h
+*** /tmp/,RCSt1001795	Thu Oct 31 18:03:32 1985
+--- sendmail.h	Sat Oct 19 03:03:24 1985
+***************
+*** 57,64 ****
+--- 57,69 ----
+  #define BYTEBITS	8	/* number of bits in a byte */
+  
+  /* internal macros */
++ #if BYTEBITS == 8 && (defined(vax) || defined(mc68000) || defined(ns32000))
++ #define _BITWORD(bit)	((bit) >> 5)
++ #define	_BITBIT(bit)	(1 << ((bit) & (BYTEBITS * sizeof (int) - 1)))
++ #else BYTEBITS == 8
+  #define _BITWORD(bit)	(bit / (BYTEBITS * sizeof (int)))
+  #define _BITBIT(bit)	(1 << (bit % (BYTEBITS * sizeof (int))))
++ #endif BYTEBITS == 8
+  
+  typedef int	BITMAP[BITMAPBYTES / sizeof (int)];
+  
+***************
+*** 321,326 ****
+--- 326,334 ----
+  # define HOSTBEGIN	'\035'	/* hostname lookup begin */
+  # define HOSTEND	'\036'	/* hostname lookup end */
+  
++ /* canonicalization */
++ # define EQUIVREPL	'\037'	/* equivalence class replacement */
++ 
+  /* \001 is also reserved as the macro expansion character */
+  /*
+  **  Information about hosts that we have looked up recently.
+***************
+*** 352,357 ****
+--- 360,379 ----
+  **  Symbol table definitions
+  */
+  
++ /*
++  * The canonicalizing operator $&n looks up names and replacements.
++  * The replacment name(s) for a name are stored in the following
++  * linked list, which is then attached to the symbol table entry.
++  */
++ struct equivstr
++ {
++ 	char		class;		/* class the replacement is in */
++ 	char		*equivname;	/* the replacement name */
++ 	struct equivstr *next;		/* linked list */
++ };
++ 
++ typedef struct equivstr EQUIV;
++ 
+  struct symtab
+  {
+  	char		*s_name;	/* name to be entered */
+***************
+*** 367,372 ****
+--- 389,395 ----
+  		HOSTINFO	sv_host;	/* host information */
+  # endif HOSTINFO
+  	}	s_value;
++ 	EQUIV		*s_equiv;	/* list of replacements */
+  };
+  
+  typedef struct symtab	STAB;
+***************
+*** 386,391 ****
+--- 409,415 ----
+  # define s_host		s_value.sv_host
+  
+  extern STAB	*stab();
++ extern char	*getequiv();
+  
+  /* opcodes to stab */
+  # define ST_FIND	0	/* find entry */
+===================================================================
+RCS file: RCS/stab.c,v
+retrieving revision 1.1
+diff -c -r1.1 stab.c
+*** /tmp/,RCSt1001795	Thu Oct 31 18:03:39 1985
+--- stab.c	Fri Oct 18 19:39:27 1985
+***************
+*** 118,120 ****
+--- 118,221 ----
+  
+  	return (s);
+  }
++ 
++ /*
++ **  MAKEEQUIV -- make a name equivalence entry
++ **
++ **	Parameters:
++ **		class -- the class the equivalence is in.
++ **		name -- the replacement (new) name.
++ **		s -- the symbol table entry of the source (old) name.
++ **
++ **	Returns:
++ **		none.
++ **
++ **	Side Effects:
++ **		Updates the equivalences attached to `s'.
++ **
++ **	Author:
++ **		Bruce Israel -- 9/4/84.
++ **		Fixes 17 Oct 1985, Chris Torek
++ */
++ 
++ makeequiv(class, name, s)
++ 	register int class;
++ 	char *name;
++ 	register STAB *s;
++ {
++ 	register EQUIV *eq;
++ 
++ 	for (eq = s->s_equiv; eq != NULL; eq = eq->next)
++ 	{
++ 		if (eq->class != class)
++ 			continue;
++ 
++ 		/*
++ 		 * To replace, or to reject: that is the question.
++ 		 * Whether 'tis nobler to suffer the slings and
++ 		 * arrows of outrageous remappings, or, by opposing,
++ 		 * to end them.  ...Chris
++ 		 */
++ #ifdef DEBUG
++ 		if (tTd(87, 5))
++ 			printf("makeequiv: attempt to replace \"%s\" => \"%s\" (class %c)\n\twith  => \"%s\" (ignored).\n",
++ 				s->s_name, eq->equivname, class, name);
++ #endif DEBUG
++ #ifdef notdef
++ 		free(eq->equivname);
++ 		eq->equivname = newstr(name);
++ #endif notdef
++ 		return;
++ 	}
++ 	eq = (EQUIV *)xalloc(sizeof *eq);
++ 	eq->class = class;
++ 	eq->equivname = newstr(name);
++ 	eq->next = s->s_equiv;
++ 	s->s_equiv = eq;
++ }
++ 
++ /*
++ **  GETEQUIV -- get the replacement name for a stab entry given a
++ **  class.
++ **
++ **	Parameters:
++ **		class -- the replacement class.
++ **		s -- the old name.
++ **
++ **	Returns:
++ **		a pointer to a string containing the new name.
++ **		If the symbol table entry has no translation
++ **		name, the original name will be returned.
++ **
++ **	Side Effects:
++ **		none.
++ **
++ **	Author:
++ **		Bruce Israel -- 9/4/84.
++ */
++ 
++ char *
++ getequiv(class, s)
++ 	register int  class;
++ 	register STAB *s;
++ {
++ 	register EQUIV *eq;
++ 
++ 	for (eq = s->s_equiv; eq != NULL; eq = eq->next)
++ 	{
++ 		if (eq->class != class)
++ 			continue;
++ #ifdef DEBUG
++ 		if (tTd(87, 5))
++ 			printf("getequiv: \"%s\" => \"%s\" (class %c).\n",
++ 				s->s_name, eq->equivname, class);
++ #endif DEBUG
++ 		return (eq->equivname);
++ 	}
++ #ifdef DEBUG
++ 	if (tTd(87, 5))
++ 		printf("getequiv: \"%s\" not mapped in class %c; unchanged.\n",
++ 			s->s_name);
++ #endif DEBUG
++ 	return (s->s_name);
++ }

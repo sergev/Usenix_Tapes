@@ -1,0 +1,9 @@
+#define menu_set pie_menu_set
+#define menu_item_set pie_menu_item_set 
+#define menu_create pie_menu_create
+#define menu_create_item pie_menu_create_item
+#define menu_destroy pie_menu_destroy
+#define menu_get pie_menu_get
+#define menu_item_get pie_menu_item_get
+#define menu_show_using_fd pie_menu_show_using_fd
+#define menu_show pie_menu_show

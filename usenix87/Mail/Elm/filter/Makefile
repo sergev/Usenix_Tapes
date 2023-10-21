@@ -1,0 +1,57 @@
+#
+#  Makefile for the Elm system filter program
+#
+#         (C) Copyright 1986, Dave Taylor
+#
+#  Last modification: Oct 7th, 1986
+
+SHELL=/bin/sh
+
+DEFINE= 
+LIB2  = 
+
+CFLAGS= -O -I../hdrs
+CC=	/bin/cc
+RM= 	/bin/rm -f
+ECHO=  /bin/echo
+
+OBJ     =   ../bin/filter
+HDRS    =   ../hdrs/defs.h ../hdrs/sysdefs.h ../hdrs/filter.h
+BINARIES=   actions.o filter.o parse.o rules.o summarize.o utils.o utils2.o
+SRC     =   actions.c filter.c parse.c rules.c summarize.c utils.c utils2.c
+
+all: ${OBJ}
+
+../bin/filter  : ${HDRS} ${BINARIES}
+	${CC} ${CFLAGS} ${DEFINE} ${BINARIES} -o ${OBJ}
+
+actions.o : ${HDRS} actions.c
+	${CC} -c ${CFLAGS} ${DEFINE} actions.c
+
+filter.o : ${HDRS} filter.c
+	${CC} -c ${CFLAGS} ${DEFINE} filter.c
+
+parse.o : ${HDRS} parse.c
+	${CC} -c ${CFLAGS} ${DEFINE} parse.c
+
+utils.o : ${HDRS} utils.c
+	${CC} -c ${CFLAGS} ${DEFINE} utils.c
+
+utils2.o : ${HDRS} utils2.c
+	${CC} -c ${CFLAGS} ${DEFINE} utils2.c
+
+rules.o : ${HDRS} rules.c
+	${CC} -c ${CFLAGS} ${DEFINE} rules.c
+
+summarize.o : ${HDRS} summarize.c
+	${CC} -c ${CFLAGS} ${DEFINE} summarize.c
+
+lint    : 
+	lint -I../hdrs ${SRC} > LINT.OUT
+
+clean	:
+	${RM} ${BINARIES}
+
+index   :
+	index ${SRC} > INDEX
+

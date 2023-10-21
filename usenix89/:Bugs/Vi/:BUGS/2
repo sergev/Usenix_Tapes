@@ -1,0 +1,71 @@
+Path: plus5!wucs1!wucs!we53!ltuxa!cuae2!ihnp4!drutx!mtuxo!mtune!akguc!akguf!akgua!gatech!seismo!ut-sally!pyramid!decwrl!sun!david
+From: david@sun.UUCP
+Newsgroups: net.sources.bugs
+Subject: Re: pipe input to vi (svi.c)
+Message-ID: <7307@sun.uucp>
+Date: 16 Sep 86 17:16:08 GMT
+References: <3646@amdahl.UUCP> <3115@pixar>
+Organization: Sun Microsystems, Inc.
+Lines: 60
+Posted: Tue Sep 16 12:16:08 1986
+
+In article <3115@pixar> brighton@pixar.UUCP writes:
+>/*
+>I wrote this late one night, to facilitate saving files from rn ( s | svi )
+...
+>Improvements welcome.  Enjoy!
+
+Well, you asked for it...
+
+>	sprintf (file, "/tmp/svi.%d", getpid());
+
+Why not use mktemp(3) here?
+
+>	fd = open (file, O_CREAT|O_RDWR, 0644);
+
+Use mode 0666, let your umask work.
+
+>char buf[10240];
+ ...
+>	while (write(fd,buf,read(0,buf,1024)))
+
+Why use a 10K buffer to hold 1K?
+
+>	tty_in = open ("/dev/tty", O_RDONLY);
+ ...
+>	tty_out = open ("/dev/tty", O_WRONLY);
+
+Looks like a job for dup(2) !
+
+>	strcpy (editor, getenv ("EDITOR"));
+>	if (editor[0] == 0) {
+>		strcpy (editor, getenv ("VISUAL"));
+
+Oops!  Passing a null pointer to strcpy means instant core dump on 
+many machines.
+
+Finally, here's a shell script to do the same thing:
+
+#! /bin/sh
+# pedit -- pipeline editor
+
+edit=${VISUAL-${EDITOR-vi}}
+tmp=/tmp/pedit.$$
+
+trap 'rm -f $tmp*; exit 1' 1 2 15
+
+# workaround for SysV/SunOS sh "$@" bug
+cat ${1+"$@"} > $tmp
+
+# /dev/tty could be named explicitly here, but that's less flexible
+$edit $tmp 0<&2 1>&2
+
+# svi.c doesn't do this, but I find it useful
+cat $tmp
+
+# * is to catch editor backup files
+rm -f $tmp*
+
+-- 
+David DiGiacomo  {decvax, ihnp4, ucbvax}!sun!david  david@sun.arpa
+Sun Microsystems, Mt. View, CA  (415) 691-7495

@@ -1,0 +1,47 @@
+INCLUDE=/usr/include
+SYSINCL=/usr/sys/include
+DOT=/tmp/$$INCL#$
+
+
+case ## in
+
+	1)
+		FILE=#1
+		;;
+
+	*)
+		echo  Usage: #0 FILE	1>&2
+		exit 1
+esac
+
+if
+	cp $FILE $DOT			2>/dev/null  ||
+	cp $FILE.h $DOT			2>/dev/null  ||
+	cp $INCLUDE/$FILE $DOT		2>/dev/null  ||
+	cp $INCLUDE/$FILE.h $DOT	2>/dev/null  ||
+	cp $SYSINCL/$FILE $DOT		2>/dev/null  ||
+	cp $SYSINCL/$FILE.h $DOT	2>/dev/null
+then
+	/bin/ed $DOT >/dev/null <<EOF
+v/^\#/d
+g-/\\*.*\\*/-s---
+g-/\\*.*-s---
+v/^\#[ 	]*define[ 	]/d
+g/^\#[ 	]*define[ 	]*/s///
+g/^[a-zA-Z0-9_]*(/d
+g/[ 	][ 	]*\$/s///
+g/[ 	][ 	]*/s//=/
+g/[ 	]/d
+g/"/s///g
+g/'/s///g
+\$a
+.
+w
+q
+EOF
+	. $DOT
+	rm $DOT
+else
+	echo $FILE: not found 1>&2
+	exit 1
+fi

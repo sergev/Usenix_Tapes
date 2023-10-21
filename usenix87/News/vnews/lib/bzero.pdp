@@ -1,0 +1,31 @@
+/ BZERO(MEM, N)  CHAR *MEM;
+/
+/	Clear "n" bytes of memory starting at "mem".
+/
+.globl	_bzero
+.globl	csav, cret
+
+.text
+_bzero:	jsr	r0, csav	/ save registers
+	mov	4(r5), r0	/ get memory pointer...
+	mov	6(r5), r1	/ ...and count
+	beq	ret		/ return if zero
+	bit	$1, r0		/ is address odd?
+	beq	1f		/ yes...
+	  clrb	  (r0)+		/   clear one byte to make it even
+	  dec	  r1		/   and adjust byte count
+1:	mov	r1, r3		/ save (low bit of) count
+	clr	r2		/ get zero into a register and clear carry
+	ror	r1		/ convert count to words.
+	asr	r1		/ convert count to double words
+	bcc	1f		/ if word count was odd
+	  mov	  r2, (r0)+	/   clear an extra word
+	  tst	  r1		/   reset condition codes on r1
+1:	beq	3f		/ while r1 ~= 0
+2:	  mov	  r2, (r0)+	/   clear a word...
+	  mov	  r2, (r0)+	/
+	  sob	  r1, 2b	/   and update count
+3:	asr	r3		/ if count was odd
+	bcc	ret		/
+	  movb	  r2, (r0)+	/   clear an extra byte
+ret:	jmp	cret		/ return

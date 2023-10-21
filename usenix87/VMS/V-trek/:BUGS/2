@@ -1,0 +1,48 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/18/84; site cyb-eng.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!gamma!epsilon!zeta!sabre!petrus!bellcore!decvax!ucbvax!ucdavis!lll-crg!mordor!ut-sally!cyb-eng!howard
+From: howard@cyb-eng.UUCP (Howard Johnson)
+Newsgroups: net.sources.bugs,net.info-terms
+Subject: vtrek termcap delay usage bug explained
+Message-ID: <744@cyb-eng.UUCP>
+Date: 13 Oct 85 06:49:12 GMT
+Date-Received: 16 Oct 85 09:10:00 GMT
+References: <1632@brl-tgr.UUCP> <57700001@hpcnof.UUCP> <166@birtch.UUCP>
+Followup-To: net.sources.bugs
+Organization: Cyb Systems, Austin, TX
+Lines: 33
+Xref: plus5 net.sources.bugs:522 net.info-terms:382
+
+A number at the beginning of a termcap string specifies a delay (in
+milliseconds) which must follow the escape sequence so the terminal
+doesn't drop subsequent characters sent to it.  The delay is accomplished
+by transmitting repeatedly a pad character ('\0' by default).
+An asterisk ('*') following that number means that this much delay
+is needed for each affected line (LINES - y) or character.
+
+> But tell me, how does that relate tgetent(3) & tgoto(3)?  I didn't write
+> vtrek [a game], so it was not my doing to use termcap(3) routines.
+> However, tgoto(3) does not strip off the delay info and just dumps it onto
+> the screen with escape and other stuff following it.  So what comes out
+> [on the vt100] is a bunch of "5"s surrounding (and distorting) everything
+> on the screen!  So what am I supposed to do?  [...]
+
+The problem seems to be that the string returned by tgoto() was sent to
+the terminal without sending it through tputs(), since tputs() interprets
+termcap delays.  BTW, don't forget to set the
+
+	extern short ospeed;
+
+variable to tty.sg_ospeed (BSD/V7) or tty.c_cflag&CBAUD (USG).
+
+Given:
+
+outc(ch)	/* sends character to the terminal */
+char ch;
+
+then the appropriate fix would resemble this:
+
+	tputs(tgoto(CM, col, row), 1, outc);
+-- 
+..!{seismo,topaz,mordor,harvard,gatech,nbires,ihnp4}!ut-sally!cyb-eng!howard
+(ordered best to worst); also ..!{ut-ngp,shell}!cyb-eng!howard  +1 512 458 6609

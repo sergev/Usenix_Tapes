@@ -1,0 +1,137 @@
+.TH VPLOT 5 AMPEX
+.SH NAME
+\fBvplot\fR \- device\-independent vector plotting instructions
+.SH DESCRIPTION
+These vector plotting instructions describe a psuedo\-plotter with
+simple characteristics that can be emulated on many graphical output
+devices.  These instructions are not related to the ones documented in
+.I plot(5)
+and
+.I plot(3).
+A user program typically generates these instructions on its standard output
+by calling library subroutines such as those in
+the Standard Plot Package (see
+.I stdplt(Vol. 2B)).
+The instructions are normally piped to one of the graphics filters
+.I tek(1)
+or
+.I mp(1)
+to produce graphical output on a Tektronix storage-tube terminal or a
+matrix plotter, respectively.
+Each instruction consists of an ASCII character with the high-order bit
+turned on (add 128 to the character code), usually followed by binary
+information.  The least\-significant byte of a binary 16\-bit integer
+is transmitted first.  The "putw" subroutine described in
+.I putc(3S)
+and the Standard I/O Package use this convention also.
+.LP
+Coordinates are given as integer (x,y) pairs.  The coordinates are treated
+as signed 16\-bit quantities, where the range 0 \- 16,383 is
+guaranteed to fit on every graphics device in both the x and y directions.
+Coordinates beyond this range are allowed, but are inherently device\-dependent.
+The standard pixel size therefore depends upon how large the device is.
+Usually, the range 0 \- 16,383 is mapped to the device's smallest
+physical dimension, and square pixels are used.
+The maximum aspect ratio a device can
+have is therefore 1:4 or 4:1, since 65535 is the
+largest unsigned short integer.
+This precludes windowing for negative
+coordinates (usually caught by the stdplt package),
+but allows very long plots to be made.
+.LP
+The instructions below are indicated by the command letter with 0200 added,
+usually followed by binary data.  Literal items are in \fBboldface\fR, and
+integer items are enclosed in {braces} to distinguish them from byte items.
+All commands are lower case, and any unrecognized command is considered
+an error.  Normal ASCII characters may be intermixed with the commands,
+and will be passed to the standard output of the graphics filter.  Note
+that this assumes a single vplot command is written as an uninterrupted
+byte stream, so that characters to be printed don't fall in the middle
+of a multi-byte plot instruction.
+.IP \&\fB'e'|0200\fR 18
+\fBerase\fR: clear the screen and begin a new plot.
+On hardcopy plotters, the origin is redefined a short distance beyond the
+end of the completed plot.
+.IP \&\fB'b'|0200\fR 18
+\fBbreak\fR: same as erase, except no extra white space
+is produced on hardcopy terminals.  This is used primarily on matrix plotters
+to cause
+.I mp(1)
+to flush the current plot to the raster plot file.  This allows very
+long plots to be broken into pieces for efficiency.
+.IP \&\fB'p'|0200\fR 18
+\fBpurge\fR: flush any buffered output to the (interactive)
+graphics device.  This automatically occurs upon end of file.
+.IP "\&\fB'm'|0200\fR {x} {y}" 18
+\fBmove\fR: set the current position to be (x,y).
+The initial position is automatically set to (0,0).
+.IP "\&\fB'd'|0200\fR {x} {y}" 18
+\fBdraw\fR: draw a line from the current position
+to (x,y).
+.IP "\&\fB't'|0200\fR c c c ... \fB'\e0'\fR"
+.br
+\fBtext\fR: the bytes indicated
+by "c c c ..." are drawn as ASCII characters up to a NUL byte, starting
+at the current position.  The usual ASCII control characters newline,
+return, tab, and backspace are correctly interpreted.
+The left margin is set only by the move instruction.  The current position
+is left on the baseline, just beyond the last character.  A subsequent
+text instruction will continue the string with no apparent break.
+.IP "\&\fB's'|0200\fR cwidth font {angle}"
+.br
+\fBset text modes\fR: the size, font,
+and rotation of subseqent text commands are set.  The width of a character
+in standard pixels is 64*cwidth, and its height is approximately 96*cwidth,
+for an aspect ratio of about 2/3.
+The character font is given by a letter, with the NUL character '\e0'
+specifying the standard ASCII font.
+Other fonts have not been implemented yet.
+The angle of the text baseline is given by the integer {angle},
+which specifies one of 32,768 different (signed) angles,
+with 0 being 0.0 degrees, +16384 being +180.0 degrees, and -16384 being
+-180.0 degrees.  Angles increase in the counter-clock-wise direction
+from the x-axis.
+.IP "\&\fB'f'|0200\fR {extra}" 18
+\fBfat\fR: set line fatness to be 1+extra lines thick.
+The thickness of a single line is undefined, and device specific.
+.IP "\&\fB'r'|0200\fR dotsize {rplot data} ... \fB{-1}\fR"
+.br
+\fBraster\fR: The integers that
+follow the dotsize byte are interpreted as raster dot rows in
+.I rplot(5)
+format.  The last row must be followed by a -1.  The raster instruction
+must be on an even byte boundary so that the integers are word-aligned.
+The noop instruction below can be used for this.
+The number of standard pixels per dot element is given by the
+unsigned byte quantity "dotsize".  This may be used in the
+future to perform resampling of the dot rows.
+.IP \&\fB'n'|0200\fR	\fBnoop\fR: no operation is performed.  Used for
+alignment purposes.
+.IP "\&\fB'w'|0200\fR {xmin} {xmax} {ymin} {ymax}"
+.br
+\fBwindow\fR: subsequent
+instructions are windowed so as to only draw inside the rectangular
+window boundaries.
+The boundaries are interpreted as unsigned integers, and if any
+exceeds 32767, windowing of negative coordinates ceases.
+In any case, it is not possible to set a window larger than the
+device dimensions.
+The initial window boundaries are set to:
+.br
+{0}, {min(32767, physical xmax)}, {0}, {min(32767, physical ymax)}.
+.IP \&\fB'x'|0200\fR
+\fBcrosshairs\fR: the Tektronix crosshair cursor is turned
+on (only applicable with
+.I tek(I))
+after a purge instruction is automatically done.  The next keystroke
+typed will cause the crosshair position to be sent as if from the Tektronix
+keyboard.  See the Tektronix manual for details.  Note that the position
+sent is not in standard pixels, and must be adjusted.
+.SH FILES
+*.vp     standard naming convention for vplot files
+.SH "SEE ALSO"
+vplotdb(1), tek(1), mp(1), rplot(5), stdplt(Vol. 2B)
+.SH AUTHORS
+Rob Clayton, Stanford University
+.br
+John Nickolls, Ampex Corp.

@@ -1,0 +1,475 @@
+Path: plus5!wucs1!cuae2!ihnp4!ptsfa!lll-lcc!ames!ucbcad!ucbvax!decvax!tektronix!teklds!dadla!rogers
+From: rogers@dadla.TEK.COM (Roger Southwick)
+Newsgroups: net.sources.games
+Subject: Patches to atc
+Keywords: atc
+Message-ID: <1808@dadla.TEK.COM>
+Date: 12 Feb 87 19:26:29 GMT
+Reply-To: rogers@dadla.UUCP (Roger Southwick)
+Distribution: world
+Organization: Tektronix, Inc., Beaverton, OR.
+Lines: 463
+
+[Do not meddle in the affairs of Unix, for it is subtle and quick to anger.]
+
+I really like atc, and applaud Ed James' brillance for coming up with it.
+But being somewhat of a hacker (er, programmer), I decided to fix a couple
+of minor bugs (er, features):
+
+	1) If you give a sequence like:
+
+	    a) Have a plane go to an altitude.
+	    b) Tell the same plane to turn at a beacon.
+	    c) Tell the same plane to go to an altitude.
+
+	    The plane ends up turning immediately, rather than waiting
+	    for the beacon.
+	
+	2) I found that sigmask() was undefined on 4.2 systems.
+	This has been fixed by checking for the define.
+
+	3) On at least one system, the constant PI was defined for
+	you.  The fix is to check for PI being defined, and if it
+	is, #undef'ing it.  Also, I used a more accurate value for PI.
+
+	4) Some players do not like having planes 'i', 'l', 'I' or 'L',
+	as they are too easily confused with each other or with altitudes.
+	These planes are disabled with the define NOPLANES_I_L which
+	I've defined in the tunable.h file.  You can comment out the
+	define there if you want to keep these planes.
+
+Anyway, take the below and feed it to Larry Wall's patch program.
+If you don't have patch, have fun applying the patches by hand.
+I've also sent along a copy of this to Ed James, so hopefully
+he'll put this into the next release of atc.
+
+
+	-Roger	(rogers@dadla.tek.com)
+
+
+*** def.h.old	Fri Jan 30 16:36:23 1987
+--- def.h	Fri Jan 30 16:38:34 1987
+***************
+*** 9,15
+  
+  #define AUTHOR_STR		"ATC - by Ed James"
+  
+! #define PI			3.14159654
+  
+  #define LOWFUEL			15
+  
+
+--- 9,19 -----
+  
+  #define AUTHOR_STR		"ATC - by Ed James"
+  
+! #ifdef PI
+! #undef PI
+! #endif
+! 
+! #define PI	 (3.141592653589793238462643383279502884)
+  
+  #define LOWFUEL			15
+  
+*** input.c.old	Tue Jan 27 12:54:47 1987
+--- input.c	Fri Jan 30 14:37:52 1987
+***************
+*** 226,232
+  	}
+  
+  	pp = findplane(p.plane_no);
+! 	if (pp->new_altitude != p.new_altitude)
+  		pp->new_altitude = p.new_altitude;
+  	else if (pp->status != p.status)
+  		pp->status = p.status;
+
+--- 226,232 -----
+  	}
+  
+  	pp = findplane(p.plane_no);
+! 	if (pp->new_altitude != p.new_altitude){
+  		pp->new_altitude = p.new_altitude;
+  		return(0);
+  	}
+***************
+*** 228,234
+  	pp = findplane(p.plane_no);
+  	if (pp->new_altitude != p.new_altitude)
+  		pp->new_altitude = p.new_altitude;
+! 	else if (pp->status != p.status)
+  		pp->status = p.status;
+  	else {
+  		pp->new_dir = p.new_dir;
+
+--- 228,236 -----
+  	pp = findplane(p.plane_no);
+  	if (pp->new_altitude != p.new_altitude){
+  		pp->new_altitude = p.new_altitude;
+! 		return(0);
+! 	}
+! 	if (pp->status != p.status){
+  		pp->status = p.status;
+  		return(0);
+  	}
+***************
+*** 230,239
+  		pp->new_altitude = p.new_altitude;
+  	else if (pp->status != p.status)
+  		pp->status = p.status;
+! 	else {
+! 		pp->new_dir = p.new_dir;
+! 		pp->delayd = p.delayd;
+! 		pp->delayd_no = p.delayd_no;
+  	}
+  	return (0);
+  }
+
+--- 232,238 -----
+  	}
+  	if (pp->status != p.status){
+  		pp->status = p.status;
+! 		return(0);
+  	}
+  	pp->new_dir = p.new_dir;
+  	pp->delayd = p.delayd;
+***************
+*** 235,240
+  		pp->delayd = p.delayd;
+  		pp->delayd_no = p.delayd_no;
+  	}
+  	return (0);
+  }
+  
+
+--- 234,242 -----
+  		pp->status = p.status;
+  		return(0);
+  	}
++ 	pp->new_dir = p.new_dir;
++ 	pp->delayd = p.delayd;
++ 	pp->delayd_no = p.delayd_no;
+  	return (0);
+  }
+  
+***************
+*** 408,414
+  char	*
+  setalt(c)
+  {
+! 	if ((p.altitude == c - '0') && (p.new_altitude == p.altitude))
+  		return ("Already at that altitude");
+  	p.new_altitude = c - '0';
+  	return (NULL);
+
+--- 410,419 -----
+  char	*
+  setalt(c)
+  {
+! 	register int alt;
+! 
+! 	alt = c - '0';
+! 	if ((p.altitude == alt) && (p.new_altitude == p.altitude))
+  		return ("Already at that altitude");
+  
+  	if (p.new_altitude == alt)
+***************
+*** 410,416
+  {
+  	if ((p.altitude == c - '0') && (p.new_altitude == p.altitude))
+  		return ("Already at that altitude");
+! 	p.new_altitude = c - '0';
+  	return (NULL);
+  }
+  
+
+--- 415,425 -----
+  	alt = c - '0';
+  	if ((p.altitude == alt) && (p.new_altitude == p.altitude))
+  		return ("Already at that altitude");
+! 
+! 	if (p.new_altitude == alt)
+! 		return ("Already going to that altitude");
+! 
+! 	p.new_altitude = alt;
+  	return (NULL);
+  }
+  
+***************
+*** 417,422
+  char	*
+  setrelalt(c)
+  {
+  	if (c == 0)
+  		return ("altitude not changed");
+  
+
+--- 426,433 -----
+  char	*
+  setrelalt(c)
+  {
++ 	register int alt;
++ 
+  	if (c == 0)
+  		return ("altitude not changed");
+  
+***************
+*** 422,428
+  
+  	switch (dir) {
+  	case D_UP:
+! 		p.new_altitude = p.altitude + c - '0';
+  		break;
+  	case D_DOWN:
+  		p.new_altitude = p.altitude - (c - '0');
+
+--- 433,442 -----
+  
+  	switch (dir) {
+  	case D_UP:
+! 		alt = p.altitude + c - '0';
+! 		if(p.new_altitude == alt)
+! 		    return ("Already going to that altitude");
+! 		p.new_altitude = alt;
+  		break;
+  	case D_DOWN:
+  		alt = p.altitude - (c - '0');
+***************
+*** 425,431
+  		p.new_altitude = p.altitude + c - '0';
+  		break;
+  	case D_DOWN:
+! 		p.new_altitude = p.altitude - (c - '0');
+  		break;
+  	default:
+  		return ("Unknown case in setrelalt!  Get help!");
+
+--- 439,448 -----
+  		p.new_altitude = alt;
+  		break;
+  	case D_DOWN:
+! 		alt = p.altitude - (c - '0');
+! 		if(p.new_altitude == alt)
+! 		    return ("Already going to that altitude");
+! 		p.new_altitude = alt;
+  		break;
+  	default:
+  		return ("Unknown case in setrelalt!  Get help!");
+*** tunable.h.old	Fri Jan 30 14:46:32 1987
+--- tunable.h	Fri Jan 30 14:49:26 1987
+***************
+*** 10,12
+  extern char	SPECIAL_DIR[];
+  
+  extern int	NUM_SCORES;
+
+--- 10,20 -----
+  extern char	SPECIAL_DIR[];
+  
+  extern int	NUM_SCORES;
++ 
++ /*
++  * Define NOPLANES_I_L if you do not want the planes with letters
++  * i, l, I and L to appear.  They may be hard to tell apart from
++  * themselves or numbers.
++  */
++ 
++ #define NOPLANES_I_L	/* Define to turn off planes i, l, I & L	*/
+*** update.c.old	Tue Jan 27 14:29:52 1987
+--- update.c	Mon Feb  2 15:35:03 1987
+***************
+*** 9,14
+  
+  #include "include.h"
+  
+  update()
+  {
+  	int	i, dir_diff, mask, unclean;
+
+--- 9,18 -----
+  
+  #include "include.h"
+  
++ #ifndef sigmask
++ #define sigmask(m)	(1 << ((m)-1))
++ #endif
++ 
+  update()
+  {
+  	int	i, dir_diff, mask, unclean;
+***************
+*** 198,203
+  	return (buf);
+  }
+  
+  /* char */
+  name(p)
+  	PLANE	*p;
+
+--- 202,213 -----
+  	return (buf);
+  }
+  
++ 
++ #ifdef NOPLANES_I_L
++ static char p_lets_lc[] = "abcdefghjkmnopqrtsuvwxyz";
++ static char p_lets_uc[] = "ABCDEFGHJKMNOPQRTSUVWXYZ";
++ #endif
++ 
+  /* char */
+  name(p)
+  	PLANE	*p;
+***************
+*** 202,207
+  name(p)
+  	PLANE	*p;
+  {
+  	if (p->plane_type == 0)
+  		return ('A' + p->plane_no);
+  	else
+
+--- 212,218 -----
+  name(p)
+  	PLANE	*p;
+  {
++ #ifdef NOPLANES_I_L
+  	if (p->plane_type == 0)
+  		return (p_lets_uc[p->plane_no]);
+  	else
+***************
+*** 203,208
+  	PLANE	*p;
+  {
+  	if (p->plane_type == 0)
+  		return ('A' + p->plane_no);
+  	else
+  		return ('a' + p->plane_no);
+
+--- 214,224 -----
+  {
+  #ifdef NOPLANES_I_L
+  	if (p->plane_type == 0)
++ 		return (p_lets_uc[p->plane_no]);
++ 	else
++ 		return (p_lets_lc[p->plane_no]);
++ #else NOPLANES_I_L
++ 	if (p->plane_type == 0)
+  		return ('A' + p->plane_no);
+  	else
+  		return ('a' + p->plane_no);
+***************
+*** 206,211
+  		return ('A' + p->plane_no);
+  	else
+  		return ('a' + p->plane_no);
+  }
+  
+  number(l)
+
+--- 222,228 -----
+  		return ('A' + p->plane_no);
+  	else
+  		return ('a' + p->plane_no);
++ #endif NOPLANES_I_L
+  }
+  
+  number(l)
+***************
+*** 210,215
+  
+  number(l)
+  {
+  	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
+  		return (-1);
+  	else if (l >= 'a' && l <= 'z')
+
+--- 227,235 -----
+  
+  number(l)
+  {
++ #ifdef NOPLANES_I_L
++ 	char *index(), *cp;
++ 
+  	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
+  		return (-1);
+  	else if (l >= 'a' && l <= 'z'){
+***************
+*** 212,217
+  {
+  	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
+  		return (-1);
+  	else if (l >= 'a' && l <= 'z')
+  		return (l - 'a');
+  	else 
+
+--- 232,248 -----
+  
+  	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
+  		return (-1);
++ 	else if (l >= 'a' && l <= 'z'){
++ 		cp = index(p_lets_lc, l);
++ 		return(cp - p_lets_lc);
++ 	}
++ 	else {
++ 		cp = index(p_lets_uc, l);
++ 		return(cp - p_lets_uc);
++ 	}
++ #else NOPLANES_I_L
++ 	if (l < 'a' && l > 'z' && l < 'A' && l > 'Z')
++ 		return (-1);
+  	else if (l >= 'a' && l <= 'z')
+  		return (l - 'a');
+  	else 
+***************
+*** 216,221
+  		return (l - 'a');
+  	else 
+  		return (l - 'A');
+  }
+  
+  next_plane()
+
+--- 247,253 -----
+  		return (l - 'a');
+  	else 
+  		return (l - 'A');
++ #endif NOPLANES_I_L
+  }
+  
+  next_plane()
+***************
+*** 227,232
+  	do {
+  		found = 0;
+  		last_plane++;
+  		if (last_plane >= 26)
+  			last_plane = 0;
+  		for (pp = air.head; pp != NULL; pp = pp->next)
+
+--- 259,268 -----
+  	do {
+  		found = 0;
+  		last_plane++;
++ #ifdef NOPLANES_I_L
++ 		if (last_plane >= 24)		/* Two less than normal	*/
++ 			last_plane = 0;
++ #else NOPLANES_I_L
+  		if (last_plane >= 26)
+  			last_plane = 0;
+  #endif NOPLANES_I_L
+***************
+*** 229,234
+  		last_plane++;
+  		if (last_plane >= 26)
+  			last_plane = 0;
+  		for (pp = air.head; pp != NULL; pp = pp->next)
+  			if (pp->plane_no == last_plane) {
+  				found++;
+
+--- 265,271 -----
+  #else NOPLANES_I_L
+  		if (last_plane >= 26)
+  			last_plane = 0;
++ #endif NOPLANES_I_L
+  		for (pp = air.head; pp != NULL; pp = pp->next)
+  			if (pp->plane_no == last_plane) {
+  				found++;

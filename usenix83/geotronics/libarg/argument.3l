@@ -1,0 +1,409 @@
+.TH ARGUMENT 3L local
+.SH NAME
+argument - process \fBmain\fR routine arguments
+.SH SYNOPSIS
+.nf
+#include <stdio.h>
+#include <\fBargument.h\fR>
+\fBmain\fR (argc, argv)         int argc;       char **argv;
+
+/* initialize and provide standard options */
+int \fBarg_init\fR (&argc, &argv, help_main)    char *help_main[];
+
+/* specify a formal argument */
+int \fBarg_spec\fR (type, flag, name, sformat, pvalue
+    , pformat, desc, cfunc, cfarg)
+int  type;      /* syntactical argument type (usually 0) */
+char *flag;     /* option flag (string starting with '-') */
+char *name;     /* string naming the actual argument value */
+char *sformat;  /* \fBscanf\fR format to convert the argument */
+char *pvalue;   /* pointer to the formal argument variable */
+char *pformat;  /* \fBprintf\fR format to display the argument */
+char *desc;     /* string describing the argument */
+int (* cfunc) (cfarg);  /* function to call on conversion */
+char *cfarg;            /* argument for conversion function */
+
+/* #defined ordinary type flags and wild card options: */
+ordinary flags: ARG_FFIX ""   ARG_FPOS "["  ARG_FVAR "[]"
+wild card options:  ARG_WFLAG "\-?"     ARG_WKEY "?"
+
+/* process arguments */
+int \fBarg_process\fR ()
+
+/* print error message on standard error and exit */
+int \fBarg_error\fR (pvalue, type, message)   char *message;
+.fi
+.SH DESCRIPTION
+.PP
+This argument package allows the specification and conversion of formal
+arguments for a UNIX C \fImain\fR routine.
+.PP
+The command syntax described in the System III manual under \fIintro\fR(1)
+and \fIgetopt\fR(3) is supported.  In addition, there are flag options,
+which use a word, rather than a single character, to designate the option.
+Options may ordinarily be given anywhere on the command line, though
+the meaning of the position of an option is determined by the command.
+.PP
+The package also provides ways to display the syntax of the command,
+to show the values of its arguments, to print error messages for 
+arguments, to take arguments from a file, and to give an interactive prompt.
+.bp
+.SH EXAMPLE
+.SH "The Source Code for a Command"
+.nf
+#include <stdio.h>
+#include <argument.h>
+
+static char *help_main[] =
+{       /* This message is printed by "\-help". */
+  arg_replace, " is similar to the example of getopt(3).\\n", 
+  "\\n",
+  NULL
+};
+.PP
+static FILE *file = NULL;
+main (argc, argv)
+int argc;       char **argv;
+{
+  extern int bproc(), filefunc ();
+  int aflag = 0;
+  double bflag = 0.0;
+  FILE *ifile = stdin;
+  FILE *ofile = stdout;
+  int ret;
+
+	/* initialize argument package */
+  arg_init (&argc, &argv, help_main);
+
+	/* specify formal arguments */
+  arg_spec (0, "-a", "", "%d", &aflag
+    , "%d", "a flag", NULL, NULL);
+  arg_spec (0, "-b", "optarg", "%lf", &bflag
+    , "%g", "another flag", bproc, &bflag);
+  arg_spec (0, "-f", "ifile", "&&r", &ifile
+    , NULL, "input file", NULL, NULL);
+  arg_spec (0, "-o", "ofile", "&&w", &ofile
+    , NULL, "output file", NULL, NULL);
+  arg_spec (0, "[]", "name", "&r", &file
+    , NULL, "file name", filefunc, &file);
+
+	/* process actuals according to formals */
+  while ((ret = arg_process ()) > 0)
+    ;
+  if (ret < 0)
+    exit (-1);
+  exit (0);
+}  
+.PP
+static int filefunc (pfp)
+char *pfp;
+{       /* conversion function for <name> */
+  register FILE *file = * ((FILE **) pfp);
+  /* etc. */
+}
+.PP
+static int bproc (pointer)
+char *pointer;
+{       /* conversion function for "-b" */
+  double bflag = *((double *) pointer);
+
+  if (bflag < 0.0)
+    arg_error (NULL, 0, "negative");
+  else
+    printf ("-b %g\\n", bflag);
+}
+.SH "The Standard Options and an Error Message"
+.SS "% getopt -syn"
+.nf
+getopt [[--a]] [-b <optarg>] [-f <ifile>] [-o <ofile>]
+ [-syn] [-help] [-show] [ <name> ]
+.SS "% getopt -help"
+.nf
+getopt [[--a]] [-b <optarg>] [-f <ifile>] [-o <ofile>]
+ [-syn] [-help] [-show] [ <name> ]
+.PP
+getopt:
+
+       switch option    format  description
+	[--]                    end of options
+	[-a]                    a flag
+	[-b <optarg>]      %lf  another flag
+	[-f <ifile>]       &&r  input file
+	[-o <ofile>]       &&w  output file
+
+	 flag option    format  description
+      [-syn]                    give synopsis
+     [-help]                    give help message
+     [-show]                    show argument values
+
+   variable argument    format  description
+  [         <name>       ]  &r  file name
+
+getopt is similar to the example of getopt(3).
+.SS "% getopt -show"
+.nf
+getopt:
+	[--]                %d  "0"
+	[-a]                %d  "0"
+	[-b <optarg>]       %g  "0"
+	[-f <ifile>]       &&r  "`standard input'"
+	[-o <ofile>]       &&w  "`standard output'"
+      [-syn]                %d  "0"
+     [-help]                %d  "0"
+     [-show]                %d  "1"
+  [         <name>       ]  &r  "(null)"
+.SS "% getopt -b -3.5"
+.nf
+* getopt * negative switch option -b <optarg> "-3.5"
+.fi
+.SH DISCUSSION
+.PP
+The usual way of using the package involves several steps:
+
+  (i)   Initialize the argument package:  \fIarg_init\fR.
+  (ii)  Specify the formal arguments:  \fIarg_spec\fR.
+  (iii) Process actuals according to formals:  \fIarg_process\fR.
+  (iv)  Act on the processed arguments (\fIarg_error\fR).
+
+Steps (iii) and (iv) may be repeated several times.
+.SH "Initialization:  \fIarg_init"\fR
+.PP
+This is usually done by calling \fIarg_init\fR.
+\fIArg_init\fR specifies the name of the program for error reporting,
+specifies the actual arguments to process, and specifies the
+standard options (\fB"\-syn"\fR, \fB"\-help"\fR, \fB"\-show"\fR, and \fB"\--"\fR).
+.PP 
+The first two arguments to \fIarg_init\fR are pointers to \fBargc\fR and \fBargv\fR.
+The third argument may be \fBNULL\fR.
+If non-\fBNULL\fR, the third argument is an array of strings (char\ *\ []), 
+terminated by a \fBNULL\fR pointer.
+These strings are a description of the command which
+will be printed as part of the \fB"\-help"\fR standard option.
+The string \fIarg_replace\fR will be
+replaced with the name of the program (found in extern char *\fIprogname\fR),
+but all other strings are printed exactly as found.
+Any newlines or other
+formatting characters must be embedded in the strings.
+.SH "Formal Argument Specification:  \fIarg_spec"\fR
+.PP
+Specification of the formal arguments of the program is done
+through the routine \fIarg_spec\fR.
+.SS "Syntactical Argument Type"
+.PP
+The first, \fItype\fR, argument to \fIarg_spec\fR
+may be set to special codes for unusual effects, but is usually 0.
+The kind of argument specified is deduced from \fIflag\fR and \fIname\fR.
+.SS "Option Specification"
+.PP
+If \fIflag\fR starts with the dash character, \fB`-'\fR (or \fB`+'\fR or \fB`='\fR),
+and is not immediately
+followed by a digit or decimal point, an option is being specified.
+If \fIflag\fR has
+exactly one character following the dash, the option is a switch,
+else it is a flag.  Only one flag is allowed in an actual argument,
+while many switches may be given in the same actual.
+.PP
+The string \fB"\-"\fR can not be specified as an option.
+If this string is seen as an actual argument,
+it is always taken to be an ordinary argument.
+Many programs interpret it to mean the standard input stream.
+.PP
+A key, such as used by \fIar\fR(I), can be specified by passing a string
+consisting of a single character as the \fIflag\fR argument
+to \fIarg_spec\fR.
+The characters \fB`-'\fR, \fB`+'\fR, \fB`='\fR, \fB`['\fR and \fB`]'\fR are prohibited,
+but digits are permitted.
+.PP
+If \fIname\fR is not the null pointer (\fBNULL\fR) or the null string (\fB""\fR),
+an argument for the option (the \fIoptarg\fR of \fIintro\fR(1)) will be expected on the command line.
+This argument may be in the next actual argument, or, for a switch,
+immediately following the switch character in the same actual.
+The argument for a flag option must be in the actual following the flag.
+.SS "Ordinary Argument Specification"
+.PP
+If the \fIflag\fR argument to \fIarg_spec\fR does not
+indicate an option is being specified, then an ordinary argument is 
+being specified (the \fIcmdarg\fR of \fIintro\fR(1)).
+.PP
+There are three types of ordinary arguments:  fixed, possible, and variable.
+If \fIflag\fR is \fBNULL\fR, the default type (fixed) is assumed.
+.PP
+If \fIflag\fR is \fBARG_FFIX\fR (\fB""\fR), a fixed argument is being specified.
+There must be exactly one actual argument in the command line to match
+each of these, in the order the formal fixed arguments are specified.
+.PP
+If \fIflag\fR is \fBARG_FPOS\fR (\fB"["\fR), a possible argument is being specified.
+There may be at most one actual to match each of these, and they are
+matched in the order specified.  \fIAdb\fR(1) uses this kind of argument.
+.PP
+If \fIflag\fR is \fBARG_FVAR\fR (\fB"[]"\fR), a variable argument is being specified.
+The whole set of variable arguments specified may be matched zero
+or more times by actuals.  \fIEcho\fR(1) uses this kind of argument.
+.PP
+If ordinary arguments of different kinds are specified, actuals
+should match all the fixed arguments, then the possible arguments,
+then the variable arguments.  It is rare to have all three kinds.
+.SS "Argument Conversion"
+.PP
+The \fIsformat\fR and \fIpvalue\fR arguments to \fIarg_spec\fR determine
+the type and method of conversion of an actual argument according
+to a formal argument.
+.PP
+When an actual argument is seen on the command line to match a formal argument,
+the actual is converted by \fIscanf\fR(3) according to \fIsformat\fR,
+and the result is put in the formal argument variable
+pointed to by the value pointer, \fIpvalue\fR.
+\fIArg_spec\fR (which is actually a macro) casts whatever is passed
+as \fIpvalue\fR to be (char *).
+.PP 
+The formal argument variable must be initialized before it is specified.
+This is done by ordinary C assignment or static initialization.
+.PP
+The formal argument variable for an option with no argument
+must be of type \fBARG_TTYPE\fR\ (int),
+should be initialized to \fBARG_TOFF\fR\ (0),
+and will be set to \fBARG_TON\fR\ (1) on conversion.
+.PP
+The formats \fB"%s"\fR and \fB"%["\fR are special cases:
+\fIscanf\fR expects an argument of type (char\ *), not (char\ **);
+thus the value pointer should be (char\ *),
+and the formal argument variable should be a (char\ []) array.
+.PP 
+There is a special format, \fBARG_DSCAN\fR (the null string, \fB""\fR), 
+which assigns an actual
+argument string directly to the formal argument variable.
+The formal argument variable is expected to be of type \fBARG_DTYPE\fR\ (char\ *)
+in this case, making the value pointer of type (\fBARG_DTYPE\fR\ *), i.e.,
+(char\ **).   Such an argument is printed in format \fBARG_DPRINT\fR\ (\fB"%s"\fR).
+.SS "Argument Display" 
+.PP
+The \fIsformat\fR and \fIdesc\fR arguments to \fIarg_spec\fR are shown
+in the \fB"\-help"\fR display, in the \fB``format''\fR and \fB``description''\fR columns,
+respectively.
+.PP
+The \fIpformat\fR argument to \fIarg_spec\fR is shown
+in the \fB"\-show"\fR display, and is used with \fIprintf\fR(3) to print the
+formal argument value with \fB"\-show"\fR and in error messages.
+.PP 
+If \fIpformat\fR is \fBNULL\fR, it defaults to \fIsformat\fR.
+\fIPformat\fR and \fIsformat\fR are frequently the same, but care
+should be taken, as \fIprintf\fR and \fIscanf\fR formats are not completely
+compatible.  If \fB"%s"\fR or \fB""\fR is used in \fIsformat\fR, the same format
+should also be used in \fIpformat\fR, and \fB"%s"\fR should be used for \fB"%["\fR.
+.SS \fB"Conversion Function" 
+.PP
+The \fIcfunc\fR and \fIcfarg\fR arguments to \fIarg_spec\fR are usually
+\fBNULL\fR.  If \fIcfunc\fR is not \fBNULL\fR, it should be a pointer to a function
+to be called whenever an actual is seen on the command line for the formal. 
+This conversion function should ordinarily return 1,
+and -1 will cause an error.
+.PP
+If \fIcfarg\fR is not \fBNULL\fR,
+it should be a pointer to be passed to
+\fIcfunc\fR as an argument thus:  (*\ cfunc)\ ((char\ *)\ cfarg).
+\fICfarg\fR is frequently the same as \fIpvalue\fR.
+\fIArg_spec\fR (which is actually a macro) casts its argument
+\fIcfarg\fR to be (char\ *), and the argument actually passed to
+\fIcfunc\fR is of type (char\ *).
+.SH "Argument Processing:  \fIarg_process"\fR
+.PP
+The routine \fIarg_process\fR is used to process the actual arguments  
+according to the formal arguments.  It returns > 0 when arguments
+are succesfully processed, 0 when there were no arguments to process,
+and -1 when an error was found.
+.PP
+If all variable formals are handled by \fIcfunc\fR conversion functions, 
+\fIarg_process\fR can simply be called while it returns anything\ >\ 0.
+.PP 
+If there are no formal variable ordinary arguments, all actual arguments
+are processed by the first call on \fIarg_process\fR, the
+routine returns 2, and subsequent calls return 0.
+.PP
+If there are formal variable ordinary arguments, 
+the first call on \fIarg_process\fR will process the fixed ordinary actuals,
+and any preceding or interspersed options, and return 1.
+While there are actuals corresponding to the variable formals,
+each succeeding call will process one set of variable actuals,
+and all preceding or interspersed options, and return 1.
+If there are options trailing all ordinary actuals,
+the succeeding call will process them and return 2.
+Once all actuals have been processed, succeeding calls
+will return 0.
+.PP
+If there are possible ordinary formals as well as variable formals,
+the possible actuals will be treated as options for this purpose.
+Thus the possible actuals will be processed by the call which
+processes the first set of variable arguments, or by the
+call which processes trailing options, if there are no variable actuals.
+.SS "Options with Special Effects"
+.PP
+Though options may ordinarily be given anywhere on the command line,
+none are recognized after the \fB"\-\-"\fR option of \fIgetopt\fR(3) is seen.
+Any remaining actuals which would otherwise be options are instead
+interpreted as ordinary arguments.
+.PP
+The option \fBARG_WFLAG\fR\ (\fB"\-?"\fR) matches any otherwise unrecognized flag
+or switch option, and \fBARG_WKEY\fR\ (\fB"?"\fR) matches any otherwise unknown key.
+A conversion function should be specified with this option.
+This function should return 1 for successful processing, 0 to permit
+a syntax error message, and -1 for an error already handled by the conversion
+function.
+The arguments to the conversion function are:  the specified function
+argument, -1, and the actual (unrecognized) option string.
+.SH "Error Reporting:  \fIarg_error"\fR
+.PP
+\fIArg_error\fR may be called to give an error message for a formal argument,
+and then exit with non-zero (error) \fIexit\fR status.
+The first argument to \fIarg_error\fR is a value pointer
+identical to that used in the specification of a formal argument.
+The second argument is an argument type, which is usually 0, meaning any type.
+The third argument is an error message string.
+.PP
+If the first argument to \fIarg_error\fR is \fBNULL\fR, the last converted
+argument is assumed.  This is useful within a \fIcfunc\fR conversion function.
+.SH "Standard IO Formats"
+.PP
+If the \fIarg_spec\fR sformat starts with one or two ampersand, \fB`&'\fR,
+characters, the corresponding actual argument
+should be a file name to be opened with \fIfopen\fR(3) or \fIfreopen\fR,
+respectively.  The open type is taken from the remainder of the format,
+following the single or double \fB`&'\fR.
+\fIPvalue\fR must point to a (FILE *) variable to be used to access the file.
+If \fIfreopen\fR is indicated, the value of the variable must be
+a valid non-\fBNULL\fR (FILE *), such as \fIstdin\fR, \fIstdout\fR, or \fIstderr\fR.
+\fIPformat\fR should always be the same as \fIsformat\fR.
+The actual argument filename is saved for display by \fB"\-show"\fR as the value
+of the argument.
+.PP 
+If \fIfopen\fR is indicated, the actual argument \fB"-"\fR is interpreted as 
+either \fIstdin\fR or \fIstdout\fR according to the open type.
+If \fIfreopen\fR is indicated, \fB"-"\fR leaves (*\ \fIpvalue\fR) unchanged
+and the previously used file open.
+.SH "DIAGNOSTICS and RETURNED VALUES"
+.PP
+An appropriate message is printed on the standard error stream for any error.
+\fIArg_error\fR always prints a message and does \fIexit\fR(-1).
+Errors discovered by \fIarg_init\fR or \fIarg_spec\fR are unrecoverable,
+and \fIexit\fR(-1) is done.
+.PP
+\fIArg_process\fR causes \fIexit\fR(0) by processing \fB"\-syn"\fR and \fB"\-help"\fR,
+but not \fB"\-show"\fR.  Syntax or conversion errors get -1 returned.
+If 2 is returned, the next call will return 0, and nothing but
+trailing options were processed.
+.PP
+From a \fIcfunc\fR conversion function, -1 will cause \fIarg_process\fR
+to return -1.
+If the formal command argument is not a wild card, 1 should otherwise
+be returned.  If the formal is a wild card, 0 will permit a syntax error 
+message and cause -1 to be returned from \fIarg_process\fR, and 
+1 will cause normal processing to proceed.
+.SH FILES
+.PP
+The library containing the argument package is \fB/usr/lib/libarg.a\fR,
+and is thus invoked from \fIcc\fR(1) by the option \fB"\-larg"\fR.
+.SH "SEE ALSO"
+.PP
+\fIintro\fR(1), \fIgetopt\fR(3), \fIexec\fR(2), \fIscanf\fR(3), \fIprintf\fR(3),
+\fIfopen\fR(3).
+.br
+``A Command Argument Processing Package,'' which is \fB/usr/hlp/argument.doc\fR.

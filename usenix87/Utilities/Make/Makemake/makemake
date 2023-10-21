@@ -1,0 +1,283 @@
+:
+#	Make a template makefile for C and Pascal programs
+#	Richard Grevis (...decvax!mulga!cadvax!richardg)
+#
+#	If a single argument is given to makemake, a
+#	Makefile template is constructed, with fields
+#	such as OBJECTS etc left blank. The argument supplied
+#	is the name of the program or library the makefile
+#	is a template for; e.g. "makemake cc". If more than
+#	one argument is given, the extra arguments will be the
+#	files that form the source.  These include C files, headers,
+#	YACC and LEx files, but also documentation, shell files,
+#	and READMEs etc.
+
+MAKEFILE=${MAKEFILE-Makefile}	# My manually made ones are 'Makefile', won't clobber.
+if [ $# = 0 ] ; then
+	echo "Usage: $0 [-l] name [files]..."
+	echo "-l: make a library makefile."
+	echo "name is the name of the resulting binary or library"
+	echo "files is the complete set of source files; give all of them"
+	exit 1
+fi
+if [ -r $MAKEFILE ] ; then
+	echo Old Makefile present
+	echo Moving $MAKEFILE to $MAKEFILE.old
+	mv ${MAKEFILE} ${MAKEFILE}.old 2>/dev/null
+fi
+# awk program to make CFILES etc strings nice for the makefile (not too long)
+AWKPROG='BEGIN{buf=""}{if(length(buf $1)<66)buf=buf" "$1;else{print buf,"\\";buf="	"$1}}END{print buf}'
+if [ $1 = '-l' ] ; then
+		libflag=true
+		shift
+else
+	libflag=false
+fi
+name=$1
+shift
+for i in $@ ; do
+	case $i in
+	*.[1-9])
+		MANFILES="$MANFILES
+			$i"
+		;;
+	*.mm|*.ms|*.me|*.doc)
+		DOCFILES="$DOCFILES
+			$i"
+		;;
+	*.c)
+		CFILES="$CFILES
+			$i"
+		OBJECTS="$OBJECTS
+			`echo $i | sed -e 's/.c$/.o/'`"
+		;;
+
+	*.f)
+		FFILES="$FFILES
+			$i"
+		OBJECTS="$OBJECTS
+			`echo $i | sed -e 's/.f$/.o/'`"
+		;;
+	*.y)
+		YACCFILES="$YACCFILES
+			$i"
+		OBJECTS="$OBJECTS
+			`echo $i | sed -e 's/.y$/.o/'`"
+		;;
+	*.l)
+		LEXFILES="$LEXFILES
+			$i"
+		OBJECTS="$OBJECTS
+			`echo $i | sed -e 's/.l$/.o/'`"
+		;;
+	*.s)
+		ASFILES="$ASFILES
+			$i"
+		OBJECTS="$OBJECTS
+			`echo $i | sed -e 's/.s$/.o/'`"
+		;;
+	*.h)
+		HEADERS="$HEADERS
+			$i"
+		;;
+	*.i)
+		INCLUDES="$INCLUDES
+			$i"
+		;;
+	*.sh)
+		SHFILES="$SHFILES
+			$i"
+		;;
+	*)
+		OTHERS="$OTHERS
+			$i"
+		;;
+	esac
+done
+#
+#	Add to libraries as appropriate
+#
+if [ "$LEXFILES" != "" ] ; then
+	LIBS="$LIBS -ll"
+fi
+if [ "$YACCFILES" != "" ] ; then
+	LIBS="$LIBS -ly"
+fi
+MCC='$(CC)'
+if [ "$FFILES" != "" ] ; then
+	MCC='f77'
+	FORTRAN='.SUFFIXES: .f
+.f.o:
+	f77 -c $(FFLAGS) $*.f
+.f:
+	f77 $(FFLAGS) $*.f -o $@ $(LIBS)
+	'
+fi
+LIBS="$LIBS -lnm"
+#	We are very lucky up to 10 blocks of arguments can be held
+MANFILES=`echo "$MANFILES" | awk "$AWKPROG"`
+DOCFILES=`echo "$DOCFILES" | awk "$AWKPROG"`
+HEADERS=`echo "$HEADERS" | awk "$AWKPROG"`
+INCLUDES=`echo "$INCLUDES" | awk "$AWKPROG"`
+CFILES=`echo "$CFILES" | awk "$AWKPROG"`
+FFILES=`echo "$FFILES" | awk "$AWKPROG"`
+ASFILES=`echo "$ASFILES" | awk "$AWKPROG"`
+LEXFILES=`echo "$LEXFILES" | awk "$AWKPROG"`
+YACCFILES=`echo "$YACCFILES" | awk "$AWKPROG"`
+OBJECTS=`echo "$OBJECTS" | awk "$AWKPROG"`
+SHFILES=`echo "$SHFILES" | awk "$AWKPROG"`
+OTHERS=`echo "$OTHERS" | awk "$AWKPROG"`
+
+#
+# Construct either a normal makefile or a library makefile
+# as appropriate
+#
+if [ $libflag = true ] ; then
+	name="\$(CPREFIX)$name"
+	MAIN="\$(TARGET):	\$(OBJECTS)
+	-rm \$(TARGET)
+	\$(AR) rcv \$(TARGET) \`\$(LORDER) \$(OBJECTS) | tsort\`
+	-\$(RANLIB) \$(TARGET)"
+	INSTALL="cp \$(TARGET) \$(INSDIR)/\$(TARGET)
+		chmod 644 \$(INSDIR)/\$(TARGET)
+		-\$(RANLIB) \$(INSDIR)/\$(TARGET)"
+	INSDIR='$(ROOTDIR)/lib'
+else
+	MAIN="\$(TARGET):	\$(OBJECTS)
+	${MCC} \$(LDFLAGS) \$(OBJECTS) -o \$(TARGET) \$(LIBS)
+	size \$(TARGET)"
+	INSTALL="cp \$(TARGET) \$(INSDIR)/\$(TARGET)
+		chmod 711 \$(INSDIR)/\$(TARGET)"
+	INSDIR='$(ROOTDIR)/bin'
+fi
+#
+#	Start making the makefile template. This
+#	is VERY tricky; most of the multiple sloshing
+#	etc was done by a careful mechanical procedure
+#	One should do the reverse to work out what it all
+#	means, although I warn you, this is a shell file
+#	producing a makefile which executes shell commands
+#	that produce the dependency lists at the end of
+#	the makefile (itself). This is BLACK MAGIC !!!
+#
+cat > $MAKEFILE <<!
+MAKEFILE= $MAKEFILE
+CLOCALFLAGS	=
+ROOTDIR		= \$\$HOME
+$FORTRAN
+CPREFIX=$CPREFIX
+TARGET=	$name
+CC	= \$(CPREFIX)cc
+INCLUDE	= /usr/local/include
+CFLAGS	= -I\$(INCLUDE) $(CLOCALFLAGS)
+YFLAGS	= -d
+FFLAGS	= -onetrip -w66 -O
+LDFLAGS	= -n
+LIBS	= $LIBS
+#	Directory where program is installed
+INSDIR	= $INSDIR
+LINT	= \$(CPREFIX)lint $(CLOCALFLAGS) -habx
+AR	= \$(CPREFIX)ar
+LORDER	= \$(CPREFIX)lorder
+RANLIB	= \$(CPREFIX)ranlib
+
+HEADERS	=$HEADERS
+INCLUDES=$INCLUDES
+CFILES	=$CFILES
+FFILES	=$FFILES
+ASFILES	=$ASFILES
+YACCFILES=$YACCFILES
+LEXFILES=$LEXFILES
+SHFILES	=$SHFILES
+MANFILES=$MANFILES
+DOCFILES=$DOCFILES
+OTHERS	=$OTHERS
+OBJECTS	=$OBJECTS
+SOURCE	= \$(MAKEFILE) \$(MANFILES) \$(DOCFILES) \$(SHFILES) \$(OTHERS) \
+	\$(HEADERS) \$(INCLUDES) \$(YACCFILES) \$(LEXFILES) \$(CFILES) \
+	\$(FFILES) \$(ASFILES)
+LISTFILES= \$(MAKEFILE) \$(SHFILES) \$(HEADERS) \$(INCLUDES) \\
+	\$(YACCFILES) \$(LEXFILES) \$(CFILES) \$(FFILES) \$(ASFILES)
+
+$MAIN
+
+install:	\$(INSDIR)/\$(TARGET)
+
+\$(INSDIR)/\$(TARGET):	\$(TARGET)
+	$INSTALL
+
+tar:
+	tar rfcb /dev/rht0 20 \$(SOURCE)
+cpio:
+	ls \$(SOURCE) | cpio -oB
+netsend:
+	netsend \$(dest) \$(SOURCE)
+lint:
+	\$(LINT) \$(CLOCALFLAGS) -I\$(INCLUDE) \$(CFILES)
+clean:
+	-rm -f \$(OBJECTS)
+clobber: clean
+	-rm -f \$(TARGET)
+touch:
+	touch \$(TARGET)
+print:	list60
+list:	list66
+list66:
+	@pr -n -w132 -l66 \$(LISTFILES)
+list60:
+	@pr -n -w132 -l60 \$(LISTFILES)
+list51:
+	@pr -n -w132 -l51 \$(LISTFILES)
+vgrind:
+	@vgrind \$(LISTFILES)
+
+depend:
+	sed -n -e '1,/^### DO NOT DELETE THIS LINE./p' < \$(MAKEFILE) > \$(MAKEFILE).new
+!
+cat >> $MAKEFILE <<'!'
+	-for i in $(YACCFILES) $(LEXFILES) $(CFILES) $(FFILES) ; do\
+		base=`expr $$i ':' '\(.*\).[cylf]$$'`;\
+		suffix=`expr $$i ':' '.*\.\([cylf]\)$$'`;\
+		if /bin/test $$suffix = l ; then\
+			lex $$i;\
+			mv lex.yy.c $$base.c;\
+			suffix=c;\
+			echo "$$base.c:	$$base.l" >> $(MAKEFILE).new;\
+		elif /bin/test $$suffix = y ; then\
+			yacc $(YFLAGS) $$i;\
+			mv y.tab.c $$base.c;\
+			suffix=c;\
+			echo "$$base.c:	$$base.y" >> $(MAKEFILE).new;\
+			echo "y.tab.h:	$$base.y" >> $(MAKEFILE).new;\
+		fi;\
+		$(CC) $(CLOCALFLAGS) -I$(INCLUDE) -E $$base.$$suffix |\
+		grep '^# [0-9][0-9]* ".*"$$' > /tmp/grep$$$$;\
+		sed -e 's/.*"\(.*\)"$$/\1/' -e 's/^.\///' < /tmp/grep$$$$ |\
+		sort -u |\
+		awk\
+			"BEGIN { line=\"$$base.o:	\"}\
+			{\
+				if(length(line \$$0)>63)\
+				{\
+					print line,\"\\\\\";\
+					line=\"		\"\$$0\
+				}\
+				else\
+					line=line\" \"\$$0\
+			}\
+			END { print line}"\
+		>> $(MAKEFILE).new;\
+	done;\
+	rm /tmp/grep$$$$
+!
+cat >> $MAKEFILE <<!
+	mv \$(MAKEFILE).new \$(MAKEFILE)
+### The following dependencies are/can be generated automatically
+### by 'make depend'. Listen to this warning
+###
+### Do NOT put any of your own dependencies below this line,
+### they will be removed
+### DO NOT DELETE THIS LINE. USED FOR MAKE DEPEND
+!
+echo "Template makefile is called '$MAKEFILE'"
+echo "Remember to use 'make depend' to finish the job"

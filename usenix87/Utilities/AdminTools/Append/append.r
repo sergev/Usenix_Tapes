@@ -1,0 +1,391 @@
+.DA
+.TL
+Append,
+A Program to Simulate "append" Permissions on Unix.
+.AU
+Dave Brown
+(yetti!lethe!dave, watmath!watbun!drbrown)
+.AB
+Append.web is the (complete) implementation of a program
+which closes a small security hole in Unix, by allowing
+selected persons to add to (but not modify) the contents
+of a directory.
+.PP
+With append permissions, one can add or update user-supported
+software without requiring superuser priveleges, or can
+place gateways to otherwise inaccessible programs or data 
+in publicly accessible places.
+.AE
+
+.fi
+.ec
+.NH
+Append
+.br
+.PP
+Append is a command to allow another person to put a file (actually
+a link) into a particular directory.  This simulates the "append only"
+access permission allowed by Multics but not Unix.
+.PP
+The mechanism is quite simple: the program is setuid to the owner of
+the directory, and when called simply checks the file for plausability
+and links it into the current directory.
+
+
+.fi
+.ec
+.NH
+Installation
+.br
+.PP
+To install append, place a copy into the directory you wish to
+have accessible to others, set it setuid and executable, but not
+writable.  The chmod command for this is:
+.nf
+	chmod u+s,g-w,o-w,a+x append -- accessible to anyone
+	  or
+	chmod u+s,g-w,o-w,o-x,g+x append -- accessible to group
+.fi
+.PP
+If you take a copy of mine, you will also have to "chown" it to yourself 
+.I
+before
+you chmod it setuid.
+
+
+.fi
+.ec
+.NH
+Implementation
+.br
+.PP
+The program consists of a main routine and some ancillaries, thusly:
+
+.B
+.br
+<Append>=
+.R
+.eo
+.nf
+<Header>
+<Includes>
+<Globals>
+<Main>
+<Utilities>
+
+
+.fi
+.ec
+.NH 2
+Main Program
+.br
+.PP
+Append consists of three basic operations.  First it checks to see
+if you want usage information, then it checks that the file is acceptable
+and finally it links it in.
+
+.B
+.br
+<Main>=
+.R
+.eo
+.nf
+ void
+main(argc,argv) int argc; char *argv[]; {
+	<Declarations>
+	char	*progName, *fromName, *toName,
+		*segmentPart(/* char * */);
+
+	progName = argv[0];
+	if (argc < 2) {
+		/* no parms, must be a request for information */
+		<Provide Usage>
+		exit(0);
+	}
+	else if (argc == 2) {
+		/*  one parm, make names the same */
+		fromName = argv[1];
+		toName = segmentPart(argv[1]);
+	}
+	else if (argc == 3) {
+		/* two parms, make second one the new name */
+		fromName = argv[1];
+		if (strcmp(argv[2],".")==0) {
+			/* the directory */
+			toName = segmentPart(fromName);
+		}
+		else {
+			toName = segmentPart(argv[2]);
+		}
+	}
+
+.fi
+.ec
+.PP
+Note, please that toName is always the segment (filename) part of
+the desired location.  This prevents one from saying "append x ../x"
+and making x appear in some directory you don't want append permissions
+applied to.
+
+.nf
+.eo
+
+	<Validity Check> 
+	rc = link(fromName,toName);
+	<Completion Check>
+	exit(0);
+}
+
+.B
+.br
+<Globals>=
+.R
+.eo
+.nf
+#define ERR (-1)
+
+
+.fi
+.ec
+.NH 2
+Checking the Advisability of Appending
+.br
+.PP
+It is inadvisable to append many kinds of file to a directory,
+such as directorys and special files, and of course the file
+should be present and either readable or executable.
+This block checks for accessibility and plausibility.
+
+.PP
+Please note that it is reasonable to append a setuid
+or setgid program to a directory. In fact, this is the proper
+way to place a "gate" to certain private or sensitive
+information in a generally accessible place.  It is not
+reasonable to contrive to chown and re-setuid a program
+to belong to root and append it to a directory, but this is dealt
+with by chown and chmod directly, and does not affect append.
+.PP
+This does not mean that giving anyone append permissions on /bin is
+a good idea: it is not hard to write a program which contains a
+trapdoor to catch the superuser, and append on /bin or /usr/bin
+would make it easy to put it in his way.
+.PP
+In general, one places append permissions on directories like
+/usr/local/bin (which superuser doesn't normally search for commands),
+man-page directories and transfer directories.  
+Uucppublic would have been an excellent
+example if the uucp author had thought of this technique...
+
+.PP
+One can append a FIFO to a directory even though it
+is a type of "special" file, since this does not constitute an
+(obvious) security problem.
+
+.B
+.br
+<Validity Check>=
+.R
+.eo
+.nf
+if (stat(progName,&s) == ERR || s.st_mode & (DIRECTORY|SPECIAL)
+   || (s.st_uid != geteuid() && s.st_gid != getegid())) {
+	/* someone's trying to trick me by putting append in his path */
+	fprintf(stderr,"%s: Can't append to current directory, %s\n",
+		progName, "\"cd\" to target directory first");
+	exit(1);
+}
+
+
+if (stat(fromName,&s) == ERR) {
+	switch (errno) {
+	case ENOTDIR: 
+		fprintf(stderr,"%s: Can't access %s, %s.\n", progName,
+			fromName, "part of the path is a non-directory");
+		break;
+	case ENOENT:
+		fprintf(stderr,"%s: File %s doesn't exist.\n",
+			progName,fromName);
+		break;
+	case EACCES:
+		fprintf(stderr,"%s: Can't search a directory in %s.\n",
+			progName,fromName);
+		break;
+	default:
+		fprintf(stderr,"%s: Can't link, error is \"%s\".\n", 
+			progName,sys_errlist[errno]);
+	}
+	exit(1);
+}
+else if ((m=s.st_mode) & SPECIAL) {
+	fprintf(stderr,"%s: Can't append a special file.\n",progName);
+	exit(1);
+}
+else if (m & DIRECTORY) {
+	fprintf(stderr,"%s: Can't append a directory.\n",progName);
+	exit(1);
+}
+
+if (stat(toName,&s) != ERR) {
+	fprintf(stderr,"%s: Can't replace an existing file\n",
+		progName);
+	exit(1);
+}
+
+.fi
+.ec
+.PP
+The block depends upon the following declarations and includes:
+
+.B
+.br
+<Includes>=
+.R
+.eo
+.nf
+#include <stdio.h>
+#include <errno.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+
+.B
+.br
+<Declarations>=
+.R
+.eo
+.nf
+struct stat s;	/* stat buffer */
+int	m; 	/* file access mode */
+
+.B
+.br
+<Globals>=
+.R
+.eo
+.nf
+#define DIRECTORY 0040000
+#define SPECIAL (0020000 | 0060000)
+
+
+.fi
+.ec
+.NH 2
+Checking the Results of Appending
+.br
+.PP
+The link can fail for several reasons, notably because Unix
+can't do cross-device links, link to a read-only file system
+and so forth.
+
+.B
+.br
+<Completion Check>=
+.R
+.eo
+.nf
+if (rc == ERR) {
+	switch (errno) {
+	case EACCES: 
+		fprintf(stderr,"%s: Cannot write to this directory (%s).\n",
+			progName, "Can't happen, send mail to the owner");
+		exit(3);
+	case EXDEV:
+		fprintf(stderr,"%s: Can't do a cross-device link.\n",
+			progName);
+		exit(1);
+	case EROFS:
+		fprintf(stderr,"%s: Can't link to a r/o file system.\n",
+			progName);
+		exit(1);
+	case EMLINK:
+		fprintf(stderr,"%s: Can't link, too many already exist.\n",
+			progName);
+		exit(1);
+	case ENOSPC:
+		fprintf(stderr,"%s: Can't link, directory full.\n",
+			progName);
+		exit(1);
+	case ENOTDIR:
+	case ENOENT:
+	case EEXIST:
+	case EPERM:
+		fprintf(stderr,"%s: Can't link, impossible error \"%s\".\n",
+			progName,sys_errlist[errno]);
+		exit(3);
+	default:
+		fprintf(stderr,"%s: Can't link, error is \"%s\".\n", 
+			progName,sys_errlist[errno]);
+		exit(2);
+	}
+}
+
+.fi
+.ec
+.PP
+These depend in turn on the following:
+.B
+.br
+<Declarations>=
+.R
+.eo
+.nf
+extern int errno;
+extern char *sys_errlist[];
+int	rc;
+
+
+.fi
+.ec
+.NH 2
+User Header
+.br
+
+.B
+.br
+<Header>=
+.R
+.eo
+.nf
+/*
+ * append -- a command to append a file to a directory to which 
+ *	one does not have write permission, using setgrp & ln. 
+ *	Placing append in a directory simulates the "sa a *.*" 
+ *	access control command of Multics. See also append.web. 
+ */
+
+.B
+.br
+<Provide Usage>=
+.R
+.eo
+.nf
+fprintf(stderr,"%s -- add (via link) a file to this directory, %s\n",
+	progName, "even if you lack permission.");
+fprintf(stderr,"Usage: %s filename [newname]\n",progName);
+
+
+.fi
+.ec
+.NH
+Utility Routines
+.br
+.PP
+This program has a single utility routine, "segmentPart", which
+extracts the segment/filename part of a pathname string, by returning
+everything right of the last "/".
+
+.B
+.br
+<Utilities>=
+.R
+.eo
+.nf
+ char *
+segmentPart(s) char *s; {
+	char	*p, *strrchr(/* char *, char */);
+
+	if (s && (p=strrchr(s,'/'))) {
+		return ++p;
+	}
+	return s;
+}
+

@@ -1,0 +1,76 @@
+*** route.c.orig	Sun Apr  6 14:43:23 1986
+--- route.c	Sun Apr  6 14:43:25 1986
+***************
+*** 22,27 ****
+--- 22,28 ----
+  
+  int	rttrash;		/* routes not in table but not freed */
+  struct	sockaddr wildcard;	/* zero valued cookie for wildcard searches */
++ struct	rtentry	nowildcard;	/* indicates rtalloc shouldn't use wildcard */
+  int	rthashsize = RTHASHSIZ;	/* for netstat, etc. */
+  
+  /*
+***************
+*** 34,44 ****
+  	register struct mbuf *m;
+  	register u_long hash;
+  	struct sockaddr *dst = &ro->ro_dst;
+! 	int (*match)(), doinghost, s;
+  	struct afhash h;
+  	u_int af = dst->sa_family;
+  	struct mbuf **table;
+  
+  	if (ro->ro_rt && ro->ro_rt->rt_ifp && (ro->ro_rt->rt_flags & RTF_UP))
+  		return;				 /* XXX */
+  	if (af >= AF_MAX)
+--- 35,50 ----
+  	register struct mbuf *m;
+  	register u_long hash;
+  	struct sockaddr *dst = &ro->ro_dst;
+! 	int (*match)(), doinghost, s, nowild;
+  	struct afhash h;
+  	u_int af = dst->sa_family;
+  	struct mbuf **table;
+  
++ 	nowild = 0;
++ 	if (ro->ro_rt == &nowildcard) {
++ 		ro->ro_rt = NULL;
++ 		nowild++;
++ 	}
+  	if (ro->ro_rt && ro->ro_rt->rt_ifp && (ro->ro_rt->rt_flags & RTF_UP))
+  		return;				 /* XXX */
+  	if (af >= AF_MAX)
+***************
+*** 46,52 ****
+  	(*afswitch[af].af_hash)(dst, &h);
+  	match = afswitch[af].af_netmatch;
+  	hash = h.afh_hosthash, table = rthost, doinghost = 1;
+! 	s = splnet();
+  again:
+  	for (m = table[RTHASHMOD(hash)]; m; m = m->m_next) {
+  		rt = mtod(m, struct rtentry *);
+--- 52,58 ----
+  	(*afswitch[af].af_hash)(dst, &h);
+  	match = afswitch[af].af_netmatch;
+  	hash = h.afh_hosthash, table = rthost, doinghost = 1;
+! 	s = splimp(); /* splnet not high enough:  also called from interrupt. */
+  again:
+  	for (m = table[RTHASHMOD(hash)]; m; m = m->m_next) {
+  		rt = mtod(m, struct rtentry *);
+***************
+*** 79,85 ****
+  	/*
+  	 * Check for wildcard gateway, by convention network 0.
+  	 */
+! 	if (dst != &wildcard) {
+  		dst = &wildcard, hash = 0;
+  		goto again;
+  	}
+--- 85,91 ----
+  	/*
+  	 * Check for wildcard gateway, by convention network 0.
+  	 */
+! 	if (!nowild && dst != &wildcard) {
+  		dst = &wildcard, hash = 0;
+  		goto again;
+  	}

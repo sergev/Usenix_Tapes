@@ -1,0 +1,405 @@
+.TH GRAPHIC 3I "7 December 1987" "InterViews" "InterViews Reference Manual"
+.SH NAME
+Graphic \- persistent structured graphics objects
+.SH SYNOPSIS
+.B #include <InterViews/graphic.h>
+.br
+.B #include <InterViews/Graphic/lines.h>
+.br
+.B #include <InterViews/Graphic/ellipses.h>
+.br
+.B #include <InterViews/Graphic/polygons.h>
+.br
+.B #include <InterViews/Graphic/splines.h>
+.br
+.B #include <InterViews/Graphic/label.h>
+.br
+.B #include <InterViews/Graphic/picture.h>
+.br
+.B #include <InterViews/Graphic/instance.h>
+.SH DESCRIPTION
+.B Graphic
+is the base class for a set of classes that provide persistent structured
+graphics.  Prederived classes include simple
+graphical objects (\fBPoint, Ellipse, Spline, Label,\fP etc.), a composite
+object (\fBPicture\fP), and an object that is a variation on another object
+(\fBInstance\fP).  Each graphic can be manipulated and transformed
+independently of others.  Functions are provided for computing
+the graphic's bounding
+box and whether or not it intersects a given point or rectangle.  Graphics
+are persistent in that each has a predefined representation that can be
+automatically written to and read from
+disk.  The \fBGraphic\fP class is derived from
+\fBPersistent\fP, described in Persistent(3I), which provides this
+functionality in a general persistent object class.
+Graphics use persistent paint
+objects that are analogous to the paint objects used by painters.
+Persistent paint objects are defined in <InterViews/Graphic/ppaint.h>.
+
+This manual page contains all you
+need to know to use \fBGraphic\fP and derived classes without the
+persistence feature.  If persistent graphics are required, then you should
+read Persistent(3I).
+.PP
+.SH STATE OPERATIONS
+.TP
+.B "Graphic(Graphic* = nil)"
+Create a new graphic having a copy of the given graphic's state.  
+All state values are set to nil (undefined) by default.
+.TP
+.B "virtual Graphic* Copy()"
+Returns an exact duplicate of the graphic.  This
+function should be redefined in user-derived graphic classes to
+guarantee these semantics.
+.TP
+.B "void SetBrush(PBrush*)"
+.ns
+.TP
+.B "PBrush* GetBrush()"
+Set or return the graphic's brush.
+.TP
+.B "void SetColors(PColor* fg, PColor* bg)"
+.ns
+.TP
+.B "PColor* GetFgColor()"
+.ns
+.TP
+.B "PColor* GetBgColor()"
+Set or return the graphic's colors.
+.TP
+.B "void SetFont(PFont*)"
+.ns
+.TP
+.B "PFont* GetFont()"
+Set or return the graphic's label font.
+.TP
+.B "void SetPattern(PPattern*)"
+.ns
+.TP
+.B "PPattern* GetPattern()"
+.ns
+.TP
+.B "void FillBg(boolean mode)"
+.ns
+.TP
+.B "boolean BgFilled()"
+Set or return the graphic's fill pattern and mode.
+If the mode is \fItrue\fP,
+fill operations will set pixels corresponding
+to 1's in the current fill pattern to the foreground color and
+pixels corresponding to 0's to the background color.
+If \fIfalse\fP, then only foreground pixels will be set.
+The default mode is \fItrue\fP.
+.TP
+.B "Graphic* Parent()"
+.ns
+.TP
+.B "virtual boolean HasChildren()"
+Parent returns the graphic's parent, if any.  HasChildren returns \fIfalse\fP
+by default; it should be redefined if a subclass should provide this
+information.
+.TP
+.B "void SetOrigin(int x0, int y0)"
+.ns
+.TP
+.B "void GetOrigin(int& x0, int& y0)"
+Set or return the origin by which all coordinates are offset.
+.TP
+.B "void SetTag(Ref)"
+.ns
+.TP
+.B "Ref GetTag()"
+Set or return a tag associated with the graphic.
+.TP
+.B "virtual Graphic& operator = (Graphic&)"
+The assignment operator is overloaded to copy the passed graphic's graphic
+state into this object's.
+.TP
+.B "void Translate(float dx, float dy)"
+.ns
+.TP
+.B "void Rotate(float angle, float cx = 0.0, float cy = 0.0)"
+.ns
+.TP
+.B "void Scale(float x, float y, float cx = 0.0, float cy = 0.0)"
+.ns
+.TP
+.B "void SetTransformer(Transformer*)"
+.ns
+.TP
+.B "Transformer* GetTransformer()"
+.ns
+.TP
+.B "void TotalTransformation(Transformer&)"
+Coordinates passed to drawing operations are transformed
+according to the current origin, translation (cumulative),
+rotation, and scale factor.  Optionally, scaling and rotation can be performed 
+relative to a point (\fIcx\fP, \fIcy\fP).
+Internally, a transformation matrix is stored that
+can be directly set and accessed using
+SetTransformer and GetTransformer.
+The default transformer is nil, meaning no transformations are performed.
+TotalTransformation postmultiplies the given transformer by the total
+transformation incurred by the graphic's parents, if any.
+
+Unless otherwise noted, input and output coordinates are relative to the
+coordinate system defined by the graphic's transformer.
+.TP
+.B "virtual void GetBounds(float& left, float& bottom, float& right, float& top)"
+Return the exact coordinates of the smallest box circumscribing the graphic.
+The return values are in absolute coordinates.
+.TP
+.B "void GetBox(Coord& left, Coord& bottom, Coord& right, Coord& top)"
+.ns
+.TP
+.B "void GetBox(BoxObj&)"
+Return the smallest box circumscribing the graphic, in Coords.  
+The return values are in absolute coordinates. A
+\fBBoxObj\fP represents a rectangle defined by lower
+left and upper right coordinates.  \fBBoxObj\fP is defined in
+<InterViews/Graphic/geomobjs.h>.
+.TP
+.B "virtual void GetCenter(float& x, float& y)"
+Return the center point of the graphic in absolute coordinates.
+.TP
+.B "virtual boolean Contains(PointObj&)"
+.ns
+.TP
+.B "virtual boolean Intersects(BoxObj&)"
+Return whether or not the graphic contains the given point or intersects the
+given rectangular area specified in absolute coordinates.
+\fBPointObj\fP, defined in <InterViews/Graphic/geomobjs.h>, describes a point.
+.TP
+.B "void CenterVert(Graphic*)"
+.ns
+.TP
+.B "void CenterHoriz(Graphic*)"
+.ns
+.TP
+.B "void Center(Graphic*)"
+.ns
+.TP
+.B "void AlignLeft(Graphic*)"
+.ns
+.TP
+.B "void AlignRight(Graphic*)"
+.ns
+.TP
+.B "void AlignTop(Graphic*)"
+.ns
+.TP
+.B "void AlignBottom(Graphic*)"
+.ns
+.TP
+.B "void AbutLeft(Graphic*)"
+.ns
+.TP
+.B "void AbutRight(Graphic*)"
+.ns
+.TP
+.B "void AbutUp(Graphic*)"
+.ns
+.TP
+.B "void AbutDown(Graphic*)"
+Position the given graphic relative to \fIthis\fP.  The graphic that
+performs the operation stays fixed, while the graphic supplied as the
+argument is translated appropriately.
+.SH DRAWING OPERATIONS
+.TP
+.B "virtual void Draw(Canvas*)"
+.ns
+.TP
+.B "virtual void Erase(Canvas*)"
+Draw draws the graphic on the given canvas using its current
+state.  Erase erases the
+graphic by temporarily setting its foreground color equal to its background 
+color and then drawing it.
+.TP
+.B "virtual void Draw(Canvas*, Coord left, Coord bottom, Coord right, Coord top)"
+.ns
+.TP
+.B "virtual void Erase(Canvas*, Coord left, Coord bottom, Coord right, Coord top)"
+Draw or erase the graphic on the canvas within the given bounding
+box, specified in absolute coordinates, without using fine clipping.  The
+bounding box should be used simply as a hint about the graphic's visibility.
+.TP
+.B "virtual void DrawClipped(Canvas*, Coord left, Coord bottom, Coord right, Coord top)"
+.ns
+.TP
+.B "virtual void EraseClipped(Canvas*, Coord left, Coord bottom, Coord right, Coord top)"
+Draw or erase the graphic on the canvas strictly within the given bounding
+box, specified in absolute coordinates.
+.SH DERIVED CLASSES AND OPERATIONS
+The following derived class are predefined.  In addition to the
+inherited operations, each derived class defines a
+\fBGetOriginal(...)\fP operation that returns the values supplied
+to the constructor when the object was created.
+.TP
+.B "Point(Coord x, Coord y, Graphic* graphic = nil)"
+.ns
+.TP
+.B "Line(Coord x0, Coord y0, Coord x1, Coord y1, Graphic* graphic = nil)"
+.ns
+.TP
+.B "MultiLine(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+Define a point, line, or set of connected lines at the specified coordinates,
+optionally having the same state as the given graphic.
+.TP
+.B "Ellipse(Coord x0, Coord y0, int r1, int r2, Graphic* graphic = nil)"
+.ns
+.TP
+.B "FillEllipse(Coord x0, Coord y0, int r1, int r2, Graphic* graphic = nil)"
+Define an ellipse or filled ellipse with center at
+(\fIx0\fP,\fIy0\fP) and radii \fIr1\fP and \fIr2\fP.
+.TP
+.B "Circle(Coord x0, Coord y0, int radius, Graphic* graphic = nil)"
+.ns
+.TP
+.B "FillCircle(Coord x0, Coord y0, int radius, Graphic* graphic = nil)"
+Define a circle or filled circle with center at
+(\fIx0\fP,\fIy0\fP) and radius \fIradius\fP.
+.TP
+.B "Rect(Coord x0, Coord y0, Coord x1, Coord y1, Graphic* graphic = nil)"
+.ns
+.TP
+.B "FillRect(Coord x0, Coord y0, Coord x1, Coord y1, Graphic* graphic = nil)"
+Define a rectangle or filled rectangle at the specified coordinates.
+.TP
+.B "Polygon(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+.ns
+.TP
+.B "FillPolygon(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+Define a polygon or filled polygon specified by the \fIn\fP vertices.
+.TP
+.B "BSpline(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+.ns
+.TP
+.B "ClosedBSpline(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+.ns
+.TP
+.B "FillBSpline(Coord* x, Coord* y, int n, Graphic* graphic = nil)"
+Define a B-spline specified by the \fIn\fP control vertices.
+If closed or filled, the last point is connected to the first point.
+.TP
+.B "Label(char* string, Graphic* graphic = nil)"
+.ns
+.TP
+.B "Label(char* string, int n, Graphic* graphic = nil)"
+Define a string or substring of text.  If background fill mode is on, then
+the characters are drawn in the foreground color and other pixels within
+character boundaries are set to the background color.  If background fill
+mode is off, only the foreground pixels are set.
+.TP
+.B "Picture(Graphic* graphic = nil)"
+.ns
+.TP
+.B "void Picture::Append(Graphic*)"
+.ns
+.TP
+.B "void Picture::Prepend(Graphic*)"
+.ns
+.TP
+.B "void Picture::InsertAfterCur(Graphic*)"
+.ns
+.TP
+.B "void Picture::InsertBeforeCur(Graphic*)"
+.ns
+.TP
+.B "void Picture::Remove(Graphic*)"
+.ns
+.TP
+.B "void Picture::RemoveCur()"
+.ns
+.TP
+.B "void Picture::SetCurrent(Graphic*)"
+.ns
+.TP
+.B "Graphic* Picture::GetCurrent()"
+.ns
+.TP
+.B "Graphic* Picture::First()"
+.ns
+.TP
+.B "Graphic* Picture::Last()"
+.ns
+.TP
+.B "Graphic* Picture::Next()"
+.ns
+.TP
+.B "Graphic* Picture::Prev()"
+.ns
+.TP
+.B "boolean Picture::IsEmpty()"
+.ns
+.TP
+.B "boolean Picture::AtEnd()"
+.ns
+.TP
+.B "Graphic* Picture::FirstGraphicContaining(PointObj&)"
+.ns
+.TP
+.B "Graphic* Picture::LastGraphicContaining(PointObj&)"
+.ns
+.TP
+.B "Picture* Picture::GraphicsContaining(PointObj&)"
+.ns
+.TP
+.B "Graphic* Picture::FirstGraphicIntersecting(BoxObj&)"
+.ns
+.TP
+.B "Graphic* Picture::LastGraphicIntersecting(BoxObj&)"
+.ns
+.TP
+.B "Picture* Picture::GraphicsIntersecting(BoxObj&)"
+.ns
+.TP
+.B "void Picture::Propagate()"
+A \fBPicture\fP is a graphic that contains other graphics.  A picture has
+its own state which is ``concatenated'' with the state of its
+constituent graphics (subgraphics) when the picture is drawn or erased.  The
+semantics of concatentation are that subgraphics are drawn with the
+picture's state information substituted for their own, except for
+attributes that are undefined (nil) in the picture; the subgraphics'
+individual attributes are used for these values.  Furthermore, each
+subgraphic's transformer is postmultiplied by the picture's transformer when
+the picture is drawn, so that subgraphics are drawn relative to the
+picture's coordinate system.
+
+Several operations are defined on Picture to allow subgraphics to be added,
+removed, and manipulated.  Append and Prepend allow subgraphics to be added
+to the beginning and end of the picture, respectively.  Subgraphics are
+drawn starting from the beginning of the picture, so that the most recently
+appended graphic is drawn last.  Each picture maintains a pointer to its
+``current'' subgraphic which can be set explicitly using SetCurrent and
+retrieved with GetCurrent.  InsertAfterCur and InsertBeforeCur insert a
+graphic after or before the current subgraphic, respectively.  Remove and
+RemoveCur remove a subgraphic from the picture.  First and Last return the
+first and last graphics in the picture. Next and Prev return the subgraphic
+following and preceding the current one, respectively, and set the current
+subgraphic to the value returned.  IsEmpty returns whether or not the
+picture has any subgraphics, and AtEnd returns \fItrue\fP if the current
+subgraphic pointer has been advanced past the last subgraphic.  
+
+FirstGraphicContaining, LastGraphicContaining, FirstGraphicIntersecting,
+LastGraphicIntersecting return the first or last graphic in the picture that
+contains the given point or intersects the given box.  GraphicsContaining and
+GraphicsIntersecting return a new picture containing those subgraphics that
+contain the given point or intersect the given box, respectively.
+
+Finally, Propagate modifies the graphics state of the picture's subgraphics
+by concatenating in place each subgraphic's state with the picture's own.
+This is useful when the subgraphics should retain their appearance after
+removal from the picture.  The picture's transformer is set to nil following
+the propagation to avoid concatenating its coordinate transformation twice.
+.TP
+.B "Instance(Graphic* obj = nil, Graphic* graphic = nil)"
+An \fBInstance\fP of a graphic consists of all the usual
+state plus a reference to another graphic specified by \fIobj\fP.
+When drawn or erased, the
+instance concatenates the state of the graphic it references with its own.
+.SH FILES
+<InterViews/Graphic/ppaint.h>	persistent paint objects
+.br
+<InterViews/Graphic/geomobjs.h>	persistent geometry objects
+.SH SEE ALSO
+Canvas(2I), Transformer(2I), GraphicBlock(3I), Painter(2I), Persistent(3I)

@@ -1,0 +1,103 @@
+.TH MAG III
+.SH NAME
+mag \- implement generalized magtape
+.SH SYNOPSIS
+.PP
+.B "#include <tp.h>"
+.PP
+.B "TPFILE *tpopen(unit, nmdns, rwx) char *nmdns, *rwx;"
+.PP
+.B "tpclose(tf) TPFILE *tf;"
+.PP
+.B "int tpread(tf, buf, size) TPFILE *tf; char *buf;"
+.PP
+.B "tpwrite(tf, buf, size) TPFILE *tf; char *buf;"
+.PP
+.B "FILE *tperr;"
+.SH DESCRIPTION
+These routines implement the generalized magtape described in
+.IR mag (I).
+Such a generalized magtape is viewed as a sequence of blocks each of which
+is written and read in one piece. A tape mark is represented as a block of
+length 0. The blocks correspond to physical blocks on tape (as separated
+by Interrecord Gaps). On a tape image each block is preceded by its length
+in format "%08d".
+.PP
+A generalized magtape is handled by these routines as a pointer to a
+TPFILE. Such a pointer is obtained from
+.IR tpopen .
+The
+.I unit
+and the
+.I nmdns
+describe the generalized magtape; these are the possibilities:
+.PP
+a real magtape:
+.I unit
+is a small non-negative integer (the unit number);
+.I nmdns
+is TP_DENL, TP_DENN or TP_DENH (for low, normal or high density).
+.PP
+a tape image:
+.I unit
+is TP_IMAG;
+.I nmdns
+is the file name.
+.PP
+a character device:
+.I unit
+is TP_CDEV;
+.I nmdns
+is the device name.
+.PP
+The third parameter
+.I rwx
+is either "r" or "rx" for reading or "w" for writing; "rx" suppresses
+the recognition of end-of-file in real magtapes (see
+.IR tpread ).
+.PP
+.I Tpclose
+closes a generalized magtape; this causes a rewind and makes room for
+other such files, since only a limited number (specified in _TP_MOPEN)
+can be open at the same time.
+.PP
+.I Tpread
+reads one block into
+.I buf
+to a maximum of
+.I size
+characters. The rest of the block, if present, is skipped.
+It returns the number of
+characters read, or 0 for a tape mark, or EOF for an end-of-file.
+On a tape image file the end-of-file coincides with the actual end-of-file.
+On a real magtape or on a character device three conditions can cause
+an end-of-file:
+.IP
+4 consecutive tape marks,
+.br
+2 consecutive read errors, or
+.br
+1 read error preceded by a tape mark,
+.PP
+unless "rx" was specified in the call of
+.IR tpopen ,
+in which case only 100 consecutive read errors will cause an end-of-file
+(to prevent the program from looping on end-of-reel).
+.PP
+.I Tpwrite
+writes one block from
+.I buf
+if
+.I size
+> 0, or a tape mark if
+.I size
+= 0.
+.SH DIAGNOSTICS
+If an error condition (other than end-of-file) is found, a message is
+printed on the stream
+.I tperr
+(default is
+.IR stderr ),
+and the program exits.
+.SH AUTHOR
+Dick Grune.

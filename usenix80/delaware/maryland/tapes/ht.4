@@ -1,0 +1,247 @@
+.th HT IV 11-April-1980
+.sh NAME
+tm \*- TE-16/TM03 magtape interface with filespacing
+.sh DESCRIPTION
+The files
+.it *mt*
+refer to the DEC TE-16/TM03 (RH/TM02/TU-16) magtape.
+File names with the same numerical suffix operate the same physical drive
+but with different opening and closing actions.
+A bit (0200 octal) in the inode minor device number
+sets a physical drive to write at 1600FPI density phase encoded (PE)
+instead of 800FPI Non-Return-Zero-Inverted (NRZI).
+Thus file name suffixes 0 and 128 may refer to the same drive but at
+800FPI and 1600FPI densities respectively.
+The hardware (when configured) detects and reads either density
+regardless of the suffix.
+.s3
+Each standard (cooked) file on tape
+starts just after an end-of-file mark (EOF)
+or the beginning of tape (BOT),
+consists of a series of 512 byte records,
+and terminates with at least one EOF.
+To some extent,
+the system makes it possible, if inefficient,
+to treat the tape like any other file.
+Seeks have their usual meaning and it is possible
+to read or write a byte at a time.
+Writing in very small units is inadvisable,
+however, because it tends to create monstrous record gaps.
+On a cooked device that is opened for writing,
+reading an EOF returns a 512 byte block of zeros
+to allow the operating systems read before write mechanism
+to extend tapes with small writes.
+Otherwise reading an EOF returns an error status from the cooked devices.
+.s3
+Files opened for writing whose last action was not a read
+write three file marks either when closing or before seeking backward.
+The files
+.it mt
+stay at their current position when opened
+and when closed return to their starting position.
+The files
+.it bu_mt*
+backup over the current file mark to a position just after the previous
+file mark or BOT when opened.
+When closed,
+they also return to their starting position.
+The files
+.it rw_mt*
+stay at their current position when opened
+and rewind to BOT when closed.
+The files
+.it nrw_mt*
+also stay at their current position when opened.
+When closed after reading,
+these files advance the tape to just past the next file mark,
+ready to read the next file.
+Hence, to skip a file,
+simply open the non-rewinding device for reading and then close it.
+After writing file marks when closing,
+the tape is positioned immediately after the first file mark,
+ready to extend the tape by writing yet another file.
+.s3
+The
+.it mt
+files discussed above are useful
+when it is desired to access the tape in a way
+compatible with ordinary files.
+When foreign tapes are to be dealt with, and especially
+when long records are to be read or written, the
+``raw'' interface is appropriate.
+The files corresponding to
+.it *mt*
+are named
+.it *rmt*.
+Each
+.it read
+or
+.it write
+call reads or writes the next physical record on the tape.
+In the write case the physical record has the same length as the
+buffer given.
+During a read,
+the record size is passed back as the number of bytes read,
+provided it is no greater than the buffer size;
+if the physical record is longer than the buffer,
+the first part of the data fills the buffer and
+an error is indicated.
+In raw tape I/O, the buffer
+.it must
+begin on a word boundary.
+However,
+the buffer length may be odd or even.
+Seeks are allowed on the raw device.
+Each physical record is treated internally
+as though it were exactly 512 bytes (including tape marks),
+so that a seek-by-blocks system call will actually seek by records.
+During a seek on the raw device, tape marks are counted as one block.
+On the cooked device,
+an error will be returned if the seek tries to cross a tape mark.
+On the raw device, an error is only returned
+if the seek tries to cross a double tape mark,
+leaving the tape positioned after the first of the pair.
+.s1
+When the non-rewinding raw files
+.it nrw_rmt*
+have just read a file mark in reaching the current position,
+other than any EOF that may precede the entire file,
+these files do not advance any further when closed.
+A
+.it seek
+just before closing can redefine the current position.
+.s1
+An end-of-file may be written on the raw devices by specifying
+a write buffer length of zero.
+Such a file mark also counts as 512 bytes when repositioning the file.
+.s3
+Signals may interrupt the tape open procedure so
+that a processes may be immediately terminated without
+waiting for the drive to complete tape movement.
+However, the device will remain occupied until closed.
+Although after an interrupted opening or
+I/O errors from the previous close,
+rewind and skip forward actions do not occur when the tape is next closed,
+the device continues with any backward prepositioning.
+On the raw device,
+a wait for tape seek operations may also be interrupted
+prior to the actual data transfer.
+In this case,
+the seek operation is completed but the device does not transfer data
+and the file pointer is not advanced.
+.s1
+The non-rewinding files
+.it nrw_mt*
+and
+.it nrw_rmt*
+are also named
+.it smt*
+and
+.it srmt*.
+.sh DIAGNOSTICS
+Except as noted above,
+when the cooked device tries to cross a file mark
+or the raw device tries to pass a pair of file marks
+the error number EFBIG (27) is returned to the
+.it read
+request.
+.s1
+Only one file corresponding to a physical drive may be open.
+Attempts to multiply open such files produce error ENXIO.
+If a physical error occurs during opening
+from the actions of a previous close operation
+or an attempt to backspace before opening,
+the pending open returns error status EIO.
+In particular,
+an attempt to open a backup file such as
+.it bu_rmt0
+when the device is already positioned at the beginning of tape,
+is such an error.
+File skipping to the hardware end of tape also generates this error
+and backs up the tape.
+.sh FILES
+/dev/mt*
+.br
+/dev/rmt*
+.br
+/dev/bu_mt*
+.br
+/dev/bu_rmt*
+.br
+/dev/rw_mt*
+.br
+/dev/rw_rmt*
+.br
+/dev/nrw_mt*
+.br
+/dev/nrw_rmt*
+.br
+/dev/smt*
+.br
+/dev/srmt*
+.sh "SEE ALSO"
+bu(I), skp(I), rewind(I), eot(I), tp(I), dd(I), seek(II)
+.sh AUTHOR
+Rewritten by Robert L. Kirby from his TM11 driver at
+Computer Science Center, University of Maryland, College Park,
+using modified ideas of
+Bruce S. Borden and S. Tucker Taft, Harvard Science Center,
+who followed a TU16 driver written at Piscataway by Larry Wehr.
+.sh BUGS
+The handler has not been tested on the older controller models
+nor on multiple slaves nor on multiple controllers.
+.s3
+If any non-data error is encountered,
+the handler refuses to do anything more until closed.
+After non-data errors the tape may lose position.
+.s3
+Some data errors are corrected without notification.
+.s3
+The numerical suffixes associated with different densities
+for the same drive may vary among installations.
+Using mixed density tapes may cause tape errors.
+.s3
+The hardware may not permit reading or writing very short records
+(< 13 frames) with the raw files.
+.s3
+On raw read requests with an odd buffer length,
+the byte following the buffer may be altered.
+.s3
+At the expense of being larger,
+this handler corrects
+several difficulties with the Harvard tape handler.
+Processing waited for the forward seek to complete
+while closing the non-rewinding files.
+Often this created an unkillable process
+that excessively tied up a terminal.
+Tapes could easily be pulled off the supply reel.
+There was no way to perform backward file spacing.
+After specifying tape repositioning with a seek on the raw files,
+the next I/O request locked the requesting process in core
+while moving the tape,
+preventing other processes from using the CPU
+for an unnecessarily long period.
+On writing a file mark,
+the buffer address had to be on a word boundary
+within an allocated area.
+.s1
+As originally distributed,
+unmodified tape drivers rounded up the bytes read to an even number,
+did not support forward file spacing,
+and did not support writing EOFs in raw mode.
+In fact,
+because of an improper use of the frame count register,
+raw mode did not work at all.
+Unlike many other devices,
+the value returned by a TE-16/TM03 on a read
+in the frame count register is the positive total
+instead of the negative residual count.
+.s1
+The optional, Harvard
+.it stty
+commands were not installed to save core
+and discourage incompatibilities.
+.it Stty
+commands would be more appropriate for changing densities,
+formats, parity, error handling, on-line status,
+or the default number of file marks written.

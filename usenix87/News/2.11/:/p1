@@ -1,0 +1,2284 @@
+Article 1006 of net.sources.bugs:
+Path: plus5!wuphys!wucs!wucs2!wucs1!cuae2!gatech!lll-lcc!lll-crg!seismo!rick
+From: rick@seismo.CSS.GOV (Rick Adams)
+Newsgroups: news.software.b,net.sources.bugs
+Subject: Patch #1 for news 2.11 source
+Message-ID: <42090@beno.seismo.CSS.GOV>
+Date: 21 Nov 86 23:15:36 GMT
+Organization: Center for Seismic Studies, Arlington, VA
+Lines: 2270
+Xref: plus5 news.software.b:24 net.sources.bugs:1006
+Posted: Fri Nov 21 17:15:36 1986
+
+Description:
+	This is patch #1 for news 2.11 source. It addresses the following
+	problems:
+
+	vnews/readnews does not correctly identify when an article has
+	been cancelled.
+	vnews redraws the screen twice on ^Z.
+	followups from readnews incorrectly seperate references with ",".
+	The options line to vnews/readnews can only be BUFSIZ chars long.
+	logerr() in batch/unbatch mishandles arguments on machines with
+	16bit ints and 32 bit char *.
+	There was no way to have moderated local groups.
+	The test for included text should be more generous.
+	The code to make directories on USG machines was not quite correct.
+	System 5 machines with the broken stdio couldn't process newgroup
+	control messages correctly.
+	You couldn't use LOCKF with BSD4_2. (e.g. Ultrix).
+	You couldn't specify the complete domain name with gethostbyname
+	and set MYDOMAIN to "".
+	uurec core dumped in certain cases.
+	getdate() didn't handle timezones of +-HHMM quite right.
+	getdate() cared what case the month and day of week was.
+	postnews didn't understand the new newsgroup names very well.
+	(It still doesn't handle distributions very well. Next patch...)
+	checkgroups didn't work on machines with 14 character file names.
+	The makefile line with #NOTVMS screwed up some makes.
+	The HIDDENNET code didn't quite figure out its own hostname when
+	forwarding articles.
+	MULTICASTING was broken with addition of the I flag.
+	A line was written into the history file twice in some cases.
+	Various cosmetic changes.
+
+Fix:
+	cd to the src directory and apply the following patch
+
+Index: visual.c
+Prereq: 1.32
+*** .d/visual.c	Thu Oct 30 16:08:02 1986
+--- visual.c	Fri Nov 21 14:05:26 1986
+***************
+*** 4,10 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.32	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+--- 4,10 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)visual.c	1.33	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+***************
+*** 793,799 ****
+  			*ptr2 = '\0';
+  		ptr2 = index(ptr3, '/');
+  		if (!ptr2) {
+! 			if (strcmp(++ptr3, "cancelled") == 0)
+  				msg("%s has been cancelled", linebuf);
+  			else
+  				msg("%s has expired", linebuf);
+--- 793,799 ----
+  			*ptr2 = '\0';
+  		ptr2 = index(ptr3, '/');
+  		if (!ptr2) {
+! 			if (strcmp(ptr3, "cancelled") == 0)
+  				msg("%s has been cancelled", linebuf);
+  			else
+  				msg("%s has expired", linebuf);
+***************
+*** 2436,2444 ****
+  	ttyraw();
+  #ifdef TIOCGWINSZ
+  	winch();	/* get current window size and redraw screen */
+! #endif 	/* TIOCGWINSZ */
+  	clearok(curscr, 1);
+  	updscr();
+  #ifdef BSD4_2
+  	(void) sigsetmask(sigblock(0) & ~(sigmask(SIGALRM)|sigmask(SIGINT)));
+  #else /* BSD4_1 */
+--- 2436,2445 ----
+  	ttyraw();
+  #ifdef TIOCGWINSZ
+  	winch();	/* get current window size and redraw screen */
+! #else 	/* !TIOCGWINSZ */
+  	clearok(curscr, 1);
+  	updscr();
++ #endif 	/* !TIOCGWINSZ */
+  #ifdef BSD4_2
+  	(void) sigsetmask(sigblock(0) & ~(sigmask(SIGALRM)|sigmask(SIGINT)));
+  #else /* BSD4_1 */
+
+Index: iparams.h
+Prereq: 2.16
+*** .d/iparams.h	Thu Oct 30 16:12:13 1986
+--- iparams.h	Fri Nov 21 14:05:11 1986
+***************
+*** 2,10 ****
+   * iparams - parameters for inews.
+   */
+  
+! /*	@(#)iparams.h	2.16	10/23/86	*/
+  
+  #include "params.h"
+  
+  /* external declarations specific to inews */
+  extern	char	nbuf[LBUFLEN], *ARTICLE, *INFILE, *ALIASES, *PARTIAL;
+--- 2,12 ----
+   * iparams - parameters for inews.
+   */
+  
+! /*	@(#)iparams.h	2.17	11/21/86	*/
+  
+  #include "params.h"
++ #include <errno.h>
++ extern int errno;
+  
+  /* external declarations specific to inews */
+  extern	char	nbuf[LBUFLEN], *ARTICLE, *INFILE, *ALIASES, *PARTIAL;
+
+Index: readr.c
+Prereq: 2.58
+*** .d/readr.c	Thu Oct 30 16:09:49 1986
+--- readr.c	Fri Nov 21 14:05:19 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)readr.c	2.58	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)readr.c	2.59	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+***************
+*** 517,523 ****
+  		ptr2 = index(ptr3, '/');
+  		if (!ptr2) {
+  			*ptr3 = '\0';
+! 			if (strcmp(++ptr3, "cancelled") == 0) {
+  				fprintf(ofp, "Article %s has been cancelled.\n",
+  					bptr);
+  				break;
+--- 517,523 ----
+  		ptr2 = index(ptr3, '/');
+  		if (!ptr2) {
+  			*ptr3 = '\0';
+! 			if (strcmp(ptr3, "cancelled") == 0) {
+  				fprintf(ofp, "Article %s has been cancelled.\n",
+  					bptr);
+  				break;
+***************
+*** 579,585 ****
+  				(void) strcpy(bfr, groupdir);
+  				selectng(ogroupdir, FALSE, PERHAPS);
+  				set(oobit);
+! 				fprintf(ofp,"Holding article %ld newsgroup %s\n", oobit, ogroupdir),
+  				(void) strcpy(groupdir, ogroupdir);
+  				selectng(bfr, FALSE, FALSE);
+  				bit = i;
+--- 579,586 ----
+  				(void) strcpy(bfr, groupdir);
+  				selectng(ogroupdir, FALSE, PERHAPS);
+  				set(oobit);
+! 				fprintf(ofp,"Holding article %ld newsgroup %s\n"
+! 					,oobit, ogroupdir);
+  				(void) strcpy(groupdir, ogroupdir);
+  				selectng(bfr, FALSE, FALSE);
+  				bit = i;
+***************
+*** 729,735 ****
+  			fbp = index(fbp + 1, '<');
+  		if (fbp != NULL) {
+  			(void) strcpy(folbuf, fbp);
+! 			(void) strcat(folbuf, ", ");
+  		}
+  	}
+  	(void) strcat(folbuf, hptr->ident);
+--- 730,736 ----
+  			fbp = index(fbp + 1, '<');
+  		if (fbp != NULL) {
+  			(void) strcpy(folbuf, fbp);
+! 			(void) strcat(folbuf, " ");
+  		}
+  	}
+  	(void) strcat(folbuf, hptr->ident);
+
+Index: process.c
+Prereq: 2.15
+*** .d/process.c	Thu Oct 30 16:16:54 1986
+--- process.c	Fri Nov 21 14:05:17 1986
+***************
+*** 16,26 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)process.c	2.15	9/16/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+  
+  #define OPTION	0	/* pick up an option string */
+  #define STRING	1	/* pick up a string of arguments */
+  
+--- 16,29 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)process.c	2.16	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "rparams.h"
+  
++ char	coptbuf[LBUFLEN], datebuf[LBUFLEN];
++ struct hbuf header;
++ 
+  #define OPTION	0	/* pick up an option string */
+  #define STRING	1	/* pick up a string of arguments */
+  
+***************
+*** 55,61 ****
+  	register int state = STRING;
+  	register char *ptr = header.nbuf;
+  	char filchar = NGDELIM;
+! 	int len = BUFLEN, tlen;
+  
+  	/* loop once per arg. */
+  
+--- 58,64 ----
+  	register int state = STRING;
+  	register char *ptr = header.nbuf;
+  	char filchar = NGDELIM;
+! 	int len = LBUFLEN, tlen;
+  
+  	/* loop once per arg. */
+  
+***************
+*** 92,98 ****
+  			optpt->flag = TRUE;
+  			state = optpt->newstate;
+  			ptr = optpt->buf;
+! 			len = BUFLEN;
+  		}
+  
+  		argv++;		/* done with this option arg. */
+--- 95,101 ----
+  			optpt->flag = TRUE;
+  			state = optpt->newstate;
+  			ptr = optpt->buf;
+! 			len = LBUFLEN;
+  		}
+  
+  		argv++;		/* done with this option arg. */
+
+Index: batch.c
+Prereq: 1.15
+*** .d/batch.c	Thu Oct 30 16:16:52 1986
+--- batch.c	Fri Nov 21 14:04:58 1986
+***************
+*** 32,38 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)batch.c	1.15	1/17/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+--- 32,38 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)batch.c	1.17	11/21/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+***************
+*** 171,176 ****
+--- 171,177 ----
+  /* VARARGS1 */
+  logerror(fmt, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+  char *fmt;
++ long a1, a2, a3, a4, a5, a6, a7, a8, a9;
+  {
+  	FILE *logfile;
+  	char lfname[BUFLEN];		/* the log file */
+
+Index: inews.c
+Prereq: 2.69
+*** .d/inews.c	Thu Oct 30 16:08:50 1986
+--- inews.c	Fri Nov 21 14:05:10 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.69	10/30/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)inews.c	2.70	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 530,537 ****
+  	 * Only certain users are allowed to create newsgroups
+  	 */
+  	if (uid != ROOTID && uid != duid && uid) {
+! 		fprintf(stderr, "Please contact one of the local netnews people\n\tto create this group for you");
+! 		xxit(1);
+  	}
+  	if (header.distribution[0] == '\0')
+  #ifdef ORGDISTRIB
+--- 530,537 ----
+  	 * Only certain users are allowed to create newsgroups
+  	 */
+  	if (uid != ROOTID && uid != duid && uid) {
+! 		logerr("Please contact one of the local netnews people");
+! 		xerror("to create group \"%s\" for you", header.ctlmsg);
+  	}
+  	if (header.distribution[0] == '\0')
+  #ifdef ORGDISTRIB
+***************
+*** 648,653 ****
+--- 648,658 ----
+  		(void) rewind(actfp);
+  
+  	(void) fseek(actfp, fpos, 0);
++ 	/*
++ 	 * Has to be same size as old because of %05d.
++ 	 * This will overflow with 99999 articles.
++ 	 */
++ 	fprintf(actfp, "%s %05ld", ngname, ngsize+1);
+  #ifdef USG
+  	/*
+  	 * U G L Y   K L U D G E
+***************
+*** 662,671 ****
+  	 */
+  	 actfp->_flag |= _IOWRT;
+  #endif /* USG */
+- 	/* Has to be same size as old because of %05d.
+- 	 * This will overflow with 99999 articles.
+- 	 */
+- 	fprintf(actfp, "%s %05ld", ngname, ngsize+1);
+  	(void) fflush(actfp);
+  	if (ferror(actfp))
+  		xerror("Active file write failed");
+--- 667,672 ----
+***************
+*** 765,776 ****
+  		sprintf(bfr, "%s/mailpaths", LIBDIR);
+  		mfd = xfopen(bfr, "r");
+  		do {
+! 			if (fgets(bfr, sizeof bfr, mfd) == NULL)
+  				xerror("Can't find backbone in %s/mailpaths",
+  					LIBDIR);
+! 		} while (!prefix(bfr, "backbone"));
+! 		if (sscanf(bfr, "%*s %s", modadd) != 1)
+! 			xerror("backbone address corrupted");
+  		/* fake a header for mailhdr */
+  		mhdr.from[0] = '\0';
+  		mhdr.replyto[0] = '\0';
+--- 766,776 ----
+  		sprintf(bfr, "%s/mailpaths", LIBDIR);
+  		mfd = xfopen(bfr, "r");
+  		do {
+! 			if (fscanf(mfd, "%s %s", bfr, modadd) != 2)
+  				xerror("Can't find backbone in %s/mailpaths",
+  					LIBDIR);
+! 		} while (strcmp(bfr, "backbone") != 0 && !ngmatch(is_mod, bfr));
+! 		(void) fclose(mfd);
+  		/* fake a header for mailhdr */
+  		mhdr.from[0] = '\0';
+  		mhdr.replyto[0] = '\0';
+***************
+*** 942,952 ****
+  		}
+  		if (bfr[0] == '>')
+  			linserted++;
+  		empty = FALSE;
+  	}
+  	if (*filename)
+  		(void) fclose(infp);
+! 	if (mode != PROC && linserted > (linecount-linserted))
+  		error("Article rejected: %s included more text than new text",
+  			username);
+  
+--- 942,955 ----
+  		}
+  		if (bfr[0] == '>')
+  			linserted++;
++ 		if (bfr[0] == '<') /* kludge to allow diff's to be posted */
++ 			linserted--;
+  		empty = FALSE;
+  	}
+  	if (*filename)
+  		(void) fclose(infp);
+! 	if (mode != PROC &&
+! 		linecount > LNCNT && linserted > (linecount-linserted))
+  		error("Article rejected: %s included more text than new text",
+  			username);
+  
+***************
+*** 1042,1096 ****
+  char	*fulldir;
+  char	*ngname;
+  {
+- #ifdef USG
+- 	register char *p;
+- 	char parent[200];
+- 	char sysbuf[200];
+- 	struct stat sbuf;
+- #endif /* USG */
+- 
+  	if (ngname == NULL || !isalpha(ngname[0]))
+  		xerror("Tried to make illegal newsgroup %s", ngname);
+  
+- #ifdef USG
+- 	/*
+- 	 * If the parent is 755 the setuid(getuid)
+- 	 * will fail, and since mkdir is suid, and our real uid is random,
+- 	 * the mkdir will fail.  So we have to temporarily chmod it to 777.
+- 	 */
+- 	(void) strcpy(parent, fulldir);
+- 	while (p = rindex(parent, '/')) {
+- 		*p = '\0';
+- 		if (stat(parent, &sbuf) == 0) {
+- 			(void) chmod(parent, 0777);
+- 			break;
+- 		}
+- 	}
+- #endif /* USG */
+- 
+  	/* Create the directory */
+  	mkparents(fulldir);
+  	if (mkdir(fulldir, 0777) < 0)
+  		xerror("Cannot mkdir %s: %s", fulldir, errmsg(errno));
+- 
+- #ifdef USG
+- 	(void) chmod(parent, (int)sbuf.st_mode);	/* put it back */
+- 	/*
+- 	 * Give away the directories we just created which were assigned
+- 	 * our real uid.
+- 	 */
+- 	(void) setuid(uid);
+- 	(void) chown(fulldir, duid, dgid);
+- 	(void) strcpy(sysbuf, fulldir);
+- 	while (p = rindex(sysbuf, '/')) {
+- 		*p = '\0';
+- 		/* stop when get to last known good parent */
+- 		if (strcmp(sysbuf, parent) == 0)
+- 			break;
+- 		(void) chown(sysbuf, duid, dgid);
+- 	}
+- 	(void) setuid(duid);
+- #endif /* USG */
+  
+  	log("make newsgroup %s in dir %s", ngname, fulldir);
+  }
+--- 1045,1058 ----
+  char	*fulldir;
+  char	*ngname;
+  {
+  	if (ngname == NULL || !isalpha(ngname[0]))
+  		xerror("Tried to make illegal newsgroup %s", ngname);
+  
+  	/* Create the directory */
+  	mkparents(fulldir);
++ 
+  	if (mkdir(fulldir, 0777) < 0)
+  		xerror("Cannot mkdir %s: %s", fulldir, errmsg(errno));
+  
+  	log("make newsgroup %s in dir %s", ngname, fulldir);
+  }
+
+Index: checknews.c
+Prereq: 2.25
+*** .d/checknews.c	Thu Oct 30 16:11:17 1986
+--- checknews.c	Fri Nov 21 14:36:10 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.25	5/27/86";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)checknews.c	2.26	11/21/86";
+  #endif /* SCCSID */
+  
+  char *Progname = "checknews";		/* used by xerror */
+***************
+*** 31,38 ****
+  char	narggrp[BUFLEN];		/* spec newsgroup		*/
+  FILE	*rcfp, *actfp;
+  char	newsrc[BUFLEN],*rcline[LINES],rcbuf[LBUFLEN],*argvrc[LINES];
+- struct hbuf header;
+- char	coptbuf[BUFLEN],datebuf[BUFLEN];
+  int	mode = 1;
+  #ifndef SHELL
+  char	*SHELL;
+--- 31,36 ----
+
+Index: control.c
+Prereq: 2.48
+*** .d/control.c	Thu Oct 30 16:09:26 1986
+--- control.c	Fri Nov 21 14:36:09 1986
+***************
+*** 19,25 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.48	10/30/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+--- 19,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)control.c	2.48	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+***************
+*** 188,194 ****
+  		inpos = ftell(infp);
+  		while (ftell(infp) < outpos) {
+  			if (fgets(myid, sizeof myid, infp) != myid)
+! 				error("iline: Can't rerear article");
+  			myid[strlen(myid) - 1] = '\0';
+  			if (findhist(myid) == NULL)
+  				(void) fprintf(outfp, "%s\n", myid);
+--- 188,194 ----
+  		inpos = ftell(infp);
+  		while (ftell(infp) < outpos) {
+  			if (fgets(myid, sizeof myid, infp) != myid)
+! 				error("iline: Can't reread article");
+  			myid[strlen(myid) - 1] = '\0';
+  			if (findhist(myid) == NULL)
+  				(void) fprintf(outfp, "%s\n", myid);
+***************
+*** 221,226 ****
+--- 221,227 ----
+  	** What else of this kind should be done?
+  	*/
+  	header.organization[0] = header.distribution[0] = '\0';
++ 	header.numlines[0] = '\0';
+  	for (i = 0; i < NUNREC && header.unrec[i] != NULL; ++i) {
+  		free(header.unrec[i]);
+  		header.unrec[i] = NULL;
+***************
+*** 418,438 ****
+  			 * group. Rewrite the active file
+  			 */
+  			(void) fseek(actfp, -2L, 1); /* back up 2 characters */
+- #ifdef USG
+- 			/*
+- 			 * U G L Y   K L U D G E
+- 			 * This utter piece of tripe is the only way I know of
+- 			 * to get around the fact that ATT BROKE standard IO
+- 			 * in System 5.2. Basically, you can't open a file for
+- 			 * "r+" and then try and write to it. This hack works
+- 			 * on all "real" USG Unix systems, It will probably
+- 			 * break on some obscure look alike that doesnt use the
+- 			 * real ATT stdio.h
+- 			 * Don't blame me, blame ATT. stdio should have
+- 			 * already done the following line for us, but it didn't
+- 			 */
+- 			actfp->_flag |= _IOWRT;
+- #endif /* USG */
+  			putc(*p, actfp);
+  			fflush(actfp);
+  			if (*p != 'm')
+--- 419,424 ----
+***************
+*** 453,458 ****
+--- 439,459 ----
+  		fprintf(actfp, "%s 00000 00001 %c\n", argv[1],
+  			(argc > 2 && strcmp(argv[2], "moderated") == 0) 
+  				? 'm' : 'y');
++ #ifdef USG
++ 		/*
++ 		 * U G L Y   K L U D G E
++ 		 * This utter piece of tripe is the only way I know of
++ 		 * to get around the fact that ATT BROKE standard IO
++ 		 * in System 5.2. Basically, you can't open a file for
++ 		 * "r+" and then try and write to it. This hack works
++ 		 * on all "real" USG Unix systems, It will probably
++ 		 * break on some obscure look alike that doesnt use the
++ 		 * real ATT stdio.h
++ 		 * Don't blame me, blame ATT. stdio should have
++ 		 * already done the following line for us, but it didn't
++ 		 */
++ 		actfp->_flag |= _IOWRT;
++ #endif /* USG */
+  		fflush(actfp);
+  	}
+  
+***************
+*** 612,618 ****
+  		(void) strcpy(nfilename, dirname(p));
+  		fp = fopen(nfilename, "r");
+  		if (fp == NULL) {
+! 			log("Already Cancelled %s", line);
+  			return 1;
+  		}
+  		htmp.unrec[0] = NULL;
+--- 613,619 ----
+  		(void) strcpy(nfilename, dirname(p));
+  		fp = fopen(nfilename, "r");
+  		if (fp == NULL) {
+! 			log("Can't cancel %s: %s", line, errmsg(errno));
+  			return 1;
+  		}
+  		htmp.unrec[0] = NULL;
+***************
+*** 950,957 ****
+  	register char *p;
+  
+  	if (sendto[0] <= ' ') {
+! 		log("nasty mail name %s from %s", sendto, header.path);
+! 		xxit(1);
+  	}
+  	for (p=sendto; *p; p++) {
+  		if (*p == ' ') {
+--- 951,957 ----
+  	register char *p;
+  
+  	if (sendto[0] <= ' ') {
+! 		xerror("nasty mail name %s from %s", sendto, header.path);
+  	}
+  	for (p=sendto; *p; p++) {
+  		if (*p == ' ') {
+***************
+*** 1007,1018 ****
+  		return;	/* no restrictions at this level */
+  	} else if (strcmp(msg, "delsub") == 0) {
+  		if (!prefix(header.nbuf, "to.")) {
+! 			printf("Must be in a 'to.system' newsgroup.");
+  			xxit(0);
+  		}
+  		return;
+  	} else {
+! 		printf("Unrecognized control message - %s\n", msg);
+  		xxit(0);
+  	}
+  }
+--- 1007,1018 ----
+  		return;	/* no restrictions at this level */
+  	} else if (strcmp(msg, "delsub") == 0) {
+  		if (!prefix(header.nbuf, "to.")) {
+! 			log("Must be in a 'to.system' newsgroup.");
+  			xxit(0);
+  		}
+  		return;
+  	} else {
+! 		log("Unrecognized control message - %s\n", msg);
+  		xxit(0);
+  	}
+  }
+
+Index: expire.c
+Prereq: 2.47
+*** .d/expire.c	Thu Oct 30 16:09:39 1986
+--- expire.c	Fri Nov 21 14:05:03 1986
+***************
+*** 17,23 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.47	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 17,23 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)expire.c	2.48	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 27,37 ****
+  # include <sys/file.h>
+  #else
+  # include "ndir.h"
+- # ifdef LOCKF
+- # include <unistd.h>
+- # endif /* LOCKF */
+  #endif
+  
+  char *Progname = "expire";	/* used by xerror to identify failing program */
+  
+  /*	Number of array entries to allocate at a time.	*/
+--- 27,38 ----
+  # include <sys/file.h>
+  #else
+  # include "ndir.h"
+  #endif
+  
++ #ifdef LOCKF
++ #include <unistd.h>
++ #endif /* LOCKF */
++ 
+  char *Progname = "expire";	/* used by xerror to identify failing program */
+  
+  /*	Number of array entries to allocate at a time.	*/
+***************
+*** 1025,1031 ****
+  	register char *p;
+  	long fpos;
+  
+- 	(void) umask(0);
+  	(void) sprintf(namebuf, "%s.dir", ARTFILE);
+  	(void) close(creat(namebuf, 0666));
+  	(void) sprintf(namebuf, "%s.pag", ARTFILE);
+--- 1026,1031 ----
+Index: rextern.c
+Prereq: 2.15
+*** .d/rextern.c	Thu Oct 30 16:11:21 1986
+--- rextern.c	Fri Nov 21 14:05:20 1986
+***************
+*** 3,9 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rextern.c	2.15	4/16/85";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 3,9 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)rextern.c	2.17	11/21/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 26,32 ****
+  char	*infile = "/tmp/M2XXXXXX";	/* -T output from Mail		*/
+  int	ngrp, line = -1;
+  
+! char	filename[BUFLEN], coptbuf[BUFLEN], datebuf[BUFLEN];
+  char	afline[BUFLEN];
+  FILE	*rcfp, *actfp;
+  time_t	atime;
+--- 26,32 ----
+  char	*infile = "/tmp/M2XXXXXX";	/* -T output from Mail		*/
+  int	ngrp, line = -1;
+  
+! char	filename[BUFLEN];
+  char	afline[BUFLEN];
+  FILE	*rcfp, *actfp;
+  time_t	atime;
+
+Index: uname.c
+Prereq: 2.11
+*** .d/uname.c	Thu Oct 30 16:11:56 1986
+--- uname.c	Fri Nov 21 14:05:20 1986
+***************
+*** 21,27 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.11	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 21,27 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uname.c	2.12	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 36,41 ****
+--- 36,43 ----
+  {
+  	char *cp;
+  	gethostname(uptr->nodename, sizeof (uptr->nodename));
++ 	if (MYDOMAIN[0] == '\0') /* get domain name from hostname */
++ 		return;
+  	cp = index(uptr->nodename, '.');
+  	if (cp)
+  		*cp = '\0';
+Index: unbatch.c
+Prereq: 1.22
+*** .d/unbatch.c	Thu Oct 30 16:09:28 1986
+--- unbatch.c	Fri Nov 21 14:05:21 1986
+***************
+*** 13,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.22	10/23/86";
+  #endif /* SCCSID */
+  
+! #define	MAXARGS		20
+  
+  #include "defs.h"
+  #include <stdio.h>
+--- 13,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)unbatch.c	1.23	11/21/86";
+  #endif /* SCCSID */
+  
+! #define	MAXARGS		32
+  
+  #include "defs.h"
+  #include <stdio.h>
+***************
+*** 179,184 ****
+--- 179,185 ----
+  /* VARARGS1 */
+  logerr(fmt, a1, a2, a3, a4, a5, a6, a7, a8, a9)
+  char *fmt;
++ long a1, a2, a3, a4, a5, a6, a7, a8, a9;
+  {
+  	FILE *logfile;
+  	char lfname[BUFSIZ];		/* the log file */
+
+Index: uurec.c
+Prereq: 2.9
+*** .d/uurec.c	Thu Oct 30 16:16:56 1986
+--- uurec.c	Fri Nov 21 14:05:22 1986
+***************
+*** 3,9 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uurec.c	2.9	4/16/85";
+  #endif /* SCCSID */
+  
+  #include "defs.h"
+--- 3,9 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)uurec.c	2.10	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "defs.h"
+***************
+*** 126,132 ****
+  			mode = SKIPPING;
+  		}
+  	}
+! 	if (pipe)
+  		pclose(pipe);
+  	exit(0);
+  }
+--- 126,132 ----
+  			mode = SKIPPING;
+  		}
+  	}
+! 	if (pipe && pipe != stdout)
+  		pclose(pipe);
+  	exit(0);
+  }
+
+Index: funcs.c
+Prereq: 2.33
+*** .d/funcs.c	Thu Oct 30 16:11:13 1986
+--- funcs.c	Fri Nov 21 14:05:04 1986
+***************
+*** 16,22 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs.c	2.33	10/23/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+--- 16,22 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)funcs.c	2.34	11/21/86";
+  #endif /* SCCSID */
+  
+  /*LINTLIBRARY*/
+***************
+*** 321,327 ****
+  char *lfsuffix[] = {
+  	"log",
+  	"errlog",
+! 	0
+  };
+  
+  /*
+--- 321,327 ----
+  char *lfsuffix[] = {
+  	"log",
+  	"errlog",
+! 	NULL,
+  };
+  
+  /*
+***************
+*** 471,477 ****
+--- 471,497 ----
+  int perm;
+  {
+  	int pid, status;
++ #ifdef USG
++ 	char parent[200];
++ 	char *p;
++ 	struct stat sbuf;
+  
++ 	/*
++ 	 * Make parent directory writable, because we will
++ 	 * be creating a directory owned by the real user,
++ 	 * rather than by news.
++ 	 */
++ 	(void) strcpy(parent, path);
++ 	if (p = rindex(parent, '/')) {
++ 		*p = '\0';
++ 		if (stat(parent, &sbuf) == 0)
++ 			(void) chmod(parent, 0777);
++ 		else
++ 			return -1;
++ 	} else
++ 		return -1;
++ #endif
++ 
+  	if (pid=vfork()) {
+  		status = fwait(pid);
+  #if defined(USG) && !defined(CHEAP)
+***************
+*** 495,500 ****
+--- 515,523 ----
+  		perror(path);
+  		_exit(1);
+  	}
++ #ifdef USG
++ 	(void) chmod(parent, sbuf.st_mode); /* Restore mode of parent */
++ #endif
+  	return status;
+  }
+  #endif /* !BSD4_2 && ! BSD4_1C */
+
+Index: getdate.y
+Prereq: 2.13
+*** .d/getdate.y	Thu Oct 30 16:11:06 1986
+--- getdate.y	Fri Nov 21 14:05:05 1986
+***************
+*** 1,9 ****
+  %token ID MONTH DAY MERIDIAN NUMBER UNIT MUNIT SUNIT ZONE DAYZONE AGO
+  %{
+! 	/* 	Steven M. Bellovin (unc!smb)			*/
+  	/*	Dept. of Computer Science			*/
+  	/*	University of North Carolina at Chapel Hill	*/
+! 	/*	@(#)getdate.y	2.13	9/16/86 */
+  
+  #include <sys/types.h>
+  #ifdef USG
+--- 1,9 ----
+  %token ID MONTH DAY MERIDIAN NUMBER UNIT MUNIT SUNIT ZONE DAYZONE AGO
+  %{
+! 	/* 	Originally from: Steven M. Bellovin (unc!smb)	*/ 
+  	/*	Dept. of Computer Science			*/
+  	/*	University of North Carolina at Chapel Hill	*/
+! 	/*	@(#)getdate.y	2.14	11/21/86	*/
+  
+  #include <sys/types.h>
+  #ifdef USG
+***************
+*** 69,75 ****
+  		{hh = $1; mm = $3; merid = $4;}
+  	| NUMBER ':' NUMBER NUMBER =
+  		{hh = $1; mm = $3; merid = 24;
+! 		daylight = STANDARD; ourzone = $4%100 + 60*$4/100;}
+  	| NUMBER ':' NUMBER ':' NUMBER =
+  		{hh = $1; mm = $3; ss = $5; merid = 24;}
+  	| NUMBER ':' NUMBER ':' NUMBER MERIDIAN =
+--- 69,75 ----
+  		{hh = $1; mm = $3; merid = $4;}
+  	| NUMBER ':' NUMBER NUMBER =
+  		{hh = $1; mm = $3; merid = 24;
+! 		daylight = STANDARD; ourzone = -($4%100 + 60*($4/100));}
+  	| NUMBER ':' NUMBER ':' NUMBER =
+  		{hh = $1; mm = $3; ss = $5; merid = 24;}
+  	| NUMBER ':' NUMBER ':' NUMBER MERIDIAN =
+***************
+*** 76,82 ****
+  		{hh = $1; mm = $3; ss = $5; merid = $6;}
+  	| NUMBER ':' NUMBER ':' NUMBER NUMBER =
+  		{hh = $1; mm = $3; ss = $5; merid = 24;
+! 		daylight = STANDARD; ourzone = $6%100 + 60*$6/100;};
+  
+  zone:	ZONE =
+  		{ourzone = $1; daylight = STANDARD;}
+--- 76,82 ----
+  		{hh = $1; mm = $3; ss = $5; merid = $6;}
+  	| NUMBER ':' NUMBER ':' NUMBER NUMBER =
+  		{hh = $1; mm = $3; ss = $5; merid = 24;
+! 		daylight = STANDARD; ourzone = -($6%100 + 60*($6/100));};
+  
+  zone:	ZONE =
+  		{ourzone = $1; daylight = STANDARD;}
+***************
+*** 125,131 ****
+  #define epoch 1970
+  
+  extern struct tm *localtime();
+! time_t dateconv(mm, dd, yy, h, m, s, mer, zone, dayflag)
+  int mm, dd, yy, h, m, s, mer, zone, dayflag;
+  {
+  	time_t tod, jdate;
+--- 125,133 ----
+  #define epoch 1970
+  
+  extern struct tm *localtime();
+! 
+! time_t
+! dateconv(mm, dd, yy, h, m, s, mer, zone, dayflag)
+  int mm, dd, yy, h, m, s, mer, zone, dayflag;
+  {
+  	time_t tod, jdate;
+***************
+*** 149,155 ****
+  	return (jdate);
+  }
+  
+! time_t dayconv(ord, day, now) int ord, day; time_t now;
+  {
+  	register struct tm *loctime;
+  	time_t tod;
+--- 151,159 ----
+  	return (jdate);
+  }
+  
+! time_t
+! dayconv(ord, day, now)
+! int ord, day; time_t now;
+  {
+  	register struct tm *loctime;
+  	time_t tod;
+***************
+*** 162,168 ****
+  	return daylcorr(tod, now);
+  }
+  
+! time_t timeconv(hh, mm, ss, mer) register int hh, mm, ss, mer;
+  {
+  	if (mm < 0 || mm > 59 || ss < 0 || ss > 59) return (-1);
+  	switch (mer) {
+--- 166,174 ----
+  	return daylcorr(tod, now);
+  }
+  
+! time_t
+! timeconv(hh, mm, ss, mer)
+! register int hh, mm, ss, mer;
+  {
+  	if (mm < 0 || mm > 59 || ss < 0 || ss > 59) return (-1);
+  	switch (mer) {
+***************
+*** 175,181 ****
+  		default: return (-1);
+  	}
+  }
+! time_t monthadd(sdate, relmonth) time_t sdate, relmonth;
+  {
+  	struct tm *ltime;
+  	time_t dateconv();
+--- 181,189 ----
+  		default: return (-1);
+  	}
+  }
+! time_t
+! monthadd(sdate, relmonth)
+! time_t sdate, relmonth;
+  {
+  	struct tm *ltime;
+  	time_t dateconv();
+***************
+*** 191,197 ****
+  		ltime->tm_min, ltime->tm_sec, 24, ourzone, MAYBE), sdate);
+  }
+  
+! time_t daylcorr(future, now) time_t future, now;
+  {
+  	int fdayl, nowdayl;
+  
+--- 199,207 ----
+  		ltime->tm_min, ltime->tm_sec, 24, ourzone, MAYBE), sdate);
+  }
+  
+! time_t
+! daylcorr(future, now)
+! time_t future, now;
+  {
+  	int fdayl, nowdayl;
+  
+***************
+*** 212,218 ****
+  	int pcnt;
+  
+  	for (;;) {
+! 		while (isspace(*lptr)) lptr++;
+  
+  		if (isdigit(c = *lptr) || c == '-' || c == '+') {
+  			if (c== '-' || c == '+') {
+--- 222,229 ----
+  	int pcnt;
+  
+  	for (;;) {
+! 		while (isspace(*lptr))
+! 			lptr++;
+  
+  		if (isdigit(c = *lptr) || c == '-' || c == '+') {
+  			if (c== '-' || c == '+') {
+***************
+*** 224,230 ****
+  				}
+  			} else sign = 1;
+  			yylval = 0;
+! 			while (isdigit(c = *lptr++)) yylval = 10*yylval + c - '0';
+  			yylval *= sign;
+  			lptr--;
+  			return (NUMBER);
+--- 235,242 ----
+  				}
+  			} else sign = 1;
+  			yylval = 0;
+! 			while (isdigit(c = *lptr++))
+! 				yylval = 10*yylval + c - '0';
+  			yylval *= sign;
+  			lptr--;
+  			return (NUMBER);
+***************
+*** 258,288 ****
+  };
+  
+  struct table mdtab[] = {
+! 	{"January", MONTH, 1},
+! 	{"February", MONTH, 2},
+! 	{"March", MONTH, 3},
+! 	{"April", MONTH, 4},
+! 	{"May", MONTH, 5},
+! 	{"June", MONTH, 6},
+! 	{"July", MONTH, 7},
+! 	{"August", MONTH, 8},
+! 	{"September", MONTH, 9},
+! 	{"Sept", MONTH, 9},
+! 	{"October", MONTH, 10},
+! 	{"November", MONTH, 11},
+! 	{"December", MONTH, 12},
+  
+! 	{"Sunday", DAY, 0},
+! 	{"Monday", DAY, 1},
+! 	{"Tuesday", DAY, 2},
+! 	{"Tues", DAY, 2},
+! 	{"Wednesday", DAY, 3},
+! 	{"Wednes", DAY, 3},
+! 	{"Thursday", DAY, 4},
+! 	{"Thur", DAY, 4},
+! 	{"Thurs", DAY, 4},
+! 	{"Friday", DAY, 5},
+! 	{"Saturday", DAY, 6},
+  	{0, 0, 0}};
+  
+  #define HRS *60
+--- 270,300 ----
+  };
+  
+  struct table mdtab[] = {
+! 	{"january", MONTH, 1},
+! 	{"february", MONTH, 2},
+! 	{"march", MONTH, 3},
+! 	{"april", MONTH, 4},
+! 	{"may", MONTH, 5},
+! 	{"june", MONTH, 6},
+! 	{"july", MONTH, 7},
+! 	{"august", MONTH, 8},
+! 	{"september", MONTH, 9},
+! 	{"sept", MONTH, 9},
+! 	{"october", MONTH, 10},
+! 	{"november", MONTH, 11},
+! 	{"december", MONTH, 12},
+  
+! 	{"sunday", DAY, 0},
+! 	{"monday", DAY, 1},
+! 	{"tuesday", DAY, 2},
+! 	{"tues", DAY, 2},
+! 	{"wednesday", DAY, 3},
+! 	{"wednes", DAY, 3},
+! 	{"thursday", DAY, 4},
+! 	{"thur", DAY, 4},
+! 	{"thurs", DAY, 4},
+! 	{"friday", DAY, 5},
+! 	{"saturday", DAY, 6},
+  	{0, 0, 0}};
+  
+  #define HRS *60
+***************
+*** 420,486 ****
+  	{"z", ZONE, 0 HRS},
+  	{0, 0, 0}};
+  
+! lookup(id) char *id;
+  {
+  #define gotit (yylval=i->value,  i->type)
+- #define getid for(j=idvar, k=id; *j++ = *k++; )
+  
+! 	char idvar[20];
+  	register char *j, *k;
+  	register struct table *i;
+  	int abbrev;
+  
+! 	getid;
+! 	if (strlen(idvar) == 3) abbrev = 1;
+! 	else if (strlen(idvar) == 4 && idvar[3] == '.') {
+  		abbrev = 1;
+! 		idvar[3] = '\0';
+! 	}
+! 	else abbrev = 0;
+  
+- 	if (islower(*idvar)) *idvar = toupper(*idvar);
+- 
+  	for (i = mdtab; i->name; i++) {
+  		k = idvar;
+  		for (j = i->name; *j++ == *k++;) {
+! 			if (abbrev && j==i->name+3) return gotit;
+! 			if (j[-1] == 0) return gotit;
+  		}
+  	}
+  
+- 	getid;
+  	for (i = mztab; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0) return gotit;
+  
+- 	for (j = idvar; *j; j++)
+- 		if (isupper(*j)) *j = tolower(*j);
+  	for (i=mztab; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0) return gotit;
+  
+- 	getid;
+  	for (i=unittb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0) return gotit;
+  
+  	if (idvar[strlen(idvar)-1] == 's')
+  		idvar[strlen(idvar)-1] = '\0';
+  	for (i=unittb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0) return gotit;
+  
+- 	getid;
+  	for (i = othertb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0) return gotit;
+  
+- 	getid;
+  	if (strlen(idvar) == 1 && isalpha(*idvar)) {
+- 		if (isupper(*idvar)) *idvar = tolower(*idvar);
+  		for (i = milzone; i->name; i++)
+! 			if (strcmp(i->name, idvar) == 0) return gotit;
+  	}
+  
+! 	return(ID);
+  }
+  
+! time_t getdate(p, now) char *p; struct timeb *now;
+  {
+  #define mcheck(f)	if (f>1) err++
+  	time_t monthadd();
+--- 432,510 ----
+  	{"z", ZONE, 0 HRS},
+  	{0, 0, 0}};
+  
+! lookup(id)
+! char *id;
+  {
+  #define gotit (yylval=i->value,  i->type)
+  
+! 	char idvar[128];
+  	register char *j, *k;
+  	register struct table *i;
+  	int abbrev;
+  
+! 	(void) strcpy(idvar, id);
+! 	j = idvar;
+! 	k = id - 1;
+! 	while (*++k)
+! 		*j++ = isupper(*k) ? tolower(*k) : *k;
+! 	*j = '\0';
+! 
+! 	if (strlen(idvar) == 3)
+  		abbrev = 1;
+! 	else
+! 		if (strlen(idvar) == 4 && idvar[3] == '.') {
+! 			abbrev = 1;
+! 			idvar[3] = '\0';
+! 		}
+! 	else
+! 		abbrev = 0;
+  
+  	for (i = mdtab; i->name; i++) {
+  		k = idvar;
+  		for (j = i->name; *j++ == *k++;) {
+! 			if (abbrev && j == i->name+3)
+! 				return gotit;
+! 			if (j[-1] == 0)
+! 				return gotit;
+  		}
+  	}
+  
+  	for (i = mztab; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0)
+! 			return gotit;
+  
+  	for (i=mztab; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0)
+! 			return gotit;
+  
+  	for (i=unittb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0)
+! 			return gotit;
+  
+  	if (idvar[strlen(idvar)-1] == 's')
+  		idvar[strlen(idvar)-1] = '\0';
++ 
+  	for (i=unittb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0)
+! 			return gotit;
+  
+  	for (i = othertb; i->name; i++)
+! 		if (strcmp(i->name, idvar) == 0)
+! 			return gotit;
+  
+  	if (strlen(idvar) == 1 && isalpha(*idvar)) {
+  		for (i = milzone; i->name; i++)
+! 			if (strcmp(i->name, idvar) == 0)
+! 				return gotit;
+  	}
+  
+! 	return ID;
+  }
+  
+! time_t
+! getdate(p, now)
+! char *p;
+! struct timeb *now;
+  {
+  #define mcheck(f)	if (f>1) err++
+  	time_t monthadd();
+
+Index: postnews.c
+Prereq: 1.28
+*** .d/postnews.c	Thu Oct 30 16:09:17 1986
+--- postnews.c	Fri Nov 21 14:05:17 1986
+***************
+*** 18,24 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)postnews.c	1.28	10/23/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+--- 18,24 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)postnews.c	1.29	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "params.h"
+***************
+*** 308,314 ****
+  	}
+  	if (deflt != (char *)0)
+  		(void) strcpy(def, deflt);
+! 	if (ngmatch("net.test", newsgroups))
+  		(void) strcpy(def, "local");
+  	for(;;) {
+  		do {
+--- 308,314 ----
+  	}
+  	if (deflt != (char *)0)
+  		(void) strcpy(def, deflt);
+! 	if (ngmatch("misc.test", newsgroups))
+  		(void) strcpy(def, "local");
+  	for(;;) {
+  		do {
+***************
+*** 333,354 ****
+  		/* Check that it's a proper distribution */
+  		for (i=0; distr[i].abbr[0]; i++) {
+  			if (strncmp(distr[i].abbr, distribution, sizeof(distr[0].abbr)) == 0) {
+- 				register int n;
+- 				/* Found a match. Do any special rewriting. */
+- 				r = newsgroups;
+- 				n = strlen(distribution);
+- 				/*
+- 				 * A distribution of foo is useless
+- 				 * if all the newsgroups are in foo.all
+- 				 */
+- 				for (;;) {
+- 					if (strncmp(r, distribution, n))
+- 						return;
+- 					if ((r = index(r, NGDELIM)) == NULL)
+- 						break;
+- 					++r;
+- 				}
+- 				distribution[0] = '\0';
+  				return;
+  			}
+  		}
+--- 333,338 ----
+***************
+*** 515,520 ****
+--- 499,506 ----
+  	if (!article_line(tempfname, "Newsgroups: ", group)) {
+    nogroups:
+  		printf("Not sending to any newsgroups - no message posted\n");
++ 		sprintf(ccname, "%s/dead.article", homedir);
++ 		save_article();
+  		(void) UNLINK(tempfname);
+  		exit(1);
+  	}
+***************
+*** 529,535 ****
+  	*p = '\0';
+  
+  	/* Sanity checks for certain newsgroups */
+! 	if (ngmatch(newsgroups, "all.wanted") && ngmatch(distribution,"net,na,usa,att,btl,eunet,aus")) {
+  		printf("Is your message something that might go in your local\n");
+  		printf("newspaper, for example a used car ad, or an apartment\n");
+  		printf("for rent? ");
+--- 515,521 ----
+  	*p = '\0';
+  
+  	/* Sanity checks for certain newsgroups */
+! 	if (ngmatch(newsgroups, "all.wanted") && ngmatch(distribution,"world,na,usa,att,btl,eunet,aus")) {
+  		printf("Is your message something that might go in your local\n");
+  		printf("newspaper, for example a used car ad, or an apartment\n");
+  		printf("for rent? ");
+***************
+*** 542,548 ****
+  		}
+  	}
+  
+! 	if (ngmatch(newsgroups, "all.jokes")) {
+  		if (askyes("Could this be offensive to anyone? ","")) {
+  			getpr("Whom might it offend? ", group);
+  			(void) sprintf(buf," - offensive to %s (rot 13)",group);
+--- 528,534 ----
+  		}
+  	}
+  
+! 	if (ngmatch(newsgroups, "rec.humor,!rec.humor.d")) {
+  		if (askyes("Could this be offensive to anyone? ","")) {
+  			getpr("Whom might it offend? ", group);
+  			(void) sprintf(buf," - offensive to %s (rot 13)",group);
+***************
+*** 551,581 ****
+  		}
+  	}
+  
+! 	if (ngmatch(newsgroups, "net.general")) {
+! 		if (index(newsgroups, NGDELIM)) {
+! 			printf("Everybody in the world reads net.general, so it doesn't make\n");
+! 			printf("sense to post to newsgroups in addition to net.general.  If your\n");
+! 			printf("article belongs in one of these other newsgroups, then you\n");
+! 			printf("should not post to net.general.	If it is important enough\n");
+! 			printf("for net.general, then you shouldn't post it in other places\n");
+! 			printf("as well.	Please reenter the newsgroups.\n");
+! 			while (!get_newsgroup())
+! 				;
+! 			modify_article(tempfname, "Newsgroups: ", newsgroups,REPLACE);
+! 		}
+! 		if (ngmatch(newsgroups, "net.general")) {
+! 			printf("net.general is for important announcements.\n");
+! 			printf("It is not for items for which you couldn't think\n");
+! 			printf("of a better place - those belong in net.misc.\n");
+! 			if (!askyes("Are you sure your message belongs in net.general? ","")) {
+! 				while (!get_newsgroup())
+! 					;
+! 				modify_article(tempfname, "Newsgroups: ", newsgroups, REPLACE);
+! 			}
+! 		}
+! 	}
+! 
+! 	if (ngmatch(newsgroups, "net.sources,!net.sources.all")) {
+  		if (!article_line(tempfname, "Subject: ", group)) {
+    nosubj:
+  			printf("There seems to be no subject for this article.\n");
+--- 537,543 ----
+  		}
+  	}
+  
+! 	if (ngmatch(newsgroups, "comp.sources.all,!comp.sources.wanted")) {
+  		if (!article_line(tempfname, "Subject: ", group)) {
+    nosubj:
+  			printf("There seems to be no subject for this article.\n");
+***************
+*** 591,604 ****
+  		}
+  		if (ngmatch(newsgroups, "all.wanted") || iswanted(subject)) {
+  			printf("Requests for sources should not be posted to any of\n");
+! 			printf("the net.sources newsgroups, please post such requests\n");
+! 			printf("to net.wanted.sources only.     Please reenter the newsgroups.\n\n");
+  			while (!get_newsgroup())
+  				;
+  			modify_article(tempfname, "Newsgroups: ", newsgroups, REPLACE);
+  		}
+! 		if (ngmatch(newsgroups, "net.sources")) {
+! 			if (!ngmatch(newsgroups, "net.sources.all") &&
+  			    stbuf.st_size < (4*1024)) {
+  				printf("Your article seems rather small to be a source distribution.\n");
+  				if (!askyes("Are you certain that this is really source? ", "")) {
+--- 553,566 ----
+  		}
+  		if (ngmatch(newsgroups, "all.wanted") || iswanted(subject)) {
+  			printf("Requests for sources should not be posted to any of\n");
+! 			printf("the comp.sources newsgroups, please post such requests\n");
+! 			printf("to comp.sources.wanted only.     Please reenter the newsgroups.\n\n");
+  			while (!get_newsgroup())
+  				;
+  			modify_article(tempfname, "Newsgroups: ", newsgroups, REPLACE);
+  		}
+! 		if (ngmatch(newsgroups, "comp.sources.all")) {
+! 			if (!ngmatch(newsgroups, "comp.sources.wanted") &&
+  			    stbuf.st_size < (4*1024)) {
+  				printf("Your article seems rather small to be a source distribution.\n");
+  				if (!askyes("Are you certain that this is really source? ", "")) {
+***************
+*** 989,1002 ****
+  	/* newsgroup */
+  	if (article_line(baseart, "Newsgroups: ", buf))
+  		(void) strcpy(newsgroups, buf+12);
+! 	if (ngmatch(newsgroups, "net.general"))
+! 		(void) strcpy(newsgroups,"net.followup");
+! 	if (ngmatch(newsgroups, "net.sources,!net.sources.all"))
+! 		(void) strcpy(newsgroups,"net.sources.d");
+! 	if (ngmatch(newsgroups, "net.jobs")) {
+! 		printf("net.jobs is for the direct posting of job announcements and requests.\n");
+! 		printf("it is not for discussion. You followup has been directed to net.misc\n");
+! 		(void) strcpy(newsgroups,"net.misc");
+  	}
+  
+  	/* distribution */
+--- 951,960 ----
+  	/* newsgroup */
+  	if (article_line(baseart, "Newsgroups: ", buf))
+  		(void) strcpy(newsgroups, buf+12);
+! 	if (ngmatch(newsgroups, "misc.jobs")) {
+! 		printf("misc.jobs is for the direct posting of job announcements and requests.\n");
+! 		printf("it is not for discussion. You followup has been directed to misc.misc\n");
+! 		(void) strcpy(newsgroups,"misc.misc");
+  	}
+  
+  	/* distribution */
+Index: defs.dist
+Prereq: 2.55
+*** .d/defs.dist	Thu Oct 30 16:17:04 1986
+--- defs.dist	Fri Nov 21 14:36:10 1986
+***************
+*** 14,20 ****
+   *
+   */
+  
+! /*	@(#)defs.dist	2.55	10/30/86	*/
+  
+  /*
+   * defs.h - defines for news-related programs.
+--- 14,20 ----
+   *
+   */
+  
+! /*	@(#)defs.dist	2.56	11/21/86	*/
+  
+  /*
+   * defs.h - defines for news-related programs.
+***************
+*** 28,47 ****
+   * to be news_version below.
+   */
+  
+- #define NEWS_VERSION   "B 2.11 10/30/86"
+- 
+  #define DAYS	(60L*60L*24L)
+  #define WEEKS	(7*DAYS)
+  /* Things that very well may require local configuration */
+  #ifndef HOME
+! #define	ROOTID	10	/* uid of person allowed to cancel anything	*/
+  #endif
+! #define	N_UMASK 000	/* mask for umask call, 022 for secure system	*/
+  #define DFLTEXP	2*WEEKS	/* default no. of seconds to expire in		*/
+  #define HISTEXP	4*WEEKS	/* default no. of seconds to forget in		*/
+  #define DFLTSUB "general,all.announce"	/* default subscription list	*/
+  #define TMAIL	"/usr/ucb/Mail"	/* Mail program that understands -T	*/
+! #define	ADMSUB	"general,all.announce"	/* Mandatory subscription list	*/
+  #define PAGE	"/usr/ucb/more"	/* Default pager			*/
+  #define NOTIFY	"usenet"	/* Tell him about certain ctl messages	*/
+  				/* Default xmit command - remove -z if	*/
+--- 28,45 ----
+   * to be news_version below.
+   */
+  
+  #define DAYS	(60L*60L*24L)
+  #define WEEKS	(7*DAYS)
+  /* Things that very well may require local configuration */
+  #ifndef HOME
+! #define ROOTID	10	/* uid of person allowed to cancel anything	*/
+  #endif
+! #define N_UMASK 000	/* mask for umask call, 022 for secure system	*/
+  #define DFLTEXP	2*WEEKS	/* default no. of seconds to expire in		*/
+  #define HISTEXP	4*WEEKS	/* default no. of seconds to forget in		*/
+  #define DFLTSUB "general,all.announce"	/* default subscription list	*/
+  #define TMAIL	"/usr/ucb/Mail"	/* Mail program that understands -T	*/
+! #define ADMSUB	"general,all.announce"	/* Mandatory subscription list	*/
+  #define PAGE	"/usr/ucb/more"	/* Default pager			*/
+  #define NOTIFY	"usenet"	/* Tell him about certain ctl messages	*/
+  				/* Default xmit command - remove -z if	*/
+***************
+*** 98,114 ****
+  # define BUFLEN	256	/* standard buffer size				*/
+  #endif
+  #define LBUFLEN 1024	/* big buffer size				*/
+! #define	SBUFLEN 32	/* small buffer size (for system names, etc)	*/
+  #define LNCNT	14	/* Articles with > LNCNT lines go through pager */
+  
+  /* Things you probably won't want to change */
+  #define PATHLEN 512	/* length of longest source string		*/
+! #define	DATELEN	64	/* length of longest allowed date string	*/
+! #define	NAMELEN	128	/* length of longest possible message ID	*/
+! #define	SNLN	8	/* max significant characters in sysname	*/
+! #define	PROTO	'A'	/* old protocol name				*/
+  #define NETCHRS	"!:@^%,"/* Punct. chars used for various networks	*/
+! #define	TRUE	1	/* boolean true					*/
+! #define	FALSE	0	/* boolean false				*/
+! #define	PERHAPS	2	/* indeterminate boolean value			*/
+! #define	NGDELIM	','	/* delimit character in news group line		*/
+--- 96,112 ----
+  # define BUFLEN	256	/* standard buffer size				*/
+  #endif
+  #define LBUFLEN 1024	/* big buffer size				*/
+! #define SBUFLEN 32	/* small buffer size (for system names, etc)	*/
+  #define LNCNT	14	/* Articles with > LNCNT lines go through pager */
+  
+  /* Things you probably won't want to change */
+  #define PATHLEN 512	/* length of longest source string		*/
+! #define DATELEN	64	/* length of longest allowed date string	*/
+! #define NAMELEN	128	/* length of longest possible message ID	*/
+! #define SNLN	8	/* max significant characters in sysname	*/
+! #define PROTO	'A'	/* old protocol name				*/
+  #define NETCHRS	"!:@^%,"/* Punct. chars used for various networks	*/
+! #define TRUE	1	/* boolean true					*/
+! #define FALSE	0	/* boolean false				*/
+! #define PERHAPS	2	/* indeterminate boolean value			*/
+! #define NGDELIM	','	/* delimit character in news group line		*/
+
+Index: Makefile.dst
+Prereq: 1.17
+*** .d/Makefile.dst	Thu Oct 30 16:16:32 1986
+--- Makefile.dst	Fri Nov 21 14:04:57 1986
+***************
+*** 1,4 ****
+! # '@(#)Makefile.dst	1.17	10/29/86'
+  # Generic Makefile.
+  # This is converted to USG/v7/etc by localize.sh
+  # which should at least be a copy of localize.v7 or localize.usg
+--- 1,4 ----
+! # '@(#)Makefile.dst	1.19	11/21/86'
+  # Generic Makefile.
+  # This is converted to USG/v7/etc by localize.sh
+  # which should at least be a copy of localize.v7 or localize.usg
+***************
+*** 98,104 ****
+  COMMANDS = readnews checknews postnews vnews
+  
+  # dependencies
+! all: $(COMMANDS) $(OTHERS)
+  
+  install: all help vnews.help
+  	-mkdir $(DESTDIR)$(BINDIR)
+--- 98,104 ----
+  COMMANDS = readnews checknews postnews vnews
+  
+  # dependencies
+! all: $(OTHERS) $(COMMANDS)
+  
+  install: all help vnews.help
+  	-mkdir $(DESTDIR)$(BINDIR)
+***************
+*** 300,306 ****
+  	$(CC) $(LFLAGS) -o expire $(EXPOBJS) $(LIBS)
+  #VMS 	mv expire.exe expire
+  
+! header.o:  header.c header.h defs.h params.h Makefile
+  	$(CC) $(CFLAGS) -c header.c
+  
+  expire.o:  expire.c defs.h Makefile params.h ndir.h header.h Makefile
+--- 300,306 ----
+  	$(CC) $(LFLAGS) -o expire $(EXPOBJS) $(LIBS)
+  #VMS 	mv expire.exe expire
+  
+! header.o:  header.c header.h defs.h patchlevel.h params.h Makefile
+  	$(CC) $(CFLAGS) -c header.c
+  
+  expire.o:  expire.c defs.h Makefile params.h ndir.h header.h Makefile
+
+Index: localize.v7
+*** .d/localize.v7	Thu Oct 30 16:12:17 1986
+--- localize.v7	Fri Nov 21 14:05:14 1986
+***************
+*** 6,11 ****
+--- 6,12 ----
+  g/^#USG /d
+  g/^#VMS /d
+  g/^#BSD4_[123] /d
++ g/#NOTVMS/s/#NOTVMS.*//
+  w
+  q
+  EOF
+
+Index: checkgroups.sh
+Prereq: 1.17
+*** .d/checkgroups.sh	Thu Oct 30 16:16:58 1986
+--- checkgroups.sh	Fri Nov 21 14:04:58 1986
+***************
+*** 1,5 ****
+  : check active file for missing or extra newsgroups
+! : '@(#)checkgroups	1.17	10/29/86'
+  
+  if  test  ! -s LIBDIR/newsgroups
+  then
+--- 1,5 ----
+  : check active file for missing or extra newsgroups
+! : '@(#)checkgroups	1.19	11/21/86'
+  
+  if  test  ! -s LIBDIR/newsgroups
+  then
+***************
+*** 22,50 ****
+  	group="^net\\.|^mod\\.|^comp\\.|^sci\\.|^rec\\.|^news\\.|^soc\\.|^misc\\.|^talk\\."
+  	egrep -v "${group}" LIBDIR/newsgroups > /tmp/$$a
+  	cat /tmp/$$a > LIBDIR/newsgroups
+  	cat >> LIBDIR/newsgroups
+  	;;
+  esac
+  
+  egrep "${group}" LIBDIR/active | sed 's/ .*//' | sort >/tmp/$$active
+! egrep "${group}" LIBDIR/newsgroups | sed 's/	.*//' | sort >/tmp/$$newsgroups
+  
+! comm -13 /tmp/$$active /tmp/$$newsgroups >/tmp/$$missing
+! comm -23 /tmp/$$active /tmp/$$newsgroups >/tmp/$$remove
+  
+  egrep "${group}" LIBDIR/active | sed -n "/m\$/s/ .*//p" |
+! 	sort > /tmp/$$active.mod.all
+  egrep "${group}" LIBDIR/newsgroups |
+! sed -n "/Moderated/s/[ 	][ 	]*.*//p" | sort > /tmp/$$newsg.mod
+  
+! comm -12 /tmp/$$missing /tmp/$$newsg.mod >/tmp/$$add.mod
+! comm -23 /tmp/$$missing /tmp/$$newsg.mod >/tmp/$$add.unmod
+  cat /tmp/$$add.mod /tmp/$$add.unmod >>/tmp/$$add
+  
+! comm -23 /tmp/$$active.mod.all /tmp/$$remove >/tmp/$$active.mod
+! comm -13 /tmp/$$newsg.mod /tmp/$$active.mod >/tmp/$$ismod
+! comm -23 /tmp/$$newsg.mod /tmp/$$active.mod >/tmp/$$notmod.all
+! comm -23 /tmp/$$notmod.all /tmp/$$add >/tmp/$$notmod
+  
+  if test -s /tmp/$$remove
+  then
+--- 22,51 ----
+  	group="^net\\.|^mod\\.|^comp\\.|^sci\\.|^rec\\.|^news\\.|^soc\\.|^misc\\.|^talk\\."
+  	egrep -v "${group}" LIBDIR/newsgroups > /tmp/$$a
+  	cat /tmp/$$a > LIBDIR/newsgroups
++ 	echo "${line}" >> LIBDIR/newsgroups
+  	cat >> LIBDIR/newsgroups
+  	;;
+  esac
+  
+  egrep "${group}" LIBDIR/active | sed 's/ .*//' | sort >/tmp/$$active
+! egrep "${group}" LIBDIR/newsgroups | sed 's/	.*//' | sort >/tmp/$$newsgrps
+  
+! comm -13 /tmp/$$active /tmp/$$newsgrps >/tmp/$$missing
+! comm -23 /tmp/$$active /tmp/$$newsgrps >/tmp/$$remove
+  
+  egrep "${group}" LIBDIR/active | sed -n "/m\$/s/ .*//p" |
+! 	sort > /tmp/$$amod.all
+  egrep "${group}" LIBDIR/newsgroups |
+! sed -n "/Moderated/s/[ 	][ 	]*.*//p" | sort > /tmp/$$ng.mod
+  
+! comm -12 /tmp/$$missing /tmp/$$ng.mod >/tmp/$$add.mod
+! comm -23 /tmp/$$missing /tmp/$$ng.mod >/tmp/$$add.unmod
+  cat /tmp/$$add.mod /tmp/$$add.unmod >>/tmp/$$add
+  
+! comm -23 /tmp/$$amod.all /tmp/$$remove >/tmp/$$amod
+! comm -13 /tmp/$$ng.mod /tmp/$$amod >/tmp/$$ismod
+! comm -23 /tmp/$$ng.mod /tmp/$$amod >/tmp/$$nm.all
+! comm -23 /tmp/$$nm.all /tmp/$$add >/tmp/$$notmod
+  
+  if test -s /tmp/$$remove
+  then
+***************
+*** 122,124 ****
+--- 123,126 ----
+  )
+  
+  rm -f /tmp/$$*
++ 
+Index: localize.usg
+*** .d/localize.usg	Thu Oct 30 16:12:16 1986
+--- localize.usg	Fri Nov 21 14:05:14 1986
+***************
+*** 6,11 ****
+--- 6,12 ----
+  g/^#V7 /d
+  g/^#VMS /d
+  g/^#BSD4_[123] /d
++ g/#NOTVMS/s/#NOTVMS.*//
+  g/termlib/s//curses/
+  w
+  q
+ 
+Index: localize.sample
+*** .d/localize.sample	Thu Oct 30 16:09:56 1986
+--- localize.sample	Fri Nov 21 14:05:14 1986
+***************
+*** 7,12 ****
+--- 7,13 ----
+  g/^#BSD4_3 /s///
+  g/^#BSD4_1 /d
+  g/^#USG /d
++ g/#NOTVMS/s/#NOTVMS.*//
+  /^LIBDIR/s;/usr/lib/news;/usr/new/lib/news;
+  /^BINDIR/s;/usr/bin;/usr/new;
+  w
+
+Index: ifuncs.c
+Prereq: 2.57
+*** .d/ifuncs.c	Thu Oct 30 16:09:04 1986
+--- ifuncs.c	Fri Nov 21 14:05:08 1986
+***************
+*** 16,26 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.57	10/29/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+- #include <errno.h>
+  
+  /*LINTLIBRARY*/
+  
+--- 16,25 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)ifuncs.c	2.58	11/21/86";
+  #endif /* SCCSID */
+  
+  #include "iparams.h"
+  
+  /*LINTLIBRARY*/
+  
+***************
+*** 49,54 ****
+--- 48,55 ----
+  static int mccount;
+  #endif /* MULTICAST */
+  
++ long lseek();
++ 
+  #ifndef DBM
+  char *histfile();
+  #endif /* !DBM */
+***************
+*** 106,114 ****
+  #ifdef HIDDENNET
+  		if (strncmp(srec.s_name, LOCALSYSNAME, SNLN) == 0)
+  			continue;
+! #endif /* HIDDENNET */
+  		if (strncmp(srec.s_name, FULLSYSNAME, SNLN) == 0)
+  			continue;
+  		if (sptr = srec.s_nosend) {
+  			while (*sptr) {
+  				while (*sptr && *sptr != ',')
+--- 107,116 ----
+  #ifdef HIDDENNET
+  		if (strncmp(srec.s_name, LOCALSYSNAME, SNLN) == 0)
+  			continue;
+! #else /* !HIDDENNET */
+  		if (strncmp(srec.s_name, FULLSYSNAME, SNLN) == 0)
+  			continue;
++ #endif /* !HIDDENNET */
+  		if (sptr = srec.s_nosend) {
+  			while (*sptr) {
+  				while (*sptr && *sptr != ',')
+***************
+*** 192,203 ****
+  					break;
+  				}
+  #ifdef VMS
+! 			if (!transmit(&srec, xfopen(firstbufname,"r"), 1,
+! 				sysptrs, mc))
+  #else /* !VMS */
+! 			if (!transmit(&srec, xfopen(ARTICLE,"r"), 1, sysptrs,
+! 				mc))
+  #endif /* !VMS */
+  				continue;
+  		}
+  #else /* !MULTICAST */
+--- 194,205 ----
+  					break;
+  				}
+  #ifdef VMS
+! 			if (!transmit(&srec, xfopen(firstbufname,"r"),
+  #else /* !VMS */
+! 			if (!transmit(&srec, xfopen(ARTICLE,"r"),
+  #endif /* !VMS */
++ 				(strncmp(h.nbuf, "to.", 3) != 0),
++ 				sysptrs, mc))
+  				continue;
+  		}
+  #else /* !MULTICAST */
+***************
+*** 273,281 ****
+  	if (notify)
+  		appfile = appmsgid = FALSE;
+  
+- 	if (!appfile)
+- 		appfile = appmsgid;
+- 
+  	if (local && mode == PROC) {
+  		local = 0;
+  		while (isdigit(*++ptr))
+--- 275,280 ----
+***************
+*** 341,347 ****
+  			sp->s_name, oldid, hh.ident);
+  	}
+  
+! 	if (appfile) {
+  		if (firstbufname[0] == '\0') {
+  			extern char histline[];
+  			localize("junk");
+--- 340,346 ----
+  			sp->s_name, oldid, hh.ident);
+  	}
+  
+! 	if (appfile || appmsgid) {
+  		if (firstbufname[0] == '\0') {
+  			extern char histline[];
+  			localize("junk");
+***************
+*** 444,450 ****
+  			argv[++pid] = 0;
+  			(void) setgid(gid);
+  			(void) setuid(uid);
+! 			execv(argv[0], argv);
+  			xerror("Can't execv %s", argv[0]);
+  		}
+  	} else {
+--- 443,449 ----
+  			argv[++pid] = 0;
+  			(void) setgid(gid);
+  			(void) setuid(uid);
+! 			execvp(argv[0], argv);
+  			xerror("Can't execv %s", argv[0]);
+  		}
+  	} else {
+***************
+*** 547,554 ****
+  	lhs.dptr = lcident;
+  	lhs.dsize = strlen(lhs.dptr) + 1;
+  	rhs = fetch(lhs);
+! 	if (rhs.dptr)
+  		return(TRUE);
+  #else /* !DBM */
+  	hfp = xfopen(histfile(lcident), "r");
+  	while (fgets(bfr, BUFLEN, hfp) != NULL) {
+--- 546,555 ----
+  	lhs.dptr = lcident;
+  	lhs.dsize = strlen(lhs.dptr) + 1;
+  	rhs = fetch(lhs);
+! 	if (rhs.dptr) {
+! 		idunlock();
+  		return(TRUE);
++ 	}
+  #else /* !DBM */
+  	hfp = xfopen(histfile(lcident), "r");
+  	while (fgets(bfr, BUFLEN, hfp) != NULL) {
+***************
+*** 612,621 ****
+  	rhs.dsize = sizeof fpos;
+  	store(lhs, rhs);
+  #else /* !DBM */
+! 	/* also append to proper history subfile */
+! 	hfp = xfopen(histfile(hline), "a");
+! 	fprintf(hfp, "%s\n", hline);
+! 	(void) fclose(hfp);
+  #endif /* !DBM */
+  	idunlock();
+  }
+--- 613,626 ----
+  	rhs.dsize = sizeof fpos;
+  	store(lhs, rhs);
+  #else /* !DBM */
+! 	if (strcmp(p = histfile(hline), ARTFILE) != 0)
+! 	/* If the history subfile is accessible */
+! 		if ((hfp = xfopen(p, "a")) != NULL ) { /* If we can append */
+! 			fprintf(hfp, "%s\n", hline);   /* Append */
+! 			(void) fclose(hfp);
+! 		} else
+! 			logerr("Unable to append to %s: %s", p, errmsg(errno));
+! 
+  #endif /* !DBM */
+  	idunlock();
+  }
+***************
+*** 807,813 ****
+  		*/
+  		if (isproc && index(ngs[ngcount], '.') == NULL &&
+  			index(header.nbuf, '.') != NULL) {
+! 				logerr("Local group '%s' removed",
+  					ngs[ngcount]);
+  				continue;
+  		}
+--- 812,818 ----
+  		*/
+  		if (isproc && index(ngs[ngcount], '.') == NULL &&
+  			index(header.nbuf, '.') != NULL) {
+! 				logerr("Local group %s removed",
+  					ngs[ngcount]);
+  				continue;
+  		}
+***************
+*** 870,878 ****
+  			if (uses[i] == 2)
+  				continue;
+  			if (isproc)
+! 				cp = "Unknown newsgroup '%s' not localized";
+  			else
+! 				cp = "Unknown newsgroup '%s'";
+  			logerr(cp, ngs[i]);
+  #ifdef ALWAYSALIAS
+  			++okcount;	/* so we know to exit below */
+--- 875,883 ----
+  			if (uses[i] == 2)
+  				continue;
+  			if (isproc)
+! 				cp = "Unknown newsgroup %s not localized";
+  			else
+! 				cp = "Unknown newsgroup %s";
+  			logerr(cp, ngs[i]);
+  #ifdef ALWAYSALIAS
+  			++okcount;	/* so we know to exit below */
+***************
+*** 902,908 ****
+  				continue;
+  			if (strcmp(ngs[i], ngs[j]) != 0)
+  				continue;
+! 			logerr("Duplicate '%s' removed", ngs[j]);
+  			if (uses[i] < uses[j])
+  				uses[i] = uses[j];
+  			uses[j] = 0;
+--- 907,913 ----
+  				continue;
+  			if (strcmp(ngs[i], ngs[j]) != 0)
+  				continue;
+! 			logerr("Duplicate %s removed", ngs[j]);
+  			if (uses[i] < uses[j])
+  				uses[i] = uses[j];
+  			uses[j] = 0;
+***************
+*** 999,1006 ****
+  	 * the program will die, possibly leaving the lock in place.
+  	 */
+  	if (++numsigs > 100) {
+! 		logerr("inews ran away looping on signal %d", n);
+! 		xxit(1);
+  	}
+  	(void) signal(n, onsig);
+  	SigTrap = n;
+--- 1004,1010 ----
+  	 * the program will die, possibly leaving the lock in place.
+  	 */
+  	if (++numsigs > 100) {
+! 		xerror("inews ran away looping on signal %d", n);
+  	}
+  	(void) signal(n, onsig);
+  	SigTrap = n;
+***************
+*** 1085,1091 ****
+  	register FILE *ofd;
+  	register int c;
+  	char *ofdname;
+- 	long lseek();
+  
+  	/* First try to seek back - if so, it's a cheap way back. */
+  	if (lseek(0, 0L, 0) == 0L)
+--- 1089,1094 ----
+
+Index: patchlevel.h
+*** .d/patchlevel.h	Thu Oct 30 16:09:04 1986
+--- patchlevel.h	Fri Nov 21 14:05:15 1986
+***************
+*** 1 ****
+! 0
+--- 1,3 ----
+! #define	PATCHLEVEL	1
+! 
+! #define NEWS_VERSION   "B 2.11 11/15/86"
+
+Index: localize.4.3
+*** .d/localize.4.3	Thu Oct 30 16:12:12 1986
+--- localize.4.3	Fri Nov 21 14:05:12 1986
+***************
+*** 7,12 ****
+--- 7,13 ----
+  g/^#USG /d
+  g/^#VMS /d
+  g/^#BSD4_1 /d
++ g/#NOTVMS/s/#NOTVMS.*//
+  /^UUXFLAGS/s/-r -z/-r -z -n -gd/
+  /^LIBDIR/s;/usr/lib/news;/usr/new/lib/news;
+  /^BINDIR/s;/usr/bin;/usr/new;
+
+Index: localize.7300
+*** .d/localize.7300	Thu Oct 30 16:12:11 1986
+--- localize.7300	Fri Nov 21 14:05:13 1986
+***************
+*** 1,4 ****
+! #From philabs!hhb!kosman!kevin Mon Apr 28 15:56:44 1986
+  rm -f Makefile
+  cp Makefile.dst Makefile
+  chmod u+w Makefile
+--- 1,6 ----
+! #localize.7300 - for AT&T UNIX PC 7300 and 3b1 system, to use the shared
+! # library.
+! #From philabs!hhb!kosman!kevin Sun Nov 9 12:00:17 1986
+  rm -f Makefile
+  cp Makefile.dst Makefile
+  chmod u+w Makefile
+***************
+*** 8,13 ****
+--- 10,16 ----
+  g/^#V7 /d
+  g/^#VMS /d
+  g/^#BSD4_[123] /d
++ g/#NOTVMS/s/#NOTVMS.*//
+  /CFLAGS[	 ]*=/t.
+  .s/CFLAGS/MFLAGS/p
+  .s/-Dindex.*strrchr//p
+***************
+*** 21,28 ****
+  s/\.c/.o/p
+  /-c compress.c/s/CFLAGS/MFLAGS/p
+  g/$(LFLAGS)/s;$(LFLAGS);& /lib/crt0s.o shlib.ifile;\
+! s/$(CC)/$(LD)/\
+! s/-ltermlib //
+  g/chmod 755.*inews/s/755/6755/p
+  /UUXFLAGS =/s/ -z//p
+  w
+--- 24,31 ----
+  s/\.c/.o/p
+  /-c compress.c/s/CFLAGS/MFLAGS/p
+  g/$(LFLAGS)/s;$(LFLAGS);& /lib/crt0s.o shlib.ifile;\
+! s/$(CC)/$(LD)/
+! g/-ltermlib/s/-ltermlib//
+  g/chmod 755.*inews/s/755/6755/p
+  /UUXFLAGS =/s/ -z//p
+  w
+***************
+*** 37,43 ****
+  /DFLTSUB/s/".*"/"all"/p
+  /ROOTID/s/10/101/p
+  /TMAIL/s;^;/*;p
+! /PAGE/s;/usr/ucb/more;/usr/bin/less;p
+  /DFTXMIT/s/ -z//p
+  /UXMIT/s/ -z//p
+  /UNAME/s;/\* ;;p
+--- 40,46 ----
+  /DFLTSUB/s/".*"/"all"/p
+  /ROOTID/s/10/101/p
+  /TMAIL/s;^;/*;p
+! /PAGE/s;/usr/ucb/more;/usr/bin/more;p
+  /DFTXMIT/s/ -z//p
+  /UXMIT/s/ -z//p
+  /UNAME/s;/\* ;;p
+***************
+*** 47,52 ****
+--- 50,60 ----
+  q
+  EOF
+  
++ #  specific stuff to tailor the shared-libarary ifile.  The news software
++ #  duplicates some code in the shared library and its easiest just to avoid
++ #  the error messages.  Also, the ifile for some reason does not define
++ #  daylight (from ctime(3c)) -- as near as I can tell, this is where it goes.
++ 
+  rm -f shlib.ifile
+  cat /lib/shlib.ifile >shlib.ifile
+  chmod u+w shlib.ifile
+***************
+*** 58,61 ****
+--- 66,75 ----
+  /^ospeed /d
+  /^COLS /d
+  /^_sibuf /i
++ 
++ daylight = 0x303658;
++ 
++ .
++ w
++ q
+  EOF
+
+Index: header.c
+Prereq: 2.43
+*** .d/header.c	Thu Oct 30 16:10:09 1986
+--- header.c	Fri Nov 21 16:16:00 1986
+***************
+*** 16,26 ****
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.43	10/23/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+  #include "params.h"
+  
+  char *hfgets();
+  
+--- 16,27 ----
+   */
+  
+  #ifdef SCCSID
+! static char	*SccsId = "@(#)header.c	2.44	11/21/86";
+  #endif /* SCCSID */
+  
+  #include <stdio.h>
+  #include "params.h"
++ #include "patchlevel.h"
+  
+  char *hfgets();
+  
+
+

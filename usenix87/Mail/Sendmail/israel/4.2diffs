@@ -1,0 +1,757 @@
+diff -c main.c.old main.c
+*** /usr/4.2/src/usr.lib/sendmail/src/main.c	Sun Sep 25 21:06:10 1983
+--- /usr/israel/sendmail/src/main.c	Wed Mar  6 15:45:26 1985
+***************
+*** 695,700 ****
+--- 695,707 ----
+  	'*', MATCHZANY,	'+', MATCHANY,	'-', MATCHONE,	'=', MATCHCLASS,
+  	'~', MATCHNCLASS,
+  
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 	/* for RHS translation table */
++ 	'&', EQUIVREPL,
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  	/* these are RHS metasymbols */
+  	'#', CANONNET,	'@', CANONHOST,	':', CANONUSER,	'>', CALLSUBR,
+  
+***************
+*** 808,813 ****
+--- 815,822 ----
+  	union frz fhdr;
+  	extern char edata;
+  	extern char Version[];
++  	extern char **environ;
++  	char	**envsave;
+  
+  	if (freezefile == NULL)
+  		return (FALSE);
+***************
+*** 835,840 ****
+--- 844,855 ----
+  		(void) close(f);
+  		return (FALSE);
+  	}
++  /**
++   **  Arrrrg!  Since the pointer to the environment is in BSS, and our
++   **  bss get's blasted over when the freeze file is read in, we need to
++   **  save and restore the environ pointer for getenv()
++   **/
++  	envsave = environ;		/* save pointer to environment */
+  
+  	/* now read in the freeze file */
+  	if (read(f, (char *) &edata, fhdr.frzinfo.frzbrk - &edata) !=
+***************
+*** 844,849 ****
+--- 859,866 ----
+  		write(2, "Cannot read freeze file\n", 24);
+  		_exit(EX_SOFTWARE);
+  	}
++ 
++  	environ = envsave;
+  
+  	(void) close(f);
+  	return (TRUE);
+diff -c parseaddr.c.old parseaddr.c
+*** /usr/4.2/src/usr.lib/sendmail/src/parseaddr.c	Mon Jul 25 23:20:46 1983
+--- /usr/israel/sendmail/src/parseaddr.c	Thu Oct 31 17:45:31 1985
+***************
+*** 2,7 ****
+--- 2,9 ----
+  
+  SCCSID(@(#)parseaddr.c	4.1		7/25/83);
+  
++ char **copyplist();
++ 
+  /*
+  **  PARSEADDR -- Parse an address
+  **
+***************
+*** 204,214 ****
+--- 206,241 ----
+  
+  char	*DelimChar;		/* set to point to the delimiter */
+  
++ #ifdef ROUTING	/* ******************************** */
++ 
++ char **prescan1();
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  char **
+  prescan(addr, delim)
+  	char *addr;
+  	char delim;
+  {
++ 	static char buf[MAXNAME+MAXATOM];
++ 	static char *av[MAXATOM+1];
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 	return(prescan1(addr,delim,buf,av,sizeof buf));
++ }
++ 
++ char **
++ prescan1(addr,delim,buf,av,bufsize)
++ 	char *addr;
++ 	char delim;
++ 	char buf[];
++ 	char *av[];
++ 	int  bufsize;
++ {
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  	register char *p;
+  	register char *q;
+  	register int c;
+***************
+*** 219,226 ****
+  	char *tok;
+  	int state;
+  	int newstate;
+- 	static char buf[MAXNAME+MAXATOM];
+- 	static char *av[MAXATOM+1];
+  
+  	q = buf;
+  	bslashmode = FALSE;
+--- 246,251 ----
+***************
+*** 249,255 ****
+  			if (c != NOCHAR)
+  			{
+  				/* squirrel it away */
+! 				if (q >= &buf[sizeof buf - 5])
+  				{
+  					usrerr("Address too long");
+  					DelimChar = p;
+--- 274,280 ----
+  			if (c != NOCHAR)
+  			{
+  				/* squirrel it away */
+! 				if (q >= &buf[bufsize - 5])
+  				{
+  					usrerr("Address too long");
+  					DelimChar = p;
+***************
+*** 396,401 ****
+--- 421,429 ----
+  	}
+  	if (c == MATCHCLASS || c == MATCHREPL || c == MATCHNCLASS)
+  		return (ONE);
++ #ifdef ROUTING	/* ******************************** */
++ 	if (c == EQUIVREPL) return (ONE);
++ #endif ROUTING	/* ******************************** */
+  	if (c == '"')
+  		return (QST);
+  	if (!isascii(c))
+***************
+*** 442,447 ****
+--- 470,478 ----
+  {
+  	char	**first;	/* first token matched */
+  	char	**last;		/* last token matched */
++ #ifdef ROUTING	/* ******************************** */
++ 	char	*equiv;		/* equivalence name for match */
++ #endif ROUTING	/* ******************************** */
+  };
+  
+  # define MAXMATCH	9	/* max params per rewrite */
+***************
+*** 528,533 ****
+--- 559,571 ----
+  				else if (*rp == MATCHNCLASS)
+  					goto backup;
+  
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 				mlp -> equiv = getequiv(rp[1],s);
++ 
++ #endif ROUTING	/* ******************************** */
++ 
++ 
+  				/* explicit fall-through */
+  
+  			  case MATCHONE:
+***************
+*** 536,541 ****
+--- 574,582 ----
+  				mlp->first = avp;
+  				mlp->last = avp++;
+  				mlp++;
++ #ifdef ROUTING	/* ******************************** */
++ 				mlp -> equiv = NULL;
++ #endif ROUTING	/* ******************************** */
+  				break;
+  
+  			  case MATCHZANY:
+***************
+*** 543,548 ****
+--- 584,592 ----
+  				mlp->first = avp;
+  				mlp->last = avp - 1;
+  				mlp++;
++ #ifdef ROUTING	/* ******************************** */
++ 				mlp -> equiv = NULL;
++ #endif ROUTING	/* ******************************** */
+  				break;
+  
+  			  default:
+***************
+*** 576,581 ****
+--- 620,628 ----
+  				{
+  					/* back out binding */
+  					mlp--;
++ #ifdef ROUTING	/* ******************************** */
++ 					mlp -> equiv = NULL;
++ #endif ROUTING	/* ******************************** */
+  				}
+  			}
+  
+***************
+*** 630,636 ****
+  			register char **pp;
+  
+  			rp = *rvp;
+! 			if (*rp != MATCHREPL)
+  			{
+  				if (avp >= &npvp[MAXATOM])
+  				{
+--- 677,687 ----
+  			register char **pp;
+  
+  			rp = *rvp;
+! 			if (*rp != MATCHREPL
+! #ifdef ROUTING	/* ******************************** */
+! 			 && *rp != EQUIVREPL
+! #endif ROUTING	/* ******************************** */
+! 					    )
+  			{
+  				if (avp >= &npvp[MAXATOM])
+  				{
+***************
+*** 641,651 ****
+--- 692,722 ----
+  				continue;
+  			}
+  
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 			/* if the $& is not followed by a digit, put the
++ 			   '&' on the output string. */
++ 
++ 			if (*rp == EQUIVREPL && (rp[1] < '1' || rp[1] > '9'))
++ 			{
++ 				*avp++ = "&";
++ 				continue;
++ 			}
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  			/* substitute from LHS */
+  			m = &mlist[rp[1] - '1'];
+  # ifdef DEBUG
+  			if (tTd(21, 15))
+  			{
++ #ifdef ROUTING	/* ******************************** */
++ 			    if (*rp == EQUIVREPL) {
++ 			        printf("$&%c:%x=\"%s\"\n",
++ 					rp[1], *m->equiv, *m->equiv);
++ 			    }
++ 			    else {
++ #endif ROUTING	/* ******************************** */
+  				printf("$%c:", rp[1]);
+  				pp = m->first;
+  				while (pp <= m->last)
+***************
+*** 655,662 ****
+  					printf("%s\"", *pp++);
+  				}
+  				printf("\n");
+! 			}
+  # endif DEBUG
+  			pp = m->first;
+  			while (pp <= m->last)
+  			{
+--- 726,763 ----
+  					printf("%s\"", *pp++);
+  				}
+  				printf("\n");
+! #ifdef ROUTING	/* ******************************** */
+! 			    }
+! #endif ROUTING	/* ******************************** */
+! 			};
+  # endif DEBUG
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 		      if (*rp == EQUIVREPL) {
++ 		        char buf[1024];
++ 			char *av[MAXATOM+1];
++ 			char *Dchar = DelimChar; /* save! */
++ 	
++ 			pp = copyplist(prescan1(m -> equiv,
++ 				'\0',buf,av,sizeof buf),TRUE);
++ 
++ 			/* restore saved version, recursive */
++ 			DelimChar = Dchar;
++ 
++ 			while (*pp)
++ 			{
++ 			    if (avp >= &npvp[MAXATOM])
++ 			    {
++ 				syserr("rewrite: expansion too long");
++ 				return;
++ 			    }
++ 			    *avp++ = *pp++;
++ 			}
++ 		      }
++ 		      else
++ 		      {
++ #endif ROUTING	/* ******************************** */
+  			pp = m->first;
+  			while (pp <= m->last)
+  			{
+***************
+*** 667,672 ****
+--- 768,776 ----
+  				}
+  				*avp++ = *pp++;
+  			}
++ #ifdef ROUTING	/* ******************************** */
++ 		      }
++ #endif ROUTING	/* ******************************** */
+  		}
+  		*avp++ = NULL;
+  		if (**npvp == CALLSUBR)
+diff -c readcf.c.old readcf.c
+*** /usr/4.2/src/usr.lib/sendmail/src/readcf.c	Sun Sep 25 21:06:11 1983
+--- /usr/israel/sendmail/src/readcf.c	Fri Feb  1 17:59:14 1985
+***************
+*** 110,119 ****
+  				rwp->r_lhs = copyplist(rwp->r_lhs, TRUE);
+  
+  			/* expand and save the RHS */
+! 			while (*++p == '\t')
+  				continue;
+  			q = p;
+! 			while (*p != '\0' && *p != '\t')
+  				p++;
+  			*p = '\0';
+  			expand(q, exbuf, &exbuf[sizeof exbuf], CurEnv);
+--- 110,119 ----
+  				rwp->r_lhs = copyplist(rwp->r_lhs, TRUE);
+  
+  			/* expand and save the RHS */
+! 			while (*++p == '\t' || *p == ' ')
+  				continue;
+  			q = p;
+! 			while (*p != '\0' && *p != '\t' && *p != ' ')
+  				p++;
+  			*p = '\0';
+  			expand(q, exbuf, &exbuf[sizeof exbuf], CurEnv);
+***************
+*** 140,165 ****
+  			(void) chompheader(&buf[1], TRUE);
+  			break;
+  
+- 		  case 'C':		/* word class */
+  		  case 'F':		/* word class from file */
+! 			/* read list of words from argument or file */
+! 			if (buf[0] == 'F')
+  			{
+! 				/* read from file */
+! 				for (p = &buf[2]; *p != '\0' && !isspace(*p); p++)
+! 					continue;
+! 				if (*p == '\0')
+! 					p = "%s";
+! 				else
+! 				{
+! 					*p = '\0';
+! 					while (isspace(*++p))
+! 						continue;
+! 				}
+! 				fileclass(buf[1], &buf[2], p);
+! 				break;
+  			}
+  
+  			/* scan the list of words and set class for all */
+  			for (p = &buf[2]; *p != '\0'; )
+  			{
+--- 140,161 ----
+  			(void) chompheader(&buf[1], TRUE);
+  			break;
+  
+  		  case 'F':		/* word class from file */
+! 
+! 		        /* read from file */
+! 			for (p = &buf[2]; *p != '\0' && !isspace(*p); p++)
+! 				continue;
+! 			if (*p == '\0') p = "%s";
+! 			else
+  			{
+! 				*p = '\0';
+! 				while (isspace(*++p)) continue;
+  			}
++ 			fileclass(buf[1], &buf[2], p);
++ 			break;
+  
++ 		  case 'C':		/* word class */
++ 
+  			/* scan the list of words and set class for all */
+  			for (p = &buf[2]; *p != '\0'; )
+  			{
+***************
+*** 179,184 ****
+--- 175,221 ----
+  			}
+  			break;
+  
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 		  case 'E':		/* word equivalence class */
++ 
++ 			/* scan the list of words as a <word, translation>
++ 			   pair, and set class for all */
++ 
++ 			for (p = &buf[2]; *p != '\0'; )
++ 			{
++ 				register char *wd;
++ 				register char *wd2;
++ 				char delim;
++ 				STAB *s;
++ 
++ 				while (*p != '\0' && isspace(*p))
++ 					p++;
++ 				wd = p;
++ 				while (*p != '\0' && !isspace(*p))
++ 					p++;
++ 				delim = *p;
++ 				*p = '\0';
++ 				if (wd[0] != '\0')
++ 					s = setclass(buf[1], wd);
++ 				*p = delim;
++ 
++ 				while (*p != '\0' && isspace(*p))
++ 					p++;
++ 				wd2 = p;
++ 				while (*p != '\0' && !isspace(*p))
++ 					p++;
++ 				delim = *p;
++ 				*p = '\0';
++ 				if (*wd != NULL)
++ 				    makeequiv(buf[1],wd2,s);
++ 				*p = delim;
++ 			}
++ 			break;
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  		  case 'M':		/* define mailer */
+  			makemailer(&buf[1], safe);
+  			break;
+***************
+*** 269,274 ****
+--- 306,322 ----
+  **
+  **		puts all lines in filename that match a scanf into
+  **			the named class.
++ **
++ **	Comment: equivalence class modification
++ **		fileclass has been modified so that if you use a format
++ **		string returning two strings, i.e.:
++ **
++ **		FN/usr/lib/net-gateways "%s%s"
++ **
++ **		it will store the second name as a name translation of
++ **		the first, accessable through the $&<digit> macro.
++ **						- BNI 9/5/84
++ **
+  */
+  
+  fileclass(class, filename, fmt)
+***************
+*** 279,284 ****
+--- 327,338 ----
+  	register FILE *f;
+  	char buf[MAXLINE];
+  
++ #ifdef DEBUG
++ 	if (tTd(86,5))
++ 	    printf("fileclass: class = %c, file = %s, fmt = \"%s\".\n"
++ 		    , class, filename, fmt);
++ #endif DEBUG
++ 
+  	f = fopen(filename, "r");
+  	if (f == NULL)
+  	{
+***************
+*** 291,300 ****
+--- 345,391 ----
+  		register STAB *s;
+  		char wordbuf[MAXNAME+1];
+  
++ #ifdef ROUTING	/* ******************************** */
++ 		char word2[MAXNAME+1];
++ 		int ssc;
++ #ifdef DEBUG
++ 		if (tTd(86,11))
++ 			printf("fileclass: got line '%s'.\n",buf);
++ #endif DEBUG
++ 		word2[0] = '\0';
++ 		
++ 		if ((ssc=sscanf(buf, fmt, wordbuf, word2, 0)) < 1) {
++ #ifdef DEBUG
++ 			if(tTd(86,8))
++ 			      printf("fileclass: found nothing on line.\n");
++ #endif DEBUG
++ 			continue;
++ 		}
++ #ifdef DEBUG
++ 		if (tTd(86,8))
++ 			if (*word2)
++ 			    printf("fileclass: found word translation '%s' --> '%s'.\n",
++ 				wordbuf,word2);
++ 			else printf("fileclass: found word '%s'.\n",wordbuf);
++ #endif DEBUG
++ 
++ #else ROUTING	/* ******************************** */
++ 
+  		if (sscanf(buf, fmt, wordbuf) != 1)
+  			continue;
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  		s = stab(wordbuf, ST_CLASS, ST_ENTER);
+  		setbitn(class, s->s_class);
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ 		if (*word2 != NULL)
++ 		    makeequiv(class,word2,s);
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  	}
+  
+  	(void) fclose(f);
+***************
+*** 805,816 ****
+  **		word -- the word to enter
+  **
+  **	Returns:
+! **		none.
+  **
+  **	Side Effects:
+  **		puts the word into the symbol table.
+  */
+  
+  setclass(class, word)
+  	int class;
+  	char *word;
+--- 896,915 ----
+  **		word -- the word to enter
+  **
+  **	Returns:
+! **		a pointer to the symbol table entry created.
+! **		- changed from 'no return value' 9/5/84 - BNI
+  **
+  **	Side Effects:
+  **		puts the word into the symbol table.
+  */
+  
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ STAB *
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  setclass(class, word)
+  	int class;
+  	char *word;
+***************
+*** 819,822 ****
+--- 918,926 ----
+  
+  	s = stab(word, ST_CLASS, ST_ENTER);
+  	setbitn(class, s->s_class);
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 	return (s);
++ #endif ROUTING	/* ******************************** */
++ 
+  }
+diff -c stab.c.old stab.c
+*** /usr/4.2/src/usr.lib/sendmail/src/stab.c	Mon Jul 25 23:18:41 1983
+--- /usr/israel/sendmail/src/stab.c	Fri Feb  1 17:00:59 1985
+***************
+*** 106,108 ****
+--- 106,185 ----
+  
+  	return (s);
+  }
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ /*
++ **  MAKEEQUIV -- make a name equivalence entry
++ **
++ **	Parameters:
++ **		class -- the class the equivalence is in.
++ **		name  -- The name to be translated into.
++ **		s     -- a symbol table entry to the orginal name.
++ **
++ **	Returns:
++ **		none.
++ **
++ **	Side Effects:
++ **		none.
++ **
++ **	Author:
++ **		Bruce Israel  --  9/4/84.
++ **
++ */
++ 
++ makeequiv(class,name,s)
++ char class;
++ char *name;
++ STAB *s;
++ {
++ 	EQUIV *eq;
++ 
++ #ifdef DEBUG
++ 	if (tTd(87,5))
++ 		printf("makeequiv: defining '%s' --> '%s' in class '%c'.\n",
++ 			s -> s_name, name, class);
++ #endif DEBUG
++ 
++ 	eq = (EQUIV *) xalloc(sizeof *eq);
++ 	eq -> class = class;
++ 	eq -> equivname = newstr(name);
++ 	eq -> next = s ->s_equiv;
++ 	s -> s_equiv = eq;
++ }
++ 
++ /*
++ **  GETQUIV -- get a name equivalence for a class
++ **
++ **	Parameters:
++ **		class -- the class the equivalence is in.
++ **		s     -- The symbol table entry of the word.
++ **
++ **	Returns:
++ **		a pointer to a string containing the translation
++ **		name. If the symbol table entry has no translation
++ **		name, the original name will be returned.
++ **
++ **	Side Effects:
++ **		none.
++ **
++ **	Author:
++ **		Bruce Israel  --  9/4/84.
++ **
++ */
++ 
++ char *getequiv(class,s)
++ char class;
++ STAB *s;
++ {
++ 	EQUIV *eq;
++ 
++ 	eq = s -> s_equiv;
++ 	while (eq != NULL) {
++ 	    if (eq -> class == class) return (eq -> equivname);
++ 	    eq = eq -> next;
++ 	}
++ 	return(s -> s_name);
++ }
++ 
++ #endif ROUTING	/* ******************************** */
+diff -c sendmail.h.old sendmail.h
+*** /usr/4.2/src/usr.lib/sendmail/src/sendmail.h	Sun Sep 25 21:06:12 1983
+--- /usr/israel/sendmail/src/sendmail.h	Fri Feb  1 17:00:42 1985
+***************
+*** 2,9 ****
+  **  SENDMAIL.H -- Global definitions for sendmail.
+  */
+  
+  
+- 
+  # ifdef _DEFINE
+  # define EXTERN
+  # ifndef lint
+--- 2,9 ----
+  **  SENDMAIL.H -- Global definitions for sendmail.
+  */
+  
++ # define ROUTING	/* Mods for equivalence name classes - BNI 9/5/84 */
+  
+  # ifdef _DEFINE
+  # define EXTERN
+  # ifndef lint
+***************
+*** 290,299 ****
+--- 290,319 ----
+  # define CONDIF		'\031'	/* conditional if-then */
+  # define CONDELSE	'\032'	/* conditional else */
+  # define CONDFI		'\033'	/* conditional fi */
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ # define EQUIVREPL	'\034'	/* equivalence class replacement */
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  /*
+  **  Symbol table definitions
+  */
+  
++ #ifdef ROUTING	/* ******************************** */
++ 
++ struct equivstr
++ {
++ 	char		class;		/* class the name belongs in */
++ 	char		*equivname;	/* translated version of name */
++ 	struct equivstr	*next;		/* next item on equivalence list */
++ };
++ 
++ typedef struct equivstr EQUIV;
++ 
++ #endif ROUTING	/* ******************************** */
++ 
+  struct symtab
+  {
+  	char		*s_name;	/* name to be entered */
+***************
+*** 306,311 ****
+--- 326,334 ----
+  		MAILER	*sv_mailer;	/* pointer to mailer */
+  		char	*sv_alias;	/* alias */
+  	}	s_value;
++ #ifdef ROUTING	/* ******************************** */
++ 	EQUIV		*s_equiv;	/* pointer to equivalence names list */
++ #endif ROUTING	/* ******************************** */
+  };
+  
+  typedef struct symtab	STAB;
+***************
+*** 323,328 ****
+--- 346,358 ----
+  # define s_alias	s_value.sv_alias
+  
+  extern STAB	*stab();
++ 
++ #ifdef ROUTING	/* ******************************** */
++ 
++ STAB	*setclass();
++ char	*getequiv();
++ 
++ #endif ROUTING	/* ******************************** */
+  
+  /* opcodes to stab */
+  # define ST_FIND	0	/* find entry */

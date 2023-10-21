@@ -1,0 +1,215 @@
+.TH MULTIVOL 8 local
+.SH NAME
+multivol \- handle multivolume files
+.SH SYNOPSIS
+.B multivol
+.B \-o
+.RB [ \-vtw ]
+.RB [ \-b
+.IR blocksize ]
+.RB [ \-n
+.IR count ]
+.RB [ \-l
+.IR label ]
+.RI [ device ]
+.PP
+.B multivol
+.B \-i
+.RB [ \-vtw ]
+.RB [ \-b
+.IR blocksize ]
+.RB [ \-n
+.IR count ]
+.RB [ \-l
+.IR label ]
+.RI [ device ]
+.PP
+.B multivol
+.B \-t
+.RI [ device ]
+.SH DESCRIPTION
+.I Multivol
+allows for the convenient use of multiple volume files such as when
+backing up output from 
+.I cpio/tar
+over several floppy disks.
+.PP
+Option
+.B \-o
+reads the standard input file, breaking it into volumes on the output device.
+Option
+.BR \-i
+reads volumes from the device, concatenates them
+and writes the result to standard output.
+.PP
+The device to use is given by the
+.I device
+argument, or
+.I /dev/multivol
+if none is specified.
+Normally this will be a character special file corresponding to a raw
+disk or tape unit.
+It does not have to be a random access device:
+.I multivol
+only accesses it sequentially.
+However,
+.I multivol
+may close and re-open a volume in order to rewind devices such as magnetic tape.
+.PP
+The
+.B \-b
+.I blocksize
+argument specifies the physical block size to be used.
+This number may end with
+.B k
+or
+.B b
+to specify multiplication by
+1024 or 512 respectively.
+With a floppy disk it can usefully be made the size of one
+track.
+The default physical block size is 512 bytes.
+If the device or its driver does not allow successful writing all the way to the
+end of a physical volume, such as with magnetic tape, the
+.B \-n
+.I count
+options should be used to specify the maximum number of physical blocks
+to be written on one volume.
+.PP
+The
+.B \-l
+.I label
+option allows the user to supply a short string to be written onto
+the volume for identification.
+.PP
+Before reading or writing a new volume,
+.I multivol
+prompts on the controlling terminal for the user to insert the appropriate
+volume into the physical device and waits for a new-line to be typed.
+With
+.BR \-i ,
+if the volume inserted is not a
+.I multivol
+volume,
+is not the next volume in sequence,
+or does not have the same date stamp as the previous volume,
+.I multivol
+verifies that you really want to read it.
+.PP
+.I Multivol
+writes an \s-2ASCII\s0 header on each volume, 
+and checksum info in each block
+hence the actual amount of data stored on each volume will be slightly less
+than its physical size.
+The
+.B \-t
+option prints some of this header information on standard error.
+It includes:
+.IP \(bu
+the date that the volume was written
+.IP \(bu
+the sequence number of the volume
+.IP \(bu
+any
+.I label
+string supplied at the time the volume was written
+.LP
+If you specify
+.B \-w
+with
+.B \-i
+or
+.B \-o
+.I multivol
+assumes the
+.B \-t
+option also and
+asks you to verify that each volume really is the required one.
+.PP
+The
+.B \-v
+option tells
+.I multivol
+to write various other verbose information on standard error
+such as an indication of how many blocks it has read or written.
+.SH EXAMPLES
+Tell me what you know about this volume:
+.br
+	multivol \-t
+.LP
+Backup a directory to the default device:
+.br
+	tar cf \- mydir | multivol \-o
+.sp
+and retrieve it again:
+.br
+	cd mydir
+.br
+	multivol \-i | tar xf \-
+.LP
+Backup to tape all files changed since last time:
+.br
+	touch /etc/multivoldate1
+.br
+	find / \-newer /etc/multivoldate2 \-print | cpio \-ov |
+.br
+		multivol \-o \-l WEEKLY \-b 20k \-n 1000 /dev/rmt0
+.br
+	mv /etc/multivoldate1 /etc/multivoldate2
+.sp
+Retrieve a file from that backup:
+.br
+	cd /
+.br
+	multivol \-i /dev/rmt0 | cpio \-idmv usr/myname/myfile
+.SH FILES
+.ta \w'/dev/multivol     'u
+.nf
+/dev/tty	where prompts are written and responses read
+.br
+/dev/multivol	the default device
+.SH SEE ALSO
+tar(1), cpio(1), dd(1), dump(8), ``your device''(4)
+.SH DIAGNOSTICS
+.PP
+A message is written on standard error and
+.I multivol
+terminates in the event of
+.IP \(bu
+incorrect usage
+.IP \(bu
+not being able to open the device
+.IP \(bu
+not being able to open /dev/tty
+.IP \(bu
+a device I/O error 
+.SH BUGS
+In the event of an I/O error you may have to start again with the first volume
+depending on the nature of the file and the program which produced it.  In
+many cases it simply means the end of the volume has been reached, and no more
+can be read/written.  If a block limit has been set
+.I multivol
+will indicate this condition.
+.PP
+When reading or writting,
+.I multivol
+attempts to read the volumes header to display what is being written over,
+or to determine the block size recorded in the header.
+Some raw devices will return an I/O error
+when the volume has not been written before, or has been previously written
+with a different block size.
+Hence the volume header cannot be read until the original
+block size is also specified.
+The first time a volume is written,
+.I multivol
+may signal an I/O error as it attempts to read the header, but will proceed 
+to allow the volume to be written.
+.PP
+Volume labels may not contain white space and are limited to 14 characters.
+.PP
+Some tape device drivers cannot handle a read/write request while the tape
+is rewinding, for such drivers the
+.B \-w
+switch is recommended in place of just
+.B \-t
+\.

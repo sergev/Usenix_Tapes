@@ -1,0 +1,93 @@
+Date:    Wed, 29 Oct 86 17:23:45 -0800 
+Subject: Realloc bugs in uip/replsbr.c and sbr/formataddr.c
+From:    terry%owl@rand-unix.ARPA
+To:      mh-bugs@ics.uci.EDU
+cc:      terry%owl@rand-unix.ARPA, phyl%tp4@rand-unix.ARPA
+
+There's a realloc-bug in the CHECKMEM macro that appears in
+uip/replsbr.c and sbr/formataddr.c.  The problem is that the variables
+"dst" and "last_dst" continue to point to the old "buf" after the realloc.
+We're still using 6.4, so this may be fixed in 6.5???
+
+    Terry West
+    <terry@rand-unix.ARPA>
+
+
+*** uip/replsbr.c.orig      Fri Jul 25 14:25:25 1986
+--- uip/replsbr.c           Wed Oct 29 17:09:22 1986
+***************
+*** 222,227
+  /* check if there's enough room in buf for str.  add more mem if needed */
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+
+--- 222,229 -----
+  /* check if there's enough room in buf for str.  add more mem if needed */
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
++ 		    int i = dst - buf;\
++ 		    int n = last_dst - buf;\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		dst = buf + i;\
+***************
+*** 224,229
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+
+--- 226,233 -----
+  		    int n = last_dst - buf;\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
++ 		dst = buf + i;\
++ 		last_dst = buf + n;\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+
+
+*** sbr/formataddr.c.orig	Thu Feb 27 22:31:53 1986
+--- sbr/formataddr.c	Wed Oct 29 17:14:54 1986
+***************
+*** 18,23
+  /* check if there's enough room in buf for str.  add more mem if needed */
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+
+--- 18,25 -----
+  /* check if there's enough room in buf for str.  add more mem if needed */
+  #define CHECKMEM(str) \
+  	    if ((len = strlen (str)) >= bufend - dst) {\
++ 		    int i = dst - buf;\
++ 		    int n = last_dst - buf;\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		dst = buf + i;\
+***************
+*** 20,25
+  	    if ((len = strlen (str)) >= bufend - dst) {\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\
+
+--- 22,29 -----
+  		    int n = last_dst - buf;\
+  		bufsiz += ((dst + len - bufend) / BUFINCR + 1) * BUFINCR;\
+  		buf = realloc (buf, bufsiz);\
++ 		dst = buf + i;\
++ 		last_dst = buf + n;\
+  		if (! buf)\
+  		    adios (NULLCP, "formataddr: couldn't get buffer space");\
+  		bufend = buf + bufsiz;\

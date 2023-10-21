@@ -1,0 +1,442 @@
+
+                        Amiga MicroGNUmacs Notes
+                        ------------------------
+
+   This file purports to document the Amiga-specific features of
+MicroGNUmacs. Except where otherwise noted, "MicroEmacs", "Emacs", "MG",
+"MicroGNU", and "MicroGNUmacs" all refer to the Amiga version of the
+GNU-compatible MicroEmacs text editor. MicroEmacs was created by Dave
+Conroy. This version has been GNUified by Mike Meyer, and the
+Intuition terminal driver enhanced and (hopefully) improved by Mic
+Kaczmarczik.
+
+   It is assumed that you already know about the point and the mark,
+buffers, windows, extended commands, and the various areas on the
+screen that all versions of MicroEmacs maintain. If you don't, see the
+MicroEmacs documentation (what there is of it) for more information.
+
+                              OPTIONS
+                              -------
+
+   (This section is for people who have their own C compiler. If you
+don't have a C compiler, you will hopefully have a version that has
+*everything* compiled into it...)
+
+   There are a bewildering variety of extra goodies available as
+compile-time options when you construct an Amiga MicroEmacs. If you
+select none of them, you save on disk space, but lose out on some
+features and versatility.
+
+   The Makefile provides documentation on these options and what to do
+to make them work, but here is a quick overview:
+
+   STARTUP -- You can configure MicroEmacs so that it will look for a
+startup file in either the current directory or the AmigaDOS s:
+(startup) directory. An example startup file is included in the
+distribution, and also see the STARTUP section below.
+
+   MENU -- If this option is used, MicroEmacs puts an Intuition menu
+bar with major editing commands at the top of the screen, just like a
+"real" Amiga program. (See the section on the MENU for more info).
+
+   BROWSER -- This has got to be seen to be appreciated. The Browser
+program turns the menu bar into a way to select files on a disk. First
+you select a disk, then a directory on the disk, then a file or
+subdirectory on the disk, and so on, all in the menu.
+
+   MOUSE -- This option turns on the Amiga Hot Mouse (and it's all due
+to Mike Meyer!). You can click on a character and move point to that
+spot, and that's just the beginning. (See the MOUSE section for more.)
+
+   XKEYS -- This option turns on support for all the extra Amiga
+function keys. This enables the HELP key, which runs the function
+"describe-key-briefly". Arrow keys work -- shift-arrow keys apply to
+words and paragraphs. (See the KEYBOARD section.)
+
+   DO_METAKEY -- Characters with the high bit set (i.e. codes > 0x80)
+are transformed into 'META' characters. If you're using 1.2, you will
+need to issue the command setmap usa0 to get the same console keymap
+as the one used by 1.1. If you don't have the usa0 keymap, this option
+may or may not be too helpful. If you *do* have DO_METAKEY set, you
+can still use the CTRL-Q command to insert ALT-ed characters.
+
+   CHANGE_FONT -- This allows you to set the font used by the Amiga
+console device driver when it draws characters in the Emacs window.
+For instance, this lets you use a slightly taller font for editing
+when using interlace mode under 1.2.  MG cannot handle proportionally
+spaced fonts, but will allow you to use them (with rather confusing
+results) if you really want to.
+
+   MODE_RENDITION, {TEXT,MODE}_{FG,BG} -- These are #defines that
+determine the default rendition of the mode line and the foreground
+and background colors of the text. See the COLOR section for more
+info.
+
+   CHANGE_COLOR -- If you want to be able to mess around with the
+foreground and background colors of the text window, this option
+allows you to do that. You can also specify the way the status line is
+rendered (plain, boldface, italics, or reverse video).
+
+                              THE MOUSE
+                              ---------
+
+(This section originated from Mike Meyer, the inventor of the Hot
+Mouse. It has been edited to be consistent with the current state of
+the Hot Mouse.)
+
+   The Amiga Mouse in hot mode can invoke no less than 24 different
+functions!!!  They are treated as keys by the rest of MicroEmacs, even
+though you click the mouse and hold down qualifier keys to get them.
+
+   Mouse keys come in three groups of eight, the groups being Mouse
+keys, Mode-Mouse keys, and Echo-Mouse keys. Inside each group, which
+of the eight keys you get is determined by the combination of Shift,
+CTRL and ALT keys you are holding down when the mouse button is
+pressed. So yes, there really is a C-M-Shift-Mode-Mouse button*.
+Note that the Meta (M-) prefix *MUST* be the ALT key. Prefixing it
+with ESC will *not* work.  Sorry, life's a beach.
+
+[* Technical note *]
+
+   Sadly, in order to keep the basic MicroEmacs editor code the same
+for all systems (it runs on everything from DEC-20's to CP/M
+machines), the Mouse keys do not have names like C-M-Shift-Mode-Mouse.
+They end up having names like ESC C-a when you use the
+describe-key-briefly command. This may be changed in a later version.
+
+[* Practical note *]
+   Because of the above restriction (I'm working on it, I'm working on
+it!) you sometimes get burned when you absent-mindedly click the mouse
+during a dialogue (e.g. I-search or switch-buffer). I have not found a
+good way to avoid this problem and preserve the main editor, so I'm
+leaving this unresolved until the next round of improvements.
+
+   Mouse keys are generally bound to functions that affect the text in
+the selected buffer. If the Intuition mouse pointer is located inside
+an Emacs text window (i.e. an area where text is being edited), then a
+Mouse key is sent to the editor when you click the mouse. The buffer
+associated wth the window the pointer is in is made current, the point
+is set as close as possible to the pointer (the character under the
+pointer, if possible), then the command bound to that mouse button is
+executed.
+
+   If the mouse pointer is in the mode line - the line that is in a
+different typeface (usually backlit, maybe black instead of white) --
+when the mouse button is clicked, a Mode-Mouse key is sent to the
+editor. The buffer that the selected status line is associated with is
+made the current buffer, the point is set to the value of point for
+that window, then whatever command is bound to that button is
+executed. Most of the Mode-Mouse keys invoke functions that act on the
+entire window or buffer.
+
+   Clicking the mouse button when the mouse pointer is in the echo
+line - the line at the bottom of the screen where prompts and message
+appear - results in an Echo-Mouse key. Whatever command is bound to
+that button will be executed.  Since the echo line is not part of
+a buffer or a window, all the functions bound to Echo-Mouse keys
+affect the state of the editor as a whole.
+   
+   The default bindings for the hot mouse (as distributed) are:
+
+ Qualifiers  |			Area clicked
+             |
+C  A  Shift  |	Text window		Mode line	Echo line
+-------------+---------------------------------------------------------
+	     |	dot to mouse		forward page	switch to other buffer 
+      X	     |	recenter		backward page	kill buffer
+   X	     |	delete word		split window	describe key
+   X  X	     |	kill line		delete window	describe bindings
+X	     |	delete char		goto bob	suspend emacs
+X     X	     |	delete whitespace	goto eob	quit
+X  X	     |	kill region		enlarge window	list buffers
+X  X  X	     |	yank			shrink window	toggle Intuition window
+
+   To help keep straight what the various keys do, notice that the
+Status and Echo groups come in pairs; the shifted version of a key is
+in some sense the opposite of the unshifted version. There is no
+opposite for display buffers, so that key is bound to
+toggle-window-hack, which toggles Emacs' Intuition window between
+bordered and borderless.
+
+   Like any Emacs key, you are perfectly free to rebind the 24 mouse
+buttons to do whatever you wish, although currently you can't rebind
+them in a startup file.
+
+			   THE KEYBOARD
+			   ------------
+
+   There is a shortcut for many of the Meta commands (usually
+indicated by the ESC character): hold down the ALT key at the same
+time you type what usually comes after the ESC.
+
+   (Historically, this is why keys that are typed with ESC in front of
+them are called META keys; on the terminals at MIT where Emacs was
+originally written, there was a META key on the keyboard that did what
+the ALT key does. However, not many terminals outside of MIT have the
+META key at all, so the ESC key was nominated as a way to tell the
+system that the next character should be converted into a META key
+before it is interpreted.)
+
+   If you are running under the 1.2 Workbench, you may need to issue
+the command "setmap usa0" to make things work right (the default
+console keymap changed between 1.1 and 1.2).
+
+   MicroEmacs also recognizes all the standard Amiga function keys.
+For quick help on a key, type the HELP key and then the key you want
+help on. The following commands are bound to the Amiga function keys:
+
+	Key			Function
+	----------------------------------
+	Help			describe-key-briefly
+
+	Left			backward-char
+	Shift-Left		backward-word
+	Right			forward-char
+	Shift-Right		forward-word
+
+	Up			previous-line
+	Shift-Up		backward-paragraph
+
+	Down			next-line
+	Shift-Down		forward-paragraph
+
+	F1			find-file
+	Shift-F1		find-file-other-window
+	F2			save-buffer
+	Shift-F2		write-file
+	F3			scroll-up (page down)
+	Shift-F3		scroll-down (page up)
+	F4			next-window
+	Shift-F4		previous-window
+	F5			enlarge-window
+	Shift-F5		shrink-window
+	F6			fill-paragraph
+	Shift-F6		query-replace
+	F7			split-window-vertically
+	Shift-F7		delete-other-windows
+	F8			global-set-key
+	Shift-F8		global-unset-key
+	F9			start-kbd-macro
+	Shift-F9		end-kbd-macro
+	F10			call-last-kbd-macro
+	Shift-F10		save-buffers-kill-emacs
+
+			     THE MENU
+			     --------
+   If the menu option is compiled into the program, you can also use
+the Intuition menu, just like a "real" Amiga program. The menu names
+are relatively self-explanitory, as are the names inside each menu. If
+you want to learn what the command key is for a menu function, type
+"<ESC>-x describe-bindings<RET>" and page through till you find a
+function with a similar name. A future release of the Amiga driver
+will probably allow you to directly find out what command keys are
+bound to a particular function, but you'll just have to bear with us
+for a while.
+
+			    THE BROWSER
+			    -----------
+
+   The Browser is the next best (or even better, for some purposes)
+thing to a file requester. In essence, it puts the directory tree up
+in the menu bar, where you can visit files simply by selecting their
+names from the menu bar. Try it, you'll like it.  If the MENU option
+is also compiled in, the editing menus are all submenus of the first,
+"Edit" menu, and the Browser uses the rest of the menu bar.
+
+			   WINDOW OPTIONS 
+			   --------------
+
+   As a service to those of us who want a full-size, 80-column editing
+window, Amiga MicroEmacs allows you to make its window borderless. If
+you like, you can take over the full Workbench screen (48 rows, 80
+columns in interlace mode under 1.2). Borderless windows can be
+"visually confusing", to say the least, so it's probably best to
+either to 1) take over the whole screen or 2) put the Emacs window at
+the bottom of the screen.
+
+   When Amiga MicroEmacs starts up, its initial window is borderless,
+and 640x200 pixels in dimension. To change to a resizeable window,
+issue the command "M-x toggle-window-hack" or select the "Toggle
+Window" item from the menu (if it is compiled into the program).
+MicroEmacs will create a new, resizeable, bordered window, which you
+can then set to whatever size you wish using the sizing gadget in the
+bottom left corner of the window.
+
+   To go back to a borderless window, issue the "Toggle Window"
+command again. MicroEmacs will remember the current size of the
+resizeable window, and create a borderless window with the same
+dimensions and position. Since under Workbench 1.2 you can use a
+640x400 window, this lets you take up the *entire screen* -- 48 rows
+by 80 columns!
+
+
+		       CHANGING THE WINDOW'S FONT
+		       --------------------------
+
+   There may be times when you'd like to use another font on the screen,
+either to make the text easier to read, or for some special effect, like
+editing something on a TV projection system.  MG lets you change the
+font that is used to draw characters in the window, using the command
+M-x set-font.
+
+   You can use the universal argument to set the desired text font size,
+for example saying C-u 12 M-x set-font, then typing "opal" when it
+prompts you for the name of the font.  If you give an argument that is
+<= 0, MG resets the window's font to the system default (set by
+Preferences).  If you don't give an argument, MG prompts you for the
+desired font size.
+
+   Changing the window's font to one that is designed to be
+proportionally spaced does not work very well, because Emacs expects the
+all characters on the screen to be the same width, which is of course
+not the case with proportional fonts.  MG lets you use proportional
+fonts, but it asks you to make sure first. 
+
+
+			    TEXT RENDITION
+			    --------------
+
+   If you really want to, you can change the "soft style" the console
+device uses to draw characters in the text area and the mode line.
+The possible values for these styles are:
+
+	0	plain
+	1	boldface
+	3	italic
+	4	underline
+	7	inverse
+
+   About the only useful values are the ones for plain, boldface or
+italics. The default value for text is 0 (plain, of course), while the
+default for the mode line is 7 (inverse video). These can be changed
+by the appropriate #definitions of MODE_RENDITION and TEXT_RENDITION.
+
+   The commands to change the rendition values are:
+
+	set-text-rendition
+		Set text area rendition
+	set-mode-rendition
+		Set mode line rendition (this is by far the more useful)
+
+				COLOR
+				-----
+
+   You can set the colors the console device uses to draw the text you
+are editing. (This does not mean that you can specify *any* color;
+your choices are limited to the colors being used by Intuition to
+maintain the Workbench screen.) The commands that control this
+behavior are:
+
+	set-text-foreground
+		Sets the color used to draw the characters you
+		see in the text area (distinct from the mode
+		line area for each window).  Accepts a number from
+		0 to 7.  The value initially used is 1.  You can
+		get a reverse video screen by selecting 0 for this
+		value and 1 for the background color
+
+	set-text-background
+		Sets the color used the draw the background behind
+		characters in the text area.  Accepts the same values
+		as set-text-foreground-color.  The initial value
+		is 0.
+
+	set-mode-foreground
+		Sets the foreground color used by the mode line.  If you
+		set this to 0 and the background color to 1, you can get
+		a reverse video mode line even when you select italics for
+		the mode line rendition (see RENDITION)
+
+	set-mode-background
+		Sets the background color for the mode line.  You should
+		get the idea by now.
+		
+
+			   THE STARTUP FILE
+			   ----------------
+
+   If the STARTUP option has been compiled into your editor, you can
+use a file of startup commands that rebind (most of the) keys and
+otherwise set up the editor as you see fit.
+
+   The startup file must have the name ".mg", and can either be
+located in the current directory, or the "s:" system startup
+directory. If the file is there, MicroEmacs opens the file and
+attempts to interpret the commands therein.
+
+   The basic idea is that you are issuing M-X commands; the first line
+in the example startup file below would be interpreted as "M-x
+bsmap-mode". Spaces are necessary to separate the parts of the
+command, but the quotation marks are there mainly for effect. If you
+happen to use GNU Emacs on a larger system, the startup file routines
+can also read your ".emacs" file, as long as the functions you call in
+the ".emacs" file are available in MicroGNUEmacs.
+
+The escape conventions for startup files are:
+
+	\^	next character is a control character
+	\e	next character is an escape (meta) character
+	\n	newline
+	\t	tab
+	\r	carriage return
+	\\	backslash character
+
+	A '\' followed by anything else means "quote this character
+	as-is".
+
+   Here, then, is the example startup file:
+
+---------------------------------CUT HERE---------------------------------
+bsmap-mode
+auto-fill-mode
+global-set-key "\^l" redraw-display
+global-set-key "\e\^h" forward-kill-word
+global-set-key "\^h" delete-char
+global-set-key "\^x\^v" find-file
+global-set-key "\eg" goto-line
+set-mode-rendition 3
+set-mode-foreground 0
+set-mode-background 1
+---------------------------------CUT HERE-------------------------------------
+
+				FUNCTION LIST
+				-------------
+
+   For completeness, here is a list of all Amiga MicroEmacs functions
+that are specific to the Amiga. See the file "functions" for the others.
+
+amiga-menu
+	The entry point for using Emacs's Intuition menu.  This function
+	figures out which menu selection was used, then calls the
+	appropriate function by name (not hard-coded key value)
+amiga-mouse
+	Set dot to where the mouse is pointing.  Two clicks in the same
+	spot set the mark too.
+mouse-*
+	Functions that first either 1) move point to where the mouse
+	points to or 2) select the buffer associated with the mode line
+	the mouse clicked in, then call the function indicated by the
+	rest of the name.  These functions are all "bound" to mouse
+	clicks, because the input machinery converts them into internal
+	Emacs "keys".
+set-font
+	Set the font used to draw characters inside the Emacs window.
+	A positive argument is used for the size of the font, while
+	a nonpositive argument requests that the font be set to the
+	system default font.  Menu items are not affected by this command.
+set-mode-rendition
+set-text-rendition
+	Set the way your text (or the mode line) is rendered.  Choose
+	from 0 (plain), 1 (bold), 3 (italic), 4 (underline), or
+	7 (reverse video). 0, 1, and 3 are about the only really useful
+	ones for text; 7 is the default for the mode line.
+set-text-foreground
+set-text-background
+set-mode-foreground
+set-mode-background
+	Set the system color used to draw the characters in the text area
+	and mode line.  Accepts a value between 0 and 7; the default for
+	the background is 0, the default for the text is 1.
+toggle-window-hack
+	Switch your window between resizable and borderless. Lets you
+	take over the whole screen (80 columns! 48 lines in interlace!)

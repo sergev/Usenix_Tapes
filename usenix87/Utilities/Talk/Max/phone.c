@@ -1,0 +1,257 @@
+#include <stdio.h>
+#include <sys/types.h>
+#include <curses.h>
+#include <utmp.h>
+
+#define	CTRL(ch)	('ch'&31)
+
+#define	MSGLINES	10
+
+struct	termio	ttmy;
+WINDOW	*winds[2];
+
+int	utmpf;
+char	talkdes[64];
+char	mydes[64];
+char	wrdes[64];
+char	wrline[80];
+char	*pn;
+int	myfil;
+int	talkfil;
+int	wrfil;
+
+main(ac,av)
+int ac;
+char *av[];
+{
+	int i,j, nmatch;
+	struct	utmp	myutmp;
+	struct	utmp	yutmp;
+	struct	utmp	tmputmp;
+
+	pn  = av[0];
+
+	if(ac<2 || ac>3) {
+		fprintf(stderr,"usage: phone user [tty]\n");
+		exit(1);
+	}
+
+	if(isatty(fileno(stderr))!=1) {
+		fprintf(stderr,"%s: can't run with redirected stderr\n",pn);
+		exit(1);
+	}
+
+	utmpf = open(UTMP_FILE,0);
+	if(utmpf<0) {
+		fprintf(stderr,"%s: \"/etc/utmp\" ",pn);
+		perror("");
+		exit(1);
+	}
+
+	i = ttyslot();
+	if(i<1) {
+		fprintf(stderr,"%s: unable to ttyslot()\n",pn);
+		exit(1);
+	}
+
+	lseek(utmpf,(long)i*sizeof(myutmp),0);
+	j = read(utmpf,&myutmp,sizeof(myutmp));
+	if(j!=sizeof(myutmp)) {
+		fprintf(stderr,"%s: problem with utmp read\n",pn);
+		exit(1);
+	}
+	nmatch = 0;
+	sprintf(mydes,"/tmp/#P%s.%s",myutmp.ut_user,myutmp.ut_line);
+	lseek(utmpf,0L,0);
+	while(read(utmpf, &tmputmp, sizeof(tmputmp))==sizeof(tmputmp)) {
+		if(strcmp(av[1],tmputmp.ut_user)==0) {
+			yutmp = tmputmp;
+			if(ac==3) {
+				if(strcmp(av[2],tmputmp.ut_line)==0) {
+					++nmatch;
+					break;
+				}
+			} else {
+				++nmatch;
+			}
+		}
+	}
+	if(nmatch==0) {
+		if(ac==3) {
+			fprintf(stderr,"%s: %s is not logged in on %s.\n",
+				pn, av[1], av[2]);
+			exit(1);
+		}
+		fprintf(stderr,"%s: %s is not logged in.\n",pn,av[1]);
+		exit(1);
+	}
+	if(nmatch>1) {
+		fprintf(stderr,"%s: %s is logged in on more than one terminal, please specify.\n",pn,av[1]);
+		exit(1);
+	}
+
+	sprintf(talkdes,"/tmp/#P%s.%s",yutmp.ut_user,yutmp.ut_line);
+
+	if(strcmp(talkdes, mydes)==0) {
+		fprintf(stderr,"%s: That's a sure sign of madness!\n",pn);
+		exit(1);
+	}
+	unlink(mydes);
+	i = mknod(mydes,0010666,0);
+	if(i!=0) {
+		fprintf(stderr,"%s: can't create pipe: ",pn);
+		perror("");
+		exit(1);
+	}
+
+	myfil = open(mydes, 2);
+	if(myfil<0) {
+		fprintf(stderr,"%s: can't open pipe \"%s\" ",pn,mydes);
+		perror("");
+		exit(1);
+	}
+
+	if(access(talkdes,6)!=0) {
+		sprintf(wrdes,"/dev/%s",yutmp.ut_line);
+		wrfil = open(wrdes,1);
+		if(wrfil<0) {
+			fprintf(stderr,"%s: can't write to %s\n",pn
+				,yutmp.ut_user);
+			close(myfil);
+			unlink(mydes);
+			exit(1);
+		}
+		sprintf(wrline,"\7%s wants to talk to you\7\n",myutmp.ut_user);
+		i = write(wrfil,wrline,strlen(wrline));
+		if(i!=strlen(wrline)) {
+			fprintf(stderr,"%s: freakout when writing to %s\n"
+				,pn,yutmp.ut_user);
+			exit(1);
+		}
+		for(;;) {
+			i = access(talkdes,6);
+			if(i==0) break;
+			sleep(1);
+		}
+	}
+
+	talkfil = open(talkdes, 2);
+	if(talkfil<0) {
+		fprintf(stderr,"%s: can't open pipe \"%s\" ",pn,talkdes);
+		perror("");
+		exit(1);
+	}
+
+	talk(myfil, myutmp.ut_user, talkfil, yutmp.ut_user);
+	unlink(mydes);
+	unlink(talkdes);
+	printf("done\n");
+}
+
+
+talk(md, mn, yd, yn)
+int md;		/* my pipe descriptor (I write to you) */
+char *mn;
+int yd;		/* your pipe descriptor (You write to me) */
+char *yn;
+{
+	WINDOW	*subwin();
+	int	childpid;
+	unsigned char	cc;
+
+	initscr();
+
+	noecho();
+	cbreak();
+	ioctl(fileno(stdin),TCGETA,&ttmy);
+	ttmy.c_cc[VMIN]=1;
+	ttmy.c_cc[VTIME]=0;
+	ioctl(fileno(stdin),TCSETA,&ttmy);
+
+	clear();
+	winds[0] = subwin(stdscr,10,80,1,0); scrollok(winds[0],TRUE);
+	wmove(winds[0],9,0);
+	winds[1] = subwin(stdscr,10,80,12,0); scrollok(winds[1],TRUE);
+	wmove(winds[1],9,0);
+
+	drawli(0,mn);
+	drawli(11,yn);
+	drawli(22,"");
+	refresh();
+
+	childpid = fork();
+	if(childpid==0) {
+		childbgc(md,yd);
+		exit(0);
+	}
+
+	for(;;) {
+		read(yd,&cc,sizeof(cc));
+		if(cc&127 == CTRL(L)) {
+			if(cc<128) continue;
+			clearok(winds[0],TRUE);
+			clearok(winds[1],TRUE);
+		    	clearok(stdscr,TRUE);
+			wrefresh(winds[0]);
+			wrefresh(winds[1]);
+		    	wrefresh(stdscr);
+			continue;
+		}
+		if((cc&127)==4) break;
+		if(cc<0 || cc>127)
+			dspc(winds[0],cc&127);
+		else
+			dspc(winds[1],cc&127);
+	}
+	kill(childpid,9);
+	endwin();
+	return cc;
+}
+
+dspc(w,c)
+WINDOW *w;
+char c;
+{
+	if(c<' ') {
+		switch(c) {
+		case CTRL(E):
+			wclear(w);
+			wmove(w,0,0);
+			break;
+		case CTRL(M):
+			c = '\n';
+		case CTRL(J):
+		case CTRL(I):
+		case CTRL(H):
+			wprintw(w,"%c",c);
+			break;
+		}
+	} else
+		wprintw(w,"%c",c);
+	wrefresh(w);
+}
+
+drawli(c,s)
+int c;
+char *s;
+{
+	int i;
+	move(c,0);
+	printw("-------------------------------------------------------------------------------");
+	i = (80-strlen(s))/2;
+	move(c,i);
+	printw("%s",s);
+}
+
+childbgc(md,yd)
+int md, yd;
+{
+	unsigned char cc;
+
+	for(;;) {
+		cc = getchar() & 127;
+		write(md, &cc, sizeof(cc));
+		cc = cc + 128;
+		write(yd, &cc, sizeof(cc));
+	}
+}

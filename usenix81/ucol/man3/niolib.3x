@@ -1,0 +1,151 @@
+.TH NIOLIB 3X CIRES
+.EQ
+delim $$
+.EN
+.SH NAME
+niolib \- transfer arrays between diskfiles and memory
+.SH SYNOPSIS
+.PP
+\fBcall realio(x,rl,rh,nam,iact)
+.PP
+\fBcall intio(ix,rl,rh,nam,iact)
+.PP
+\fBcall return(nam)
+.PP
+\fBiflag = ntype(nam)
+.PP
+\fBreal rl, rh, x()
+.PP
+\fBinteger*2 iact, ix(), ntype
+.PP
+\fBcharacter* nam\fR
+.PP
+f77 flag: \fB-lCf\fR
+.SH DESCRIPTION
+.PP
+The programs \fIrealio\fR and \fIintio\fR are intended to transfer data
+between an array in the calling program,
+and file(s) on disk,
+in a random access fashion.
+The programs were originally written for use with time series,
+but could be used for any other type of array.
+The disk file written by the programs have no structure
+(such as a header block),
+but simply consist of a string of numbers, (called terms),
+the first of which is term 1.
+There are two kinds of disk files:
+real and integer (short).
+The second type is provided because most recorded data has
+no more than 16 bits,
+and storing numbers in this for makes for a factor of 2
+saving in disk space.
+Either type of file can be read using \fIrealio\fR,
+but this program can write only real files;
+\fIintio\fR will read or write integer files only.
+The file type is determined by the name of the file.
+.PP
+A maximum of 16 files can be open at any one time.
+More files than this can be handled sequentially,
+provided that those not being used are closed with a call to \fIreturn\fR,
+which severs the connection between the file and the program.
+.PP
+The arguments are:
+.IP \fBx,ix\fR
+array to be written out, or read into.
+In accordance with the usual Fortran rule,
+if the call is made with argument \fBx(n)\fR,
+this will be taken to be the first element of the array.
+.IP \fBrl,rh\fR
+diskfile terms to be written out, or read in, inclusive.
+The total number of terms handled is thus \fBrh\fR - \fBrl\fR + 1.
+When reading, \fBrh\fR must not be greater than the number of
+terms in the file, and always 1 $<=$ \fBrl\fR $<=$ \fBrh\fR.
+.IP \fBnam\fR
+the file name.
+(Actually, this string may contain a full pathname;
+the file name is taken to be the string following the last
+slash. The pathname may not contain blanks or tabs).
+The only legal characters in the file name proper are the letters, the digits,
+and the underscore character _ .
+A blank, newline, or tab will be taken to signal the end of the name.
+The name must begin with a letter.
+The total length of the string in \fBnam\fR must be less than
+70 characters; a null is appended to the string if it does not
+end in one.
+The file type is determined by the first letter of the filename
+according to the usual Fortran implicit typing:
+if the first letter is [i-n,I-N] the file is integer,
+otherwise real.
+The function \fIntype\fR may be used to check the type of a file name;
+it returns -1 for real, 0 for illegal, and 1 for integer.
+The name that the system gives the diskfile is the name
+used in the program call, but with .D appended.
+.IP \fBiact\fR
+the action to be taken. The choices are:
+.IP 0
+read terms \fBrl\fR through \fBrh\fR from file \fBnam\fR into array \fBx\fR (or \fBix\fR).
+.IP -1
+write from array \fBx\fR (or \fBix\fR) into terms \fBrl\fR through \fBrh\fR of file nam.
+.IP 1
+write from array \fBx\fR (or \fBix\fR) into terms \fBrl\fR through \fBrh\fR of file nam.
+On the first call within a program, or the first call following
+a call to \fIreturn\fR with \fBnam\fR as argument,
+this creates file nam;
+if a file with this name already exists, it is destroyed.
+On subsequent calls the action taken is as if \fBiact\fR = -1.
+.PP
+These programs are written in C, and use the low-level read and
+write functions to maximize speed;
+however, no buffering is done.
+For this reason there is a constant overhead no matter
+how small an array is being handled,
+and transferring data one at a time will be less efficient
+than doing it by blocks.
+Some rough tests indicate that the system times involved
+are on the order of 5 msec per call,
+plus .04 msec times the number of terms transferred.
+Note that Fortran units may be opened and closed in the
+calling program without interfering with these routines.
+.SH EXAMPLE
+The following program creates a real file and writes
+numbers into it, using the standard input as source.
+It reads in the file name (first line of input),
+number of values (second line),
+and the values themselves (third and subsequent lines, 10 numbers
+per line).
+.sp 1
+.nf
+.na
+         character*80 name
+         dimension x(10)
+         read(5,199) name
+ 199  format(a)
+         read(5,*) terms
+         nl = terms/10
+         nrem = terms - 10*nl
+         if(nrem.eq.0) nl = nl - 1
+c  nl is number of lines  - 1; nrem number of terms on last line.
+         do 3 i = 1,nl
+         rl= 10.*(i-1.) + 1.
+         rh=rl + 9.
+         read(5,*) x
+ 3     call realio(x,rl,rh,name,1)
+         read(5,*) (x(i),i=1,nrem)
+         call realio(x,rh+1.,rh+nrem,name,-1)
+         stop
+         end
+.sp 1
+.fi
+.ad
+.SH DIAGNOSTICS
+A call to either program with an illegal filename,
+to \fIintio\fR with a real filename,
+or to \fIrealio\fR with an integer filename and \fBiact\fR $!=$ 0,
+or an attempt to open more than 16 files at once,
+will produce a message on the error output
+and a return to the calling program.
+Errors in reading or writing cause process termination.
+.SH AUTHOR
+D. C. Agnew (CIRES)
+.SH SPONSOR
+D. C. Agnew (CIRES)

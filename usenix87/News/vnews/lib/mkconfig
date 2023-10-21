@@ -1,0 +1,41 @@
+#!/bin/sh
+if test "$1" = ""
+then	echo "Usage: mkconfig dir"
+	echo "where dir is the directory containing the 2.10.1 source"
+	exit 1
+fi
+
+if test ! -d $1
+then	echo "mkconfig: $1: no such directory"
+	exit 1
+fi
+
+(
+sed -n	-e 's/^NEWSUSR *= */newsusr /p' \
+	-e 's/^NEWSGRP *= */newsgrp /p' \
+	-e 's/^LIBDIR *= */lib /p' \
+	-e 's/^BINDIR *= */bin /p' \
+	-e 's/^SPOOLDIR *= */spool /p' \
+		$1/Makefile
+sed -n	-e 's/^#define[ 	]NOTIFY[ 	]*"\([^"]*\)".*/notify \1/p' \
+	-e 's/^#define[ 	]MYDOMAIN[ 	]*"\([^"]*\)".*/mydomain \1/p' \
+	-e 's/^#define[ 	]MYORG[ 	]*"\([^"]*\)".*/myorg \1/p' \
+	-e 's/^#define[ 	]DFLTSUB[ 	]*"\([^"]*\)".*/dfltsub \1/p' \
+	-e 's/^#define[ 	]ADMSUB[ 	]*"\([^"]*\)".*/admsub \1/p' \
+	-e 's/^#define[ 	]UNAME.*/uname/p' \
+	-e 's/^#define[ 	]GHNAME.*/ghname/p' \
+	-e 's/^\/\*[ 	]*#define[ 	]INTERNET.*/internet no/p' \
+	-e 's/^\/\*[ 	]*#define[ 	]V7MAIL.*/v7mail no/p' \
+	-e 's/^#define[ 	]X[ 	]*"\([^"]*\)".*/x \1/p' \
+		$1/defs.h
+rootid=`sed -n -e 's/^#define[ 	]ROOTID[ 	]*\([0-9]*\).*/\1/p' $1/defs.h`
+rootname=`sed -n -e "/^[^:]*:[^:]*:$rootid:/s/:.*//p" /etc/passwd | sed '2,$d'`
+if test "$rootname" != ""
+then	echo admin $rootname
+fi
+) | sed	-e '/lib \/usr\/lib\/news/d' \
+	-e '/bin \/usr\/bin/d' \
+	-e '/spool \/usr\/spool\/news/d' \
+	-e '/dfltsub all/d' \
+	-e '/admsub general,all\.announce/d' \
+		> config

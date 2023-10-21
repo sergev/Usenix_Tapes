@@ -1,0 +1,56 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83; site ucsbcsl.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!houxm!mhuxt!mhuxr!ulysses!allegra!mit-eddie!genrad!decvax!ittatc!dcdwest!sdcsvax!sdcrdcf!trwrb!trwrba!cepu!ucsbcsl!frew
+From: frew@ucsbcsl.UUCP (James Frew)
+Newsgroups: net.sources.bugs
+Subject: bug in bm
+Message-ID: <358@ucsbcsl.UUCP>
+Date: 3 Dec 85 18:49:01 GMT
+Date-Received: 8 Dec 85 08:44:38 GMT
+Organization: U.C. Santa Barbara
+Lines: 44
+
+There is a bug in the "bm" program posted here a while back that causes
+it to produce scrambled output when reading from a pipe (typically, the
+first few characters of random output lines get eaten).  I haven't
+tracked the bug down, but it appears to be due to the common, erroneous
+assumption that UNIX pipes are true buffers; i.e., if you ask for N
+bytes, your read will hang until n bytes appear.  Well, that ain't so -
+on 4.2BSD a read on a pipe will return whenever there's SOMETHING in
+the pipe - not necessarily as much as you asked for - and looking back
+as far as version 7 I find nothing written that guarantees any other
+sort of behavior.  Anyway, the bug in "bm" disappears when the read()
+in Execute.c is changed to uread(), which is:
+-----------------------------------cut here------------------------------------
+/* uread - UNIX read, guaranteed to return nbytes unless error or EOF */
+
+#define	ERROR	(-1)
+
+uread(fd, buf, nbytes)
+	int		fd;
+	char		*buf;
+	int		nbytes;
+{
+	register int	ngot;
+	register int	nleft;
+
+	for (nleft = nbytes; nleft > 0; nleft -= ngot) {
+		ngot = read(fd, buf, nleft);
+
+		if (ngot == ERROR) {
+			return (ERROR);
+		}
+
+		if (ngot == 0) {
+			break;
+		}
+
+		buf += ngot;
+	}
+
+	return (nbytes - nleft);
+}
+-- 
+James Frew	ucbvax!ucsbcsl!frew
+Computer Systems Lab., Univ. of Calif., Santa Barbara, CA 93106
+(805) 961-2309

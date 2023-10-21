@@ -1,0 +1,193 @@
+c  i/o routines (speak, pspeak, rspeak, getin, yes, a5toa1)
+c
+c
+	subroutine speak(n)
+c
+c  print the message in record n of the random access message file.
+c  precede it with a blank line unless blklin is false.
+c
+	implicit integer (a-z)
+	logical*1 blklin,noinpt
+	common /txtcom/ rtext,lines,ascvar
+	common /blkcom/ blklin,noinpt
+	common /alphas/ blank,eof
+	dimension rtext(205),lines(36)
+c
+	if(n.eq.0)return
+	read(2'n) loc,lines
+	if(lines(1).eq.eof)return
+	if(blklin.and.noinpt)type 2
+	noinpt=.true.
+1	oldloc = loc
+	do 3 i=36,1,-1
+	l = i
+	if(lines(i) .ne. blank) go to 5
+3	continue
+5	type 2,(lines(i),i=1,l)
+2	format(' ',36a2)
+	read(2'ascvar) loc,lines
+	if(loc .eq. oldloc) go to 1
+	return
+	end
+c
+c
+c
+	subroutine pspeak(msg,skip)
+c
+c  find the skip+1st message for object msg and print it.
+c  msg should be the index of
+c  the object.  (inven+n+1 message is prop=n message).
+c
+	implicit integer (a-z)
+	common /txtcom/ rtext,lines,ascvar
+	common /ptxcom/ ptext
+	dimension rtext(205),lines(36),ptext(100)
+c
+	m=ptext(msg)
+	if(skip.lt.0)goto 9
+	oldloc=msg
+	do 3 i=1,skip+1
+1	read(2'm)loc,lines
+	m = ascvar
+	if(loc.eq.oldloc) go to 1
+	oldloc=loc
+3	continue
+	m=m-1
+9	call speak(m)
+	return
+	end
+c
+c
+c
+	subroutine rspeak(i)
+c
+c  print the i-th "random" message (section 6 of database).
+c
+	implicit integer (a-z)
+	common /txtcom/ rtext
+	dimension rtext(205)
+c
+	if(i.ne.0)call speak(rtext(i))
+	return
+	end
+c
+c
+c
+c
+c	subroutine mspeak(i)
+c
+c  print the i-th "magic" message from section 12 of database
+c
+c	implicit integer (a-z)
+c	common /mtxcom/ mtext
+c	dimension mtext (35)
+c
+c	if(i.ne.0) call speak(mtext(i))
+c	return
+c	end
+c
+c
+	subroutine getin(word1,word1a,word1x,word2,word2a,word2x)
+c
+c  get a command from the adventurer.  snarf out the first word, pad it with
+c  blanks, and return it in word1 and word1a.
+c  chars 5  and 6 are returned in word1x, in
+c  case we need to print out the whole word in an error message.  any number of
+c  blanks may follow the word.  if a second word appears, it is returned in
+c  word2 and word2a (chars 5 and 68 in word2x), else word2 is set to zero.
+c
+	implicit integer (a-z)
+	logical*1 blklin,noinpt
+	logical*1 frst(20),blank,blank1
+	common /blkcom/ blklin,noinpt
+	data blank/' '/
+c
+	noinpt=.false.
+	if(blklin)type 1
+1	format(1x)
+2	accept 3,frst
+3	format(20a1)
+	st2 = 1
+	ix1 = 0
+	ix2 = 0
+	i = 0
+10	i = i + 1
+	if(i .gt. 20) go to 2
+	if(frst(i) .eq. blank) go to 10
+15	ix1 = ix1 + 1
+	i = i + 1
+	if(i .gt. 20) go to 500
+	if(frst(i) .ne. blank) go to 15
+20	i = i + 1
+	if(i .gt. 20) go to 500
+	if(frst(i) .eq. blank) go to 20
+	st2 = i
+25	ix2 = ix2 + 1
+	i = i + 1
+	if(i .gt. 20) go to 500
+	if(frst(i) .ne. blank) go to 25
+500	ix1 = min0(6,ix1)
+	ix2 = min0(6,ix2)
+	decode(ix1,99,frst) word1,word1a,word1x
+99	format(3a2)
+	word2 = 0
+	if(ix2 .eq. 0) return
+	do 30 i=1,ix2
+30	frst(i)=frst(st2+i-1)
+	decode(ix2,99,frst) word2,word2a,word2x
+	return
+c
+	end
+c
+c
+c
+	logical function yes(x,y,z)
+c
+c  call yesx (below) with messages from section 6.
+c
+	implicit integer (a-z)
+	external rspeak
+	logical yesx
+c
+	yes=yesx(x,y,z,rspeak)
+	return
+	end
+c
+c
+c
+c	logical function yesm(x,y,z)
+c
+c  call yesx (below) with messages from section 12.
+c
+c	implicit integer (a-z)
+c	external mspeak
+c	logical yesx
+c
+c	yesm=yesx(x,y,z,mspeak)
+c	return
+c	end
+c
+c
+c
+	logical function yesx(x,y,z,spk)
+c
+c  print message x, wait for yes/no answer.  if yes, print y and leave yea
+c  true; if no, print z and leave yea false.  spk is either rspeak or mspeak.
+c
+	implicit integer (a-z)
+	common /alphas/ blank,eof,cye,cy,cno,cn
+c
+1	if(x.ne.0)call spk(x)
+	call getin(reply,junk1,junk2,junk3,junk4,junk5)
+	if(reply.eq.cye .or. reply.eq.cy)goto 10
+	if(reply.eq.cno .or. reply.eq.cn)goto 20
+	type 9
+9	format(/' please answer the question.')
+	goto 1
+10	yesx=.true.
+	if(y.ne.0)call spk(y)
+	return
+20	yesx=.false.
+	if(z.ne.0)call spk(z)
+	return
+	end

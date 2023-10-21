@@ -1,0 +1,70 @@
+
+#	FILES:
+#	.opquestion - Holds the current question.
+#	.curopinion - Holds the current opinion status.
+#	.oplist - tells who has voted and how. Not democratic
+#	but then, nothing major is resting on this poll either.
+#	CLS = clear screen string.
+trap '' 2
+ENTER="Press RETURN to continue..."
+# findout somehow who the current user is.
+NAME=`logname`
+DATE=`date +"%a, %h %d"`
+# do a chdir to whatever dir the opinion is stored
+cd /opinions
+if test -s .opquestion
+then
+	echo "$CLS The current question for the opinion poll is:"
+	cat .opquestion
+else
+	echo "Nothing being polled currently..."
+	sleep 2
+	exit
+fi
+if test -s .curopinion
+then
+	cat .curopinion
+else
+	echo "New poll - no opinions posted yet\n"
+fi
+while :
+do
+echo "\nPlease vote: Y)es, N)o, U)ndecided or Q)uit: \c"
+read ansr
+case $ansr in
+[Yy]*) ansr=Y;break;;
+[Nn]*) ansr=N;break;;
+[Uu]*) ansr=U;break;;
+[Qq]*) exit;;
+*) continue;;
+esac
+done
+grep $NAME .oplist > /dev/null
+case $? in
+	0) echo "\007You have already voted on this question, Thanks anyway"
+	   echo $ENTER
+	   read dummy
+	   exit;;
+	1) echo "$NAME $ansr" >> .oplist
+	   echo "Current opinion as of `date`" > .curopinion ;;
+esac
+awk '
+$2 == "Y"{
+	yes++
+}
+$2 == "N"{
+	no++
+}
+$2 == "U"{
+	none++
+}
+END{
+	PYES=(yes/NR) * 100
+	PNO=(no/NR) * 100
+	PUND=(none/NR) * 100
+	printf"Total votes = %d\n",NR
+	printf"\nYES: %3d  (%6.2f%%)   NO: %3d  (%6.2f%%)  UNDECIDED: %3d (%6.2f%%)\n",yes,PYES,no,PNO,none,PUND
+}' .oplist >> .curopinion
+cat .curopinion
+echo $ENTER
+read dummy

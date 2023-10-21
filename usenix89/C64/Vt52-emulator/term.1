@@ -1,0 +1,588 @@
+  100 ;
+  110 ; term.plus.64.1
+  120 ;
+  130 ; last date 870102
+  140 ;
+  150 ;various scaler variables
+  160 char .byte 0 ; character just read
+  170 stat .byte 0 ; rs-232 status byte
+  180 ndig .byte 0 ; digit counter for downline load
+  190 loopcnt .byte 0 ; cursor blink counter
+  200 loopmax .byte $00 ; cursor blink loop reset value
+  210 control .byte $06 ; rs-232 control reg (300 baud default)
+  220 command .byte $00 ; rs-232 command reg
+  230 optbdlo .byte $3c ; kluge value for 1200 baud
+  240 optbdhi .byte $01 ; kluge value for 1200 baud
+  250 fgbg8 .byte $bf ; 80 col fgnd/bgnd colors (gray1/gray3)
+  260 fgbg4 .byte $1b ; 40 col fgnd/bgnd colors (white/gray1)
+  270 escflag .byte 0 ; escape sequence flag/counter
+  280 xcoord .byte 0 ; temp storage for x screen coordinate
+  290 ycoord .byte 0 ; temp storage for y screen coordinate
+  300 lineh .byte 0 ; hires cursor line number
+  310 colh .byte 0 ; hires cursor column number
+  320 hilo .byte $f0 ; hires nibble mask
+  330 revmask .byte $0 ; reverse video mask ($f=reverse, $0=normal)
+  340 cflag .byte $ff ; zero if char under cursor has been reversed
+  350 cstate .byte $0 ; top nibble of char under cursor if cflag=0
+  360 flag79 .byte $0 ; non-zero if previous char printed in column 79
+  370 flag79t .byte $0 ; one shot copy of previous flag79
+  380 ccode .byte $0 ; temporary character storage for chrouth
+  390 suspend .byte $0 ; rs-232 reads suspended if non-zero
+  400 fxoff .byte $0 ; xoff has been sent if non-zero
+  410 commflg .byte $0 ; non-zero if commodore key is depressed
+  420 flag80 .byte $0 ; non-zero if 80 column mode
+  430 ;
+  440 ; terminal emulator reloacation from "here" to "there"
+  450 ;
+  460 *=there+$280
+  470 ;
+  480 movterm lda #<here ; set up source and dest to point
+  490 sta source ; to "here" and "there" respectively
+  500 lda #>here
+  510 sta source+1
+  520 lda #<there
+  530 sta dest
+  540 lda #>there
+  550 sta dest+1
+  560 ldx #$10 ; $1000 bytes will be moved
+  570 ldy #$00
+  580 lp lda (source),y ; beginning of outer and inner move loops
+  590 sta (dest),y
+  600 iny
+  610 bne lp ; end inner loop to move $100 bytes
+  620 inc source+1
+  630 inc dest+1
+  640 dex
+  650 bne lp ; end outer loop to do inner loop 16 times
+  660 beq renter ; skip around termination code
+  670 term lda r6510 ; prepare to terminate
+  680 ora #1 ; by paging basic rom in
+  690 sta r6510
+  700 brk ; terminate
+  710 renter lda r6510 ; reenter here
+  720 and #$fe ; page out basic rom
+  730 sta r6510
+  740 jmp init ; branch to init "there"
+  750 ;
+  760 ; terminal emulator main program
+  770 ;
+  780 init jsr revic ; set up vic chip bank and addresses
+  790 jsr movechr ; move 40 col char set from rom to ram
+  800 jsr replchr ; mod 40 col char set for full ascii
+  810 jsr screen ; set up screen attributes
+  820 jsr openrs ; open rs-232 channel
+  830 jsr welcome ; write initial message to screen
+  840 ;
+  850 tloop lda ndx ; main terminal loop begins
+  860 bne kbd ; keyboard has priority over rs-232
+  870 jsr flowcon ; do rs-232 flow control if necessary
+  880 jsr getrs ; get an rs-232 byte
+  890 bne kbd ; if none available, go check keyboard
+  900 jsr unblink ; restore character under cursor
+  910 lda escflag ; escape sequence activeprint
+  920 beq normal ; no
+  930 jsr escseq ; yes - process escape seq.
+  940 clc ; then skip printing char
+  950 bcc nospec
+  960 normal ldx char ; get ascii character read
+  970 lda from,x ; get equivalent c64 character to print
+  980 jsr chrouth ; print it on screen
+  990 ldx char ; get ascii again
+ 1000 lda from,x ; get c64 again
+ 1010 cmp #$01 ; code 1 characters are special
+ 1020 bne nospec ; skip if not special
+ 1030 jsr special ; process special rs-232 characters
+ 1040 nospec jsr cleanup ; clean up after 40 col screen print
+ 1050 clc ; repeat
+ 1060 bcc tloop ; main loop
+ 1070 ;
+ 1080 kbd jsr getkb ; get a keyboard byte
+ 1090 beq cursor ; if none available, go generate cursor
+ 1100 ldx #5 ; change kernel output
+ 1110 jsr chkout ; to rs-232
+ 1120 jsr optimum ; wait for optimum time to do rs-232 out
+ 1130 ldx char ; get c64 character read
+ 1140 lda to,x ; get equivalent ascii character to send
+ 1150 jsr chrout ; send it to rs-232
+ 1160 ldx #0 ; return kernel output
+ 1170 jsr chkout ; to screen
+ 1180 cursor jsr docurs ; blink cursor position
+ 1190 clc ; repeat
+ 1200 bcc tloop ; main loop
+ 1210 ;
+ 1220 ; subroutine - open rs-232 as logical device 5
+ 1230 ;
+ 1240 openrs lda #<rsout ; allocate the rs-232 buffers
+ 1250 sta robuf
+ 1260 lda #>rsout
+ 1270 sta robuf+1
+ 1280 lda #<rsin
+ 1290 sta ribuf
+ 1300 lda #>rsin
+ 1310 sta ribuf+1
+ 1320 lda #4 ; pass rs-232 parameters as "filename"
+ 1330 ldx #<control
+ 1340 ldy #>control
+ 1350 jsr setnam
+ 1360 lda #5 ; equate logical unit 5 to physical 2 (rs-232)
+ 1370 ldx #2
+ 1380 ldy #0
+ 1390 jsr setlfs
+ 1400 jsr open ; do the open
+ 1410 rts
+ 1420 ;
+ 1430 ; subroutine - move character set 2 from rom into ram as set 1
+ 1440 ;
+ 1450 movechr lda #$8e ; switch to character set 1
+ 1460 jsr chrout
+ 1470 lda vmcr ; set low 4 bits of vic memory control register
+ 1480 and #$f0 ; to $0c so vic will fetch character patterns
+ 1490 ora #$0e ; from $b800
+ 1500 sta vmcr
+ 1510 lda ccra ; clear bit 0 of cia control register a to stop
+ 1520 and #$fe ; keyboard scan
+ 1530 sta ccra
+ 1540 lda r6510 ; page in character rom at $d000
+ 1550 and #$fb
+ 1560 sta r6510
+ 1570 lda #$00 ; set up source to $d800 (rom set 2)
+ 1580 sta source ; and dest to $b800 (ram set 1)
+ 1590 sta dest
+ 1600 lda #$d8
+ 1610 sta source+1
+ 1620 lda #$b8
+ 1630 sta dest+1
+ 1640 ldx #$08 ; $0800 bytes need to be moved
+ 1650 ldy #$00
+ 1660 mloop lda (source),y ; beginning of both outer and inner move loops
+ 1670 sta (dest),y
+ 1680 iny
+ 1690 bne mloop ; end inner loop to move $100 bytes
+ 1700 inc source+1
+ 1710 inc dest+1
+ 1720 dex
+ 1730 bne mloop ; end outer loop to do inner loop 8 times
+ 1740 lda r6510 ; page out character rom
+ 1750 ora #$04
+ 1760 sta r6510
+ 1770 lda ccra ; resume keyboard scan
+ 1780 ora #$01
+ 1790 sta ccra
+ 1800 rts
+ 1810 ;
+ 1820 ; subroutine - replace the bit patterns for 8 characters to attain full asc
+ 1830 ;
+ 1840 replchr lda #<newchar ; set up source to point to newchar
+ 1850 sta source
+ 1860 lda #>newchar
+ 1870 sta source+1
+ 1880 ldx #0 ; x always 0, y indexes through newchar
+ 1890 ldy #0
+ 1900 rloop1 lda (source),y ; begin outer loop - fetch screen code and
+ 1910 lsr a ; compute dest as $b800 + screen code*8
+ 1920 lsr a
+ 1930 lsr a
+ 1940 lsr a
+ 1950 lsr a
+ 1960 clc
+ 1970 adc #$b8
+ 1980 sta dest+1
+ 1990 lda (source),y
+ 2000 asl a
+ 2010 asl a
+ 2020 asl a
+ 2030 sta dest
+ 2040 lda #8 ; set inner loop counter to 8
+ 2050 sta loopcnt
+ 2060 iny ; index to first pattern byte
+ 2070 rloop2 lda (source),y ; begin inner loop - move bit pattern for 1 chr
+ 2080 sta (dest,x)
+ 2090 lda dest+1 ; switch dest to reversed character area
+ 2100 ora #$04
+ 2110 sta dest+1
+ 2120 lda (source),y ; move reversed bit pattern
+ 2130 eor #$ff
+ 2140 sta (dest,x)
+ 2150 lda dest+1 ; switch dest back to normal characters
+ 2160 eor #$04
+ 2170 sta dest+1
+ 2180 iny ; index to next bit pattern
+ 2190 inc dest
+ 2200 dec loopcnt
+ 2210 bne rloop2 ; end inner loop to move 8 bytes
+ 2220 cpy #$40
+ 2230 bmi rloop1 ; end outer loop to modify 8 characters
+ 2240 rts
+ 2250 ;
+ 2260 ; subroutine - perform rs-232 flow control
+ 2270 ;
+ 2280 flowcon lda shflag ; check commodore key
+ 2290 and #$02 ; is it depressedprint
+ 2300 beq nocomm ; no
+ 2310 lda commflg ; was it depressed before
+ 2320 bne bufchk ; yes, ignore it
+ 2330 inc commflg ; set commodore key flag
+ 2340 lda suspend ; currently suspendedprint
+ 2350 beq notsus ; no
+ 2360 lda #0 ; clear suspend flag
+ 2370 sta suspend
+ 2380 beq bufchk
+ 2390 notsus inc suspend ; set suspend flag
+ 2400 bne bufchk
+ 2410 nocomm sta commflg ; clear commodore key flag
+ 2420 bufchk lda ridbe ; compute number of char in rs-232 buffer
+ 2430 sec
+ 2440 sbc ridbs
+ 2450 lsr a ; divide count by 2 for accurate check
+ 2460 ldx fxoff ; has an xoff already been sent
+ 2470 bne itsoff ; yes
+ 2480 cmp #100 ; number chars in buffer reached 200print
+ 2490 bmi flowret ; no - no flow control necessary yet
+ 2500 jsr xoff ; send an xoff
+ 2510 rts ; return
+ 2520 itsoff cmp #10 ; has backlog dropped to 20 or lessprint
+ 2530 bpl flowret ; no - leave input suspended
+ 2540 jsr xon ; send an xon
+ 2550 flowret rts
+ 2560 ;
+ 2570 ; subroutine - set border, background, and text colors, then clear screen
+ 2580 ;
+ 2590 screen lda #$0c ; set border to gray 2
+ 2600 sta bord
+ 2610 lda flag80 ; 80 column modeprint
+ 2620 beq s40 ; no
+ 2630 ;
+ 2640 lda #<vidmat ; set up hires bgnd and fgnd colors
+ 2650 sta dest
+ 2660 lda #>vidmat
+ 2670 sta dest+1
+ 2680 ldx #$04 ; $0400 bytes need to be set
+ 2690 ldy #0
+ 2700 lda fgbg8 ; foreground/background colors
+ 2710 sloop sta (dest),y ; begin both outer and inner set loops
+ 2720 iny
+ 2730 bne sloop ; end inner loop to set $100 bytes
+ 2740 inc dest+1
+ 2750 dex
+ 2760 bne sloop ; end outer loop to do inner loop 4 times
+ 2770 beq scom ; now go to common code
+ 2780 ;
+ 2790 s40 lda fgbg4 ; set 40 col bgnd color
+ 2800 and #$0f
+ 2810 sta bgnd
+ 2820 lda fgbg4 ; set 40 col foreground color
+ 2830 lsr a
+ 2840 lsr a
+ 2850 lsr a
+ 2860 lsr a
+ 2870 sta color ; continue into common code
+ 2880 ;
+ 2890 scom lda #$93 ; clear screen
+ 2900 jsr chrouth
+ 2910 rts
+ 2920 ;
+ 2930 ; subroutine - try to get a byte from rs-232 channel
+ 2940 ;
+ 2950 getrs lda suspend ; is rs-232 reading suspendedprint
+ 2960 bne rsret ; yes
+ 2970 ldx #$05 ; change kernel input to rs-232 channel
+ 2980 jsr chkin
+ 2990 jsr getin ; get byte
+ 3000 and #$7f ; remove parity bit
+ 3010 sta char
+ 3020 jsr readst ; get status
+ 3030 sta stat
+ 3040 lda #0 ; return kernel input to keyboard
+ 3050 jsr chkin
+ 3060 jsr rserrs ; check for rs-232 errors
+ 3070 bne rsret ; if error, return no byte
+ 3080 lda stat ; check status to see if byte was read
+ 3090 and #$08
+ 3100 rsret rts ; return "ne" if no byte read
+ 3110 ;
+ 3120 ; subroutine - check for rs-232 errors
+ 3130 ;
+ 3140 rserrs lda stat ; check status for error bits
+ 3150 and #$f7
+ 3160 beq erret ; no errors, return "eq"
+ 3170 jsr beeplo ; just beep on error
+ 3180 lda #1
+ 3190 erret rts ; return "ne" on errors
+ 3200 ;
+ 3210 ; subroutine - restore character under cursor to normal
+ 3220 ;
+ 3230 unblink lda flag80 ; 80 column modeprint
+ 3240 beq u40 ; no
+ 3250 ;
+ 3260 lda cflag ; has cursor been blinked at this positionprint
+ 3270 bne noneed ; no - char must still be in original state
+ 3280 ldy #0 ; fetch top byte of character
+ 3290 lda (pnth),y
+ 3300 and hilo ; isolate nibble under cursor
+ 3310 cmp cstate ; is character in original stateprint
+ 3320 beq noneed ; yes
+ 3330 ldy #8-1 ; must restore 8 bytes
+ 3340 uloop lda (pnth),y ; fetch hires byte
+ 3350 eor hilo ; reverse nibble under cursor
+ 3360 sta (pnth),y ; replace hires byte
+ 3370 dey ; decrement counter
+ 3380 bpl uloop ; loop 8 times
+ 3390 noneed ldy #$ff ; flag that char under cursor is restored
+ 3400 sty cflag
+ 3410 rts
+ 3420 ;
+ 3430 u40 ldy pntr ; fetch column displacement of cursor
+ 3440 lda (pnt),y ; fetch screen byte under cursor
+ 3450 and #$7f ; ensure non reversed character
+ 3460 sta (pnt),y ; store back in screen
+ 3470 rts
+ 3480 ;
+ 3490 ; subroutine - handle special input characters
+ 3500 ;
+ 3510 special lda char ; get ascii character
+ 3520 cmp #$0d ; carriage returnprint
+ 3530 bne notcr ; no
+ 3540 sec ; yes, fetch cursor coordinates
+ 3550 jsr ploth
+ 3560 ldy #0 ; set column number to 0
+ 3570 clc ; set cursor coordinates
+ 3580 jsr ploth
+ 3590 rts
+ 3600 notcr cmp #$07 ; bellprint
+ 3610 bne notbell ; no
+ 3620 jsr beephi ; beep the tv with high tone
+ 3630 rts
+ 3640 notbell cmp #$1b ; ^[ (esc)print
+ 3650 bne notesc ; no
+ 3660 sta escflag ; set escape flag
+ 3670 rts
+ 3680 notesc cmp #$09 ; ^i (tab)print
+ 3690 bne nottab ; no
+ 3700 sec ; fetch cursor coordinates
+ 3710 jsr ploth
+ 3720 tya
+ 3730 lsr a ; divide column by 8
+ 3740 lsr a
+ 3750 lsr a
+ 3760 tay ; add one
+ 3770 iny
+ 3780 tya
+ 3790 asl a ; multiply by 8
+ 3800 asl a
+ 3810 asl a
+ 3820 tay
+ 3830 lda flag80 ; 80 column modeprint
+ 3840 bne nowrap ; yes
+ 3850 cpy #40 ; is new column number 40print
+ 3860 bne nowrap ; no
+ 3870 ldy #0 ; column=0
+ 3880 inx ; line=line+1
+ 3890 cpx #25 ; does screen need to be rolled upprint
+ 3900 bne nowrap ; no
+ 3910 sty char ; zero char as a rollup flag
+ 3920 nowrap clc ; reset column to new tab stop
+ 3930 jsr ploth
+ 3940 lda char ; is char zero (rollup required)print
+ 3950 bne tabret ; no
+ 3960 lda #$11 ; print cursor down to do rollup
+ 3970 jsr chrouth
+ 3980 tabret rts
+ 3990 nottab brk ; error - there should be no other specials
+ 4000 ;
+ 4010 ; subroutine - clean up the c64 text editor flags for clean operation
+ 4020 ;
+ 4030 cleanup lda #$84 ; flag 2nd line as unlinked for good rollup
+ 4040 sta ldtb1+1
+ 4050 lda #$00 ; flag no-quote mode
+ 4060 sta qtsw
+ 4070 rts
+ 4080 ;
+ 4090 ; subroutine - try to get a keyboard byte
+ 4100 ;
+ 4110 getkb jsr getin ; get a keyboard character
+ 4120 cmp #0 ;"is there a character ?
+ 4130 bne kbchar ; yes
+ 4140 rts ; return "eq" if no character
+ 4150 kbchar cmp #$83 ;"is it "shift/run/stop" ?
+ 4160 bne kbsw ; no
+ 4170 jsr end ; yes, terminate program
+ 4180 kbsw cmp #$9e ;"is it ^8 ?
+ 4190 bne kbsw2 ; no
+ 4200 jsr restore ; restore everything
+ 4210 lda #"8" ; set 80 column flag
+ 4220 sta digcol ; and 80 column message digit
+ 4230 kbsw1 sta flag80
+ 4240 pla ; fix stack pointer
+ 4250 pla
+ 4260 jmp init ; restart program in new mode
+ 4270 kbsw2 cmp #$9f ;"is it ^4 ?
+ 4280 bne kbret ; no
+ 4290 jsr restore ; restore everything
+ 4300 lda #"4" ; set 40 column message digit
+ 4310 sta digcol
+ 4320 lda #0 ; clear 80 column flag
+ 4330 beq kbsw1 ; via common code
+ 4340 kbret sta char ; save in char
+ 4350 rts
+ 4360 ;
+ 4370 ; subroutine - blink the cursor
+ 4380 ;
+ 4390 docurs dec loopcnt ; decrement timer
+ 4400 beq blinkit ;"expired ?
+ 4410 rts ; no
+ 4420 blinkit lda flag80 ;"80 column mode ?
+ 4430 beq b40 ; no
+ 4440 ;
+ 4450 lda cflag ;"must we save state of current character ?
+ 4460 beq nosave ; no
+ 4470 ldy #0 ; fetch top byte of char
+ 4480 lda (pnth),y
+ 4490 and hilo ; isolate nibble under cursor
+ 4500 sta cstate ; save this state
+ 4510 sty cflag ; clear flag
+ 4520 nosave ldy #8-1 ; must reverse 8 bytes
+ 4530 bloop lda (pnth),y ; fetch hires byte
+ 4540 eor hilo ; reverse nibble under cursor
+ 4550 sta (pnth),y ; replace hires byte
+ 4560 dey
+ 4570 bpl bloop ; loop 8 times
+ 4580 bmi bcom ; go to common code
+ 4590 ;
+ 4600 b40 ldy pntr ; fetch column displacement of cursor
+ 4610 lda (pnt),y ; fetch screen byte under cursor
+ 4620 eor #$80 ; reverse it's current state
+ 4630 sta (pnt),y ; store back in screen
+ 4640 clc ; compute corresponding color ram address
+ 4650 lda pnt+1 ; because c64 "user" is unreliable
+ 4660 adc #>(colram-vidmat4)
+ 4670 sta source+1
+ 4680 lda pnt
+ 4690 sta source
+ 4700 lda fgbg4 ; get color code for fgnd
+ 4710 lsr a
+ 4720 lsr a
+ 4730 lsr a
+ 4740 lsr a
+ 4750 sta (source),y ; into color ram
+ 4760 ;
+ 4770 bcom lda loopmax ; reset timer
+ 4780 sta loopcnt
+ 4790 lda #0 ; reset sound from beep routine
+ 4800 sta wave
+ 4810 rts
+ 4820 ;
+ 4830 ; subroutine - initiate sounds (beeps) - will be terminated next cursor bl
+ 4840 ;
+ 4850 beeplo lda #$14 ; select low frequency
+ 4860 bne beep
+ 4870 beephi lda #$50 ; select high frequency
+ 4880 beep sta freqhi
+ 4890 lda #$0f ; select fast attack, slow decay
+ 4900 sta attdec
+ 4910 lda #$12 ; select sustain ...
+ 4920 sta susrel
+ 4930 lda #6 ; select not-too-loud volume
+ 4940 sta vol
+ 4950 lda #$21 ; select sawtooth wave
+ 4960 sta wave
+ 4970 lda loopmax ; reset cursor timer for consistent beep time
+ 4980 sta loopcnt
+ 4990 rts
+ 5000 ;
+ 5010 ; subroutine - downline load output from 6502 assembler until ^^
+ 5020 ;
+ 5030 dload lda #0 ; initialize
+ 5040 sta ndig ; number of digits read
+ 5050 sta dest ; clear load base address
+ 5060 sta dest+1
+ 5070 dget lda ndx ; begin line loop - check keyboard
+ 5080 bne dbreak ; any key terminates load
+ 5090 jsr getrs ; get rs-232 byte
+ 5100 bne dget ; if none, keep waiting
+ 5110 lda char ; get ascii character
+ 5120 cmp #$1e ; ^^ (terminate load)print
+ 5130 bne noterm ; no
+ 5140 dbreak rts ; yes, return
+ 5150 noterm cmp #$0a ; line feedprint
+ 5160 beq dload ; yes, new line restarts load process
+ 5170 jsr chekdig ; convert character to digit
+ 5180 bmi dget ; not a digit, ignore
+ 5190 inc ndig ; increment digit count
+ 5200 lda ndig ; check digit count
+ 5210 cmp #3 ; first or secondprint
+ 5220 bpl ndlo ; no
+ 5230 jsr dlo ; yes, update destination low
+ 5240 clc ; loop for next character
+ 5250 bcc dget
+ 5260 ndlo cmp #5 ; third or fourthprint
+ 5270 bpl ndhi ; no
+ 5280 jsr dhi ; yes, update destination high
+ 5290 clc ; loop for next character
+ 5300 bcc dget
+ 5310 ndhi jsr putdat ; must be data, go store it
+ 5320 clc ; loop for next character
+ 5330 bcc dget
+ 5340 ;
+ 5350 ; subroutine - a a hex digit, return binary value (also in char), else -1
+ 5360 ;
+ 5370 chekdig sec ; convert decimal digit to binary
+ 5380 sbc #"0"
+ 5390 bmi ckbad ; below 0, not a digit
+ 5400 cmp #9+1 ; is it a decimal digitprint
+ 5410 bmi ckgood ; yes, return binary
+ 5420 sec ; convert hex digit to binary
+ 5430 sbc #"a"-"0"-10
+ 5440 cmp #$a
+ 5450 bmi ckbad ; below "A", not a digit
+ 5460 cmp #$f+1 ; is it a hex digitprint
+ 5470 bpl ckbad ; no, too high
+ 5480 ckgood sta char ; return good digit value
+ 5490 lda char
+ 5500 rts
+ 5510 ckbad lda #-1 ; return -1 (not digit)
+ 5520 rts
+ 5530 ;
+ 5540 ; subroutine - dest(low) = 16*dest(low)+char
+ 5550 ;
+ 5560 dlo lda dest ; dest low
+ 5570 asl a ; multiply by 16
+ 5580 asl a
+ 5590 asl a
+ 5600 asl a
+ 5610 ora char ; combine with char
+ 5620 sta dest ; update dest low
+ 5630 rts
+ 5640 ;
+ 5650 ; subroutine - dest(high) = 16*dest(high)+char
+ 5660 ;
+ 5670 dhi lda dest+1 ; dest high
+ 5680 asl a ; multiply by 16
+ 5690 asl a
+ 5700 asl a
+ 5710 asl a
+ 5720 ora char ; combine with char
+ 5730 sta dest+1 ; update dest high
+ 5740 rts
+ 5750 ;
+ 5760 ; subroutine - put data into memory at dest
+ 5770 ;
+ 5780 putdat lda ndig ; which digitprint
+ 5790 and #1 ; odd or evenprint
+ 5800 bne podd ; odd, just go stash char
+ 5810 lda source ; even, get stashed data
+ 5820 asl a ; multiply by 16
+ 5830 asl a
+ 5840 asl a
+ 5850 asl a
+ 5860 ora char ; combine with char
+ 5870 ldy #0 ; store data into memory
+ 5880 sta (dest),y
+ 5890 inc dest ; increment destination
+ 5900 bne samehi
+ 5910 inc dest+1
+ 5920 samehi rts
+ 5930 podd lda char ; stash char
+ 5940 sta source ; temporarily in source
+ 5950 rts
+ 5960 ;
+ 5970 .file 08,"0:term.2"

@@ -1,0 +1,117 @@
+#! /bin/csh -f
+#
+#-	useshdir - Update .login, .logout, and .cshrc to install shdir
+#-
+#-	This program will modify your .cshrc, .login, and .logout files
+#-	so that: (1) proper aliases will be defined. (2) directory stack
+#-	will be saved on logout and restored on login.
+#-
+#	Author:		Paul Lew, General Systems Group, Salem, NH
+#	Created at:	10/08/86  12:23 PM
+#	Last update:	10/14/86  02:28 PM
+#
+#-	Usage:	useshdir dirname <CR>
+#-
+#-	where: dirname is the directory where the shdir stored.
+#
+set tmpfile = "/tmp/shdir$$.setup"
+#---------------------------------------------------------------#
+#	   Find shdir directory if not specified		#
+#---------------------------------------------------------------#
+set dir = "$1"
+if ( "${dir}" == "" ) set dir = '/usr/local/bin'
+while (1)
+	if ( -e "${dir}/shdir" ) break
+	echo -n "Which directory did the shdir stored? "
+	set dir = "$<"
+	end
+#---------------------------------------------------------------#
+#	    Get Box style choice from the user			#
+#---------------------------------------------------------------#
+cat << cat_eof
+
+shdir can display the box in 3 styles (only if your terminal can
+support the selected feature, i.e., proper entries in termcap
+database):
+
+	<1> special graphical character set for lines (default)
+	<2> reverse video blanks
+	<3> hightlighted blanks
+
+cat_eof
+echo -n "Please make a choice: [1-3]: "
+switch ( "$<" )
+	case 2:
+		set shdir = (shdir -br)
+		breaksw
+	case 3:
+		set shdir = (shdir -bh)
+		breaksw
+	case 1:
+	default:
+		set shdir = (shdir)
+	endsw
+#---------------------------------------------------------------#
+#		Add aliases to .cshrc file			#
+#---------------------------------------------------------------#
+set msg = "Directory stack operation aliases"
+@ added = 0
+if ( -e ~/.cshrc ) @ added = `grep "${msg}" ~/.cshrc | wc -l`
+if ( ${added} == 0 ) then
+	cat > ${tmpfile} << cat_eof
+#
+# ${msg}  (Added: `date`)
+#
+alias	lsdir	'source ${dir}/lsdir'
+alias	po	'popd +\!* > /dev/null; '"${shdir}"' \`dirs\`'
+alias	s	${shdir} '-s\!* \`dirs\` ;if ( \${status} ) pushd +\${status} > /dev/null'
+alias	to	'pushd \!* > /dev/null ; '"${shdir}"' \`dirs\`'
+cat_eof
+	echo ''
+	cat ${tmpfile}
+	echo ''
+	echo -n "Do you want to add these aliases to .cshrc file? [y/n]: "
+	if ( "$<" == "y") cat ${tmpfile} >> ~/.cshrc
+	endif
+#---------------------------------------------------------------#
+#	   Update directory stack save in .logout		#
+#---------------------------------------------------------------#
+if ( ! -e ~/saved_wd ) mkdir ~/saved_wd
+set msg = "save directory stack for next login"
+@ added = 0
+if ( -e ~/.logout ) @ added = `grep "${msg}" ~/.logout | wc -l`
+if ( ${added} == 0 ) then
+	echo "# ${msg}" > ${tmpfile}
+	echo 'dirs > ~/saved_wd/cwd.wd' >> ${tmpfile}
+	echo ''
+	cat ${tmpfile}
+	echo ''
+	echo -n "Do you want to add the line above to .logout file? [y/n]: "
+	if ( "$<" == "y") cat ${tmpfile} >> ~/.logout
+	endif
+#---------------------------------------------------------------#
+#		Add restore directory in .login			#
+#---------------------------------------------------------------#
+set msg = "restore last working directory stacks"
+@ added = 0
+if ( -e ~/.login ) @ added = `grep "${msg}" ~/.login | wc -l`
+#
+if ( ${added} == 0 ) then
+	cat > ${tmpfile} << cat_eof
+# ${msg}
+source ${dir}/restdir
+${shdir} \`dirs\`
+cat_eof
+#
+	echo ''
+	cat ${tmpfile}
+	echo ''
+	echo -n "Do you want to add above 3 lines to .login file? [y/n]: "
+	if ( "$<" == "y") cat ${tmpfile} >> ~/.login
+	endif
+#---------------------------------------------------------------#
+#			    Exit here				#
+#---------------------------------------------------------------#
+end:
+/bin/rm -f ${tmpfile}
+unset tmpfile dir msg added shdir

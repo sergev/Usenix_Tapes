@@ -1,0 +1,96 @@
+.TH BACKUP 8L PUCC
+.SH NAME
+backup \- run periodic tape dumps
+.SH SYNOPSIS
+.B /etc/backup
+.br
+.SH DESCRIPTION
+.I Backup
+reads
+.I /etc/backup.list
+and attempts the necessary invocations of 
+.IR dump (8)
+to back up (to tape) all filesystems listed therein.
+It asks the invoker to mount the appropriate
+tape, and checks the tape label to make sure that
+it is correct with respect to machine, filesystem,
+and level of backup being done.
+It then calls
+.IR dump (8)
+with appropriate arguments and waits
+for it to finish.  When dump is done,
+.I backup
+will go on to the next filesystem.
+.PP
+The backup schedule in the file
+.I /etc/backup.list
+consists of lines of the form:
+.nf
+
+\ \ \ \ \ pucc-h:x0x9x9x:/usr
+
+.fi
+which are interpreted as follows:
+.nf
+
+\ \ \ \ \ machine-name:schedule:filesystem
+
+.fi
+where ``machine-name'' must be exactly the same as the string returned by
+.IR hostname (2),
+and ``filesystem'' the same as given in /etc/fstab.
+The ``schedule'' is a seven character string, with one character for
+each day of the week, with the first character representing Sunday.
+The character corresponding to a given day of the week represents the level
+of dump for that day.  For example, the sample line indicates that for pucc-h,
+filesystem /usr, an epoch (level 0) dump should be done on Monday,
+with incremental (level 9) dumps on Wednesday and Friday.
+No dumps will be done on Sunday, Tuesday, Thursday, or Saturday.
+Note that any numeric character will cause a dump of that level
+to be done on that day; any non-numeric character
+will prevent dumps from being done on that day.
+Colons (``:'') are not allowed, since they are used as
+field separators.
+.PP
+Additionally,
+.I backup
+runs ``/etc/dump #W'' (with # being the level of the dump)
+and decides from its output whether a filesystem has already been
+backed up on the same day.
+If it finds that any particular filesystem
+has already been dumped, it will ask the
+operator to verify that it should be dumped again.
+.PP
+Any question that
+.I backup
+asks must be answered with 
+.B go
+or 
+.BR stop ,
+exactly.
+Any other answer will cause an error message to be printed,
+and the question will be asked again.
+.SH FILES
+.nf
+/etc/backup.list
+/etc/fstab
+/etc/dumpdates
+.fi
+.SH SEE ALSO
+dump(8)
+.SH BUGS
+.PP
+There's no way to cleanly restart backup (if interrupted) without
+repeating some work.
+.PP
+Since
+.I backup
+tries to fit all partial dumps for a machine on one tape, selecting
+too low a level or waiting too long between backups
+may cause it to run out of tape.
+.PP
+Mixing dump levels on one partial tape is not recommended.
+.PP
+Dump always claims to be rewinding the tape, even if it's not.
+.PP
+The tape labelling scheme is not fail safe.

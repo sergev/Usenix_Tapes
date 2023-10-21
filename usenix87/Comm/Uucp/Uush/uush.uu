@@ -1,0 +1,145 @@
+trap 'echo uush.uu: abort; rm -f /tmp/RRSH$$ /tmp/OOSH$$ /tmp/MMSH$$; exit 255' 1 2 3 4 5 10 12
+# trap RRSH and MMSH
+
+# this is run on the remote
+TESTER=test
+#
+# change to MAILER=Mail for BSD systems
+#
+MAILER=mailx
+#
+# change to LOCAL=`hostname` for BSD systems
+#
+LOCAL=`uname -n`
+
+tty > /dev/null 2>&1
+case $? in
+	0)
+		echo 'uush.uu: can not be run from tty'
+		exit 255
+		;;
+esac
+
+# i'm not sure what would happen here if EOF seen, but what the heck...
+
+read R_UMASK
+read R_JOB
+read R_PATH
+read R_SYS
+read R_MBOX
+read R_XQT
+read R_USER
+read X_USER
+read X_SYS
+read SHOPTS
+read COMOPTS
+read DATA
+
+if $TESTER "$DATA" = yes
+then
+	cat > /tmp/RRSH$$
+fi
+
+#
+# prepare mail-back header
+#
+echo '
+
+---------- configuration information, warnings, verification ----------
+
+	Job number:       '$R_JOB'
+	Run on System:    '$R_SYS > /tmp/MMSH$$
+if test $R_SYS != $LOCAL
+then
+	echo '	                  (warning: My system name is really '$LOCAL')' >> /tmp/MMSH$$
+fi
+	echo '	Return Mail to:   '$R_MBOX'
+	Username:         '$R_SYS!$R_USER >> /tmp/MMSH$$
+
+# look up place for .uuprofile
+user=`grep '^'$R_USER':' /etc/passwd | cut -d: -f6`
+if test ! "$user" 
+then
+	echo '	                  (warning: above user does not exist)' >> /tmp/MMSH$$
+else
+	if test ! -f $user/.uuprofile
+	then
+		echo '	                  (warning: above user has no .uuprofile)' >> /tmp/MMSH$$
+	else
+		PROFILE=$user/.uuprofile
+		. $PROFILE
+		echo '	Profiled from:    '$user/.uuprofile >> /tmp/MMSH$$
+	fi
+fi
+
+echo '	Execution Path:   '$R_PATH >> /tmp/MMSH$$
+
+for f in `echo $R_PATH | tr ':' ' '`
+do
+	if test ! -d $f
+	then
+		echo '	                  (warning: '$f' not found)' >> /tmp/MMSH$$
+	fi
+done
+echo '	Execution Dir:    '$R_XQT >> /tmp/MMSH$$
+if test ! -d $R_XQT
+then
+	echo '	                  (warning: dir not found, using PUBDIR)' >> /tmp/MMSH$$
+	R_XQT=/usr/spool/uucppublic
+else
+	(cd $R_XQT ) > /dev/null 2>&1
+	case $? in
+	1)
+		echo '	                  (warning: could not chdir, using PUBDIR)' >> /tmp/MMSH$$
+		;;
+	esac
+	R_XQT=/usr/spool/uucppublic
+fi
+
+umask $R_UMASK
+RM=`sh -c umask 2>&1`
+echo '	File mask:        '$RM' ('$R_UMASK')
+' >> /tmp/MMSH$$
+
+if test $DATA = no
+then
+	echo '	Command:          'sh $SHOPTS >> /tmp/MMSH$$
+else
+	echo '	Command:          'sh $SHOPTS comfile $COMOPTS >> /tmp/MMSH$$
+fi
+
+echo '	Start date:       '`date` >> /tmp/MMSH$$
+
+echo '
+
+---------- command execution begins, stdout & stderr follows ----------
+' >> /tmp/OOSH$$
+
+
+PATH=$R_PATH
+export PATH
+
+cd $R_XQT
+
+if test $DATA = no
+then
+	sh $SHOPTS >> /tmp/OOSH$$ 2>&1
+else
+	sh $SHOPTS /tmp/RRSH$$ $COMOPTS >> /tmp/OOSH$$ 2>&1
+fi
+
+STATUS=$?
+
+echo '	Finish date:      '`date` >> /tmp/MMSH$$
+echo '	Exit Status:      '$STATUS >> /tmp/MMSH$$
+
+cat /tmp/MMSH$$ /tmp/OOSH$$ | $MAILER -s 'uush.uu@'$LOCAL' output' $R_MBOX 
+
+rm -f /tmp/RRSH$$ /tmp/MMSH$$ /tmp/OOSH$$
+
+#
+# we could place call back command here if Mailer doesn't automatically
+# call ... most sendmail.cf's don't, so we can 'uucall $X_SYS' on BSD if
+# needed.
+#
+#uucall $X_SYS

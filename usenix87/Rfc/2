@@ -1,0 +1,839 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA28208; Tue, 7 Jul 87 10:58:43 CDT
+Path: plus5!wucs1!td2cad!mipos3!intelca!oliveb!pyramid!decwrl!decvax!ucbvax!husc6!rutgers!topaz.rutgers.edu!hedrick
+From: topaz.rutgers.edu!hedrick (Charles Hedrick)
+Newsgroups: comp.protocols.tcp-ip
+Subject: TCP/IP intro, part II of II
+Message-Id: <13129@topaz.rutgers.edu>
+Date: 3 Jul 87 09:59:22 GMT
+Organization: Rutgers Univ., New Brunswick, N.J.
+Lines: 827
+Apparently-To: hokey
+
+
+
+
+
+Now  that  we  know  how  to  open  connections, let's get back to the
+applications programs.  As mentioned earlier, once TCP  has  opened  a
+connection,  we  have  something  that might as well be a simple wire.
+All the hard parts are handled by TCP and IP.  However we  still  need
+some  agreement  as  to  what we send over this connection.  In effect
+this is simply an agreement on what set of  commands  the  application
+will  understand,  and  the  format  in  which  they  are  to be sent.
+Generally, what is sent is a combination of commands and data.    They
+use  context  to  differentiate.  For example, the mail protocol works
+like this: Your mail program opens a connection to the mail server  at
+the  other end.  Your program gives it your machine's name, the sender
+of the message, and the recipients you want it sent to.  It then sends
+a  command saying that it is starting the message.  At that point, the
+other end  stops  treating  what  it  sees  as  commands,  and  starts
+accepting  the  message.  Your end then starts sending the text of the
+message.  At the end of the message, a special mark is sent (a dot  in
+the first column).  After that, both ends understand that your program
+is again sending commands.  This is the simplest way to do things, and
+the one that most applications use.
+
+File  transfer  is  somewhat more complex.  The file transfer protocol
+involves two different connections.  It starts  out  just  like  mail.
+The user's program sends commands like "log me in as this user", "here
+is my password", "send me the file with this name".  However once  the
+command  to  send  data is sent, a second connection is opened for the
+data itself.  It would certainly be possible to send the data  on  the
+same  connection,  as  mail does.  However file transfers often take a
+long time.  The designers of the  file  transfer  protocol  wanted  to
+allow  the  user  to  continue  issuing commands while the transfer is
+going on.  For example, the user might make an inquiry,  or  he  might
+abort  the  transfer.    Thus  the designers felt it was best to use a
+separate connection for  the  data  and  leave  the  original  command
+connection  for  commands.    (It  is  also  possible  to open command
+connections to two different computers, and tell them to send  a  file
+from  one  to  the other.  In that case, the data couldn't go over the
+command connection.)
+
+Remote terminal connections use another mechanism still.   For  remote
+logins,  there  is just one connection.  It normally sends data.  When
+it is necessary to send a command (e.g. to set the terminal type or to
+change  some  mode),  a special character is used to indicate that the
+next character is a command.  If the user happens to type that special
+character as data, two of them are sent.
+
+We  are  not  going to describe the application protocols in detail in
+this document.  It's better to read the RFC's yourself.  However there
+are  a  couple of common conventions used by applications that will be
+described here.  First, the common network representation:  TCP/IP  is
+intended  to  be  usable  on  any  computer.    Unfortunately, not all
+computers agree on how data is represented.  There are differences  in
+character  codes  (ASCII  vs.  EBCDIC),  in  end  of  line conventions
+(carriage return, line feed, or a representation using counts), and in
+whether  terminals expect characters to be sent individually or a line
+at a time.   In  order  to  allow  computers  of  different  kinds  to
+communicate,   each   applications   protocol   defines   a   standard
+                                  14
+
+
+
+representation.    Note  that  TCP  and  IP  do  not  care  about  the
+representation.    TCP  simply  sends octets.  However the programs at
+both ends have to agree on how the octets are to be interpreted.   The
+RFC  for  each  application  specifies the standard representation for
+that application.  Normally it  is  "net  ASCII".    This  uses  ASCII
+characters,  with end of line denoted by a carriage return followed by
+a line feed.  For remote login,  there  is  also  a  definition  of  a
+"standard terminal", which turns out to be a half-duplex terminal with
+echoing happening on the local machine.  Most applications  also  make
+provisions  for  the  two  computers to agree on other representations
+that they may find more convenient.  For example, PDP-10's have 36-bit
+words.    There  is a way that two PDP-10's can agree to send a 36-bit
+binary file.  Similarly, two systems that prefer full-duplex  terminal
+conversations  can  agree  on  that.    However each application has a
+standard representation, which every machine must support.
+
+
+
+3.1 An example application: SMTP
+
+
+In order to give a bit better idea what is involved in the application
+protocols,  I'm  going  to  show an example of SMTP, which is the mail
+protocol.  (SMTP is "simple mail transfer protocol.)  We assume that a
+computer called TOPAZ.RUTGERS.EDU wants to send the following message.
+
+  Date: Sat, 27 Jun 87 13:26:31 EDT
+  From: hedrick@topaz.rutgers.edu
+  To: levy@red.rutgers.edu
+  Subject: meeting
+
+  Let's get together Monday at 1pm.
+
+First,  note  that the format of the message itself is described by an
+Internet standard (RFC 822).  The standard specifies the fact that the
+message  must be transmitted as net ASCII (i.e. it must be ASCII, with
+carriage return/linefeed to delimit lines).   It  also  describes  the
+general  structure, as a group of header lines, then a blank line, and
+then the body of the message.  Finally, it describes the syntax of the
+header  lines in detail.  Generally they consist of a keyword and then
+a value.
+
+Note  that  the  addressee  is  indicated   as   LEVY@RED.RUTGERS.EDU.
+Initially,  addresses were simply "person at machine".  However recent
+standards have made things more flexible.  There  are  now  provisions
+for  systems  to handle other systems' mail.  This can allow automatic
+forwarding on behalf of computers not connected to the Internet.    It
+can be used to direct mail for a number of systems to one central mail
+server.  Indeed there is no requirement that an actual computer by the
+name  of RED.RUTGERS.EDU even exist.  The name servers could be set up
+so that you mail to department names, and each  department's  mail  is
+routed  automatically to an appropriate computer.  It is also possible
+that the part before the @ is something other than a user name.  It is
+possible  for  programs  to be set up to process mail.  There are also
+provisions  to  handle  mailing  lists,  and  generic  names  such  as
+                                  15
+
+
+
+"postmaster" or "operator".
+
+The  way  the  message is to be sent to another system is described by
+RFC's 821 and 974.  The program that is going to be doing the  sending
+asks  the  name server several queries to determine where to route the
+message.  The first query is to find out which  machines  handle  mail
+for  the  name RED.RUTGERS.EDU.  In this case, the server replies that
+RED.RUTGERS.EDU handles its own mail.  The program then asks  for  the
+address of RED.RUTGERS.EDU, which is 128.6.4.2.  Then the mail program
+opens a TCP connection to port 25  on  128.6.4.2.    Port  25  is  the
+well-known  socket  used  for receiving mail.  Once this connection is
+established, the mail program starts sending  commands.    Here  is  a
+typical  conversation.  Each line is labelled as to whether it is from
+TOPAZ or RED.  Note that TOPAZ initiated the connection:
+
+    RED    220 RED.RUTGERS.EDU SMTP Service at 29 Jun 87 05:17:18 EDT
+    TOPAZ  HELO topaz.rutgers.edu
+    RED    250 RED.RUTGERS.EDU - Hello, TOPAZ.RUTGERS.EDU
+    TOPAZ  MAIL From:<hedrick@topaz.rutgers.edu>
+    RED    250 MAIL accepted
+    TOPAZ  RCPT To:<levy@red.rutgers.edu>
+    RED    250 Recipient accepted
+    TOPAZ  DATA
+    RED    354 Start mail input; end with <CRLF>.<CRLF>
+    TOPAZ  Date: Sat, 27 Jun 87 13:26:31 EDT
+    TOPAZ  From: hedrick@topaz.rutgers.edu
+    TOPAZ  To: levy@red.rutgers.edu
+    TOPAZ  Subject: meeting
+    TOPAZ
+    TOPAZ  Let's get together Monday at 1pm.
+    TOPAZ  .
+    RED    250 OK
+    TOPAZ  QUIT
+    RED    221 RED.RUTGERS.EDU Service closing transmission channel
+
+First, note that commands all use normal text.  This is typical of the
+Internet  standards.    Many  of  the  protocols  use  standard  ASCII
+commands.  This makes it easy  to  watch  what  is  going  on  and  to
+diagnose  problems.  For example, the mail program keeps a log of each
+conversation.  If something goes wrong, the log  file  can  simply  be
+mailed  to  the  postmaster.  Since it is normal text, he can see what
+was going on.  It also allows a human to interact  directly  with  the
+mail  server,  for  testing.  (Some newer protocols are complex enough
+that this is not practical.  The commands would have to have a  syntax
+that would require a significant parser.  Thus there is a tendency for
+newer protocols to use binary formats.  Generally they are  structured
+like  C or Pascal record structures.)  Second, note that the responses
+all begin with numbers.  This is also typical of  Internet  protocols.
+The  allowable  responses  are  defined  in the protocol.  The numbers
+allow the user program to respond unambiguously.    The  rest  of  the
+response  is  text,  which is normally for use by any human who may be
+watching or looking at a log.  It has no effect on  the  operation  of
+the  programs.  (However there is one point at which the protocol uses
+part of the text of the response.)   The  commands  themselves  simply
+allow  the  mail  program  on  one  end  to  tell  the mail server the
+                                  16
+
+
+
+information it needs to know in order to deliver the message.  In this
+case,  the  mail  server  could  get the information by looking at the
+message itself.  But for more complex cases, that would not  be  safe.
+Every  session  must  begin  with  a HELO, which gives the name of the
+system that initiated the connection.  Then the sender and  recipients
+are specified.  (There can be more than one RCPT command, if there are
+several recipients.)  Finally the data itself is sent.  Note that  the
+text  of the message is terminated by a line containing just a period.
+(If such a line appears in the message, the period is doubled.)  After
+the  message  is  accepted,  the  sender  can send another message, or
+terminate the session as in the example above.
+
+Generally, there is a pattern to the response numbers.   The  protocol
+defines  the  specific set of responses that can be sent as answers to
+any given command.  However programs that don't want to  analyze  them
+in  detail  can  just  look at the first digit.  In general, responses
+that begin with a 2  indicate  success.    Those  that  begin  with  3
+indicate  that some further action is needed, as shown above.  4 and 5
+indicate errors.  4 is a "temporary" error, such as  a  disk  filling.
+The  message should be saved, and tried again later.  5 is a permanent
+error, such as a  non-existent  recipient.    The  message  should  be
+returned to the sender with an error message.
+
+(For  more  details about the protocols mentioned in this section, see
+RFC's 821/822 for mail, RFC 959 for file transfer, and  RFC's  854/855
+for  remote  logins.  For the well-known port numbers, see the current
+edition of Assigned Numbers, and possibly RFC 814.)
+
+
+
+4. Protocols other than TCP: UDP and ICMP
+
+
+So far, we have described only connections that use TCP.  Recall  that
+TCP  is  responsible  for  breaking  up  messages  into datagrams, and
+reassembling them properly.  However in  many  applications,  we  have
+messages  that  will  always  fit in a single datagram.  An example is
+name lookup.  When a user attempts to make  a  connection  to  another
+system,  he  will  generally  specify  the system by name, rather than
+Internet address.  His system has to translate that name to an address
+before  it  can  do  anything.  Generally, only a few systems have the
+database used to translate names to addresses.  So the  user's  system
+will want to send a query to one of the systems that has the database.
+This query is going to be very short.  It will certainly  fit  in  one
+datagram.    So  will the answer.  Thus it seems silly to use TCP.  Of
+course TCP does more than just break things up  into  datagrams.    It
+also  makes  sure  that  the  data  arrives, resending datagrams where
+necessary.  But for a question that fits  in  a  single  datagram,  we
+don't  need  all the complexity of TCP to do this.  If we don't get an
+answer after a few seconds, we can just ask again.   For  applications
+like this, there are alternatives to TCP.
+
+The most common alternative is UDP ("user datagram protocol").  UDP is
+designed for applications where you don't need  to  put  sequences  of
+datagrams  together.  It fits into the system much like TCP.  There is
+                                  17
+
+
+
+a UDP header.  The network software puts the UDP header on  the  front
+of  your  data, just as it would put a TCP header on the front of your
+data.  Then UDP sends the data  to  IP,  which  adds  the  IP  header,
+putting  UDP's  protocol number in the protocol field instead of TCP's
+protocol number.  However UDP doesn't do as much  as  TCP  does.    It
+doesn't  split data into multiple datagrams.  It doesn't keep track of
+what it has sent so it can resend if necessary.  About  all  that  UDP
+provides  is  port  numbers,  so  that several programs can use UDP at
+once.  UDP port numbers are used just like TCP port  numbers.    There
+are  well-known  port numbers for servers that use UDP.  Note that the
+UDP header is shorter than a TCP header.   It  still  has  source  and
+destination  port  numbers,  and  a checksum, but that's about it.  No
+sequence number, since it is not needed.  UDP is used by the protocols
+that  handle  name  lookups (see IEN 116, RFC 882, and RFC 883), and a
+number of similar protocols.
+
+Another  alternative  protocol  is  ICMP  ("Internet  control  message
+protocol").    ICMP  is  used  for  error messages, and other messages
+intended for the TCP/IP software itself, rather  than  any  particular
+user  program.  For example, if you attempt to connect to a host, your
+system may get back an ICMP message saying "host unreachable".    ICMP
+can  also be used to find out some information about the network.  See
+RFC 792 for details of ICMP.  ICMP is  similar  to  UDP,  in  that  it
+handles messages that fit in one datagram.  However it is even simpler
+than UDP.  It doesn't even have port numbers in its header.  Since all
+ICMP  messages are interpreted by the network software itself, no port
+numbers are needed to say where a ICMP message is supposed to go.
+
+
+
+5. Keeping track of names and information: the domain system
+
+
+As we indicated earlier, the network software generally needs a 32-bit
+Internet  address  in  order  to open a connection or send a datagram.
+However users prefer to deal with computer names rather than  numbers.
+Thus  there  is  a database that allows the software to look up a name
+and find the corresponding number.  When the Internet was small,  this
+was  easy.  Each system would have a file that listed all of the other
+systems, giving both their name and number.  There are  now  too  many
+computers  for  this  approach to be practical.  Thus these files have
+been replaced by a set of name servers that keep track of  host  names
+and  the corresponding Internet addresses.  (In fact these servers are
+somewhat more general than that.  This is just one kind of information
+stored in the domain system.)  Note that a set of interlocking servers
+are used, rather than a single central one.  There  are  now  so  many
+different  institutions  connected  to  the  Internet that it would be
+impractical for them to  notify  a  central  authority  whenever  they
+installed  or moved a computer.  Thus naming authority is delegated to
+individual institutions.  The name servers form a tree,  corresponding
+to  institutional  structure.    The names themselves follow a similar
+structure.  A typical example is the name BORAX.LCS.MIT.EDU.  This  is
+a  computer  at  the Laboratory for Computer Science (LCS) at MIT.  In
+order to find its Internet address,  you  might  potentially  have  to
+consult  4  different  servers.  First, you would ask a central server
+                                  18
+
+
+
+(called the root) where the EDU server is.  EDU is a server that keeps
+track of educational institutions.  The root server would give you the
+names and Internet addresses of several servers for EDU.   (There  are
+several  servers  at  each  level,  to allow for the possibly that one
+might be down.)  You would then ask EDU where the server for  MIT  is.
+Again,  it  would  give  you  names  and Internet addresses of several
+servers for MIT.  Generally, not all of those servers would be at MIT,
+to  allow for the possibility of a general power failure at MIT.  Then
+you would ask MIT where the server for LCS is, and finally  you  would
+ask one of the LCS servers about BORAX.  The final result would be the
+Internet address for BORAX.LCS.MIT.EDU.    Each  of  these  levels  is
+referred  to  as  a  "domain".  The entire name, BORAX.LCS.MIT.EDU, is
+called a "domain name".    (So  are  the  names  of  the  higher-level
+domains, such as LCS.MIT.EDU, MIT.EDU, and EDU.)
+
+Fortunately,  you  don't really have to go through all of this most of
+the time.  First of all, the root name servers also happen to  be  the
+name  servers  for  the  top-level domains such as EDU.  Thus a single
+query to a root  server  will  get  you  to  MIT.    Second,  software
+generally  remembers answers that it got before.  So once we look up a
+name at LCS.MIT.EDU, our software remembers where to find servers  for
+LCS.MIT.EDU,  MIT.EDU,  and EDU.  It also remembers the translation of
+BORAX.LCS.MIT.EDU.  Each of these pieces of information has a "time to
+live"  associated with it.  Typically this is a few days.  After that,
+the information expires and has to be looked up again.    This  allows
+institutions to change things.
+
+The  domain  system  is not limited to finding out Internet addresses.
+Each domain name is a node in a database.  The node can  have  records
+that  define  a number of different properties.  Examples are Internet
+address, computer type, and a list of services provided by a computer.
+A  program  can  ask  for  a  specific  piece  of  information, or all
+information about a given name.  It is possible  for  a  node  in  the
+database  to  be  marked as an "alias" (or nickname) for another node.
+It is also possible to use the  domain  system  to  store  information
+about users, mailing lists, or other objects.
+
+There  is  an  Internet  standard  defining  the  operation  of  these
+databases, as well as the protocols used  to  make  queries  of  them.
+Every  network utility has to be able to make such queries, since this
+is now the official way to evaluate host names.   Generally  utilities
+will talk to a server on their own system.  This server will take care
+of contacting the other servers for them.  This keeps down the  amount
+of code that has to be in each application program.
+
+The  domain  system  is  particularly  important for handling computer
+mail.  There are entry types to define what computer handles mail  for
+a  given  name, to specify where an individual is to receive mail, and
+to define mailing lists.
+
+(See RFC's 882, 883, and 973 for specifications of the domain  system.
+RFC 974 defines the use of the domain system in sending mail.)
+
+
+
+                                  19
+
+
+
+6. Routing
+
+
+The   description  above  indicated  that  the  IP  implementation  is
+responsible for getting datagrams to the destination indicated by  the
+destination address, but little was said about how this would be done.
+The task of finding how to  get  a  datagram  to  its  destination  is
+referred to as "routing".  In fact many of the details depend upon the
+particular implementation.  However some general things can be said.
+
+First, it is necessary to understand the model on which IP  is  based.
+IP assumes that a system is attached to some local network.  We assume
+that the system can send datagrams to any  other  system  on  its  own
+network.    (In  the  case  of  Ethernet, it simply finds the Ethernet
+address of the destination system, and puts the datagram  out  on  the
+Ethernet.)    The  problem  comes  when  a  system  is asked to send a
+datagram to a system on a different network.  This problem is  handled
+by  gateways.   A gateway is a system that connects a network with one
+or more other networks.  Gateways  are  often  normal  computers  that
+happen  to have more than one network interface.  For example, we have
+a Unix machine that has two different Ethernet interfaces.  Thus it is
+connected  to networks 128.6.4 and 128.6.3.  This machine can act as a
+gateway between those two networks.  The software on that machine must
+be  set  up  so that it will forward datagrams from one network to the
+other.  That is, if a machine on network 128.6.4 sends a  datagram  to
+the  gateway,  and  the  datagram is addressed to a machine on network
+128.6.3, the gateway will forward the  datagram  to  the  destination.
+Major communications centers often have gateways that connect a number
+of different  networks.    (In  many  cases,  special-purpose  gateway
+systems provide better performance or reliability than general-purpose
+systems acting as gateways.  A number of vendors sell such systems.)
+
+Routing in IP is  based  entirely  upon  the  network  number  of  the
+destination  address.    Each computer has a table of network numbers.
+For each network number, a gateway is listed.  This is the gateway  to
+be used to get to that network.  Note that the gateway doesn't have to
+connect directly to the network.  It just has to be the best place  to
+go  to  get there.  For example at Rutgers, our interface to NSFnet is
+at the John von Neuman Supercomputer Center (JvNC). Our connection  to
+JvNC  is  via  a  high-speed  serial line connected to a gateway whose
+address is 128.6.3.12.  Systems on net 128.6.3 will list 128.6.3.12 as
+the  gateway  for  many  off-campus  networks.  However systems on net
+128.6.4 will list 128.6.4.1 as the gateway to  those  same  off-campus
+networks.    128.6.4.1  is  the  gateway  between networks 128.6.4 and
+128.6.3, so it is the first step in getting to JvNC.
+
+When a computer wants to send a datagram, it first checks  to  see  if
+the  destination address is on the system's own local network.  If so,
+the datagram can be sent directly.  Otherwise, the system  expects  to
+find an entry for the network that the destination address is on.  The
+datagram is sent to the gateway listed in that entry.  This table  can
+get quite big.  For example, the Internet now includes several hundred
+individual networks.  Thus various strategies have been  developed  to
+reduce  the size of the routing table.  One strategy is to depend upon
+"default routes".  Often, there is only one gateway out of a  network.
+                                  20
+
+
+
+This  gateway might connect a local Ethernet to a campus-wide backbone
+network.  In that case, we don't need to have  a  separate  entry  for
+every  network  in  the  world.    We  simply define that gateway as a
+"default".  When no specific  route  is  found  for  a  datagram,  the
+datagram  is  sent to the default gateway.  A default gateway can even
+be used when there are several gateways  on  a  network.    There  are
+provisions  for  gateways  to  send a message saying "I'm not the best
+gateway -- use this one instead."  (The message is sent via ICMP.  See
+RFC  792.)  Most network software is designed to use these messages to
+add entries to their routing tables.  Suppose network 128.6.4 has  two
+gateways, 128.6.4.59 and 128.6.4.1.  128.6.4.59 leads to several other
+internal Rutgers networks.  128.6.4.1 leads indirectly to the  NSFnet.
+Suppose  we  set  128.6.4.59  as  a default gateway, and have no other
+routing table entries.  Now what  happens  when  we  need  to  send  a
+datagram  to  MIT?    MIT  is  network 18.  Since we have no entry for
+network 18, the datagram will be sent to the default, 128.6.4.59.   As
+it  happens,  this  gateway  is the wrong one.  So it will forward the
+datagram to 128.6.4.1.  But it will also send back an error saying  in
+effect: "to get to network 18, use 128.6.4.1".  Our software will then
+add an entry to the routing table.  Any future datagrams to  MIT  will
+then  go  directly to 128.6.4.1.  (The error message is sent using the
+ICMP protocol.  The message type is called "ICMP redirect.")
+
+Most IP experts recommend that individual computers should not try  to
+keep  track  of  the  entire network.  Instead, they should start with
+default gateways, and let the gateways tell them the routes,  as  just
+described.   However this doesn't say how the gateways should find out
+about the routes.  The gateways can't depend upon this strategy.  They
+have  to  have fairly complete routing tables.  For this, some sort of
+routing protocol is needed.  A routing protocol is simply a  technique
+for  the  gateways  to  find each other, and keep up to date about the
+best way to get to every network.   RFC  1009  contains  a  review  of
+gateway  design  and  routing.    However rip.doc is probably a better
+introduction to the subject.  It contains some tutorial material,  and
+a detailed description of the most commonly-used routing protocol.
+
+
+
+7. Details about Internet addresses: subnets and broadcasting
+
+
+As  indicated earlier, Internet addresses are 32-bit numbers, normally
+written as 4 octets (in decimal), e.g. 128.6.4.7.  There are  actually
+3  different types of address.  The problem is that the address has to
+indicate both the network and the host within the  network.    It  was
+felt  that  eventually  there would be lots of networks.  Many of them
+would be small, but probably 24 bits would be needed to represent  all
+the  IP  networks.  It was also felt that some very big networks might
+need 24 bits to represent all of their hosts.  This would seem to lead
+to  48  bit  addresses.  But the designers really wanted to use 32 bit
+addresses.  So they adopted a kludge.  The assumption is that most  of
+the  networks will be small.  So they set up three different ranges of
+address.  Addresses beginning with 1 to 126 use only the  first  octet
+for  the network number.  The other three octets are available for the
+host number.  Thus 24 bits are available for hosts.  These numbers are
+                                  21
+
+
+
+used  for large networks.  But there can only be 126 of these very big
+networks.  The Arpanet is one, and there are a  few  large  commercial
+networks.    But  few  normal organizations get one of these "class A"
+addresses.  For normal large organizations, "class  B"  addresses  are
+used.    Class  B  addresses  use the first two octets for the network
+number.  Thus network numbers are 128.1 through 191.254.  (We avoid  0
+and  255,  for  reasons  that  we  see below.  We also avoid addresses
+beginning with 127, because that is used by some systems  for  special
+purposes.)    The  last  two  octets  are available for host addesses,
+giving 16 bits of host address.   This  allows  for  64516  computers,
+which should be enough for most organizations.  (It is possible to get
+more than one class B address, if you run  out.)    Finally,  class  C
+addresses  use  three  octets,  in  the  range 192.1.1 to 223.254.254.
+These allow only 254 hosts on each network, but there can be  lots  of
+these  networks.   Addresses above 223 are reserved for future use, as
+class D and E (which are currently not defined).
+
+Many large organizations find it convenient to  divide  their  network
+number into "subnets".  For example, Rutgers has been assigned a class
+B address, 128.6.  We find it convenient to use the third octet of the
+address to indicate which Ethernet a host is on.  This division has no
+significance outside of Rutgers.  A computer  at  another  institution
+would treat all datagrams addressed to 128.6 the same way.  They would
+not look at the third octet of the address.   Thus  computers  outside
+Rutgers  would  not have different routes for 128.6.4 or 128.6.5.  But
+inside Rutgers, we treat 128.6.4 and 128.6.5 as separate networks.  In
+effect, gateways inside Rutgers have separate entries for each Rutgers
+subnet, whereas gateways outside  Rutgers  just  have  one  entry  for
+128.6.  Note  that  we  could  do  exactly  the  same thing by using a
+separate class C address for each Ethernet.   As  far  as  Rutgers  is
+concerned,  it  would be just as convenient for us to have a number of
+class C addresses.  However using class C addresses would make  things
+inconvenient for the rest of the world.  Every institution that wanted
+to talk to us would have to have a separate entry for each one of  our
+networks.   If every institution did this, there would be far too many
+networks for any reasonable gateway to keep track of.  By  subdividing
+a  class B network, we hide our internal structure from everyone else,
+and  save  them  trouble.    This  subnet  strategy  requires  special
+provisions in the network software.  It is described in RFC 950.
+
+0  and  255  have  special  meanings.  0 is reserved for machines that
+don't know their address.  In certain circumstances it is possible for
+a  machine not to know the number of the network it is on, or even its
+own host address.  For example, 0.0.0.23 would be a machine that  knew
+it was host number 23, but didn't know on what network.
+
+255  is  used for "broadcast".  A broadcast is a message that you want
+every system on the network to see.    Broadcasts  are  used  in  some
+situations  where you don't know who to talk to.  For example, suppose
+you need to look  up  a  host  name  and  get  its  Internet  address.
+Sometimes  you  don't know the address of the nearest name server.  In
+that case, you might send the request as a broadcast.  There are  also
+cases  where a number of systems are interested in information.  It is
+then less expensive to send a single broadcast than to send  datagrams
+individually  to  each host that is interested in the information.  In
+                                  22
+
+
+
+order to send a broadcast, you use an address that is  made  by  using
+your  network  address, with all ones in the part of the address where
+the host number goes.  For example, if you are on network 128.6.4, you
+would   use   128.6.4.255  for  broadcasts.    How  this  is  actually
+implemented depends upon the medium.   It  is  not  possible  to  send
+broadcasts  on the Arpanet, or on point to point lines.  However it is
+possible on an Ethernet.  If you use an Ethernet address with all  its
+bits  on (all ones), every machine on the Ethernet is supposed to look
+at that datagram.
+
+Although the official broadcast address for  network  128.6.4  is  now
+128.6.4.255,  there  are  some  other addresses that may be treated as
+broadcasts by certain implementations.  For convenience, the  standard
+also  allows  255.255.255.255 to be used.  This refers to all hosts on
+the local network.  It is often simpler to use 255.255.255.255 instead
+of  finding out the network number for the local network and forming a
+broadcast address such as 128.6.4.255.   In  addition,  certain  older
+implementations  may  use  0  instead  of  255  to  form the broadcast
+address.    Such  implementations  would  use  128.6.4.0  instead   of
+128.6.4.255  as  the  broadcast  address on network 128.6.4.  Finally,
+certain older implementations may not understand about subnets.   Thus
+they consider the network number to be 128.6.  In that case, they will
+assume a broadcast address  of  128.6.255.255  or  128.6.0.0.    Until
+support  for  broadcasts is implemented properly, it can be a somewhat
+dangerous feature to use.
+
+Because 0 and 255 are used for unknown and broadcast addresses, normal
+hosts  should never be given addresses containing 0 or 255.  Addresses
+should never begin with 0, 127, or any number above  223.    Addresses
+violating these rules are sometimes referred to as "Martians", because
+of rumors that the Central University of Mars is using network 225.
+
+
+
+8. Datagram fragmentation and reassembly
+
+
+TCP/IP is designed for use  with  many  different  kinds  of  network.
+Unfortunately,  network  designers  do not agree about how big packets
+can be.  Ethernet packets can be 1500 octets long.    Arpanet  packets
+have  a  maximum  of around 1000 octets.  Some very fast networks have
+much larger packet sizes.  At first, you might think  that  IP  should
+simply  settle  on  the  smallest  possible size.  Unfortunately, this
+would cause serious performance problems.    When  transferring  large
+files, big packets are far more efficient than small ones.  So we want
+to be able to use the largest packet size possible.  But we also  want
+to  be  able  to  handle  networks  with  small limits.  There are two
+provisions for this.  First, TCP has the ability to "negotiate"  about
+datagram  size.  When a TCP connection first opens, both ends can send
+the maximum datagram size they can  handle.    The  smaller  of  these
+numbers  is  used  for  the  rest  of the connection.  This allows two
+implementations that can handle big datagrams to use  them,  but  also
+lets  them  talk  to  implementations that can't handle them.  However
+this doesn't completely solve the problem.  The most  serious  problem
+is  that the two ends don't necessarily know about all of the steps in
+                                  23
+
+
+
+between.  For example, when sending data between Rutgers and Berkeley,
+it is likely that both computers will be on Ethernets.  Thus they will
+both  be  prepared  to  handle  1500-octet  datagrams.    However  the
+connection will at some point end up going over the Arpanet.  It can't
+handle packets of that size.  For this reason, there are provisions to
+split   datagrams   up   into   pieces.    (This  is  referred  to  as
+"fragmentation".)  The IP header  contains  fields  indicating  the  a
+datagram  has  been split, and enough information to let the pieces be
+put back together.  If a gateway connects an Ethernet to the  Arpanet,
+it must be prepared to take 1500-octet Ethernet packets and split them
+into pieces that will fit on the Arpanet.    Furthermore,  every  host
+implementation  of  TCP/IP  must  be prepared to accept pieces and put
+them back together.  This is referred to as "reassembly".
+
+TCP/IP implementations differ in the approach they take to deciding on
+datagram  size.    It  is  fairly  common  for  implementations to use
+576-byte datagrams whenever they can't verify that the entire path  is
+able  to  handle larger packets.  This rather conservative strategy is
+used because of the number of implementations with bugs in the code to
+reassemble  fragments.    Implementors  often try to avoid ever having
+fragmentation occur.  Different implementors take different approaches
+to  deciding  when  it  is safe to use large datagrams.  Some use them
+only for the local network.  Others will use them for any  network  on
+the   same   campus.    576  bytes  is  a  "safe"  size,  which  every
+implementation must support.
+
+
+
+9. Ethernet encapsulation: ARP
+
+
+There was a brief discussion earlier about what IP datagrams look like
+on  an  Ethernet.    The  discussion  showed  the  Ethernet header and
+checksum.  However it left one hole: It didn't say how to  figure  out
+what Ethernet address to use when you want to talk to a given Internet
+address.  In fact, there is a separate protocol for this,  called  ARP
+("address  resolution protocol").  (Note by the way that ARP is not an
+IP protocol.  That is, the ARP datagrams  do  not  have  IP  headers.)
+Suppose  you  are  on  system  128.6.4.194  and you want to connect to
+system 128.6.4.7.  Your system will first verify that 128.6.4.7 is  on
+the  same network, so it can talk directly via Ethernet.  Then it will
+look up 128.6.4.7 in its ARP table, to see if  it  already  knows  the
+Ethernet  address.    If  so, it will stick on an Ethernet header, and
+send the packet.  But suppose this system is not  in  the  ARP  table.
+There  is  no  way  to  send the packet, because you need the Ethernet
+address.  So it  uses  the  ARP  protocol  to  send  an  ARP  request.
+Essentially  an  ARP  request  says  "I  need the Ethernet address for
+128.6.4.7".  Every system listens to ARP requests.  When a system sees
+an  ARP  request  for itself, it is required to respond.  So 128.6.4.7
+will see the request, and will respond with an  ARP  reply  saying  in
+effect "128.6.4.7 is 8:0:20:1:56:34".  (Recall that Ethernet addresses
+are 48 bits.  This is 6 octets.  Ethernet addresses are conventionally
+shown  in  hex,  using  the punctuation shown.)  Your system will save
+this information in its ARP table, so future packets will go directly.
+Most  systems  treat the ARP table as a cache, and clear entries in it
+                                  24
+
+
+
+if they have not been used in a certain period of time.
+
+Note by the way that ARP requests must be sent as "broadcasts".  There
+is  no  way  that  an  ARP  request  can be sent directly to the right
+system.  After all, the whole reason for sending  an  ARP  request  is
+that  you  don't know the Ethernet address.  So an Ethernet address of
+all ones is  used,  i.e.  ff:ff:ff:ff:ff:ff.    By  convention,  every
+machine  on  the Ethernet is required to pay attention to packets with
+this as an address.  So every system sees every ARP  requests.    They
+all  look to see whether the request is for their own address.  If so,
+they respond.  If not, they could just ignore it.   (Some  hosts  will
+use  ARP  requests  to update their knowledge about other hosts on the
+network, even if the request isn't for them.)  Note that packets whose
+IP  address  indicates broadcast (e.g. 255.255.255.255 or 128.6.4.255)
+are also sent with an Ethernet address that is all ones.
+
+
+
+10. Getting more information
+
+
+This directory contains  documents  describing  the  major  protocols.
+There  are literally hundreds of documents, so we have chosen the ones
+that seem most important.  Internet standards are called RFC's.    RFC
+stands  for  Request  for  Comment.   A proposed standard is initially
+issued as a proposal, and given an RFC number.   When  it  is  finally
+accepted,  it is added to Official Internet Protocols, but it is still
+referred to by the RFC number.   We  have  also  included  two  IEN's.
+(IEN's  used  to  be  a  separate  classification  for  more  informal
+documents.  This classification no longer exists -- RFC's are now used
+for  all  official  Internet documents, and a mailing list is used for
+more informal reports.)  The convention is that  whenever  an  RFC  is
+revised, the revised version gets a new number.  This is fine for most
+purposes, but it causes problems with two documents: Assigned  Numbers
+and  Official  Internet  Protocols.  These documents are being revised
+all the time, so the RFC number keeps changing.  You will have to look
+in rfc-index.txt to find the number of the latest edition.  Anyone who
+is seriously interested in TCP/IP should read the  RFC  describing  IP
+(791).    RFC 1009 is also useful.  It is a specification for gateways
+to be used by NSFnet.  As such, it contains an overview of  a  lot  of
+the  TCP/IP technology.  You should probably also read the description
+of at least one of the application protocols, just to get a  feel  for
+the  way  things  work.    Mail is probably a good one (821/822).  TCP
+(793) is of course a very basic specification.  However  the  spec  is
+fairly  complex,  so  you should only read this when you have the time
+and patience to think about it carefully.  Fortunately, the author  of
+the  major  RFC's  (Jon Postel) is a very good writer.  The TCP RFC is
+far easier to read than you would expect, given the complexity of what
+it  is  describing.    You  can  look at the other RFC's as you become
+curious about their subject matter.
+
+Here is a list of the documents you are more likely to want:
+
+     rfc-index list of all RFC's
+
+                                  25
+
+
+
+     rfc1012   somewhat fuller list of all RFC's
+
+     rfc1011   Official Protocols.  It's useful to scan  this  to  see
+               what tasks protocols have been built for.  This defines
+               which  RFC's  are  actual  standards,  as  opposed   to
+               requests for comments.
+
+     rfc1010   Assigned  Numbers.  If you are working with TCP/IP, you
+               will probably want a hardcopy of this as  a  reference.
+               It's  not  very  exciting  to  read.   It lists all the
+               offically defined well-known ports and  lots  of  other
+               things.
+
+     rfc1009   NSFnet  gateway  specifications.  A good overview of IP
+               routing and gateway technology.
+
+     rfc1001/2 netBIOS: networking for PC's
+
+     rfc973    update on domains
+
+     rfc959    FTP (file transfer)
+
+     rfc950    subnets
+
+     rfc937    POP2: protocol for reading mail on PC's
+
+     rfc894    how IP is to be put on Ethernet, see also rfc825
+
+     rfc882/3  domains (the database used to go  from  host  names  to
+               Internet  address  and back -- also used to handle UUCP
+               these days).  See also rfc973
+
+     rfc854/5  telnet - protocol for remote logins
+
+     rfc826    ARP - protocol for finding out Ethernet addresses
+
+     rfc821/2  mail
+
+     rfc814    names and ports - general  concepts  behind  well-known
+               ports
+
+     rfc793    TCP
+
+     rfc792    ICMP
+
+     rfc791    IP
+
+     rfc768    UDP
+
+     rip.doc   details of the most commonly-used routing protocol
+
+     ien-116   old  name  server  (still  needed  by  several kinds of
+               system)
+
+     ien-48    the  Catenet  model,   general   description   of   the
+                                  26
+
+
+
+               philosophy behind TCP/IP 
+
+The following documents are somewhat more specialized.
+
+     rfc813    window and acknowledgement strategies in TCP
+
+     rfc815    datagram reassembly techniques
+
+     rfc816    fault isolation and resolution techniques
+
+     rfc817    modularity and efficiency in implementation
+
+     rfc879    the maximum segment size option in TCP
+
+     rfc896    congestion control
+
+     rfc827,888,904,975,985
+               EGP and related issues 
+
+To those of you who may be reading this document remotely  instead  of
+at  Rutgers:  The  most  important  RFC's  have  been collected into a
+three-volume set, the DDN Protocol Handbook.  It is available from the
+DDN  Network  Information  Center,  SRI  International, 333 Ravenswood
+Avenue, Menlo Park, California 94025 (telephone: 800-235-3155).    You
+should  be able to get them via anonymous FTP from sri-nic.arpa.  File
+names are:  
+
+  RFC's:
+    rfc:rfc-index.txt
+    rfc:rfcxxx.txt
+  IEN's:
+    ien:ien-index.txt
+    ien:ien-xxx.txt
+
+rip.doc is available  by  anonymous  FTP  from  topaz.rutgers.edu,  as
+/pub/tcp-ip-docs/rip.doc.
+
+Sites with access to UUCP but not FTP may be able to retreive them via
+UUCP from UUCP host rutgers.  The file names would be 
+
+  RFC's:
+    /topaz/pub/pub/tcp-ip-docs/rfc-index.txt
+    /topaz/pub/pub/tcp-ip-docs/rfcxxx.txt
+  IEN's:
+    /topaz/pub/pub/tcp-ip-docs/ien-index.txt
+    /topaz/pub/pub/tcp-ip-docs/ien-xxx.txt
+  /topaz/pub/pub/tcp-ip-docs/rip.doc
+
+Note that SRI-NIC has the entire set of RFC's and IEN's,  but  rutgers
+and topaz have only those specifically mentioned above.
+
+
+
+
+
+                                  27

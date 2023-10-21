@@ -1,0 +1,52 @@
+Path: plus5!wucs!we53!ltuxa!cuae2!ihnp4!hplabs!hp-pcd!craig
+From: craig@hp-pcd.UUCP (craig)
+Newsgroups: net.sources.bugs
+Subject: uEMACS type ahead problem
+Message-ID: <41300001@hpcvlo.UUCP>
+Date: 3 Apr 86 23:18:00 GMT
+Organization: Hewlett-Packard - Corvallis, OR
+Lines: 40
+Nf-ID: #N:hpcvlo:41300001:000:1105
+Nf-From: hpcvlo!craig    Apr  3 15:18:00 1986
+Posted: Thu Apr  3 17:18:00 1986
+
+I don't know about anybody else, but I had a hard time getting
+the BSD (on a VAX) version of Micro Emacs to detect typeahead
+(used to remap softkeys).  The ioctl(..FIONREAD..) was very
+unreliable so I recoded it using select(2).
+2 notes: on the VAX I'm using, the timeout needed to be
+fine tuned a bit and you HAVE to read() the terminal (buffered
+reads don't work).  So heres the routines (termio.c):
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+ttgetc()
+{
+  int c;
+
+  read(0,&c,1); c &= 0xFF;
+  return c;
+}
+
+#include <sys/time.h>
+typahead()
+{
+#if	TYPEAH
+  int x=1, y=0;
+  struct timeval timeout;
+
+  timeout.tv_sec = 0; timeout.tv_usec = 90000; /* .09 sec */
+  return select(1,&x,&y,&y,&timeout);
+#else
+  return FALSE;
+#endif
+}
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+---  Craig "Who needs TV when I got T Rex?" Durland
+       (503) 757-2000 x3354
+       Hewlett-Packard, 1000 NE Circle Boulevard, Corvallis, OR 97330
+     ~~~~~~~~~~~~~~~
+     hplabs    ---->\
+     harpo     ----> \
+     orstcs    ---->  >--!hp-pcd!craig
+     microsoft ----> /
+     textronix ---->/
+     ~~~~~~~~~~~~~~~

@@ -1,0 +1,81 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA01631; Wed, 25 Feb 87 14:53:57 EST
+Received: by seismo.CSS.GOV (5.54/1.14) 
+	id AA06944; Wed, 25 Feb 87 14:18:54 EST
+Received: from bboards by ICS.UCI.EDU id a006639; 25 Feb 87 10:46 PST
+Received: from braggvax.arpa by ICS.UCI.EDU id a006607; 25 Feb 87 10:41 PST
+Message-Id: <8702251840.AA20750@braggvax.arpa>
+To: ics.uci.edu!mh-workers
+Cc: braggvax.arpa!action
+Subject: Pidwait probably should not ignore SIGHUP
+Date: Wed, 25 Feb 87 13:40:32 EST
+From: braggvax.arpa!ted
+
+
+We have a large number of users who have come to Unix (Vax 4.3 BSD) from
+systems where the end of file character is ^Z.  Despite many reminders,
+there are always some who use ^Z in the prompter to end a message.
+Since we have job control bound to ^Z, this results in the prompter
+being suspended.  It is not uncommon for users to have 2 or 3 suspended
+prompters.  When they try to logout, they get the message from the
+shell saying they have stopped jobs and just hang up the modem or turn
+off the terminal.
+
+This results in SIGHUP being sent to all their processes, letting them
+clean up and exit.  Unfortunately, when comp calls pidwait() to wait
+for the prompter to exit, it ignores SIGHUP.  This causes stopped ('T'
+state) prompters and sleeping comps to gradually build up over time
+even after the user is logged out (and these actually seem to sometimes
+do funny things to the tty ports they are associated with).
+
+I tried to think of anytime in normal use when you really would want
+comp not to exit when sent a SIGHUP and couldn't, so I made the following
+change to pidwait.c in sbr/pidwait.c :
+
+version: MH 6.5 #46[UCI] (braggvax) of Wed Aug 20 16:20:49 EDT 1986
+options: [ATZ] [BERK] [BSD42] [DPOP] [DUMB] [MHE] [MHRC] [OVERHEAD]
+         [RPOP] [BSD43] [SBACKUP='"#"'] [RPATHS] [SENDMTS] [SMTP] [POP]
+         [BPOP]
+
+------- pidwait.c -------
+*** /tmp/d20379	Wed Feb 25 13:05:00 1987
+--- pidwait.c	Wed Feb 25 11:16:57 1987
+***************
+*** 20,27 ****
+      union wait status;
+  #endif	BSD42
+  
+      if (sigsok == NOTOK) {
+! 	hstat = signal (SIGHUP, SIG_IGN);
+  	istat = signal (SIGINT, SIG_IGN);
+  	qstat = signal (SIGQUIT, SIG_IGN);
+  	tstat = signal (SIGTERM, SIG_IGN);
+--- 20,30 ----
+      union wait status;
+  #endif	BSD42
+  
++ /*
++  * Don't ignore sighup.  This causes dead comps all over the place! TN
++  */
+      if (sigsok == NOTOK) {
+! /*	hstat = signal (SIGHUP, SIG_IGN); */
+  	istat = signal (SIGINT, SIG_IGN);
+  	qstat = signal (SIGQUIT, SIG_IGN);
+  	tstat = signal (SIGTERM, SIG_IGN);
+***************
+*** 31,37 ****
+  	continue;
+  
+      if (sigsok == NOTOK) {
+! 	(void) signal (SIGHUP, hstat);
+  	(void) signal (SIGINT, istat);
+  	(void) signal (SIGQUIT, qstat);
+  	(void) signal (SIGTERM, tstat);
+--- 34,40 ----
+  	continue;
+  
+      if (sigsok == NOTOK) {
+! /*	(void) signal (SIGHUP, hstat);*/
+  	(void) signal (SIGINT, istat);
+  	(void) signal (SIGQUIT, qstat);
+  	(void) signal (SIGTERM, tstat);

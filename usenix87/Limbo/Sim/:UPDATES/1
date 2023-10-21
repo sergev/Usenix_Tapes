@@ -1,0 +1,389 @@
+Path: plus5!wuphys!wucs!abstl!we53!ltuxa!cuae2!ihnp4!houxm!mhuxt!mhuxr!ulysses!gamma!epsilon!zeta!sabre!petrus!bellcore!decvax!genrad!panda!sources-request
+From: sources-request@panda.UUCP
+Newsgroups: mod.sources
+Subject: Re: Software similarity tester for C programs
+Message-ID: <1468@panda.UUCP>
+Date: 3 Mar 86 15:25:34 GMT
+Sender: jpn@panda.UUCP
+Lines: 378
+Approved: jpn@panda.UUCP
+Posted: Mon Mar  3 09:25:34 1986
+
+Mod.sources:  Volume 4, Issue 12
+
+[ Contained here are two updates to "sim", the software similarity
+  tester that was submitted two weeks ago.  One provides for compiling
+  the program on a Gould, and the other provides more ambitious changes
+  including a new option to specify line width, as well as changes
+  specific to the HP-UX environment.
+
+    - John P. Nelson, Moderator, mod.sources
+]
+  
+-------------------------------------------------------------------
+Submitted by: tektronix!tekig4!georgew (George Walker)
+
+This is a quick fix to allow sim to run on a Gould (which has 64K segment
+problems).  It prevents stack overflow.
+
+Change is to hash.c (I have moved the declaration out of the function and made
+it a static):
+
+20a21,25
+> /*NOBASE*/				/* <- required by Gould compiler */
+> static unsigned int last[N_HASH];
+> /*	last[i] is the index of the latest char with hash_code i,
+> 	or 0 if there is none.
+> */
+27,30d31
+< 	unsigned int last[N_HASH];
+< 	/*	last[i] is the index of the latest char with hash_code i,
+< 		or 0 if there is none.
+< 	*/
+
+George Walker
+
+(UUCP)	   {ucbvax,decvax,chico,pur-ee,cbosg,ihnss}!tektronix!tekig4!georgew
+(CSNET)	   tekig4!georgew@tek
+(ARPANET)  tekig4!georgew.tek@rand-relay
+
+
+-------------------------------------------------------------------
+Submitted by: hplabs!hp-lsd!paul (Paul Bame)
+
+
+Having a large-screen display, I decided to change sim(1) to accept a command 
+line argument allowing specification of line width.   The  following  patches
+(output  of  diff  -c)  patch  the  files  sim.c,  sim.1 (yea, even fixed the
+manual), pass3.c, and params.h to accommodate the  change.   I  attempted  to
+make the changes in the same style as the original software.  
+
+Patches to Makefile and hash.c are suitable for HP-UX installations  and  may
+be  safely  removed  if you're not running HP-UX.  The local symbol space was
+too large in a function in hash.c so I moved the offending array outside  the
+function.  The MANDIR and BINDIR variables were changed in Makefile.  
+
+Many thanks to Dick Grune for this software.
+
+		--Paul Bame
+		UUCP: {hplabs,ihnp4!hpfcla}!hp-lsd!paul
+		CSNET: hp-lsd!paul@hp-labs
+		ARPA: hp-lsd!paul%hp-labs@csnet-relay.arpa
+
+
+*** /tmp/,RCSt1a03232	Thu Feb 20 13:53:49 1986
+--- Makefile	Thu Feb 20 13:52:04 1986
+***************
+*** 2,9
+  #	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+  #
+  
+! BINDIR = /user1/dick/bin#		# where to put the binary (sim)
+! MANDIR = /user1/dick/man#		# where to put the manual page (sim.1)
+  
+  #
+  #	Each module (set of programs that together perform some function)
+
+--- 2,9 -----
+  #	Written by Dick Grune, Vrije Universiteit, Amsterdam.
+  #
+  
+! BINDIR = /usr/local/bin#		# where to put the binary (sim)
+! MANDIR = /usr/local/man/man1#		# where to put the manual page (sim.1)
+  
+  #
+  #	Each module (set of programs that together perform some function)
+*** /tmp/,RCSt1a03237	Thu Feb 20 13:53:56 1986
+--- hash.c	Thu Feb 20 13:52:12 1986
+***************
+*** 23,28
+  static tally_right = 0, tally_wrong = 0;
+  static tally_hash(), print_tally();
+  
+  make_hash()	{
+  	unsigned int last[N_HASH];
+  	/*	last[i] is the index of the latest char with hash_code i,
+
+--- 23,31 -----
+  static tally_right = 0, tally_wrong = 0;
+  static tally_hash(), print_tally();
+  
++ /* moved last[] out of make_hash() because too large local data area */
++ /* according to HPUX C compiler  - Paul Bame */
++ static unsigned int last[N_HASH];
+  make_hash()	{
+  	/*	last[i] is the index of the latest char with hash_code i,
+  		or 0 if there is none.
+***************
+*** 24,30
+  static tally_hash(), print_tally();
+  
+  make_hash()	{
+- 	unsigned int last[N_HASH];
+  	/*	last[i] is the index of the latest char with hash_code i,
+  		or 0 if there is none.
+  	*/
+
+--- 27,32 -----
+  /* according to HPUX C compiler  - Paul Bame */
+  static unsigned int last[N_HASH];
+  make_hash()	{
+  	/*	last[i] is the index of the latest char with hash_code i,
+  		or 0 if there is none.
+  	*/
+*** /tmp/,RCSt1a03242	Thu Feb 20 13:54:02 1986
+--- params.h	Thu Feb 20 13:52:28 1986
+***************
+*** 5,8
+  #define	MIN_RUN		24		/*	default minimum size
+  						of interesting run
+  					*/
+! #define	PAGE_WIDTH	80
+
+--- 5,9 -----
+  #define	MIN_RUN		24		/*	default minimum size
+  						of interesting run
+  					*/
+! #define	DEFAULT_PAGE_WIDTH	80	/* default page width */
+! #define	MAX_PAGE_WIDTH		160	/* maximum possible page width */
+*** /tmp/,RCSt1a03247	Thu Feb 20 13:54:08 1986
+--- pass3.c	Thu Feb 20 13:52:36 1986
+***************
+*** 10,15
+  #include	"debug.h"
+  
+  extern char options[];
+  
+  static FILE *chunk_open();
+  static unsigned int fill_line();
+
+--- 10,16 -----
+  #include	"debug.h"
+  
+  extern char options[];
++ extern int page_width;
+  
+  static FILE *chunk_open();
+  static unsigned int fill_line();
+***************
+*** 14,19
+  static FILE *chunk_open();
+  static unsigned int fill_line();
+  static show_chunk(), show_line(), clear_line(), print_run();
+  
+  #define	MAXLINE		(PAGE_WIDTH/2-2)
+  
+
+--- 15,21 -----
+  static FILE *chunk_open();
+  static unsigned int fill_line();
+  static show_chunk(), show_line(), clear_line(), print_run();
++ static int maxline;	/* Actual maxline */
+  
+  #define	MAXLINE		(MAX_PAGE_WIDTH/2-2)
+  
+***************
+*** 15,21
+  static unsigned int fill_line();
+  static show_chunk(), show_line(), clear_line(), print_run();
+  
+! #define	MAXLINE		(PAGE_WIDTH/2-2)
+  
+  pass3()	{
+  	TopGen tp;
+
+--- 17,23 -----
+  static show_chunk(), show_line(), clear_line(), print_run();
+  static int maxline;	/* Actual maxline */
+  
+! #define	MAXLINE		(MAX_PAGE_WIDTH/2-2)
+  
+  pass3()	{
+  	TopGen tp;
+***************
+*** 21,26
+  	TopGen tp;
+  	struct run *run;
+  
+  	OpenTop(&tp);
+  	while ((run = NextTop(&tp)), run != NoObject)	{
+  		print_run(run);
+
+--- 23,30 -----
+  	TopGen tp;
+  	struct run *run;
+  
++ 	maxline = page_width / 2 - 2;
++ 
+  	OpenTop(&tp);
+  	while ((run = NextTop(&tp)), run != NoObject)	{
+  		print_run(run);
+***************
+*** 164,170
+  			indent++;
+  		if (indent == 8)	{
+  			/* every eight blanks give one blank */
+! 			if (lpos < MAXLINE)
+  				ln[lpos++] = ' ';
+  			indent = 0;
+  		}
+
+--- 168,174 -----
+  			indent++;
+  		if (indent == 8)	{
+  			/* every eight blanks give one blank */
+! 			if (lpos < maxline)
+  				ln[lpos++] = ' ';
+  			indent = 0;
+  		}
+***************
+*** 174,180
+  	while (ch >= 0 && ch != '\n')	{
+  		if (ch == '\t')		/* replace tabs by blanks */
+  			ch = ' ';
+! 		if (lpos < MAXLINE)
+  			ln[lpos++] = ch;
+  		ch = getc(f);
+  	}
+
+--- 178,184 -----
+  	while (ch >= 0 && ch != '\n')	{
+  		if (ch == '\t')		/* replace tabs by blanks */
+  			ch = ' ';
+! 		if (lpos < maxline)
+  			ln[lpos++] = ch;
+  		ch = getc(f);
+  	}
+***************
+*** 195,201
+  {
+  	int i;
+  	
+! 	for (i = 0; i < MAXLINE && ln0[i] != '\0'; i++)
+  		putchar(ln0[i]);
+  	for (; i < MAXLINE; i++)
+  		putchar(' ');
+
+--- 199,205 -----
+  {
+  	int i;
+  	
+! 	for (i = 0; i < maxline && ln0[i] != '\0'; i++)
+  		putchar(ln0[i]);
+  	for (; i < maxline; i++)
+  		putchar(' ');
+***************
+*** 197,203
+  	
+  	for (i = 0; i < MAXLINE && ln0[i] != '\0'; i++)
+  		putchar(ln0[i]);
+! 	for (; i < MAXLINE; i++)
+  		putchar(' ');
+  	printf(" |");
+  
+
+--- 201,207 -----
+  	
+  	for (i = 0; i < maxline && ln0[i] != '\0'; i++)
+  		putchar(ln0[i]);
+! 	for (; i < maxline; i++)
+  		putchar(' ');
+  	printf(" |");
+  
+***************
+*** 201,207
+  		putchar(' ');
+  	printf(" |");
+  
+! 	for (i = 0; i < MAXLINE && ln1[i] != '\0'; i++)
+  			putchar(ln1[i]);
+  	printf("\n");
+  }
+
+--- 205,211 -----
+  		putchar(' ');
+  	printf(" |");
+  
+! 	for (i = 0; i < maxline && ln1[i] != '\0'; i++)
+  			putchar(ln1[i]);
+  	printf("\n");
+  }
+*** /tmp/,RCSt1a03252	Thu Feb 20 13:54:16 1986
+--- sim.1	Thu Feb 20 13:52:40 1986
+***************
+*** 9,14
+  [
+  .B \-[fns]
+  .BI \-r N
+  ]
+  file ...
+  .SH DESCRIPTION
+
+--- 9,15 -----
+  [
+  .B \-[fns]
+  .BI \-r N
++ .BI \-w N
+  ]
+  file ...
+  .SH DESCRIPTION
+***************
+*** 22,27
+  are found, they are reported on standard output; the default length
+  minimum is 24, but can be reset by the
+  .BR \-r -parameter.
+  .PP
+  The program can be used for finding copied pieces of code in
+  purportedly unrelated programs (with the
+
+--- 23,33 -----
+  are found, they are reported on standard output; the default length
+  minimum is 24, but can be reset by the
+  .BR \-r -parameter.
++ .PP
++ The page width used may be changed from the default of 80 columns
++ with the
++ .BR \-w -parameter.
++ Maximum page width is 160 columns.
+  .PP
+  The program can be used for finding copied pieces of code in
+  purportedly unrelated programs (with the
+*** /tmp/,RCSt1a03257	Thu Feb 20 13:54:22 1986
+--- sim.c	Thu Feb 20 13:52:47 1986
+***************
+*** 5,10
+  #include	"params.h"
+  
+  int min_run_size = MIN_RUN;
+  
+  char options[128];			/* for various, extensible flags */
+  
+
+--- 5,11 -----
+  #include	"params.h"
+  
+  int min_run_size = MIN_RUN;
++ int page_width   = DEFAULT_PAGE_WIDTH;
+  
+  char options[128];			/* for various, extensible flags */
+  
+***************
+*** 20,25
+  			switch (*par)	{
+  			case 'r':
+  				min_run_size = atoi(argv[1]);
+  				argc--, argv++;
+  				break;
+  			default:
+
+--- 21,30 -----
+  			switch (*par)	{
+  			case 'r':
+  				min_run_size = atoi(argv[1]);
++ 				argc--, argv++;
++ 				break;
++ 			case 'w':
++ 				page_width = atoi(argv[1]);
+  				argc--, argv++;
+  				break;
+  			default:

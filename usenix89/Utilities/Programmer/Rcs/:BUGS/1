@@ -1,0 +1,113 @@
+Relay-Version: version B 2.10.3 alpha 4/15/85; site plus5.UUCP
+Posting-Version: version B 2.10.1 6/24/83 (MC840302); site mcvax.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!allegra!mit-eddie!genrad!panda!talcott!harvard!seismo!mcvax!aeb
+From: aeb@mcvax.UUCP (Andries Brouwer)
+Newsgroups: net.sources.bugs
+Subject: A tiny extension to RCS
+Message-ID: <661@mcvax.UUCP>
+Date: 10 May 85 14:13:34 GMT
+Date-Received: 18 May 85 19:20:04 GMT
+Reply-To: aeb@mcvax.UUCP (Andries Brouwer)
+Organization: CWI, Amsterdam
+Lines: 100
+
+Recently I started using RCS - it works just fine but I am not
+satisfied with its interface to make. One of the problems is that
+ci touches the source files, and thus checking in all sources
+(even with ci -l or ci -u) leads to a lot of unnecessary recompilations.
+Therefore I added the flags -L and -U to ci; they do precisely the same
+as -l and -u but leave the input files alone (i.e., do not do keyword
+expansion on them).
+The diff follows (starting from version
+ "$Header: /usr/wft/RCS/SRC/RCS/ci.c,v 3.9 83/02/15 15:25:44 wft Exp $ Purdue CS"; ).
+*** /usr/src/new/rcs/src/rcs/ci.c	Thu Jan 17 14:58:51 1985
+--- ci.c	Fri May 10 01:28:34 1985
+***************
+*** 105,111
+  char * rev, * state, *msg;
+  
+  int initflag, rcsinitflag;
+! int lockflag, keepworkingfile,keepflag;
+  int forceciflag;                      /* forces check in                    */
+  int symrebindflag; char * symbol;
+  int textflag; char * textfile;
+
+--- 105,111 -----
+  char * rev, * state, *msg;
+  
+  int initflag, rcsinitflag;
+! int lockflag, keepworkingfile, nokeywordexpansion, keepflag;
+  int forceciflag;                      /* forces check in                    */
+  int symrebindflag; char * symbol;
+  int textflag; char * textfile;
+***************
+*** 139,144
+          rev = state = msg = symbol = textfile = caller = nil;
+          initflag= rcsinitflag= symrebindflag= textflag= quietflag= false;
+          forceciflag= lockflag= keepworkingfile= keepflag= false;
+          caller=getpwuid(getuid())->pw_name;
+  
+          while (--argc,++argv, argc>=1 && ((*argv)[0] == '-')) {
+
+--- 139,145 -----
+          rev = state = msg = symbol = textfile = caller = nil;
+          initflag= rcsinitflag= symrebindflag= textflag= quietflag= false;
+          forceciflag= lockflag= keepworkingfile= keepflag= false;
++         nokeywordexpansion= false;
+          caller=getpwuid(getuid())->pw_name;
+  
+          while (--argc,++argv, argc>=1 && ((*argv)[0] == '-')) {
+***************
+*** 152,157
+                          }
+                          break;
+  
+                  case 'l':
+                          keepworkingfile=lockflag=true;
+                          goto revno;
+
+--- 153,160 -----
+                          }
+                          break;
+  
++                 case 'L':
++                         nokeywordexpansion=true;
+                  case 'l':
+                          keepworkingfile=lockflag=true;
+                          goto revno;
+***************
+*** 156,161
+                          keepworkingfile=lockflag=true;
+                          goto revno;
+  
+                  case 'u':
+                          keepworkingfile=true; lockflag=false;
+                          goto revno;
+
+--- 159,166 -----
+                          keepworkingfile=lockflag=true;
+                          goto revno;
+  
++                 case 'U':
++                         nokeywordexpansion=true;
+                  case 'u':
+                          keepworkingfile=true; lockflag=false;
+                          goto revno;
+***************
+*** 477,483
+  
+          if (!keepworkingfile) {
+                  unlink(workfilename); /* get rid of old file */
+!         } else {
+                  /* expand keywords in file */
+                  newworkfilename=
+                  xpandfile(workfilename,workfilename /*for directory*/,&newdelta);
+
+--- 482,488 -----
+  
+          if (!keepworkingfile) {
+                  unlink(workfilename); /* get rid of old file */
+!         } else if (!nokeywordexpansion) {
+                  /* expand keywords in file */
+                  newworkfilename=
+                  xpandfile(workfilename,workfilename /*for directory*/,&newdelta);

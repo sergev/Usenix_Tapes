@@ -1,0 +1,106 @@
+#! /bin/sh
+#
+# diffmark - mark differences in nroff/troff source
+#		write result to stdout (for pipe into n/troff)
+#
+# By King Ables
+# Latest update: 15-Jul-85
+#
+# usage is:
+#
+#    diffmark source-file | {n,t}roff ...
+#	or
+#    diffmark new-source-file old-source-file | {n,t}roff ...
+#
+# if only one parameter is used, then the old source is
+# expected to be in either source-file.bak or source-file.BAK.
+#
+# At someone's request, if the filename is in the form
+# "file.ext" (Tops-10/20 style), then "file.BAK" and "file.bak" are
+# also looked for (though, this is not usually an optimistic pursuit!).
+# NOTE: I am NOT responsible for things like "file.ext.a" because it'll
+# look for "file.ext.BAK" and "file.ext.bak" (it only takes off the last
+# extension, in this case, ".a").
+#
+# If a second parameter is provided, that will reference the
+# original source file.
+#
+# Differences are marked with a "|" in the right margin.
+# missing lines are marked with a "-" in the right margin of
+#	the line in the area of the missing text.
+#
+# This was not my idea... many people have had this idea.  I most
+# recently heard that it had existed at Los Alamos National Labs
+# (lanl.arpa) but may not any longer.  We had a need for this and
+# couldn't find a version already in existence, so here is one.
+#
+if test "$1" = ""
+then
+	echo $0: no file name specified.
+	exit 1
+fi
+#
+# get original (backup) name
+#
+if test "$2" = ""
+then
+   if test -r $1.bak
+   then
+      bak=$1.bak
+   else
+      if test -r $1.BAK
+      then
+	 bak=$1.BAK
+      else 
+	 name=`expr "$1" : '\(.*\)\..*'`
+	 if test "$name" = ""
+	 then
+	    echo "$0: original file not specified/found."
+	    exit
+	 else
+	    if test -r $name.bak
+	    then
+	       bak=$name.bak
+	    else
+	       if test -r $name.BAK
+	       then
+	          bak=$name.BAK
+	       else
+	          echo "$0: original file not specified/found."
+	          exit
+	       fi
+	    fi
+	 fi
+       fi
+   fi
+  else
+     bak=$2
+fi
+#
+cp $bak /tmp/$$.dmscr
+#
+# awk script to put in .mc commands
+#
+# all but the first 'print ".mc"' of the first line of the 
+# following awk script is a hack to make sure the change
+# bars are always on all lines of changed text (so the
+# last line isn't left unmarked).  This could cause more
+# changebars than needed (on unchanged lines adjacent to 
+# changed lines) but that's better than leaving out a changed
+# line, right?
+#
+cat >/tmp/$$.dmawkcmd <<%
+/^\.$/ { print ".mc" ; print ".mc |" ; print ".mc" }
+ {print}
+/^[0-9,]*[ac]$/ { print ".mc |" }
+/^[0-9,]*d$/ { print ".i" ; print ".mc -" ; print ".mc" ; 
+		print ".mc -" ; print ".mc" ; print "." }
+END {print "w" ; print "q"}
+%
+#
+diff -e $bak $1 | awk -f /tmp/$$.dmawkcmd | ed /tmp/$$.dmscr >>/dev/null
+#
+# send to stdout (this is kinda gross)
+#
+cat /tmp/$$.dmscr
+rm -f /tmp/$$.dmscr /tmp/$$.dmawkcmd

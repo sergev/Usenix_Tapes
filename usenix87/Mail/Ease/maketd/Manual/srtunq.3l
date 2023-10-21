@@ -1,0 +1,126 @@
+.TH SRTUNQ 1L PUCC
+.SH NAME
+srtinit, srtin, srtgti, srtgets, srtfree, srtdtree
+.SH SYNOPSIS
+.B #include <stdio.h>
+.br
+.B #include <local/srtunq.h>
+.sp
+cc file.c
+.B \-lsrtunq
+.SH DESCRIPTION
+.I Libsrtunq.a
+is a set of sorting routines for a particular purpose.
+It's use is extracting unique items from a possibly long list,
+where items are likely to be replicated numerously.
+The list of unique items will be small enough to
+fit in main memory.
+High speed is desired.
+.PP
+The caller has control over the database through the use of a
+.I struct srtent
+variable.
+The subroutines provide for data entry and retrieval,
+memory allocation and deallocation.
+.SH ROUTINES
+.TP
+.ft B
+void srtinit(ent) struct srtent *ent;
+.ft
+This subroutine must be called before the first time
+any data is entered or retrieved
+from a database tree whose tag is pointed to by
+.B ent.
+It assumes that the database tag has not been used
+to store a tree, and therefore does not attempt to free
+any such data.
+.TP
+.ft B
+char *srtin(ent, string, compar) struct srtent *ent; char *string; int (*compar)();
+.ft
+The existing data tree is searched.
+If the string is found in the tree then nothing is done.
+Otherwise, space is allocated for the string and pointer structure via
+.I malloc(3).
+The string is copied to this new space.
+The structure is linked into the tree.
+If space cannot be obtained, the operation is aborted, and
+a pointer to an error string is returned.
+The data structure remains consistent, but the string is not placed in it.
+If the operation is successful, NULL is returned.
+The strings are compared and sorted with the subroutine pointed to by
+.I compar.
+This subroutine takes two string pointers as arguments.
+It returns zero if the strings are the same,
+less than zero if the first string should precede the second, and
+greater than zero if the second string should precede the first.
+If the subroutine pointer is NULL, then a simple string compare is used, which
+sorts in ascending ASCII order, and strings of different length comparing
+as unequal.
+.TP
+.ft B
+void srtgti(ent); struct srtent *ent;
+.ft
+This subroutine initializes the database tag pointed to by
+.B ent
+so that a tree transversal can be made via
+.I srtgets.
+.TP
+.ft B
+char *srtgets(ent); struct srtent *ent;
+.ft
+This routine extracts the next string from the data structure.
+The strings are returned in increasing order.
+When the list is exhausted, NULL is returned.
+.TP
+.ft B
+void srtfree(ent) struct srtent *ent;
+.ft
+This subroutine deletes a database, and re-initializes the
+database tag.
+It assumes that the database tag was initialized at one time via
+.I srtinit
+(other routines will probably also have been called).
+The space formally occupied by string data and pointer structures is
+deallocated via
+.I free(3).
+.TP
+.ft B
+void srtdtree(ent, tbl) struct srtent *ent; struct srtbl *tbl;
+.ft
+This subroutine recursively deletes a database subtree.
+The space formally occupied by the string data and pointer structures is
+deallocated via
+.I free(3).
+This routine is most likely only of use internally.
+.SH EXAMPLE
+.nf
+main()
+{
+    char buf[80], *p;
+    struct srtent d;
+    srtinit(&d);
+    while (fgets(buf, stdin, 79) != NULL)
+        if ((p = srtin(&d, "foo")) != NULL)
+            printf("test: %s\n", p);  /* warning message */
+    srtgti(&d);
+    while ((p = srtgets(&d)) != NULL)
+        puts(p);
+    srtfree(&d);
+}
+.fi
+.SH DIAGNOSTICS
+There are no messages printed by these routines.
+Catchable errors are returned as strings.
+Compiled in errors such as the use of strings that
+are not null terminated tend to result in core files.
+.SH FILES
+/usr/local/lib/libsrtunq.a
+.br
+/usr/include/local/srtunq.h
+.SH SEE ALSO
+malloc(3), qsort(3)
+.SH AUTHOR
+Stephen Uitti, PUCC
+.SH BUGS
+Likely.

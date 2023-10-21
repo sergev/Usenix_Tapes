@@ -1,0 +1,69 @@
+#!/bin/sh
+# Batch Queue Cancel command.
+#    batchcancel [-q reg_exp] jobid [ jobid ... ]
+# This will mess up if you pass an arg that is not a valid
+# GLOB pattern, e.g. batchcancel "["   -IAN!
+
+PATH=/bin:/usr/bin:/usr/ucb
+date=`date`
+
+dirs=*
+case "$1" in
+-q)
+	shift
+	case $# in
+	0)
+		echo batchcancel: queue list missing, default used
+		;;
+	*)
+		dirs=$1
+		shift
+		;;
+	esac
+	;;
+esac
+
+case "$#" in
+0)
+	echo Usage: ${0} "[-q reg_exp]" jobid "[ jobid ... ]"
+	exit 1
+	;;
+esac
+
+whoami=`whoami`
+case "$whoami" in
+root)
+	who=$whoami"($USER)"
+	user=""
+	;;
+*)
+	who=$whoami
+	user="-user $whoami"
+	;;
+esac
+
+cd /usr/spool/batch
+for dir in $dirs ; do
+	if [ ! -d "$dir" ]; then
+		continue
+	fi
+	cd $dir
+	echo ">>-- $dir queue --<<"
+	for jobid  do
+		for file in `find . $user -name cf'*'"$jobid" -print` ; do
+			ls -l $file | awk ' { printf("%-12s %s %s %s   %s\n", $3, $5, $6, $7, substr($8,3) ) }'
+			grep "JOB CANCELLED" $file || (
+				sed	-e "1,/set home=/d" -e "/^$/d" \
+					-e "s/'//g;s/  */ /g;s/^ */  /;" \
+					-e "/typeset/s;/tmp/typesetSTDIN_;#;" \
+					-e "/spice/s;/tmp/spiceSTDIN_;#;" \
+					2>/dev/null $file ; \
+				( echo "#!/bin/cat" ; \
+				  echo "JOB CANCELLED by $who on $date." \
+					) >$file && chmod ugo+r $file \
+					&& echo "  JOB CANCELLED." )
+		done
+	done
+	cd ..
+done
+exit 0

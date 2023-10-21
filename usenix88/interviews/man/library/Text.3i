@@ -1,0 +1,209 @@
+.TH TEXT 3I "13 December 1987" "InterViews" "InterViews Reference Manual"
+.SH NAME
+Text \- structured text composition
+.SH SYNOPSIS
+.B #include <InterViews/Text/text.h>
+.SH DESCRIPTION
+Text is the base class for structured text objects.  An important derived
+class is Composition, which is the base class for grouping other Text
+objects.  A Text object is formatted onto the screen by a Layout(3I).  See the
+manual page for Layout for a description of the use of Layouts with Text
+objects.
+.PP
+Each Text object has a ``context'', which is used to associate the text
+with some other, application-specific object.  Operations on the text, such
+as defining the font to use when it is displayed or determining
+which object is ``hit'' by a mouse click, are done on the basis of the Text
+object's context.  If a Text object has a nil context it will ``inherit''
+its parent Composition's context.
+.SH COMPOSITION MODEL
+Each Text object has an associated size, representing its natural width.
+The size of a Composition object is the sum of the component sizes.
+Conceptually the whole structured Text object is a single line of text \-
+when the text is composed into available screen space the Composition
+objects each determine how they will insert line breaks into the output
+if there is insufficient space remaining on the current line for the unbroken
+object.
+.SH TEXT PRIMITIVES
+.TP
+.B "Word"
+A Word contains a string of characters that will be output without
+interpretation.
+.TP
+.B "Caret"
+A Caret produces a zero-width marker in the output, useful for text cursors.
+.TP
+.B "Whitespace"
+Whitespace produces blank space in the output.
+.TP
+.B "LineBreak"
+A LineBreak is Whitespace with ``infinite'' width, which typically causes
+the containing Composition to begin a new line.
+.PP
+.SH COMPOSITION OBJECTS
+.TP
+.B "Composition"
+A Composition never adds line breaks.  It is useful for grouping
+several Text objects into a single object.
+.TP
+.B "Paragraph"
+A Paragraph specifies a prefix and the amounts by which to adjust
+the left and right
+margins during composition of the components.  The prefix is typically
+used to achieve indenting of the first line, or to provide an item number
+for an itemized list.
+.TP
+.B "Sentence"
+A Sentence causes a line break during composition
+if the next component would
+overflow the right margin.  A Sentence has a separator, usually a Whitespace
+object, that is automatically inserted into the output between each
+component.  For example a piece of prose might be composed into Sentences
+containing Words with separators consisting of Whitespace
+objects each of which produce a single blank character.
+These Sentences in turn might be
+composed into another Sentence object representing the body of a
+paragraph.  The outer Sentence could have a separator which produces two
+blank spaces.
+.TP
+.B "TextList"
+A TextList is composed either horizontally or
+vertically, depending on the space
+available.  The contents of a TextList is composed without line breaks
+if it fits on the current line; otherwise, it would
+overflow the current line, line breaks are inserted between each of the
+TextList's components.  Like a Sentence, a TextList has a separator which is
+automatically inserted between each component.  Typically the separator is a
+Whitespace object, a LineBreak or a Word containing a character such as a
+comma or semicolon.
+A TextList also has a prefix, a postfix and a ``keeper''.  The keeper is used
+when the list has no components, and the prefix and postfix are inserted
+before and after the body if there are one or more components.
+.TP
+.B "Display"
+A Display contains a prefix, a body, and a postfix.
+If during composition the body of a Display
+would overflow the current line, a line break is inserted before the body,
+the body is composed with the left margin indented by a specified amount,
+and a second line break is inserted after the body.  If a Display contains a
+single component, then that component is the body and there is no prefix or
+postfix.  If it contains two components, the first is the prefix, the second
+the body and there is no postfix.  If the Display contains three or more
+components the first is the prefix, the last is the postfix and the
+remainder constitute the body.
+.TP
+.B " "
+A Display is used to create ``display'' structures
+within a piece of prose or to
+produce block-structured layouts for program source code.  In C source code
+layout, for example, a Display might be used for the body of a function
+definition.  The prefix would be a word containing a left brace, the postfix
+would contain the matching right brace and the body might be represented as
+a TextList of objects representing source code statements and with a LineBreak as
+the separator.
+.SH PUBLIC OPERATIONS
+.TP
+.B "Text(void* context = SELF)"
+.ns
+.TP
+.B "~Text()"
+Construct or destroy a Text object.  The default context is the constant
+\fISELF\fP which is interpreted to be the Text object itself.  When a Text
+object is deallocated, it removes itself from its parent Composition, if any.
+.TP
+.B "Text* Copy()"
+Make a duplicate of the Text object, recursively copying its components if
+it is a Composition.
+.TP
+.B "void Reshape()"
+Recalculate the size of the Text, based on the sizes of its components if it
+is a Composition, and propagate the call to the parent Composition.  Reshape
+should be called following changes to the components of a Composition.
+.TP
+.B "void* GetContext()"
+.ns
+.TP
+.B "void SetContext(void*)"
+.ns
+.TP
+.B "Composition* Parent()"
+.ns
+.TP
+.B "Text* Next()"
+Access to various information about a Text object.  \fINext\fP will return
+the Text object following this in the parent Composition, or nil if this is
+the last component.
+.SH DERIVED CLASS PUBLIC OPERATIONS
+.TP
+.B "Word::Word(const char*, int length, void* context = SELF)"
+Construct a word from the given substring with a size equal to the
+substring length.
+.TP
+.B "Whitespace::Whitespace(int size, void* context = SELF)"
+Construct a Whitespace object with the specified size.
+.TP
+.B "LineBreak::LineBreak(void* context = SELF)"
+Construct a LineBreak, which is equivalent to a Whitespace object with
+``infinite'' size.
+.TP
+.B "Composition::Composition(void* context = SELF)"
+.ns
+.TP
+.B "Composition::~Composition()"
+Construct or destroy a Composition object.  Compositions and
+derived classes delete their components when destroyed.
+.TP
+.B "Text* Composition::First()"
+.ns
+.TP
+.B "Text* Composition::Succ(Text*)"
+.ns
+.TP
+.B "Text* Composition::Pred(Text*)"
+Get the first component in a Composition, or the successor or predecessor of
+a specified component.  The returned value is nil if the component does not
+exist.
+.TP
+.B "boolean Composition::Follows(Text* t1, Text* t2)"
+Return true if both \fIt1\fP and \fIt2\fP are components of the Composition,
+and \fIt2\fP occurs after \fIt1\fP.
+.TP
+.B "void Composition::Append(Text*)"
+.ns
+.TP
+.B "void Composition::Prepend(Text*)"
+.ns
+.TP
+.B "void Composition::InsertAfter(Text* old, Text*)"
+.ns
+.TP
+.B "void Composition::InsertBefore(Text* old, Text*)"
+.ns
+.TP
+.B "void Composition::Remove(Text*)"
+.ns
+.TP
+.B "void Composition::Replace(Text* old, Text*)"
+Various ways to modify the contents of a Composition.  Note that if the
+Composition being modified is already a component in some other Composition,
+an application should call Reshape following the change or changes.
+.TP
+.B "Paragraph::Paragraph(Text* pre, int l, int r, void* = SELF)"
+Construct a Paragraph with a specified prefix, and with left margin indented
+by \fIl\fP and right margin indented by \fIr\fP.  A prefix of nil is
+equivalent to no prefix.
+.TP
+.B "Sentence::Sentence(Text* sep, void* = SELF)"
+Construct a Sentence with a specified separator.  A separator of nil is
+equivalent to no separator.
+.TP
+.B "TextList::TextList(Text* s, Text* k, Text* pre, Text* post, void* = SELF)"
+Construct a TextList, with specified separator, keeper, prefix and postfix.  Nil
+values for any of these will result in that component being omitted in the
+composition.
+.TP
+.B "Display::Display(int indent, void* = SELF)"
+Construct a Display with a specified indent.
+The composition of a Display depends on the number of components it contains.
+.SH SEE ALSO
+Layout(3I)

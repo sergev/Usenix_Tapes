@@ -1,0 +1,309 @@
+From shannon Tue Sep  6 19:54:23 1977
+The following files have been changed and recompiled
+to implement the rand system calls (eofp, sfork, gprocs, empty).
+	fio.c		(eofp)
+	sys1.c		(gprocs)
+	pipe.c		(eofp)
+	slp.c		(sfork)
+	sig.c		(sfork)
+	tty.c		(empty)
+	inode.h		(eofp)
+	proc.h		(sfork)
+	empty.s		(C lib)
+	sfork.s		(C lib)
+	eofp.s		(C lib)
+	gprocs.s	(C lib)
+
+From shannon Fri Dec 16 19:40:06 1977
+The following files have been changed or added to implement
+the reboot system call:
+	m40reboot.s	(actual reboot code, new halt code)
+	m40.s		(trivial change)
+	sys4.c		(halt, reboot, clkoff added)
+	trap.c		(bug fix, illegal sys call)
+	sysent.c	(entries for new sys calls)
+	reboot.s	(C lib)
+	clkoff.s	(C lib)
+	reboot.c	(command processor)
+	fsboot.s	(new boot)
+	tty.s		(ditto)
+	wrboot.c	(write out boot)
+
+From shannon Tue Dec 27 19:24:30 1977
+The following files were changed to implement the new terminal
+service procedures:
+	tty.h		(new constants)
+	tty.c		(most changes here, in ttyinput)
+	getty.c		(crt's are treated special)
+	login.c		(stty call removed)
+	dz.c		(flow control added)
+
+From shannon Wed Feb  1 10:46:52 1978
+Bug fix installed in bio.c, see Unix News, Oct. 1977
+Fixed breada to avoid deadlock.
+
+From shannon Wed Mar  8 12:33:33 1978
+A new mode was added to the tty driver (tty.c) for use by the Teco editor.
+This new mode is the "break on control character" mode.  Any control
+character ( < 040 ) will wake up the reading process.  The control
+character will NOT be echoed.  This mode is controlled by the high order
+bit in the tty mode word, which was previously used for backspace delays.
+
+From shannon Wed Mar  8 12:38:17 1978
+Several new features have been added to allow easier debugging of the system.
+The post-mortem system dumper was changed to dump to disk.  Primitive tty I/O
+procedures (from fsboot.s) were added to allow the user to control the dumping
+process.  Panic was changed to either go to the dump routine or halt (instead
+of idle) depending on the value of a new switch (DUMP).  The DUMP switch is
+present in both the assembler and C routines.  The following files were
+changed to implement this feature:
+
+	m40.s		(system dumper changed, conditional assembly added)
+	m40tty.s	(the new tty routines for the dumper)
+	prf.c		(changes to panic)
+	param.h		(DUMP flag added)
+
+
+From shannon Wed Mar  8 12:45:28 1978
+Bug fix in dz driver.  Interrupt priority in l.s should be br5, not br4.
+
+From shannon Wed Mar  8 12:46:50 1978
+Bug fix in creat (sys2.c). See Unix News 2.5
+
+From shannon Tue May  9 14:25:00 1978
+The system profiler from m45.s has been added to our system.  It runs
+on the clock frequency and is called from the clock interrupt routine.
+The following files were changed:
+
+	m40.s		(system profiler added with conditional assembly)
+	clock.c		(call to system profiler added)
+	param.h		(PROF flag added)
+
+From shannon Sat Jun  3 18:58:39 1978
+The following procedures were changed to implement the
+LRU algorithm for incore inode allocation used at Toronto.
+Several other changes and bugfixes were also made.
+
+	clock.c		(system monitoring code added;
+			 inode LRU; timeout panic)
+	iget.c		(inode LRU; I/O buffer size reduced
+			 to 512 bytes, bugfix)
+	bio.c		(buffer size to 512; unibus map
+			 code removed)
+	sys3.c		(sumount - inode LRU)
+	tty.c		(bugfix for 8 bit raw I/O)
+	param.h		(MONITOR flag added)
+
+From shannon Sat Jun  3 19:09:20 1978
+The dz11 driver has been modified to use modem control
+if requested.  The VTDELAY bit has been changed to the
+MODEM bit.  When set, RTS will be set on open and cleared
+on close and CTS will be checked before output.  This
+is mainly to allow devices using a scanner box (such as
+the printers and Calcomp plotter) to be driven with the
+dz11.
+
+
+From shannon Wed Jun  7 16:24:05 1978
+Many procedures have been modified to include instrumentation.
+See systm.h for the statistics collected.  All instrumentation
+code is under conditional compilation control of the symbol
+MONITOR, defined in param.h.  Several other bugfixes and minor
+improvements were also made.  Below is a list:
+
+	param.h		(MONITOR, NMON, MSGBUFS)
+	systm.h		(instrumentation variables)
+	clock.c		(instrumentation)
+	iget.c		(mon: iget - hits and misses)
+	prf.c		(save printf chars in msgbuf)
+	bio.c		(mon: getblk - buffer hits and misses)
+	rk.c		(mon: numb ops, words, busy)
+	tty.c		(mon: chars in and out)
+
+From shannon Tue Aug 22 17:18:52 1978
+Many changes have been added to Unix in an effort to move
+towards Version 7.  Five new system calls were added and
+some performance improvements have been made.
+
+The new system calls are:
+	access	- check access permission on file
+	tell	- return file R/W pointer offset
+	alarm	- set alarm clock signal
+	pause	- sleep forever
+	nap	- sleep in clock ticks (not V7)
+
+The following files were changed:
+
+	clock.c		(alarm clock times maintained)
+	sys2.c		(access, tell, nap system calls)
+	sys4.c		(alarm, pause system calls)
+	sysent.c	(new system calls)
+	param.h		(MAX_NAPPING, PNAP constants; SIGCLK signal)
+
+
+
+Performance improvements were made in the process termination
+sequence.  Exit no longer swaps the terminated process' user
+area out to swap space.  Instead relevant information is overlayed
+onto the proc structure.  Wait then retrieves the child's stats
+from the overlayed proc structure.  The following files were changed:
+
+	sys1.c		(exit, wait system calls)
+	proc.h		(xproc overlay structure)
+
+
+
+Counters were added to keep track of the total free blocks and
+free inodes on each mounted file system.  This information is
+kept in the superblock for each file system.  The system does
+not use this information and it is kept only for use by subsystems.
+Icheck was modified to initialize these counts with the -s option.
+The following files were changed:
+
+	filsys.h	(new structure)
+	alloc.c		(incr and decr counters)
+	icheck.c	(-s option also inits free counts)
+	df.c		(-f[ast] option gets counts from superblock)
+
+
+
+Various other changes were also made:
+
+	user.h		(cutime, cstime changed to longs)
+	file.h		(int pointer changed to struct pointer)
+	param.h		(structure to access long as ints)
+	systm.h		(new disk timing stats)
+	rk.c		(new disk timing stats)
+	clock.c		(scheduling algorithm changed to V7)
+	sys4.c		(unlink: V7 bugfixes; clkoff: removed)
+	trap.c		(bugfix)
+
+
+From shannon Thu Mar  1 17:17:57 1979
+
+Case Ecmp Unix System 6.5.0
+
+It is finally time to start a consistent and logical numbering scheme
+for system versions.  There are now three Case Unix systems: Ecmp,
+Esys, and Graphics.  The three parts of the version number have the
+following meaning:  <Bell version>.<Case version>.<system version>.
+Thus, for quite a while, the Bell version should be 6.  The Case
+version number will reflect chnages in the kernel or system that are
+common to all Case Unix systems.  The system version will reflect changes
+that are specific to a particular system.  Some effort will be made to
+keep the common parts of the kernel and system up to date on all the
+systems.  The common kernel should have all system parameters (param.h)
+the same for all systems, except perhaps NMOUNT which reflects the local
+disk situation.  Version 6.5.0 encompasses previous versions 6.4.0,
+6.4.1, and 6.4.2 which include the following changes:
+
+
+tty configuration made easier
+	ttyc.c	- tty configuration file, contains tty addresses, etc.
+	kl.c	- modified to use information in ttyc.c,
+		  also modem control added.
+
+system id
+	c.c	- variables for system name, version, and date,
+		  printed at boot time.
+
+improved line printer driver
+	lx.c	- sgtty added for new lpd and lpr from U. of Ill.
+		  form feeds optimized, blank pages suppressed.
+
+pseudo-ttys
+	pty.c	- pseudo-tty code from U. of Ill., tested but
+		  not in standard system.
+	c.c	- ifdef's for pseudo-ttys.
+
+software switch register
+	main.c	- find out if there is a hardware switch register
+		  (may not be one on 11/34's) if not, use software
+		  switch register at absolute location 050.
+	l.s	- reserve space for s.s.r.
+	sys4.c	- getswit looks at switch register again.
+		  setswit allows super-user to set s.s.r.
+	sysent.c - setswit added
+	prf.c	- look at switch register again
+	systm.h	- variable to contain address of switch register.
+
+network
+	sys2.c	- installed hooks for CWRUnet.
+	ncpk/net_dummy.c - dummy network routines.
+	dummy_lib3 - dummy network library
+
+cleanup
+	trap.c	- cleaned up code dealing with bad system calls
+	sysent.c - 'badent' array declared
+
+end of disk
+	rk.c	- check for read or write past end of disk and
+		  return a reasonable error code.
+	bio.c	- physio: ditto, and do a partial transfer if
+		  possible.  NOTE: another parameter was added to
+		  physio - the size of the disk.  Only the rk driver
+		  has been modified so far.
+
+lower case
+	kl.c	- initialize to lower case mode on opens.
+	dz.c	- ditto
+
+instrumentation
+	inst.h	- variables for system instrumentation.  revised versions
+		  of previous stuff.  controlled by MONITOR define.
+		  dynamically controlled by inst_go variable.  definitions
+		  removed from systm.h
+	clock.c	- accumulate statistics.
+	rk.c	- ditto
+	iget.c	- ditto
+	bio.c	- ditto, plus new stats for swapping
+	tty.c	- ditto
+	m40.s	- count number of device interrupts
+
+misc. attempts at speeding up kernel
+	main.c	- new sureg from USG Unix, hopefully faster.  no more tests
+		  of cputype, ifdefs of CPU_45 control it.  sep I/D
+		  stuff ifdef'ed out.
+	m34.s	- modified m40.s to use mfps, mtps instructions.
+	rk.c	- interleaved RK's no longer supported (it was never used).
+		  no more Unibus Map stuff.
+
+From shannon Sun Jun 10 13:20:02 1979
+Just got a tape from Purdue and it had lots of good performance
+improvements and bug fixes.  Added the important ones to our
+system, up to version 6.6.0 now.  The following stuff was changed:
+
+	iget.c		(iupdat; clear IACC and IUPD flags when done
+			 and do a bdwrite instead of bwrite.  This
+			 mod also appears in the PWD diff listing.)
+	bio.c		(added stuff for correct aging of buffers
+			 from a delayed write.  Added bclose procedure
+			 to flush incore buffer pool on close of
+			 blocked device, see Purdue syslog or comments
+			 before bclose.)
+	buf.h		(B_AGE defined for delayed write aging, B_RELOC
+			 removed. B_CTRL defined to indicate that a buffer
+			 contains a control function as opposed to a data
+			 transfer request.  Used by RX02 driver to format
+			 disks.  Intended to be used by other disk drivers
+			 to make sure drive is ready before allowing open.
+			 Also could be used by tape drivers for rewind, etc.)
+	rk.c		(added rkopen and rkclose.  rkopen checks minor device
+			 range, rkclose calls bclose.)
+	rx.c		(new RX01 floppy disk device driver from Bell,
+			 cleaned up and installed in Esys Unix.)
+	rx2.c		(RX02 floppy disk device driver.  based on rx.c.
+			 handles both single and double density floppies,
+			 can also format floppies.  installed in CWRUnet Unix.)
+	dh.c		(modified U. of Ill. dh driver (from DoD) to be
+			 compatible with Case tty driver.  installed in
+			 CWRUnet Unix.)
+	rx2boot.s	(RX02 bootstrap for Unix, used with CWRUnet Unix.)
+	sys1.c		(Added Purdue/Version 7 mods to exec, to place
+			 arguments on the swap device rather than in an
+			 I/O buffer; increased maximum size of argument
+			 list (now NCARGS - NEXEC is made obsolete) to
+			 5120 bytes (NCARGS must be a multiple of 512);
+			 installed in Ecmp Unix.)
+
+

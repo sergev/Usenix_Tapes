@@ -1,0 +1,1904 @@
+
+----------------------------------------------------------------------
+Today's Topics:
+                file-insert command for microEmacs 30
+                Fix for termcap upgrade to MicroEmacs
+          GNU compatability, System V and PC7300 MicroEMACS.
+----------------------------------------------------------------------
+
+From: genrad!decvax!yetti!oz (Ozan Yigit)
+Subject: file-insert command for microEmacs 30
+
+The following shar file contains the diffs to symbol.c and
+a new file misc.c that contains the necessary code to do a
+file-insert in microEmacs (the definitive version 30).
+
+Currently the symbol.c binds the keys C-X C-I to this function,
+which is compatible with Goslings, but not necessarily with GNU.
+I have not yet heard anything from David Conroy about this addition
+[I desperately needed this facility..] or any alternatives to it. So,
+here it is. Enjoy.
+
+oZ
+-------------------- SNAP HERE ----------------------------------
+#!/bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #!/bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	symbol.DIFFS
+#	misc.c
+# This archive created: Thu May 15 20:52:47 1986
+export PATH; PATH=/bin:$PATH
+echo shar: extracting "'symbol.DIFFS'" '(189 characters)'
+if test -f 'symbol.DIFFS'
+then
+	echo shar: over-writing existing file "'symbol.DIFFS'"
+fi
+sed 's/^X//' << \SHAR_EOF > 'symbol.DIFFS'
+X99a100,104
+X>  * Defined by "misc.c".
+X>  */
+X> extern	int	fileinsert();		/* Insert contents of a file	*/
+X> 
+X> /*
+X189a195,197
+X> #if	MISC
+X> 	KCTLX|KCTRL|'I',fileinsert,	"file-insert",
+X> #endif
+SHAR_EOF
+if test 189 -ne "`wc -c 'symbol.DIFFS'`"
+then
+	echo shar: error transmitting "'symbol.DIFFS'" '(should have been 189 characters)'
+fi
+echo shar: extracting "'misc.c'" '(1644 characters)'
+if test -f 'misc.c'
+then
+	echo shar: over-writing existing file "'misc.c'"
+fi
+sed 's/^X//' << \SHAR_EOF > 'misc.c'
+X/*
+X * Name:	MicroEMACS
+X *		Miscellaneous extensions
+X * Version:	30+
+X * Last edit:	30-Apr-86
+X * By:		oz
+X *		decvax!utzoo!yetti!oz
+X */
+X#include	"def.h"
+X
+X/*
+X * Insert a file at the dot a la yank. This is not
+X * terribly difficult. Insert routines handle
+X * it all. All we have to do is to ask for a
+X * filename, make sure it exists, and loop through
+X * the entire file. Just like yank, we try to
+X * handle the cosmetic bug, so that when entire
+X * text lands off screen, we will not look silly.
+X * This is usually bound to C-X C-I.
+X */
+Xfileinsert(f, n, k)
+X{
+X	register int 	s;
+X	register char	*p;
+X	register LINE	*lp;
+X	char		fname[NFILEN];
+X	char		line[NLINE];
+X	register int	nline;
+X
+X	if ((s=ereply("Insert file: ", fname, NFILEN)) != TRUE)
+X		return (s);
+X	adjustcase(fname);
+X	if ((s=ffropen(fname)) == FIOFNF) {	/* hard file open	*/
+X		if (kbdmop == NULL)
+X			eprintf("Cannot open %s", fname);
+X		return(FALSE);
+X	}
+X	nline = 0;				/* newline counting..	*/
+X	while ((s=ffgetline(line, NLINE)) == FIOSUC) {
+X		for (p = line; *p; p++)
+X			if (linsert(1, *p) == FALSE)
+X				return(FALSE);
+X						/* eol: fake newline..	*/
+X		if(newline(FALSE, 1, KRANDOM) == FALSE)
+X			return(FALSE);
+X		++nline;
+X	}
+X	ffclose();				/* ignore errors here	*/
+X	if (s==FIOEOF && kbdmop==NULL) {	/* do not zap anything  */
+X		if (nline == 1)
+X			eprintf("[Inserted 1 line]");
+X		else
+X			eprintf("[Inserted %d lines]", nline);
+X	}
+X	lp = curwp->w_linep;			/* Cosmetic adjustment	*/
+X	if (curwp->w_dotp == lp) {		/* if offscreen insert.	*/
+X		while (nline-- && lback(lp)!=curbp->b_linep)
+X			lp = lback(lp);
+X		curwp->w_linep = lp;		/* Adjust framing.	*/
+X		curwp->w_flag |= WFHARD;
+X	}
+X	return (TRUE);
+X}
+SHAR_EOF
+if test 1644 -ne "`wc -c 'misc.c'`"
+then
+	echo shar: error transmitting "'misc.c'" '(should have been 1644 characters)'
+fi
+#	End of shell archive
+exit 0
+
+------------------------------
+
+From: talcott!ima!amdcad!jimb (Jim Budler)
+Subject: Fix for termcap upgrade to MicroEmacs
+Reply-To: jimb@amdcad.UUCP (Jim Budler)
+Organization: AMD, Sunnyvale, California
+
+The patch as posted leaves the terminal in a strange mode when
+there is an exit(1) for any of the bad termcap errors, such as
+"This terminal is too dumb", etc.
+I patched in calls to the existing ttclose() routine from ttyio.c.
+Works fine. Use patch to apply to ../uemacs/tty/termcap/tty.c
+
+*** /tmp/,RCSt1016739	Fri Apr 25 23:10:53 1986
+--- tty.c	Fri Apr 25 23:09:31 1986
+***************
+*** 66,71
+          if ((tv_stype = getenv("TERM")) == NULL)
+          {
+                  puts("Environment variable TERM not defined!");
+                  exit(1);
+          }
+  
+
+--- 66,72 -----
+          if ((tv_stype = getenv("TERM")) == NULL)
+          {
+                  puts("Environment variable TERM not defined!");
++ 		ttclose();
+                  exit(1);
+          }
+  
+***************
+*** 73,78
+          {
+                  sprintf(err_str, "Unknown terminal type %s!", tv_stype);
+                  puts(err_str);
+                  exit(1);
+          }
+  
+
+--- 74,80 -----
+          {
+                  sprintf(err_str, "Unknown terminal type %s!", tv_stype);
+                  puts(err_str);
++ 		ttclose();
+                  exit(1);
+          }
+  
+***************
+*** 99,104
+          if(CD == NULL || CM == NULL || CE == NULL || UP == NULL)
+          {
+                  puts("This terminal is not powerful enough to run Micro Emacs\n");
+                  exit(1);
+          }
+  	if (!*CE) {
+
+--- 101,107 -----
+          if(CD == NULL || CM == NULL || CE == NULL || UP == NULL)
+          {
+                  puts("This terminal is not powerful enough to run Micro Emacs\n");
++ 		ttclose();
+                  exit(1);
+          }
+  	if (!*CE) {
+***************
+*** 122,127
+          if (p >= &tcapbuf[TCAPSLEN])
+          {
+                  puts("Terminal description too big!\n");
+                  exit(1);
+          }
+  	if (*TI) tputs (TI);	/* init the term */
+
+--- 125,131 -----
+          if (p >= &tcapbuf[TCAPSLEN])
+          {
+                  puts("Terminal description too big!\n");
++ 		ttclose();
+                  exit(1);
+          }
+  	if (*TI) tputs (TI);	/* init the term */
+
+------------------------------
+
+Date: Sat, 26 Apr 86 02:47:32 pst
+From: rtech.rtech!condor!daveb (Dave Brower)
+Subject: GNU compatability, System V and PC7300 MicroEMACS.
+
+Enclosed are replacement and new files for the MicroEMACS recently sent
+over mod.sources.  They provide GNU Emacs command compatibility, System
+V support, and some hacks for PC7300 display dame bramage.  More details
+are in the GNU_README file.
+
+#! /bin/sh
+# This is a shell archive, meaning:
+# 1. Remove everything above the #! /bin/sh line.
+# 2. Save the resulting text in a file.
+# 3. Execute the file with /bin/sh (not csh) to create the files:
+#	GNU_README
+#	gnucmds.c
+#	gnusymbol.c
+#	sys
+#	tty
+# This archive created: Sat Apr 26 02:34:55 1986
+export PATH; PATH=/bin:$PATH
+if test -f 'GNU_README'
+then
+	echo shar: will not over-write existing file "'GNU_README'"
+else
+cat << \SHAR_EOF > 'GNU_README'
+This archive contains a number of files to be used with the recent
+mod.sources posting of Dave Conroy's MicroEMACS.  The new files support
+these new features:
+
+	* GNU Emacs compatibility
+
+	* System V.
+
+	* AT&T UNIX PC 7300/3b1.
+
+
+  The GNU emacs compatibility is as the crudest possible level, a simple
+remapping of existing commands, and a few new ones I couldn't live
+without.  Further work is planned, but this should be enough to  help
+most people out immediately.  The file gnusymbol.c replaces the
+previously distributed symbol.c, and the file gnucmds.c contains my
+additions.  You will need to change the contents in the OBJS macro of
+your Makefile, or your build scripts on other systems.
+
+  System V is supported in the obvious way with the addition of a new
+sys/sysv directory.  The ttyio.c and spawn.c files have been further
+decoupled by using reentrant calls to ttopen and ttclose instead of
+sharing the termio structures.
+
+  My PC7300 wouldn't work right with the ansi terminal driver because
+the scroll region and index/reverse index commands don't appear to work
+as needed.  I've reimplemented the insert and delete block operations
+using the insert and delete line capabilities.  Not surprisingly, the
+vt220 function keys didn't work right, so I threw all the code out. 
+Being a "real" Emacs fan, I chucked the arrow keys too.
+
+                            ----------------
+
+There is a continuing discussion of MicroEMACS and GNU compatibility in
+net.emacs.  I am attempting to put together a mailing list of people who
+are interested in actively pursuing this goal, with intent to make
+regular mod.source submissions as progress is made.
+
+The first step was to get this short term fix distributed.  The next is
+to try to merge some of the variant versions that are floating around to
+grab missing features.  For instance, the MicroEMACS 3.5 posted in
+net.sources recently has word wrap, but doesn't have reverse video
+modelines or the smart redisplay algorithm.
+
+If you are interested in working on this project, send me mail at:
+
+               {sun, amdahl, mtxinu, cbosgd}!rtech!daveb
+
+Compatibility now for the future!
+
+
+SHAR_EOF
+chmod +x 'GNU_README'
+fi # end of overwriting check
+if test -f 'gnucmds.c'
+then
+	echo shar: will not over-write existing file "'gnucmds.c'"
+else
+cat << \SHAR_EOF > 'gnucmds.c'
+/*
+ * Name:	MicroEMACS
+ *		GNU compatible commands
+ * Version:	29
+ * Last edit:	19-Apr-86
+ * By:		{sun, amdahl, mtxinu}!rtech!daveb
+ *
+ * This file contains new commands written for GNU emacs compatibility.
+ *
+ *	suspend(),		replacing jeffexit().
+ *	savebuffs(),		new.
+ *	savequit(),		new.
+ *	notmodified(),		new.
+ *	findalternate(),	new.
+ *	scrollother(),		new.
+ */
+#include	"def.h"
+
+/*
+ * GNU style suspend.  Asks to save all dirty buffs, then starts a CLI.
+ * Bound to "C-Z" and "X-C-Z"
+ *
+ * Supercedes "jeffexit"	X-C-Z too.
+ */
+suspend(f, n, k)
+{
+	if(ABORT != savebuffs(0, 0, KRANDOM))
+		return (spawncli(f, n, KRANDOM));
+	else
+		return (ABORT);
+}
+
+/*
+ * GNU compatible buffer save routine.
+ * Scan all buffers and ask for disposition.
+ * Does not affect display.	X-S
+ * (daveb)
+ */
+savebuffs(f, n, k)
+{
+	char		buf[ 80 ];
+	register int	s;
+	register	BUFFER *bp;
+	BUFFER		*oldbp = curbp;
+	int		considered = FALSE;
+	int		row = ttrow;
+	int		col = ttcol;
+
+	for( bp = bheadp; bp != NULL; bp = bp->b_bufp )
+		if (bp->b_bname[0]!=' ' && bp->b_fname[0]!='\0' 
+			&& (bp->b_flag&BFCHG) != 0) {
+			considered = TRUE;
+			strcpy( buf, "Save file ");
+			strcat( buf, bp->b_fname );
+			s = eyesno( buf, bp->b_fname);
+			if (s == ABORT)
+				return (ABORT);
+			if (s == TRUE) {
+				curbp = bp;
+				filesave(f, n, KRANDOM);
+				ttmove( row, col );
+				ttflush();
+			}
+		}
+	if(!considered)
+		eprintf("(No files need saving)");
+	curbp = oldbp;
+	ttmove( row, col );
+	ttflush();
+	return(TRUE);
+}
+
+/*
+ * GNU style exit:  query on every dirty buffer, then exit.  X-C-C
+ */
+savequit(f, n, k)
+{
+	if(ABORT != savebuffs(0, 0, KRANDOM))
+		quit(f, n, k);
+	return( ABORT );
+}
+
+/*
+ * Turn off the dirty bit on this buffer.  M-~
+ */
+notmodified(f, n, k)
+{
+	register WINDOW *wp;
+	
+	curbp->b_flag &= ~BFCHG;
+	wp = wheadp;				/* Update mode lines.	*/
+	while (wp != NULL) {
+		if (wp->w_bufp == curbp)
+			wp->w_flag |= WFMODE;
+		wp = wp->w_wndp;
+	}
+	eprintf("Modification-flag cleared");
+	return (TRUE);
+}
+
+/*
+ * Scroll the other window.  On C-M-V.  Works OK (daveb).
+ */
+scrollother(f, n, k)
+{
+	nextwind(0, 0, KRANDOM);
+	forwpage(f, n, k);
+	prevwind(0, 0, KRANDOM);
+}
+
+SHAR_EOF
+chmod +x 'gnucmds.c'
+fi # end of overwriting check
+if test -f 'gnusymbol.c'
+then
+	echo shar: will not over-write existing file "'gnusymbol.c'"
+else
+cat << \SHAR_EOF > 'gnusymbol.c'
+/*
+ * Name:	MicroEMACS
+ *		Symbol table stuff for GNU emacs compatability
+ * Version:	29
+ * Last edit:	19-Apr-86
+ * By:		{sun, amdahl, cbosgd}!rtech!gonzo!daveb
+ *
+ * Symbol tables, and keymap setup.
+ * The terminal specific parts of building the
+ * keymap has been moved to a better place.
+ *
+ * This version matches the standard GNU Emacs 17.49 bindings.
+ * With this file, MicroEMACS is a proper subset of GNU.
+ *
+ * If a GNU feature was misnamed, it was moved.
+ * If a GNU feature was "nearly" right, it was noted for later work.
+ * If a MicroEMACS feature was incompatible, it was dropped.
+ *
+ * Compatibility NOW for the future!
+ */
+#include	"def.h"
+
+#define	DIRLIST	0			/* Disarmed!			*/
+
+# define	DEL	0x7f
+# define	ESC	0x1b
+
+/* # define DAVEB	*//* Dave Brower specials, not GNU compatibility */
+
+/*
+ * Defined by "main.c".
+ */
+extern	int	ctrlg();		/* Abort out of things		*/
+extern	int	quit();			/* Rude Quit			*/
+extern	int	ctlxlp();		/* Begin macro			*/
+extern	int	ctlxrp();		/* End macro			*/
+extern	int	ctlxe();		/* Execute macro		*/
+extern  int	showversion();		/* Show version numbers, etc.	*/
+
+/*
+ * defined by "gnucmds.c"
+ */
+extern	int	savebuffs();		/* GNU style save-some-buffers	*/
+extern	int	savequit();		/* GNU save-buffers-kill-emacs	*/
+extern	int	suspend();		/* GNU style suspend		*/
+extern	int	notmodified();		/* GNU make buffer undirty	*/
+extern	int	scrollother();		/* GNU scroll other window	*/
+
+/*
+ * Defined by "search.c".
+ */
+extern	int	forwsearch();		/* Search forward		*/
+extern	int	backsearch();		/* Search backwards		*/
+extern  int	searchagain();		/* Repeat last search command	*/
+extern  int	forwisearch();		/* Incremental search forward	*/
+extern  int	backisearch();		/* Incremental search backwards	*/
+extern  int	queryrepl();		/* Query replace		*/
+
+/*
+ * Defined by "basic.c".
+ */
+extern	int	gotobol();		/* Move to start of line	*/
+extern	int	backchar();		/* Move backward by characters	*/
+extern	int	gotoeol();		/* Move to end of line		*/
+extern	int	forwchar();		/* Move forward by characters	*/
+extern	int	gotobob();		/* Move to start of buffer	*/
+extern	int	gotoeob();		/* Move to end of buffer	*/
+extern	int	forwline();		/* Move forward by lines	*/
+extern	int	backline();		/* Move backward by lines	*/
+extern	int	forwpage();		/* Move forward by pages	*/
+extern	int	backpage();		/* Move backward by pages	*/
+extern	int	setmark();		/* Set mark			*/
+extern	int	swapmark();		/* Swap "." and mark		*/
+extern	int	gotoline();		/* Go to a specified line.	*/
+
+/*
+ * Defined by "buffer.c".
+ */
+extern	int	listbuffers();		/* Display list of buffers	*/
+extern	int	usebuffer();		/* Switch a window to a buffer	*/
+extern	int	killbuffer();		/* Make a buffer go away.	*/
+
+#if	DIRLIST
+/*
+ * Defined by "dirlist.c".
+ */
+extern	int	dirlist();		/* Directory list.		*/
+#endif
+
+/*
+ * Defined by "file.c".
+ */
+extern	int	fileread();		/* Get a file, read only	*/
+extern	int	filevisit();		/* Get a file, read write	*/
+extern	int	filewrite();		/* Write a file			*/
+extern	int	filesave();		/* Save current file		*/
+extern	int	filename();		/* Adjust file name		*/
+
+/*
+ * Defined by "random.c".
+ */
+extern	int	selfinsert();		/* Insert character		*/
+extern	int	showcpos();		/* Show the cursor position	*/
+extern	int	twiddle();		/* Twiddle characters		*/
+extern	int	quote();		/* Insert literal		*/
+extern	int	openline();		/* Open up a blank line		*/
+extern	int	newline();		/* Insert CR-LF			*/
+extern	int	deblank();		/* Delete blank lines		*/
+extern	int	indent();		/* Insert CR-LF, then indent	*/
+extern	int	forwdel();		/* Forward delete		*/
+extern	int	backdel();		/* Backward delete		*/
+extern	int	killline();		/* Kill forward			*/
+extern	int	yank();			/* Yank back from killbuffer.	*/
+
+/*
+ * Defined by "region.c".
+ */
+extern	int	killregion();		/* Kill region.			*/
+extern	int	copyregion();		/* Copy region to kill buffer.	*/
+extern	int	lowerregion();		/* Lower case region.		*/
+extern	int	upperregion();		/* Upper case region.		*/
+
+/*
+ * Defined by "spawn.c".
+ */
+extern	int	spawncli();		/* Run CLI in a subjob.		*/
+
+/*
+ * Defined by "window.c".
+ */
+extern	int	reposition();		/* Reposition window		*/
+extern	int	refresh();		/* Refresh the screen		*/
+extern	int	nextwind();		/* Move to the next window	*/
+extern  int	prevwind();		/* Move to the previous window	*/
+extern	int	mvdnwind();		/* Move window down		*/
+extern	int	mvupwind();		/* Move window up		*/
+extern	int	onlywind();		/* Make current window only one	*/
+extern	int	splitwind();		/* Split current window		*/
+extern	int	enlargewind();		/* Enlarge display window.	*/
+extern	int	shrinkwind();		/* Shrink window.		*/
+
+/*
+ * Defined by "word.c".
+ */
+extern	int	backword();		/* Backup by words		*/
+extern	int	forwword();		/* Advance by words		*/
+extern	int	upperword();		/* Upper case word.		*/
+extern	int	lowerword();		/* Lower case word.		*/
+extern	int	capword();		/* Initial capitalize word.	*/
+extern	int	delfword();		/* Delete forward word.		*/
+extern	int	delbword();		/* Delete backward word.	*/
+
+/*
+ * Defined by "extend.c".
+ */
+extern	int	extend();		/* Extended commands.		*/
+extern	int	help();			/* Help key.			*/
+extern	int	bindtokey();		/* Modify key bindings.		*/
+extern	int	wallchart();		/* Make wall chart.		*/
+
+typedef	struct	{
+	short	k_key;			/* Key to bind.			*/
+	int	(*k_funcp)();		/* Function.			*/
+	char	*k_name;		/* Function name string.	*/
+}	KEY;
+
+/*
+ * Default key binding table. This contains
+ * the function names, the symbol table name, and (possibly)
+ * a key binding for the builtin functions. There are no
+ * bindings for C-U or C-X. These are done with special
+ * code, but should be done normally.
+ */
+
+/* GNU standard bindings that are missing are commented out with the
+ * following notations:
+ *
+ *	/*B	Braindamaged in current implementation.
+ *	/*D	Design restructuring is needed.
+ *	/*E	Easy, a few hours.
+ *	/*H	Hard, (days) but possible if desirable.
+ *	/*I	Impossible (weeks), much too hard to do right.
+ *	/*M	Moderate difficulty, a day or so.
+ *	/*T	On the to do list.
+ *	/*U	Undecided.
+ *	/*X	Means unnecessary to do.
+ *	/*W	Current version is wrong.
+ *
+ *   Well, braindamaged is a bit too strong, but doing all the argument
+ *   processing in the main loop, and not having meta- ancd ctrl-x
+ *   be bindable commands seems kinda funny to me (daveb).
+ */
+
+KEY	key[] = {
+	KCTRL|'@',	setmark,	"set-mark-command",
+	KCTRL|'A',	gotobol,	"beginning-of-line",
+	KCTRL|'B',	backchar,	"backward-char",
+/*DHX	KCTRL|'C',	???,		"mode-specific-command-prefix",	*/
+	KCTRL|'D',	forwdel,	"delete-char",
+	KCTRL|'E',	gotoeol,	"end-of-line",
+	KCTRL|'F',	forwchar,	"forward-char",
+	KCTRL|'G',	ctrlg,		"keyboard-quit",
+	KCTRL|'H',	help,		"help-command",
+/*DHX	KCTRL|'I',	???,		"indent-for-tab-command",	*/
+	KCTRL|'J',	indent,		"newline-and-indent",
+	KCTRL|'K',	killline,	"kill-line",
+	KCTRL|'L',	refresh,	"recenter",
+			/*W actually doesn't recenter...		*/
+
+	KCTRL|'M',	newline,	"newline",
+	KCTRL|'N',	forwline,	"next-line",
+	KCTRL|'O',	openline,	"open-line",
+	KCTRL|'P',	backline,	"previous-line",
+	KCTRL|'Q',	quote,		"quoted-insert",
+	KCTRL|'R',	backisearch,	"isearch-backward",
+	KCTRL|'S',	forwisearch,	"isearch-forward",
+	KCTRL|'T',	twiddle,	"transpose-characters",
+/*BMT	KCTRL|'U',	???,		"universal-argument,"		*/
+	KCTRL|'V',	forwpage,	"scroll-up",
+	KCTRL|'W',	killregion,	"kill-region",
+/*BMT	KCTRL|'X',	???,		"Control-X-prefix",		*/
+	KCTRL|'Y',	yank,		"yank",
+			/*WET doesn't set point! */
+
+	KCTRL|'Z',	suspend,	"suspend-emacs",
+
+/*BMT	KMETA,		???,		"ESC-prefix",			*/
+/*DX	KCTRL|']',	???,		"abort-recursive-edit",		*/
+/*DIX	KCTRL|'_',	???,		"undo",				*/
+
+	DEL,		backdel,	"delete-backward-char",
+
+/*DIX	KCTLX|KCTRL|'A',???,		"add-mode-abbrev",		*/
+	KCTLX|KCTRL|'B',listbuffers,	"list-buffers",
+	KCTLX|KCTRL|'C',savequit,	"save-buffers-kill-emacs",
+
+#if	DIRLIST
+	KCTLX|KCTRL|'D',dirlist,	"list-directory",
+#endif
+
+/*DIX	KCTLX|KCTRL|'E',???,		"eval-last-sexp",		*/
+	KCTLX|KCTRL|'F',filevisit,	"find-file",
+/*DIX	KCTLX|KCTRL|'H',???,		"inverse-add-mode=abbrev",	*/
+/*MT	KCTLX|KCTRL|'I',???,		"indent-rigidly",		*/
+	KCTLX|KCTRL|'L',lowerregion,	"downcase-region",
+/*ET	KCTLX|KCTRL|'N', ???,		"set-goal-column"		*/
+	KCTLX|KCTRL|'O',deblank,	"delete-blank-lines",
+/*MU	KCTLX|KCTRL|'P',???,		"mark-page"			 */
+ 	KCTLX|KCTRL|'R',fileread,	"file-file-read-only",
+				/*WU incorrect behaviour...		*/
+	KCTLX|KCTRL|'S',filesave,	"file-buffer",
+
+/*EU	KCTLX|KCTRL|'T',???,		"transpose-lines",		*/
+	KCTLX|KCTRL|'U',upperregion,	"upcase-region",
+/*EU	KCTLX|KCTRL|'V',findalternate,	"find-alternate-file",		*/
+	KCTLX|KCTRL|'W',filewrite,	"write-file",
+	KCTLX|KCTRL|'X',swapmark,	"exchange-point-and-mark",
+	KCTLX|KCTRL|'Z',spawncli,	"suspend-emacs",
+
+/*MT	KCTLX|ESC	???,		"repeat-complex-command",	*/
+/*U	KCTLX|'$'	???,		"set-selective-display",	*/
+	KCTLX|'(',	ctlxlp,		"start-kbd-macro",
+	KCTLX|')',	ctlxrp,		"end-kbd-macro",
+/*DIX	KCTLX|'+',	???,		"add-global-abbrev",		*/
+/*DIX	KCTLX|'-',	???,		"inverse-add-global-abbrev",	*/
+/*MX	KCTLX|'.',	???,		"set-fill-prefix",		*/
+/*HX	KCTLX|'/',	???,		"point-to-register",		*/
+/*MT	KCTLX|'0',	???,		"delete-window",		*/
+	KCTLX|'1',	onlywind,	"delete-other-windows",
+	KCTLX|'2',	splitwind,	"split-window-vertically",
+/*MX	KCTLX|'4',	???,		"ctl-x-4-prefix",		*/
+/*DHX	KCTLX|'5',	???,		"split-window-horizontally",	*/
+/*EX	KCTLX|';',	???,		"set-comment-column",		*/
+/*HU	KCTLX|'<',	???,		"scroll-left",			*/
+	KCTLX|'=',	showcpos,	"what-cursor-position",
+/*HU	KCTLX|'>',	???,		"scroll-right",			*/
+/*MU	KCTLX|'[',	???,		"backward-page",		*/
+/*MU	KCTLX|']',	???,		"forward-page",			*/
+	KCTLX|'^',	enlargewind,	"enlarge-window",
+/*HX	KCTLX|'`',	???,		"next-error",			*/
+/*MU	KCTLX|'A',	???,		"append-to-buffer",		*/
+	KCTLX|'B',	usebuffer,	"switch-to-buffer",
+/*MX	KCTLX|'D',	???,		"dired",			*/
+	KCTLX|'E',	ctlxe,		"call-last-kbd-macro",
+/*EU	KCTLX|'F',	ctlxe,		"set-fill-column",		*/
+/*HX	KCTLX|'G',	???,		"insert-register",		*/
+/*EU	KCTLX|'H',	???,		"mark-whole-buffer",		*/
+/*MU	KCTLX|'I',	???,		"insert-file",			*/
+/*HX	KCTLX|'J',	???,		"register-to-point",		*/
+	KCTLX|'K',	killbuffer,	"kill-buffer",
+/*MU	KCTLX|'L',	???,		"count-lines-page",		*/
+/*HU	KCTLX|'N',	???,		"narrow-to-region",		*/
+	KCTLX|'O',	nextwind,	"other-window",
+/*HU	KCTLX|'P',	???,		"narrow-to-page",		*/
+/*MX	KCTLX|'Q',	???,		"kbd-macro-qry",		*/
+/*HX	KCTLX|'R',	???,		"copy-rectangle-to-register",	*/
+	KCTLX|'S',	savebuffs,	"save-some-buffers",
+/*HX	KCTLX|'U',	???,		"advertised-undo",		*/
+/*HX	KCTLX|'W',	???,		"widen",			*/
+/*HX	KCTLX|'{',	???,		"shrink-window-horizontally",	*/
+/*HX	KCTLX|'}',	???,		"enlarge-window-horizontally",	*/
+/*MT	KCTLX|DEL,	???,		"backward-kill-sentence,"	*/
+
+/*MU	KMETA|KCTRL|'@',???,		"mark-sexp",			*/
+/*MU	KMETA|KCTRL|'A',???,		"beginning-of-defun",		*/
+/*MU	KMETA|KCTRL|'B',???,		"backwards-sexp",		*/
+/*MX	KMETA|KCTRL|'C',???,		"exit-recursive-edit",		*/
+/*MU	KMETA|KCTRL|'D',???,		"down-list",			*/
+/*MU	KMETA|KCTRL|'E',???,		"end-of-defun",			*/
+/*MU	KMETA|KCTRL|'F',???,		"forward-sexp",			*/
+/*MU	KMETA|KCTRL|'H',???,		"mark-defun",			*/
+/*MU	KMETA|KCTRL|'J',???,		"indent-new-comment-line",	*/
+/*MU	KMETA|KCTRL|'K',???,		"kill-sexp",			*/
+/*MU	KMETA|KCTRL|'N',???,		"foward-list",			*/
+/*EU	KMETA|KCTRL|'O',???,		"split-line",			*/
+/*MU	KMETA|KCTRL|'P',???,		"backward-list",		*/
+/*HX	KMETA|KCTRL|'S',???,		"isearch-forward-regexp",	*/
+/*MU	KMETA|KCTRL|'T',???,		"transpose-sexps",		*/
+/*MU	KMETA|KCTRL|'U',???,		"backward-up-list",		*/
+	KMETA|KCTRL|'V',scrollother,	"scroll-other-window",
+/*ET	KMETA|KCTRL|'W',???,		"append-next-kill",		*/
+
+/*IX	KMETA|ESC,	???		"eval-expression",		*/
+/*IX	KMETA|CTRL|'\',	???		"indent-region",		*/
+/*MU	KMETA|' ',	???		"just-one-space",		*/
+/*HT	KMETA|'!',	???,		"shell-command", */
+/*HU	KMETA|'$',	???,		"spell-word", */
+	KMETA|'%',	queryrepl,	"query-replace",
+/*IX	KMETA|'\'',	???,		"abbrev-prefix-mark",		*/
+/*TU	KMETA|'(',	???,		"insert-parenthesis", */
+/*HU	KMETA|')',	???,		"move-past-close-and-reindent", */
+/*HX	KMETA|',',	???,		"tags-loop-continue",		*/
+/*DT	KMETA|'-',	???,		"negative-argument",		*/
+	KMETA|'>',	gotoeob,	"end-of-buffer",
+/*MU	KMETA|'=',	???,		"count-lines-region",		*/
+	KMETA|'<',	gotobob,	"beginning-of-buffer",
+/*TT	KMETA|'@',	???,		"mark-word",			*/
+/*MU	KMETA|'[',	???,		"backward-paragraph",		*/
+/*TT	KMETA|'\\',	???,		"delete-horizontal-space",	*/
+/*MU	KMETA|']',	???,		"forward-paragraph",		*/
+/*TT	KMETA|'^',	???,		"delete-indentation",		*/
+/*MU	KMETA|'A',	???,		"backward-sentence",		*/
+	KMETA|'B',	backword,	"backward-word",
+	KMETA|'C',	capword,	"capitalize-word",
+	KMETA|'D',	delfword,	"kill-word",
+/*MU	KMETA|'E',	???,		"forward-sentence",		*/
+	KMETA|'F',	forwword,	"forward-word",
+/*HT	KMETA|'G',	???,		"fill-region",			*/
+/*MU	KMETA|'H',	???,		"mark-paragraph",		*/
+/*DMX	KMETA|'I',	???,		"tab-to-tab-stop",		*/
+/*MU	KMETA|'J',	???,		"indent-new-comment-line",	*/
+	KMETA|'L',	lowerword,	"downcase-word",
+/*EU	KMETA|'M',	???,		"back-to-indentation",		*/
+/*HT	KMETA|'Q',	???,		"fill-paragraph",		*/
+	KMETA|'R',	reposition,	"move-to-window-line",
+/*ET	KMETA|'T',	???,		"transpose-words",		*/
+	KMETA|'U',	upperword,	"upcase-word",
+	KMETA|'V',	backpage,	"scroll-down",
+	KMETA|'W',	copyregion,	"copy-region-as-kill",
+	KMETA|'X',	extend,		"execute-extended-command",
+/*HDX	KMETA|'Y',	???,		"yank-pop",			*/
+/*MU	KMETA|'Z',	???,		"zap-to-char",			*/
+/*HT	KMETA|'|',	???,		"shell-command-on-region",	*/
+	KMETA|'~',	notmodified,	"not-modified",
+	KMETA|DEL,	delbword,	"backward-kill-word",
+
+	/*
+	** These are unbound functions, callable by name.
+	** They are GNU compatible (to various degrees).
+	*/
+
+
+/*	-1,		???,		"append-next-kill",	*/
+/*	-1,		???,		"apropos",		*/
+	-1,		wallchart,	"describe-bindings",
+/*MT	-1,		???,		"digit-argument",	*/
+	-1,		showversion,	"emacs-version",
+	-1,		bindtokey,	"global-set-key",
+	-1,		gotoline,	"goto-line",
+	-1,		quit,		"kill-emacs",
+	-1,		backsearch,	"search-backward",
+	-1,		forwsearch,	"search-forward",
+	-1,		selfinsert,	"self-insert-command",
+	-1,		filename,	"set-visited-file-name",
+
+	/* These are duplicate names for GNU compatible functions,
+	** or incompatible commands I've left lying around for now.
+	** The old command names get used as args to keydup() in the
+	** various tty/xxx/ttykbd.c modules for function keys.
+	*/
+
+	-1,		backchar,	"back-char",
+	-1,		backline,	"back-line",
+	-1,		backpage,	"back-page",
+	-1,		prevwind,	"back-window",	
+	-1,		mvdnwind,	"down-window",
+	-1,		enlargewind,	"enlarge-window",
+	-1,		ctlxe,		"execute-macro",
+	-1,		forwchar,	"forw-char",
+	-1,		forwline,	"forw-line",
+	-1,		forwpage,	"forw-page",
+	-1,		nextwind,	"forw-window",
+	-1,		help,		"help",
+	-1,		selfinsert,	"ins-self",
+	-1,		killregion,	"kill-region",
+	-1,		searchagain,	"search-again",
+	-1,		setmark,	"set-mark",
+	-1,		shrinkwind,	"shrink-window",
+	-1,		mvupwind,	"up-window",
+			/*MT incorrect behaviour */
+
+};
+
+#define	NKEY	(sizeof(key) / sizeof(key[0]))
+
+/*
+ * Symbol table lookup.
+ * Return a pointer to the SYMBOL node, or NULL if
+ * the symbol is not found.
+ */
+SYMBOL	*
+symlookup(cp)
+register char	*cp;
+{
+	register SYMBOL	*sp;
+
+	sp = symbol[symhash(cp)];
+	while (sp != NULL) {
+		if (strcmp(cp, sp->s_name) == 0)
+			return (sp);
+		sp = sp->s_symp;
+	}
+	return (NULL);
+}
+
+/*
+ * Take a string, and compute the symbol table
+ * bucket number. This is done by adding all of the characters
+ * together, and taking the sum mod NSHASH. The string probably
+ * should not contain any GR characters; if it does the "*cp"
+ * may get a nagative number on some machines, and the "%"
+ * will return a negative number!
+ */
+symhash(cp)
+register char	*cp;
+{
+	register int	c;
+	register int	n;
+
+	n = 0;
+	while ((c = *cp++) != 0)
+		n += c;
+	return (n % NSHASH);
+}
+
+/*
+ * Build initial keymap. The funny keys
+ * (commands, odd control characters) are mapped using
+ * a big table and calls to "keyadd". The printing characters
+ * are done with some do-it-yourself handwaving. The terminal
+ * specific keymap initialization code is called at the
+ * very end to finish up. All errors are fatal.
+ */
+keymapinit()
+{
+	register SYMBOL	*sp;
+	register KEY	*kp;
+	register int	i;
+	register int	hash;
+
+	for (i=0; i<NKEYS; ++i)
+		binding[i] = NULL;
+	for (kp = &key[0]; kp < &key[NKEY]; ++kp)
+		keyadd(kp->k_key, kp->k_funcp, kp->k_name);
+
+	/* Multiple bindings of standard commands */
+
+#ifdef DAVEB
+        keydup(KCTRL|'Z', "scroll-down");
+#endif
+	keydup(KCTLX|KCTRL|'G',	"keyboard-quit");
+	keydup(KMETA|KCTRL|'G',	"keyboard-quit");
+	keydup(KMETA|' ', "set-mark-command");
+
+	/*
+	 * Self insert should be in hash table already, bound to -1.
+	 * Bind all printing chars without an explicit binding already.
+	 */
+	if ((sp=symlookup("self-insert-command")) == NULL)
+		abort();
+	binding[ KCTRL|'I' ] = sp;
+	for ( i = ' ' ; i < DEL ; ++i ) {
+		if (binding[i] != NULL)
+			continue;
+		binding[i] = sp;
+		++sp->s_nkey;
+	}
+
+	ttykeymapinit();
+}
+
+/*
+ * Create a new builtin function "name"
+ * with function "funcp". If the "new" is a real
+ * key, bind it as a side effect. All errors
+ * are fatal.
+ */
+keyadd(new, funcp, name)
+int	(*funcp)();
+char	*name;
+{
+	register SYMBOL	*sp;
+	register int	hash;
+
+	if ((sp=(SYMBOL *)malloc(sizeof(SYMBOL))) == NULL)
+		abort();
+	hash = symhash(name);
+	sp->s_symp = symbol[hash];
+	symbol[hash] = sp;
+	sp->s_nkey = 0;
+	sp->s_name = name;
+	sp->s_funcp = funcp;
+	if (new >= 0) {				/* Bind this key.	*/
+		if (binding[new] != NULL)
+			abort();
+		binding[new] = sp;
+		++sp->s_nkey;
+	}
+}
+
+/*
+ * Bind key "new" to the existing routine "name".
+ * If the routine doesn't exist, just give a warning.
+ * It's no error to rebind a key.
+ */
+keydup(new, name)
+register int	new;
+char		*name;
+{
+	register SYMBOL	*sp;
+
+	if ( (sp=symlookup(name))==NULL )
+		return;
+
+	if( new >= 0 )
+		binding[new] = sp;
+
+	++sp->s_nkey;
+}
+SHAR_EOF
+chmod +x 'gnusymbol.c'
+fi # end of overwriting check
+if test ! -d 'sys'
+then
+	mkdir 'sys'
+fi
+cd 'sys'
+if test ! -d 'sysv'
+then
+	mkdir 'sysv'
+fi
+cd 'sysv'
+if test -f 'Makefile'
+then
+	echo shar: will not over-write existing file "'Makefile'"
+else
+cat << \SHAR_EOF > 'Makefile'
+# Makefile for MicroEMACS.
+# Is there a better way to do the rebuilds, other than using
+# the links?
+
+SYS	= sysv
+TTY	= ansi
+
+CFLAGS	= -O
+
+LIBS =
+
+OBJ =	basic.o \
+	buffer.o \
+	cinfo.o \
+	display.o \
+	echo.o \
+	extend.o \
+	file.o \
+	kbd.o \
+	line.o \
+	main.o \
+	random.o \
+	region.o \
+	search.o \
+	symbol.o \
+	version.o \
+	window.o \
+	word.o \
+	fileio.o \
+	spawn.o \
+	ttyio.o \
+	tty.o \
+	ttykbd.o
+
+xemacs:		$(OBJ)
+		cc -o xemacs $(OBJ) $(LIBS)
+
+$(OBJ):		def.h sysdef.h ttydef.h
+
+sysdef.h:	sys/$(SYS)/sysdef.h	# Update links, if needed.
+		rm -f sysdef.h
+		ln sys/$(SYS)/sysdef.h .
+
+ttydef.h:	tty/$(TTY)/ttydef.h
+		rm -f ttydef.h
+		ln tty/$(TTY)/ttydef.h .
+
+fileio.c:	sys/$(SYS)/fileio.c
+		rm -f fileio.c
+		ln sys/$(SYS)/fileio.c .
+
+spawn.c:	sys/$(SYS)/spawn.c
+		rm -f spawn.c
+		ln sys/$(SYS)/spawn.c .
+
+tty.c:		tty/$(TTY)/tty.c
+		rm -f tty.c
+		ln tty/$(TTY)/tty.c .
+
+ttyio.c:	sys/$(SYS)/ttyio.c
+		rm -f ttyio.c
+		ln sys/$(SYS)/ttyio.c .
+
+ttykbd.c:	tty/$(TTY)/ttykbd.c
+		rm -f ttykbd.c
+		ln tty/$(TTY)/ttykbd.c .
+SHAR_EOF
+chmod +x 'Makefile'
+fi # end of overwriting check
+if test -f 'fileio.c'
+then
+	echo shar: will not over-write existing file "'fileio.c'"
+else
+cat << \SHAR_EOF > 'fileio.c'
+/*
+ * Name:	MicroEMACS
+ * 		System V file I/O, differs from ultrix 
+ *		  only in lack of rename() system call.
+ * Version:	0
+ * Last edit:	17-Apr-86
+ * By:		gonzo!daveb
+ *		{sun, amdahl, mtxinu}!rtech!gonzo!daveb
+ */
+#include	"def.h"
+
+static	FILE	*ffp;
+
+/*
+ * Open a file for reading.
+ */
+ffropen(fn)
+char	*fn;
+{
+	if ((ffp=fopen(fn, "r")) == NULL)
+		return (FIOFNF);
+	return (FIOSUC);
+}
+
+/*
+ * Open a file for writing.
+ * Return TRUE if all is well, and
+ * FALSE on error (cannot create).
+ */
+ffwopen(fn)
+char	*fn;
+{
+	if ((ffp=fopen(fn, "w")) == NULL) {
+		eprintf("Cannot open file for writing");
+		return (FIOERR);
+	}
+	return (FIOSUC);
+}
+
+/*
+ * Close a file.
+ * Should look at the status.
+ */
+ffclose()
+{
+	fclose(ffp);
+	return (FIOSUC);
+}
+
+/*
+ * Write a line to the already
+ * opened file. The "buf" points to the
+ * buffer, and the "nbuf" is its length, less
+ * the free newline. Return the status.
+ * Check only at the newline.
+ */
+ffputline(buf, nbuf)
+register char	buf[];
+{
+	register int	i;
+
+	for (i=0; i<nbuf; ++i)
+		putc(buf[i]&0xFF, ffp);
+	putc('\n', ffp);
+	if (ferror(ffp) != FALSE) {
+		eprintf("Write I/O error");
+		return (FIOERR);
+	}
+	return (FIOSUC);
+}
+
+/*
+ * Read a line from a file, and store the bytes
+ * in the supplied buffer. Stop on end of file or end of
+ * line. Don't get upset by files that don't have an end of
+ * line on the last line; this seem to be common on CP/M-86 and
+ * MS-DOS (the suspected culprit is VAX/VMS kermit, but this
+ * has not been confirmed. If this is sufficiently researched
+ * it may be possible to pull this kludge). Delete any CR
+ * followed by an LF. This is mainly for runoff documents,
+ * both on VMS and on Ultrix (they get copied over from
+ * VMS systems with DECnet).
+ */
+ffgetline(buf, nbuf)
+register char	buf[];
+{
+	register int	c;
+	register int	i;
+
+	i = 0;
+	for (;;) {
+		c = getc(ffp);
+		if (c == '\r') {		/* Delete any non-stray	*/
+			c = getc(ffp);		/* carriage returns.	*/
+			if (c != '\n') {
+				if (i >= nbuf-1) {
+					eprintf("File has long line");
+					return (FIOERR);
+				}
+				buf[i++] = '\r';
+			}
+		}
+		if (c==EOF || c=='\n')		/* End of line.		*/
+			break;
+		if (i >= nbuf-1) {
+			eprintf("File has long line");
+			return (FIOERR);
+		}
+		buf[i++] = c;
+	}
+	if (c == EOF) {				/* End of file.		*/
+		if (ferror(ffp) != FALSE) {
+			eprintf("File read error");
+			return (FIOERR);
+		}
+		if (i == 0)			/* Don't get upset if	*/
+			return (FIOEOF);	/* no newline at EOF.	*/
+	}
+	buf[i] = 0;
+	return (FIOSUC);
+}
+
+/*
+ * Rename the file "fname" into a backup
+ * copy. On Unix the backup has the same name as the
+ * original file, with a "~" on the end; this seems to
+ * be newest of the new-speak. The error handling is
+ * all in "file.c". The "unlink" is perhaps not the
+ * right thing here; I don't care that much as
+ * I don't enable backups myself.
+ */
+fbackupfile(fname)
+char	*fname;
+{
+	register char	*nname;
+
+	if ((nname=malloc(strlen(fname)+1+1)) == NULL)
+		return (ABORT);
+	(void) strcpy(nname, fname);
+	(void) strcat(nname, "~");
+	(void) unlink(nname);			/* Ignore errors.	*/
+
+	/* no rename on System V, so do it dangerous way. */
+	if ( link(fname, nname) < 0 || unlink(fname) < 0 ) {
+		free(nname);
+		return (FALSE);
+	}
+	free(nname);
+	return (TRUE);
+}
+
+/*
+ * The string "fn" is a file name.
+ * Perform any required case adjustments. All sustems
+ * we deal with so far have case insensitive file systems.
+ * We zap everything to lower case. The problem we are trying
+ * to solve is getting 2 buffers holding the same file if
+ * you visit one of them with the "caps lock" key down.
+ * On UNIX file names are dual case, so we leave
+ * everything alone.
+ */
+adjustcase(fn)
+register char	*fn;
+{
+#if	0
+	register int	c;
+
+	while ((c = *fn) != 0) {
+		if (c>='A' && c<='Z')
+			*fn = c + 'a' - 'A';
+		++fn;
+	}
+#endif
+}
+SHAR_EOF
+chmod +x 'fileio.c'
+fi # end of overwriting check
+if test -f 'spawn.c'
+then
+	echo shar: will not over-write existing file "'spawn.c'"
+else
+cat << \SHAR_EOF > 'spawn.c'
+/*
+ * Name:	MicroEMACS
+ *		Spawn CLI for System V.
+ * Version:	0
+ * Last edit:	17-Apr-86
+ * By:		gonzo!daveb
+ *		{sun, amdahl, mtxinu}!rtech!daveb
+ *
+ * Spawn for System V.
+ */
+#include	"def.h"
+
+#include	<signal.h>
+
+char	*shellp	= NULL;			/* Saved "SHELL" program.	*/
+char	*shname = NULL;			/* Saved shell name		*/
+
+extern	char	*getenv();
+
+/*
+ * On System V, we no gots job control, so always run
+ * a subshell using fork/exec. Bound to "C-C", and used
+ * as a subcommand by "C-Z". (daveb)
+ *
+ * Returns 0 if the shell executed OK, something else if
+ * we couldn't start shell or it exited badly.
+ */
+spawncli(f, n, k)
+{
+	extern char	*strrchr();
+	register int	pid;
+	register int	wpid;
+	register int	(*oqsig)();
+	register int	(*oisig)();
+	int		status;
+	int		errp = FALSE;
+
+	if (shellp == NULL) {
+		shellp = getenv("SHELL");
+		if (shellp == NULL)
+			shellp = getenv("shell");
+		if (shellp == NULL)
+			shellp = "/bin/sh";	/* Safer.		*/
+		shname = strrchr( shellp, '/' ); 
+		shname = shname ? shname++ : shellp;
+		
+	}
+	ttcolor(CTEXT);
+	ttnowindow();
+	ttmove(nrow-1, 0);
+	if (epresf != FALSE) {
+		tteeol();
+		epresf = FALSE;
+	}
+	ttclose();
+	sgarbf = TRUE;				/* Force repaint.	*/
+	oqsig = signal(SIGQUIT, SIG_IGN);
+	oisig = signal(SIGINT,  SIG_IGN);
+	if ((pid=fork()) == 0) {
+		execlp(shellp, shname, "-i", NULL);
+		_exit(1);			/* Should do better!	*/
+	}
+	else if (pid > 0) {
+		while ((wpid=wait(&status))>=0 && wpid!=pid)
+			;
+	}
+	else errp = TRUE;
+
+	signal(SIGINT,  oisig);
+	ttopen();
+	if(errp)
+		eprintf("Failed to create process");
+
+	return ( errp | status );
+}
+SHAR_EOF
+chmod +x 'spawn.c'
+fi # end of overwriting check
+if test -f 'sysdef.h'
+then
+	echo shar: will not over-write existing file "'sysdef.h'"
+else
+cat << \SHAR_EOF > 'sysdef.h'
+/*
+ * Name:	MicroEMACS
+ *		Ultrix-32 system header file same for System V.
+ * Version:	29
+ * Last edit:	05-Feb-86
+ * By:		rex::conroy
+ *		decvax!decwrl!dec-rhea!dec-rex!conroy
+ */
+#define	PCC	1			/* "[]" gets an error.		*/
+#define	KBLOCK	8192			/* Kill grow.			*/
+#define	GOOD	0			/* Good exit status.		*/
+
+/*
+ * Macros used by the buffer name making code.
+ * Start at the end of the file name, scan to the left
+ * until BDC1 (or BDC2, if defined) is reached. The buffer
+ * name starts just to the right of that location, and
+ * stops at end of string (or at the next BDC3 character,
+ * if defined). BDC2 and BDC3 are mainly for VMS.
+ */
+#define	BDC1	'/'			/* Buffer names.		*/
+SHAR_EOF
+chmod +x 'sysdef.h'
+fi # end of overwriting check
+if test -f 'ttyio.c'
+then
+	echo shar: will not over-write existing file "'ttyio.c'"
+else
+cat << \SHAR_EOF > 'ttyio.c'
+/*
+ * Name:	MicroEMACS
+ *		System V terminal I/O.
+ * Version:	0
+ * Last edit:	17-Apr-86
+ * By:		gonzo!daveb
+ *		{sun, amdahl, mtxinu}!rtech!gonzo!daveb
+ *
+ * The functions in this file
+ * negotiate with the operating system for
+ * keyboard characters, and write characters to
+ * the display in a barely buffered fashion.
+ *
+ * This version goes along with tty/termcap/tty.c.
+ * Terminal size is determined there, rather than here, and
+ * this does not open the termcap file
+ */
+#include	"def.h"
+
+#include	<sys/types.h>
+#include	<fcntl.h>
+#include	<termio.h>
+
+#define	NOBUF	512			/* Output buffer size.		*/
+
+char	obuf[NOBUF];			/* Output buffer.		*/
+int	nobuf;				/* buffer count			*/
+
+static struct termio	ot;		/* entry state of the terminal	*/
+static struct termio	nt;		/* editor's terminal state	*/
+
+static int ttyactivep = FALSE;		/* terminal in editor mode?	*/
+static int ttysavedp = FALSE;		/* terminal state saved?	*/
+
+int	nrow;				/* Terminal size, rows.		*/
+int	ncol;				/* Terminal size, columns.	*/
+
+/*
+ * This function gets called once, to set up
+ * the terminal channel.  This version turns off flow
+ * control.  This may be wrong for your system, but no
+ * good solution has really been found (daveb).
+ */
+ttopen()
+{
+	register char	*cp;
+	extern char	*getenv();
+
+	if (ttyactivep)
+		return;
+
+	if( !ttysavedp )
+	{
+		if (ioctl(0, TCGETA, &ot) < 0)
+			abort();
+		nt = ot;		/* save entry state		*/
+		nt.c_cc[VMIN] = 1;	/* one character read is OK	*/
+		nt.c_cc[VTIME] = 0;	/* Never time out.		*/
+		nt.c_iflag |= IGNBRK;
+		nt.c_iflag &= ~( ICRNL | INLCR | ISTRIP | IXON | IXOFF );
+		nt.c_oflag &= ~OPOST;
+		nt.c_cflag |= CS8;	/* allow 8th bit on input	*/
+		nt.c_cflag &= ~PARENB;	/* Don't check parity		*/
+		nt.c_lflag &= ~( ECHO | ICANON | ISIG );
+		ttysavedp = TRUE;
+	}
+	
+	if (ioctl(0, TCSETAF, &nt) < 0)
+		abort();
+
+	/* This really belongs in tty/termcap... */
+
+	if ((cp=getenv("TERMCAP")) == NULL
+	|| (nrow=getvalue(cp, "li")) <= 0
+	|| (ncol=getvalue(cp, "co")) <= 0) {
+		nrow = 24;
+		ncol = 80;
+	}
+	if (nrow > NROW)			/* Don't crash if the	*/
+		nrow = NROW;			/* termcap entry is	*/
+	if (ncol > NCOL)			/* too big.		*/
+		ncol = NCOL;
+
+	ttyactivep = TRUE;
+}
+
+/*
+ * This routine scans a string, which is
+ * actually the return value of a getenv call for the TERMCAP
+ * variable, looking for numeric parameter "name". Return the value
+ * if found. Return -1 if not there. Assume that "name" is 2
+ * characters long. This limited use of the TERMCAP lets us find
+ * out the size of a window on the X display.
+ */
+getvalue(cp, name)
+register char	*cp;
+register char	*name;
+{
+	for (;;) {
+		while (*cp!=0 && *cp!=':')
+			++cp;
+		if (*cp++ == 0)			/* Not found.		*/
+			return (-1);
+		if (cp[0]==name[0] && cp[1]==name[1] && cp[2]=='#')
+			return (atoi(cp+3));	/* Stops on ":".	*/
+	}
+}
+
+/*
+ * This function gets called just
+ * before we go back home to the shell. Put all of
+ * the terminal parameters back.
+ */
+ttclose()
+{
+	if(!ttysavedp || !ttyactivep)
+		return;
+	ttflush();
+	if (ioctl(0, TCSETAF, &ot) < 0)
+		abort();
+	ttyactivep = FALSE;
+}
+
+/*
+ * Write character to the display.
+ * Characters are buffered up, to make things
+ * a little bit more efficient.
+ */
+ttputc(c)
+{
+	if (nobuf >= NOBUF)
+		ttflush();
+	obuf[nobuf++] = c;
+}
+
+/*
+ * Flush output.
+ */
+ttflush()
+{
+	if (nobuf != 0) {
+		write(1, obuf, nobuf);
+		nobuf = 0;
+	}
+}
+
+/*
+ * Read character from terminal.
+ * All 8 bits are returned, so that you can use
+ * a multi-national terminal.
+ */
+ttgetc()
+{
+	char	buf[1];
+
+	while (read(0, &buf[0], 1) != 1)
+		;
+	return (buf[0] & 0xFF);
+}
+SHAR_EOF
+chmod +x 'ttyio.c'
+fi # end of overwriting check
+cd ..
+cd ..
+if test ! -d 'tty'
+then
+	mkdir 'tty'
+fi
+cd 'tty'
+if test ! -d '7300'
+then
+	mkdir '7300'
+fi
+cd '7300'
+if test -f 'tty.c'
+then
+	echo shar: will not over-write existing file "'tty.c'"
+else
+cat << \SHAR_EOF > 'tty.c'
+/*
+ * Name:	MicroEMACS
+ *		AT&T UNIX PC 7300/3b1 terminal display
+ * Version:	29
+ * Last edit:	25-Apr-86
+ * By:		{sun, amdahl, mtxinu, cbosgd}!rtech!daveb
+ *
+ * This is nearly the ansi/tty.c, except the 7300 has broken scroll
+ * region support with index and reverse index.  Instead we do it
+ * with parameterized insert/delete lines.
+ *
+ * It also has "smart" support for the window system.
+ */
+#include	"def.h"
+
+#define	BEL	0x07			/* BEL character.		*/
+#define	ESC	0x1B			/* ESC character.		*/
+#define	LF	0x0A			/* Line feed.			*/
+
+extern	int	ttrow;
+extern	int	ttcol;
+extern	int	tttop;
+extern	int	ttbot;
+extern	int	tthue;
+
+int	tceeol	=	3;		/* Costs, ANSI display.		*/
+int	tcinsl	= 	17;
+int	tcdell	=	16;
+
+/*
+ * Initialize the terminal when the editor
+ * gets started up. This is a no-op on the ANSI
+ * display.
+ */
+ttinit()
+{
+}
+
+/*
+ * Clean up the terminal, in anticipation of
+ * a return to the command interpreter. This is a no-op
+ * on the ANSI display. On the SCALD display, it sets the
+ * window back to half screen scrolling. Perhaps it should
+ * query the display for the increment, and put it
+ * back to what it was.
+ */
+tttidy()
+{
+}
+
+/*
+ * Move the cursor to the specified
+ * origin 0 row and column position. Try to
+ * optimize out extra moves; redisplay may
+ * have left the cursor in the right
+ * location last time!
+ */
+ttmove(row, col)
+{
+	if (ttrow!=row || ttcol!=col) {
+		ttputc(ESC);
+		ttputc('[');
+		asciiparm(row+1);
+		ttputc(';');
+		asciiparm(col+1);
+		ttputc('H');
+		ttrow = row;
+		ttcol = col;
+	}
+}
+
+/*
+ * Erase to end of line.
+ */
+tteeol()
+{
+	ttputc(ESC);
+	ttputc('[');
+	ttputc('K');
+}
+
+/*
+ * Erase to end of page.
+ */
+tteeop()
+{
+	ttputc(ESC);
+	ttputc('[');
+	ttputc('J');
+}
+
+/*
+ * Make a noise.
+ */
+ttbeep()
+{
+	ttputc(BEL);
+	ttflush();
+}
+
+/*
+ * Convert a number to decimal
+ * ascii, and write it out. Used to
+ * deal with numeric arguments.
+ */
+asciiparm(n)
+register int	n;
+{
+	register int	q;
+
+	q = n/10;
+	if (q != 0)
+		asciiparm(q);
+	ttputc((n%10) + '0');
+}
+
+/*
+ * Insert a block of blank lines onto the
+ * screen, using parameterized insert and delete line commands.
+ *
+ * Deal with the one
+ * line case, which is a little bit special, with special
+ * case code. Put all of the back index commands out
+ * in a block. The SCALDstation loses the position
+ * of the cursor.
+ */
+ttinsl(row, bot, nchunk)
+{
+	if (row == bot) {			/* Funny case.		*/
+		if (nchunk != 1)
+			abort();
+		ttmove(row, 0);
+		tteeol();
+	} else {				/* General case.	*/
+		ttwindow(row, bot);
+
+		/* delete the lines that are going away */
+		ttmove(bot + 1 - nchunk , 0);
+		ttputc(ESC);
+		ttputc('[');
+		asciiparm( nchunk );
+		ttputc('M');
+
+		/* add the lines */
+		ttmove(row, 0);
+		ttputc(ESC);
+		ttputc('[');
+		asciiparm( nchunk );
+		ttputc('L');
+	}
+}
+
+/*
+ * Delete a block of lines, with the uppermost
+ * line at row "row", in a screen slice that extends to
+ * row "bot". The "nchunk" is the number of lines that have
+ * to be deleted. Watch for the pathalogical 1 line case.
+ * Done using delete and insert line commands.
+ */
+ttdell(row, bot, nchunk)
+{
+	if (row == bot) {			/* Funny case.		*/
+		if (nchunk != 1)
+			abort();
+		ttmove(row, 0);
+		tteeol();
+	} else {				/* General case.	*/
+
+		/* delete the lines that are going away */
+		ttmove(row, 0);
+		ttputc(ESC);
+		ttputc('[');
+		asciiparm( nchunk );
+		ttputc('M');
+
+		/* insert new lines to fill the empty space */
+		ttmove(bot + 1 - nchunk , 0);
+		ttputc(ESC);
+		ttputc('[');
+		asciiparm( nchunk );
+		ttputc('L');
+
+	}
+}
+
+/*
+ * This routine sets the scrolling window
+ * on the display to go from line "top" to line
+ * "bot" (origin 0, inclusive). The caller checks
+ * for the pathalogical 1 line scroll window that
+ * doesn't work right, and avoids it. The "ttrow"
+ * and "ttcol" variables are set to a crazy value
+ * to ensure that the next call to "ttmove" does
+ * not turn into a no-op (the window adjustment
+ * moves the cursor).
+ */
+ttwindow(top, bot)
+{
+	/* No-op on 7300 */
+}
+
+/*
+ * Switch to full screen scroll. This is
+ * used by "spawn.c" just before is suspends the
+ * editor, and by "display.c" when it is getting ready
+ * to exit. This function gets to full screen scroll
+ * by sending a DECSTBM with default parameters, but
+ * I think that this is wrong. The SRM seems to say
+ * that the default for Pb is 24, not the size of the
+ * screen, which seems really dumb. Do I really have
+ * to read the size of the screen as in "ttresize"
+ * to do this right?
+ */
+ttnowindow()
+{
+	/* No-op on 7300 */
+}
+
+/*
+ * Set the current writing color to the
+ * specified color. Watch for color changes that are
+ * not going to do anything (the color is already right)
+ * and don't send anything to the display.
+ * The rainbow version does this in putline.s on a
+ * line by line basis, so don't bother sending
+ * out the color shift.
+ */
+ttcolor(color)
+register int	color;
+{
+	if (color != tthue) {
+		if (color == CTEXT) {		/* Normal video.	*/
+			ttputc(ESC);
+			ttputc('[');
+			ttputc('m');
+		} else if (color == CMODE) {	/* Reverse video.	*/
+			ttputc(ESC);
+			ttputc('[');
+			ttputc('7');
+			ttputc('m');
+		}
+		tthue = color;			/* Save the color.	*/
+	}
+}
+
+/*
+ * This routine is called by the
+ * "refresh the screen" command to try and resize
+ * the display. The new size, which must be deadstopped
+ * to not exceed the NROW and NCOL limits, it stored
+ * back into "nrow" and "ncol". Display can always deal
+ * with a screen NROW by NCOL. Look in "window.c" to
+ * see how the caller deals with a change.
+ */
+ttresize()
+{
+# if 0
+	register int	c;
+	register int	newnrow;
+	register int	newncol;
+
+	else if (newnrow > NROW)
+		newnrow = NROW;
+	if (newncol < 1)
+		newncol = 1;
+	else if (newncol > NCOL)
+		newncol = NCOL;
+	nrow = newnrow;
+	ncol = newncol;
+# endif
+}
+SHAR_EOF
+chmod +x 'tty.c'
+fi # end of overwriting check
+if test -f 'ttydef.h'
+then
+	echo shar: will not over-write existing file "'ttydef.h'"
+else
+cat << \SHAR_EOF > 'ttydef.h'
+/*
+ * Name:	MicroEMACS
+ *		AT&T UNIX PC 7300/3b1 terminal header file.
+ * Version:	29
+ * Last edit:	05-Feb-86
+ * By:		rex::conroy
+ *		decvax!decwrl!dec-rhea!dec-rex!conroy
+ */
+#define	GOSLING	1			/* Compile in fancy display.	*/
+#define	MEMMAP	0			/* Not memory mapped video.	*/
+
+/*
+ * 7300 Maximums.
+ */
+#define	NROW	25			/* Rows.			*/
+#define	NCOL	80			/* Columns.			*/
+SHAR_EOF
+chmod +x 'ttydef.h'
+fi # end of overwriting check
+if test -f 'ttykbd.c'
+then
+	echo shar: will not over-write existing file "'ttykbd.c'"
+else
+cat << \SHAR_EOF > 'ttykbd.c'
+/*
+ * Name:	MicroEMACS
+ * 		AT&T UNIX PC 7300/3b1 terminal keyboard.
+ * Version:	29
+ * Last edit:	25-Apr-86
+ * By:		{sun, amdahl, mtxinu, cbosgd}!rtech!daveb
+ *
+ * This is presently a vanilla implementation, but may in time
+ * support function keys and mouse mapping.
+ */
+#include	"def.h"
+
+/*
+ * Names for the keys with basic keycode
+ * between KFIRST and KLAST (inclusive). This is used by
+ * the key name routine in "kbd.c".
+ *
+ * It is presently unimplemented on the 7300 (daveb).
+ */
+char	*keystrings[] = {
+
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL
+};
+
+
+/*
+ * Read in a key, doing the low level mapping
+ * of ASCII code to 11 bit code.
+ */
+getkbd()
+{
+	register int	c;
+	register int	n;
+
+	c = ttgetc();
+	if (c == Esc) {
+		c = ttgetc();
+		if (ISLOWER(c) != FALSE)	/* Copy the standard	*/
+			c = TOUPPER(c);		/* META code.		*/
+		if (c>=0x00 && c<=0x1F)
+			c = KCTRL | (c+'@');
+		return (KMETA | c);
+	}
+	return (c);
+}
+
+
+/*
+ * Terminal specific keymap initialization.
+ */
+ttykeymapinit()
+{
+}
+SHAR_EOF
+chmod +x 'ttykbd.c'
+fi # end of overwriting check
+cd ..
+cd ..
+#	End of shell archive
+exit 0
+
+------------------------------
+
+End of Digest
+******************************

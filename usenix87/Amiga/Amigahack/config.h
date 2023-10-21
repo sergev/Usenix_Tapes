@@ -1,0 +1,1733 @@
+#file config.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+#ifndef CONFIG   /* make sure the compiler doesnt see the typedefs twice */
+
+#define CONFIG
+#define VAX      /* to get proper struct initialization */
+#define BSD      /* delete this line on System V */
+/* #define STUPID */   /* avoid some complicated expressions if
+			your C compiler chokes on them */
+
+#define HELP    "help"
+#define HACKNAME "hack"
+#define HACKDIR "HACK_Game:"
+#define HACKCSET "characters"
+#define WIZARD  "wizard"/* the person allowed to use the -w option */
+#define NEWS   "news"   /* the file containing the latest hack news */
+#define FMASK   0660   /* file creation mask */
+
+/* #define register */
+#define OPTIONS      /* do not delete the 'o' command */
+/* #define SHELL        /* do not delete the '!' command */
+#define TRACK      /* do not delete the tracking properties of monsters */
+
+/* size of terminal screen is (ROWNO+2) by COLNO */
+#define COLNO   77
+#define ROWNO   21
+
+/*
+ * small signed integers (8 bits suffice)
+ *   typedef   char   schar;
+ * will do when you have signed characters; otherwise use
+ *   typedef   short int schar;
+ */
+typedef   char   schar;
+
+/*
+ * small unsigned integers (8 bits suffice - but 7 bits do not)
+ * - these are usually object types; be careful with inequalities! -
+ *   typedef   unsigned char   uchar;
+ * will be satisfactory if you have an "unsigned char" type; otherwise use
+ *   typedef unsigned short int uchar;
+ */
+typedef   unsigned char   uchar;
+
+/*
+ * small integers in the range 0 - 127, usually coordinates
+ * although they are nonnegative they must not be declared unsigned
+ * since otherwise comparisons with signed quantities are done incorrectly
+ * (thus, in fact, you could make xchar equal to schar)
+ */
+typedef char   xchar;
+typedef   xchar   boolean;      /* 0 or 1 */
+#define   TRUE   1
+#define   FALSE   0
+
+/*
+ * Declaration of bitfields in various structs; if your C compiler
+ * doesnt handle bitfields well, e.g., if it is unable to initialize
+ * structs containing bitfields, then you might use
+ *   #define Bitfield(x,n)   xchar x
+ * since the bitfields used never have more than 7 bits. (Most have 1 bit.)
+ */
+/* #define   Bitfield(x,n)   unsigned x:n */
+#define Bitfield(x,n)   xchar x
+
+#endif CONFIG
+#file date.h
+char datestring[] = "Sunday Jan 5, 1986";
+#file def.edog.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+struct edog {
+
+	long hungrytime;	/* at this time dog gets hungry */
+
+	long eattime;		/* dog is eating */
+
+	long droptime;		/* moment dog dropped object */
+
+	unsigned dropdist;		/* dist of drpped obj from @ */
+
+	unsigned apport;		/* amount of training */
+
+	long whistletime;		/* last time he whistled */
+
+};
+
+#define	EDOG(mp)	((struct edog *)(&(mp->mextra[0])))
+
+#file def.eshk.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+#define   BILLSZ   200
+struct bill_x {
+   unsigned bo_id;
+   Bitfield(useup,1);
+   Bitfield(bquan,7);
+   unsigned price;      /* price per unit */
+};
+
+struct eshk {
+   long int robbed;   /* amount stolen by most recent customer */
+   schar shoproom;      /* index in rooms; set by inshop() */
+   coord shk;      /* usual position shopkeeper */
+   coord shd;      /* position shop door */
+   int billct;
+   struct bill_x bill[BILLSZ];
+   int visitct;      /* nr of visits by most recent customer */
+   char customer[PL_NSIZ];   /* most recent customer */
+   char shknam[PL_NSIZ];
+};
+#file def.func_tab.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+struct func_tab {
+
+	char f_char;
+
+	int (*f_funct)();
+
+};
+
+
+
+extern struct func_tab list[];
+
+#file def.gen.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+/* def.gen.h version 1.0.1: added ONCE flag */
+
+struct gen {
+   struct gen *ngen;
+   xchar gx,gy;
+   unsigned gflag;      /* 037: trap type; 040: SEEN flag */
+			/* 0100: ONCE only */
+#define	TRAPTYPE	037
+#define	SEEN	040
+#define	ONCE	0100
+};
+extern struct gen *fgold, *ftrap;
+struct gen *g_at();
+#define newgen()   (struct gen *) alloc(sizeof(struct gen))
+#file def.monst.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+struct monst {
+   struct monst *nmon;
+   struct permonst *data;
+   unsigned m_id;
+   xchar mx,my;
+   xchar mdx,mdy;      /* if mdispl then pos where last displayed */
+#define   MTSZ   4
+   coord mtrack[MTSZ];   /* monster track */
+   schar mhp,orig_hp;
+   char mimic;      /* undetected mimic - this is its symbol */
+   Bitfield(mdispl,1);   /* mdx,mdy valid */
+   Bitfield(minvis,1);   /* invisible */
+   Bitfield(cham,1);   /* shape-changer */
+   Bitfield(mhide,1);   /* hides beneath objects */
+   Bitfield(mundetected,1);   /* not seen in present hiding place */
+   Bitfield(mspeed,2);
+   Bitfield(msleep,1);
+   Bitfield(mfroz,1);
+   Bitfield(mconf,1);
+   Bitfield(mflee,1);
+   Bitfield(mcan,1);   /* has been cancelled */
+   Bitfield(mtame,1);      /* implies peaceful */
+   Bitfield(mpeaceful,1);   /* does not attack unprovoked */
+   Bitfield(isshk,1);   /* is shopkeeper */
+   Bitfield(isgd,1);   /* is guard */
+   Bitfield(mcansee,1);   /* cansee 1, temp.blinded 0, blind 0 */
+   Bitfield(mblinded,7);   /* cansee 0, temp.blinded n, blind 0 */
+   Bitfield(mtrapped,1);   /* trapped in a pit or bear trap */
+   Bitfield(mnamelth,6);   /* length of name (following mxlth) */
+#ifndef NOWORM
+   Bitfield(wormno,5);   /* at most 31 worms on any level */
+#endif NOWORM
+   unsigned mtrapseen;   /* bitmap of traps we've been trapped in */
+   long mlstmv;   /* prevent two moves at once */
+   struct obj *minvent;
+   long mgold;
+   unsigned mxlth;      /* length of following data */
+   /* in order to prevent alignment problems mextra should
+      be (or follow) a long int */
+   long mextra[1];      /* monster dependent info */
+};
+
+#define newmonst(xl)   (struct monst *) alloc((unsigned)(xl) + sizeof(struct monst))
+
+extern struct monst *fmon;
+#ifndef MKLEV
+extern struct monst *fallen_down;
+#endif MKLEV
+struct monst *m_at();
+
+/* these are in mspeed */
+#define MSLOW 1 /* slow monster */
+#define MFAST 2 /* speeded monster */
+
+#define   NAME(mtmp)   (((char *) mtmp->mextra) + mtmp->mxlth)
+#file def.obj.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+struct obj {
+
+	struct obj *nobj;
+
+	unsigned o_id;
+
+	unsigned o_cnt_id;		/* id of container object is in */
+
+	xchar ox,oy;
+
+	xchar odx,ody;
+
+	uchar otyp;
+
+	uchar owt;
+
+	unsigned quan;	/* small in general but large in case of gold */
+
+	schar spe;
+
+	char olet;
+
+	Bitfield(oinvis,1);
+
+	Bitfield(odispl,1);
+
+	Bitfield(known,1);	/* exact nature known */
+
+	Bitfield(dknown,1);	/* color or text known */
+
+	Bitfield(cursed,1);
+
+	Bitfield(unpaid,1);	/* on some bill */
+
+	Bitfield(rustfree,1);
+
+	Bitfield(onamelth,6);
+
+	long age;	/* creation date */
+
+	long owornmask;
+
+#define	W_ARM	01L
+
+#define	W_ARM2	02L
+
+#define	W_ARMH	04L
+
+#define	W_ARMS	010L
+
+#define	W_ARMG	020L
+
+#define	W_ARMOR		(W_ARM | W_ARM2 | W_ARMH | W_ARMS | W_ARMG)
+
+#define	W_RINGL	010000L	/* make W_RINGL = RING_LEFT (see uprop) */
+
+#define	W_RINGR	020000L
+
+#define	W_RING		(W_RINGL | W_RINGR)
+
+#define	W_WEP	01000L
+
+#define	W_BALL	02000L
+
+#define	W_CHAIN	04000L
+
+	long oextra[1];
+
+};
+
+
+
+extern struct obj *fobj;
+
+
+
+#define newobj(xl)	(struct obj *) alloc((unsigned)(xl) + sizeof(struct obj))
+
+#define	ONAME(otmp)	((char *) otmp->oextra)
+
+#file def.objclass.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+/* definition of a class of objects */
+
+
+
+struct objclass {
+
+	char *oc_name;		/* actual name */
+
+	char *oc_descr;		/* description when name unknown */
+
+	char *oc_uname;		/* called by user */
+
+	Bitfield(oc_name_known,1);
+
+	Bitfield(oc_merge,1);	/* merge otherwise equal objects */
+
+	char oc_olet;
+
+	schar oc_prob;		/* probability for mkobj() */
+
+	schar oc_delay;		/* delay when using such an object */
+
+	uchar oc_weight;
+
+	schar oc_oc1, oc_oc2;
+
+	int oc_oi;
+
+#define	nutrition	oc_oi	/* for foods */
+
+#define	a_ac		oc_oc1	/* for armors */
+
+#define	a_can		oc_oc2	/* for armors */
+
+#define bits		oc_oc1	/* for wands and rings */
+
+				/* wands */
+
+#define		NODIR		1
+
+#define		IMMEDIATE	2
+
+#define		RAY		4
+
+				/* rings */
+
+#define		SPEC		1	/* +n is meaningful */
+
+#define	wldam		oc_oc1	/* for weapons */
+
+#define	wsdam		oc_oc2	/* for weapons */
+
+#define	g_val		oc_oi	/* for gems: value on exit */
+
+};
+
+
+
+extern struct objclass objects[];
+
+
+
+/* definitions of all object-symbols */
+
+
+
+#define	ILLOBJ_SYM	'\\'
+
+#define	AMULET_SYM	'"'
+
+#define	FOOD_SYM	'%'
+
+#define	WEAPON_SYM	')'
+
+#define	TOOL_SYM	'('
+
+#define	BALL_SYM	'0'
+
+#define	CHAIN_SYM	'_'
+
+#define	ROCK_SYM	'`'
+
+#define	ARMOR_SYM	'['
+
+#define	POTION_SYM	'!'
+
+#define	SCROLL_SYM	'?'
+
+#define	WAND_SYM	'/'
+
+#define	RING_SYM	'='
+
+#define	GEM_SYM		'*'
+
+/* Other places with explicit knowledge of object symbols:
+
+ * ....shk.c:	char shtypes[] = "=/)%?![";
+
+ * mklev.c:	"=/)%?![<>"
+
+ * hack.mkobj.c:	char mkobjstr[] = "))[[!!!!????%%%%/=**";
+
+ * hack.apply.c:   otmp = getobj("0#%", "put in");
+
+ * hack.eat.c:     otmp = getobj("%", "eat");
+
+ * hack.invent.c:          if(index("!%?[)=*(0/\"", sym)){
+
+ * hack.invent.c:    || index("%?!*",otmp->olet))){
+
+ */
+
+#file def.objects.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+/* objects have letter " % ) ( 0 _ [ ! ? / = * */
+
+#include "def.objclass.h"
+
+#define	NULL	(char *)0
+
+
+
+struct objclass objects[] = {
+
+
+
+	{ "strange object", NULL, NULL, 1, 0,
+
+		ILLOBJ_SYM, 0, 0, 0, 0, 0, 0 },
+
+	{ "amulet of Yendor", NULL, NULL, 1, 0,
+
+		AMULET_SYM, 100, 0, 2, 0, 0, 0 },
+
+
+
+#define	FOOD(name,prob,delay,weight,nutrition)	{ name, NULL, NULL, 1, 1,\
+
+		FOOD_SYM, prob, delay, weight, 0, 0, nutrition }
+
+
+
+/* dog eats foods 0-4 but prefers 1 above 0,2,3,4 */
+
+/* food 4 can be read */
+
+/* food 5 improves your vision */
+
+/* food 6 makes you stronger (like Popeye) */
+
+/* foods CORPSE=15 up to CORPSE+52 are cadavers */
+
+
+
+	FOOD("food ration", 	50, 5, 4, 800),
+
+	FOOD("tripe ration",	20, 1, 2, 200),
+
+	FOOD("pancake",		3, 1, 1, 200),
+
+	FOOD("dead lizard",	3, 0, 1, 40),
+
+	FOOD("fortune cookie",	7, 0, 1, 40),
+
+	FOOD("carrot",		2, 0, 1, 50),
+
+	FOOD("tin",		7, 0, 1, 0),
+
+	FOOD("orange",		1, 0, 1, 80),
+
+	FOOD("apple",		1, 0, 1, 50),
+
+	FOOD("pear",		1, 0, 1, 50),
+
+	FOOD("melon",		1, 0, 1, 100),
+
+	FOOD("banana",		1, 0, 1, 80),
+
+	FOOD("candy bar",	1, 0, 1, 100),
+
+	FOOD("egg",		1, 0, 1, 80),
+
+	FOOD("clove of garlic",	1, 0, 1, 40),
+
+
+
+	FOOD("dead human",	0, 4, 40, 400),
+
+	FOOD("dead giant ant",	0, 1, 3, 30),
+
+	FOOD("dead giant bat",	0, 1, 3, 30),
+
+	FOOD("dead centaur",	0, 5, 50, 500),
+
+	FOOD("dead dragon",	0, 15, 150, 1500),
+
+	FOOD("dead floating eye",	0, 1, 1, 10),
+
+	FOOD("dead freezing sphere",	0, 1, 1, 10),
+
+	FOOD("dead gnome",	0, 1, 10, 100),
+
+	FOOD("dead hobgoblin",	0, 2, 20, 200),
+
+	FOOD("dead stalker",	0, 4, 40, 400),
+
+	FOOD("dead jackal",	0, 1, 10, 100),
+
+	FOOD("dead kobold",	0, 1, 10, 100),
+
+	FOOD("dead leprechaun",	0, 4, 40, 400),
+
+	FOOD("dead mimic",	0, 4, 40, 400),
+
+	FOOD("dead nymph",	0, 4, 40, 400),
+
+	FOOD("dead orc",	0, 2, 20, 200),
+
+	FOOD("dead purple worm",	0, 7, 70, 700),
+
+	FOOD("dead quasit",	0, 2, 20, 200),
+
+	FOOD("dead rust monster",	0, 5, 50, 500),
+
+	FOOD("dead snake",	0, 1, 10, 100),
+
+	FOOD("dead troll",	0, 4, 40, 400),
+
+	FOOD("dead umber hulk",	0, 5, 50, 500),
+
+	FOOD("dead vampire",	0, 4, 40, 400),
+
+	FOOD("dead wraith",	0, 1, 1, 10),
+
+	FOOD("dead xorn",	0, 7, 70, 700),
+
+	FOOD("dead yeti",	0, 7, 70, 700),
+
+	FOOD("dead zombie",	0, 1, 3, 30),
+
+	FOOD("dead acid blob",	0, 1, 3, 30),
+
+	FOOD("dead giant beetle",	0, 1, 1, 10),
+
+	FOOD("dead cockatrice",	0, 1, 3, 30),
+
+	FOOD("dead dog",	0, 2, 20, 200),
+
+	FOOD("dead ettin",	0, 1, 3, 30),
+
+	FOOD("dead fog cloud",	0, 1, 1, 10),
+
+	FOOD("dead gelatinous cube",	0, 1, 10, 100),
+
+	FOOD("dead homunculus",	0, 2, 20, 200),
+
+	FOOD("dead imp",	0, 1, 1, 10),
+
+	FOOD("dead jaguar",	0, 3, 30, 300),
+
+	FOOD("dead killer bee",	0, 1, 1, 10),
+
+	FOOD("dead leocrotta",	0, 5, 50, 500),
+
+	FOOD("dead minotaur",	0, 7, 70, 700),
+
+	FOOD("dead nurse",	0, 4, 40, 400),
+
+	FOOD("dead owlbear",	0, 7, 70, 700),
+
+	FOOD("dead piercer",	0, 2, 20, 200),
+
+	FOOD("dead quivering blob",	0, 1, 10, 100),
+
+	FOOD("dead giant rat",	0, 1, 3, 30),
+
+	FOOD("dead giant scorpion",	0, 1, 10, 100),
+
+	FOOD("dead tengu",	0, 3, 30, 300),
+
+	FOOD("dead unicorn",	0, 3, 30, 300),
+
+	FOOD("dead violet fungi",	0, 1, 10, 100),
+
+	FOOD("dead long worm",	0, 5, 50, 500),
+
+/* %% wt of long worm should be proportional to its length */
+
+	FOOD("dead xan",	0, 3, 30, 300),
+
+	FOOD("dead yellow light",	0, 1, 1, 10),
+
+	FOOD("dead zruty",	0, 6, 60, 600),
+
+
+
+/* weapons ... - ROCK come several at a time */
+
+/* weapons ... - (ROCK-1) are shot using idem+(BOW-ARROW) */
+
+/* weapons AXE, SWORD, THSWORD are good for worm-cutting */
+
+/* weapons AXE, DAGGER, CRYSKNIFE are good for tin-opening */
+
+#define WEAPON(name,prob,wt,ldam,sdam)	{ name, NULL, NULL, 1, 0 /*%%*/,\
+
+		WEAPON_SYM, prob, 0, wt, ldam, sdam, 0 }
+
+
+
+	WEAPON("arrow",		7, 0, 6, 6),
+
+	WEAPON("sling bullet",	7, 0, 4, 6),
+
+	WEAPON("crossbow bolt",	7, 0, 4, 6),
+
+	WEAPON("dart",		7, 0, 3, 2),
+
+	WEAPON("rock",		6, 1, 3, 3),
+
+	WEAPON("boomerang",	2, 3, 9, 9),
+
+	WEAPON("mace",		9, 3, 6, 7),
+
+	WEAPON("axe",		6, 3, 6, 4),
+
+	WEAPON("flail",		6, 3, 6, 5),
+
+	WEAPON("long sword",	8, 3, 8, 12),
+
+	WEAPON("two handed sword",	6, 4, 10, 6),
+
+	WEAPON("dagger",	6, 3, 4, 3),
+
+	WEAPON("worm tooth",	0, 4, 2, 2),
+
+	WEAPON("crysknife",	0, 3, 12, 12),
+
+	WEAPON("spear",		6, 3, 6, 8),
+
+	WEAPON("bow",		6, 3, 4, 6),
+
+	WEAPON("sling",		5, 3, 6, 6),
+
+	WEAPON("crossbow",	6, 3, 4, 6),
+
+
+
+	{ "whistle", "whistle", NULL, 0, 0,
+
+		TOOL_SYM, 90, 0, 2, 0, 0, 0 },
+
+	{ "magic whistle", "whistle", NULL, 0, 0,
+
+		TOOL_SYM, 10, 0, 2, 0, 0, 0 },
+
+	{ "expensive camera", NULL, NULL, 1, 1,
+
+		TOOL_SYM, 0, 0, 3, 0, 0, 0 },
+
+	{ "ice box", "large box", NULL, 0, 0,
+
+		TOOL_SYM, 0, 0, 40, 0, 0, 0 },
+
+	{ "heavy iron ball", NULL, NULL, 1, 0,
+
+		BALL_SYM, 100, 0, 20, 0, 0, 0 },
+
+	{ "iron chain", NULL, NULL, 1, 0,
+
+		CHAIN_SYM, 100, 0, 20, 0, 0, 0 },
+
+	{ "enormous rock", NULL, NULL, 1, 0,
+
+		ROCK_SYM, 100, 0, 200 /* > MAX_CARR_CAP */, 0, 0, 0 },
+
+
+
+#define ARMOR(name,prob,delay,ac,can)	{ name, NULL, NULL, 1, 0,\
+
+		ARMOR_SYM, prob, delay, 8, ac, can, 0 }
+
+	ARMOR("helmet",		 3, 1, 9, 0),
+
+	ARMOR("plate mail",		 5, 5, 3, 2),
+
+	ARMOR("splint mail",	 8, 5, 4, 1),
+
+	ARMOR("banded mail",	10, 5, 4, 0),
+
+	ARMOR("chain mail",		10, 5, 5, 1),
+
+	ARMOR("scale mail",		10, 5, 6, 0),
+
+	ARMOR("ring mail",		15, 5, 7, 0),
+
+	/* the armors below do not rust */
+
+	ARMOR("studded leather armor", 13, 3, 7, 1),
+
+	ARMOR("leather armor",	17, 3, 8, 0),
+
+	ARMOR("elven cloak",	 5, 0, 9, 3),
+
+	ARMOR("shield",		 3, 0, 9, 0),
+
+	ARMOR("pair of gloves",	 1, 1, 9, 0),
+
+
+
+#define POTION(name,color)	{ name, color, NULL, 0, 1,\
+
+		POTION_SYM, 0, 0, 2, 0, 0, 0 }
+
+
+
+	POTION("restore strength",	"orange"),
+
+	POTION("booze",		"bubbly"),
+
+	POTION("invisibility",	"glowing"),
+
+	POTION("fruit juice",	"smoky"),
+
+	POTION("healing",	"pink"),
+
+	POTION("paralysis",	"puce"),
+
+	POTION("monster detection",	"purple"),
+
+	POTION("object detection",	"yellow"),
+
+	POTION("sickness",	"white"),
+
+	POTION("confusion",	"swirly"),
+
+	POTION("gain strength",	"purple-red"),
+
+	POTION("speed",		"ruby"),
+
+	POTION("blindness",	"dark green"),
+
+	POTION("gain level",	"emerald"),
+
+	POTION("extra healing",	"sky blue"),
+
+	POTION("levitation",	"brown"),
+
+	POTION(NULL,	"brilliant blue"),
+
+	POTION(NULL,	"clear"),
+
+	POTION(NULL,	"magenta"),
+
+	POTION(NULL,	"ebony"),
+
+
+
+#define SCROLL(name,text,prob) { name, text, NULL, 0, 1,\
+
+		SCROLL_SYM, prob, 0, 3, 0, 0, 0 }
+
+	SCROLL("enchant armor", "ZELGO MER", 6),
+
+	SCROLL("destroy armor", "JUYED AWK YACC", 5),
+
+	SCROLL("confuse monster", "NR 9", 5),
+
+	SCROLL("scare monster", "XIXAXA XOXAXA XUXAXA", 4),
+
+	SCROLL("blank paper", "READ ME", 3),
+
+	SCROLL("remove curse", "PRATYAVAYAH", 6),
+
+	SCROLL("enchant weapon", "DAIYEN FOOELS", 6),
+
+	SCROLL("damage weapon", "HACKEM MUCHE", 5),
+
+	SCROLL("create monster", "LEP GEX VEN ZEA", 5),
+
+	SCROLL("taming", "PRIRUTSENIE", 1),
+
+	SCROLL("genocide", "ELBIB YLOH",2),
+
+	SCROLL("light", "VERR YED HORRE", 10),
+
+	SCROLL("teleportation", "VENZAR BORGAVVE", 5),
+
+	SCROLL("gold detection", "THARR", 4),
+
+	SCROLL("food detection", "YUM YUM", 1),
+
+	SCROLL("identify", "KERNOD WEL", 18),
+
+	SCROLL("magic mapping", "ELAM EBOW", 5),
+
+	SCROLL("amnesia", "DUAM XNAHT", 3),
+
+	SCROLL("fire", "ANDOVA BEGARIN", 5),
+
+	SCROLL("punishment", "VE FORBRYDERNE", 1),
+
+	SCROLL(NULL, "VELOX NEB", 0),
+
+	SCROLL(NULL, "FOOBIE BLETCH", 0),
+
+	SCROLL(NULL, "TEMOV", 0),
+
+	SCROLL(NULL, "GARVEN DEH", 0),
+
+
+
+#define	WAND(name,metal,prob,flags)	{ name, metal, NULL, 0, 0,\
+
+		WAND_SYM, prob, 0, 3, flags, 0, 0 }
+
+
+
+	WAND("light",	"iridium",		10,	NODIR),
+
+	WAND("secret door detection",	"tin",	5,	NODIR),
+
+	WAND("create monster",	"platinum",	5,	NODIR),
+
+	WAND("wishing",		"glass",	1,	NODIR),
+
+	WAND("striking",	"zinc",		9,	IMMEDIATE),
+
+	WAND("slow monster",	"balsa",	5,	IMMEDIATE),
+
+	WAND("speed monster",	"copper",	5,	IMMEDIATE),
+
+	WAND("undead turning",	"silver",	5,	IMMEDIATE),
+
+	WAND("polymorph",	"brass",	5,	IMMEDIATE),
+
+	WAND("cancellation",	"maple",	5,	IMMEDIATE),
+
+	WAND("teleport monster",	"pine",	5,	IMMEDIATE),
+
+	WAND("make invisible",	"marble",	9,	IMMEDIATE),
+
+	WAND("digging",	"iron",		5,	RAY),
+
+	WAND("magic missile",	"aluminium",	10,	RAY),
+
+	WAND("fire",	"steel",	5,	RAY),
+
+	WAND("sleep",	"curved",	5,	RAY),
+
+	WAND("cold",	"short",	5,	RAY),
+
+	WAND("death",	"long",		1,	RAY),
+
+	WAND(NULL,	"oak",		0,	0),
+
+	WAND(NULL,	"ebony",	0,	0),
+
+	WAND(NULL,	"runed",	0,	0),
+
+
+
+#define	RING(name,stone,spec)	{ name, stone, NULL, 0, 0,\
+
+		RING_SYM, 0, 0, 1, spec, 0, 0 }
+
+
+
+	RING("adornment",	"engagement",	0),
+
+	RING("teleportation",	"wooden",	0),
+
+	RING("regeneration",	"black onyx",	0),
+
+	RING("searching",	"topaz",	0),
+
+	RING("see invisible",	"pearl",	0),
+
+	RING("stealth",		"sapphire",	0),
+
+	RING("levitation",	"moonstone",	0),
+
+	RING("poison resistance", "agate",	0),
+
+	RING("aggravate monster", "tiger eye",	0),
+
+	RING("hunger",		"shining",	0),
+
+	RING("fire resistance",	"gold",		0),
+
+	RING("cold resistance",	"copper",	0),
+
+	RING("protection from shape changers", "diamond", 0),
+
+	RING("conflict",	"jade",		0),
+
+	RING("gain strength",	"ruby",		SPEC),
+
+	RING("increase damage",	"silver",	SPEC),
+
+	RING("protection",	"granite",	SPEC),
+
+	RING("warning",		"wire",		0),
+
+	RING("teleport control", "iron",	0),
+
+	RING(NULL,		"ivory",	0),
+
+	RING(NULL,		"blackened",	0),
+
+
+
+/* gems ************************************************************/
+
+#define	GEM(name,color,prob,gval)	{ name, color, NULL, 0, 1,\
+
+		GEM_SYM, prob, 0, 1, 0, 0, gval }
+
+	GEM("diamond", "blue", 1, 4000),
+
+	GEM("ruby", "red", 1, 3500),
+
+	GEM("sapphire", "blue", 1, 3000),
+
+	GEM("emerald", "green", 1, 2500),
+
+	GEM("turquoise", "green", 1, 2000),
+
+	GEM("aquamarine", "blue", 1, 1500),
+
+	GEM("tourmaline", "green", 1, 1000),
+
+	GEM("topaz", "yellow", 1, 900),
+
+	GEM("opal", "yellow", 1, 800),
+
+	GEM("garnet", "dark", 1, 700),
+
+	GEM("amethyst", "violet", 2, 650),
+
+	GEM("agate", "green", 2, 600),
+
+	GEM("onyx", "white", 2, 550),
+
+	GEM("jasper", "yellowish brown", 2, 500),
+
+	GEM("jade", "green", 2, 450),
+
+	GEM("worthless piece of blue glass", "blue", 20, 0),
+
+	GEM("worthless piece of red glass", "red", 20, 0),
+
+	GEM("worthless piece of yellow glass", "yellow", 20, 0),
+
+	GEM("worthless piece of green glass", "green", 20, 0),
+
+	{ NULL, NULL, NULL, 0, 0, ILLOBJ_SYM, 0, 0, 0, 0, 0, 0 }
+
+};
+
+
+
+char obj_symbols[] = {
+
+	ILLOBJ_SYM, AMULET_SYM, FOOD_SYM, WEAPON_SYM, TOOL_SYM,
+
+	BALL_SYM, CHAIN_SYM, ROCK_SYM, ARMOR_SYM, POTION_SYM, SCROLL_SYM,
+
+	WAND_SYM, RING_SYM, GEM_SYM, 0 };
+
+int bases[sizeof(obj_symbols)];
+
+#file def.permonst.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+struct permonst {
+
+	char *mname,mlet;
+
+	schar mlevel,mmove,ac,damn,damd;
+
+	unsigned pxlth;
+
+};
+
+#file def.trap.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+/* def.trap.h version 1.0.1 - added ONCE flag */
+
+/* various kinds of traps */
+#define BEAR_TRAP	0
+#define	ARROW_TRAP	1
+#define	DART_TRAP	2
+#define TRAPDOOR	3
+#define	TELEP_TRAP	4
+#define PIT 5
+#define SLP_GAS_TRAP	6
+#define	PIERC	7
+#define	MIMIC	8	/* used only in mklev.c */
+/* before adding more trap types, check mfndpos ! */
+/* #define SEEN 040 - trap which has been seen */
+/* #define ONCE 0100 - once only trap */
+#file def.wseg.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+#ifndef NOWORM
+/* worm structure */
+struct wseg {
+   struct wseg *nseg;
+   xchar wx,wy;
+   Bitfield(wdispl,1);
+};
+
+#define newseg()   (struct wseg *) alloc(sizeof(struct wseg))
+#endif NOWORM
+#file hack.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1985. */
+/* hack.h version 1.0.1 - added some flags for HACKOPTIONS */
+
+#include "mklev.h"
+#include "hack.onames.h"
+
+/* #define GRAPHICS 1 */
+
+#define MUP    1
+#define MDOWN  2
+
+#define ON 1
+#define OFF 0
+
+extern struct obj *invent, *uwep, *uarm, *uarm2, *uarmh, *uarms, *uarmg, 
+   *uleft, *uright, *fcobj;
+extern struct obj *uchain;   /* defined iff PUNISHED */
+extern struct obj *uball;   /* defined if PUNISHED */
+struct obj *o_at(), *getobj(), *sobj_at();
+
+struct flag {
+	unsigned ident;		/* social security number for each monster */
+	Bitfield(topl,2);	/* a top line (message) has been printed */
+				/* 0: top line empty; 2: no --More-- reqd. */
+	Bitfield(cbreak,1);	/* in cbreak mode, rogue format */
+	Bitfield(oneline,1);	/* give inventories 1 line at a time */
+	Bitfield(time,1);	/* display elapsed 'time' */
+	Bitfield(nonews,1);	/* suppress news printing */
+	Bitfield(notombstone,1);
+ 	unsigned end_top, end_around;	/* describe desired score list */
+	Bitfield(end_own,1);		/* idem (list all own scores) */
+	Bitfield(no_rest_on_space,1);	/* spaces are ignored */
+	Bitfield(move,1);
+	Bitfield(mv,1);
+	Bitfield(run,3);	/* 0: h (etc), 1: H (etc), 2: fh (etc) */
+				/* 3: FH, 4: ff+, 5: ff-, 6: FF+, 7: FF- */
+	Bitfield(nopick,1);	/* do not pickup objects */
+	Bitfield(echo,1);	/* 1 to echo characters */
+	Bitfield(botl,1);	/* partially redo status line */
+	Bitfield(botlx,1);	/* print an entirely new bottom line */
+	Bitfield(nscrinh,1);	/* inhibit nscr() in pline(); */
+};
+extern struct flag flags;
+
+struct prop {
+#define   TIMEOUT      007777   /* mask */
+#define   LEFT_RING   W_RINGL   /* 010000L */
+#define   RIGHT_RING   W_RINGR   /* 020000L */
+#define   INTRINSIC   040000L
+#define   LEFT_SIDE   LEFT_RING
+#define   RIGHT_SIDE   RIGHT_RING
+#define   BOTH_SIDES   (LEFT_SIDE | RIGHT_SIDE)
+   long p_flgs;
+   int (*p_tofn)();   /* called after timeout */
+};
+
+struct you {
+   xchar ux, uy;
+   schar dx, dy;      /* direction of fast move */
+#ifdef QUEST
+   schar di;      /* direction of FF */
+   xchar ux0, uy0;      /* initial position FF */
+#endif QUEST
+   xchar udisx, udisy;   /* last display pos */
+   char usym;      /* usually '@' */
+   schar uluck;
+   int last_str_turn:3;   /* 0: none, 1: half turn, 2: full turn */
+            /* +: turn right, -: turn left */
+   Bitfield(udispl,1);   /* @ on display */
+   Bitfield(ulevel,5);
+#ifdef QUEST
+   Bitfield(uhorizon,7);
+#endif QUEST
+   Bitfield(utrap,3);   /* trap timeout */
+   Bitfield(utraptype,1);   /* defined if utrap nonzero */
+#define   TT_BEARTRAP   0
+#define   TT_PIT      1
+   Bitfield(uinshop,1);
+
+
+/* perhaps these #define's should also be generated by makedefs */
+#define   TELEPAT      LAST_RING      /* not a ring */
+#define   Telepat      u.uprops[TELEPAT].p_flgs
+#define   FAST      (LAST_RING+1)      /* not a ring */
+#define   Fast      u.uprops[FAST].p_flgs
+#define   CONFUSION   (LAST_RING+2)      /* not a ring */
+#define   Confusion   u.uprops[CONFUSION].p_flgs
+#define   INVIS      (LAST_RING+3)      /* not a ring */
+#define   Invis      u.uprops[INVIS].p_flgs
+#define   GLIB      (LAST_RING+4)      /* not a ring */
+#define   Glib      u.uprops[GLIB].p_flgs
+#define   PUNISHED   (LAST_RING+5)      /* not a ring */
+#define   Punished   u.uprops[PUNISHED].p_flgs
+#define   SICK      (LAST_RING+6)      /* not a ring */
+#define   Sick      u.uprops[SICK].p_flgs
+#define   BLIND      (LAST_RING+7)      /* not a ring */
+#define   Blind      u.uprops[BLIND].p_flgs
+#define   WOUNDED_LEGS   (LAST_RING+8)      /* not a ring */
+#define Wounded_legs   u.uprops[WOUNDED_LEGS].p_flgs
+#define PROP(x) (x-RIN_ADORNMENT)       /* convert ring to index in uprops */
+   Bitfield(umconf,1);
+   char *usick_cause;
+   struct prop uprops[LAST_RING+9];
+
+   Bitfield(uswallow,1);      /* set if swallowed by a monster */
+   Bitfield(uswldtim,4);      /* time you have been swallowed */
+   Bitfield(uhs,3);         /* hunger state - see hack.eat.c */
+   schar ustr,ustrmax;
+   schar udaminc;
+   schar uac;
+   int uhp,uhpmax;
+   long int ugold,ugold0,uexp,urexp;
+   int uhunger;         /* refd only in eat.c and shk.c */
+   int uinvault;
+   struct monst *ustuck;
+   int nr_killed[CMNUM+2];      /* used for experience bookkeeping */
+};
+
+extern struct you u;
+
+extern char *traps[];
+extern char *plur(), *monnam(), *Monnam(), *amonnam(), *Amonnam(),
+   *doname(), *aobjnam();
+extern char readchar();
+extern char vowels[];
+
+extern xchar curx,cury;   /* cursor location on screen */
+
+extern coord bhitpos;   /* place where thrown weapon falls to the ground */
+
+extern xchar seehx,seelx,seehy,seely; /* where to see*/
+extern char *save_cm,*killer;
+
+extern xchar dlevel, maxdlevel; /* dungeon level */
+
+extern long moves;
+
+extern int multi;
+
+
+extern char lock[];
+
+
+#define DIST(x1,y1,x2,y2)       (((x1)-(x2))*((x1)-(x2)) + ((y1)-(y2))*((y1)-(y2)))
+
+#define   PL_CSIZ      20   /* sizeof pl_character */
+#define   MAX_CARR_CAP   120   /* so that boulders can be heavier */
+#define   FAR   (COLNO+2)   /* position outside screen */
+#file hack.mfndpos.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+
+
+#define	ALLOW_TRAPS	0777
+
+#define	ALLOW_U		01000
+
+#define	ALLOW_M		02000
+
+#define	ALLOW_TM	04000
+
+#define	ALLOW_ALL	(ALLOW_U | ALLOW_M | ALLOW_TM | ALLOW_TRAPS)
+
+#define	ALLOW_SSM	010000
+
+#define	ALLOW_ROCK	020000
+
+#define	NOTONL		040000
+
+#define	NOGARLIC	0100000
+
+#file hack.onames.h
+#define	STRANGE_OBJECT	0
+
+#define	AMULET_OF_YENDOR	1
+
+#define	FOOD_RATION	2
+
+#define	TRIPE_RATION	3
+
+#define	PANCAKE	4
+
+#define	DEAD_LIZARD	5
+
+#define	FORTUNE_COOKIE	6
+
+#define	CARROT	7
+
+#define	TIN	8
+
+#define	ORANGE	9
+
+#define	APPLE	10
+
+#define	PEAR	11
+
+#define	MELON	12
+
+#define	BANANA	13
+
+#define	CANDY_BAR	14
+
+#define	EGG	15
+
+#define	CLOVE_OF_GARLIC	16
+
+#define	DEAD_HUMAN	17
+
+#define	DEAD_GIANT_ANT	18
+
+#define	DEAD_GIANT_BAT	19
+
+#define	DEAD_CENTAUR	20
+
+#define	DEAD_DRAGON	21
+
+#define	DEAD_FLOATING_EYE	22
+
+#define	DEAD_FREEZING_SPHERE	23
+
+#define	DEAD_GNOME	24
+
+#define	DEAD_HOBGOBLIN	25
+
+#define	DEAD_STALKER	26
+
+#define	DEAD_JACKAL	27
+
+#define	DEAD_KOBOLD	28
+
+#define	DEAD_LEPRECHAUN	29
+
+#define	DEAD_MIMIC	30
+
+#define	DEAD_NYMPH	31
+
+#define	DEAD_ORC	32
+
+#define	DEAD_PURPLE_WORM	33
+
+#define	DEAD_QUASIT	34
+
+#define	DEAD_RUST_MONSTER	35
+
+#define	DEAD_SNAKE	36
+
+#define	DEAD_TROLL	37
+
+#define	DEAD_UMBER_HULK	38
+
+#define	DEAD_VAMPIRE	39
+
+#define	DEAD_WRAITH	40
+
+#define	DEAD_XORN	41
+
+#define	DEAD_YETI	42
+
+#define	DEAD_ZOMBIE	43
+
+#define	DEAD_ACID_BLOB	44
+
+#define	DEAD_GIANT_BEETLE	45
+
+#define	DEAD_COCKATRICE	46
+
+#define	DEAD_DOG	47
+
+#define	DEAD_ETTIN	48
+
+#define	DEAD_FOG_CLOUD	49
+
+#define	DEAD_GELATINOUS_CUBE	50
+
+#define	DEAD_HOMUNCULUS	51
+
+#define	DEAD_IMP	52
+
+#define	DEAD_JAGUAR	53
+
+#define	DEAD_KILLER_BEE	54
+
+#define	DEAD_LEOCROTTA	55
+
+#define	DEAD_MINOTAUR	56
+
+#define	DEAD_NURSE	57
+
+#define	DEAD_OWLBEAR	58
+
+#define	DEAD_PIERCER	59
+
+#define	DEAD_QUIVERING_BLOB	60
+
+#define	DEAD_GIANT_RAT	61
+
+#define	DEAD_GIANT_SCORPION	62
+
+#define	DEAD_TENGU	63
+
+#define	DEAD_UNICORN	64
+
+#define	DEAD_VIOLET_FUNGI	65
+
+#define	DEAD_LONG_WORM	66
+
+#define	DEAD_XAN	67
+
+#define	DEAD_YELLOW_LIGHT	68
+
+#define	DEAD_ZRUTY	69
+
+#define	ARROW	70
+
+#define	SLING_BULLET	71
+
+#define	CROSSBOW_BOLT	72
+
+#define	DART	73
+
+#define	ROCK	74
+
+#define	BOOMERANG	75
+
+#define	MACE	76
+
+#define	AXE	77
+
+#define	FLAIL	78
+
+#define	LONG_SWORD	79
+
+#define	TWO_HANDED_SWORD	80
+
+#define	DAGGER	81
+
+#define	WORM_TOOTH	82
+
+#define	CRYSKNIFE	83
+
+#define	SPEAR	84
+
+#define	BOW	85
+
+#define	SLING	86
+
+#define	CROSSBOW	87
+
+#define	WHISTLE	88
+
+#define	MAGIC_WHISTLE	89
+
+#define	EXPENSIVE_CAMERA	90
+
+#define	ICE_BOX	91
+
+#define	HEAVY_IRON_BALL	92
+
+#define	IRON_CHAIN	93
+
+#define	ENORMOUS_ROCK	94
+
+#define	HELMET	95
+
+#define	PLATE_MAIL	96
+
+#define	SPLINT_MAIL	97
+
+#define	BANDED_MAIL	98
+
+#define	CHAIN_MAIL	99
+
+#define	SCALE_MAIL	100
+
+#define	RING_MAIL	101
+
+#define	STUDDED_LEATHER_ARMOR	102
+
+#define	LEATHER_ARMOR	103
+
+#define	ELVEN_CLOAK	104
+
+#define	SHIELD	105
+
+#define	PAIR_OF_GLOVES	106
+
+#define	POT_RESTORE_STRENGTH	107
+
+#define	POT_BOOZE	108
+
+#define	POT_INVISIBILITY	109
+
+#define	POT_FRUIT_JUICE	110
+
+#define	POT_HEALING	111
+
+#define	POT_PARALYSIS	112
+
+#define	POT_MONSTER_DETECTION	113
+
+#define	POT_OBJECT_DETECTION	114
+
+#define	POT_SICKNESS	115
+
+#define	POT_CONFUSION	116
+
+#define	POT_GAIN_STRENGTH	117
+
+#define	POT_SPEED	118
+
+#define	POT_BLINDNESS	119
+
+#define	POT_GAIN_LEVEL	120
+
+#define	POT_EXTRA_HEALING	121
+
+#define	POT_LEVITATION	122
+
+#define	SCR_ENCHANT_ARMOR	127
+
+#define	SCR_DESTROY_ARMOR	128
+
+#define	SCR_CONFUSE_MONSTER	129
+
+#define	SCR_SCARE_MONSTER	130
+
+#define	SCR_BLANK_PAPER	131
+
+#define	SCR_REMOVE_CURSE	132
+
+#define	SCR_ENCHANT_WEAPON	133
+
+#define	SCR_DAMAGE_WEAPON	134
+
+#define	SCR_CREATE_MONSTER	135
+
+#define	SCR_TAMING	136
+
+#define	SCR_GENOCIDE	137
+
+#define	SCR_LIGHT	138
+
+#define	SCR_TELEPORTATION	139
+
+#define	SCR_GOLD_DETECTION	140
+
+#define	SCR_FOOD_DETECTION	141
+
+#define	SCR_IDENTIFY	142
+
+#define	SCR_MAGIC_MAPPING	143
+
+#define	SCR_AMNESIA	144
+
+#define	SCR_FIRE	145
+
+#define	SCR_PUNISHMENT	146
+
+#define	WAN_LIGHT	151
+
+#define	WAN_SECRET_DOOR_DETECTION	152
+
+#define	WAN_CREATE_MONSTER	153
+
+#define	WAN_WISHING	154
+
+#define	WAN_STRIKING	155
+
+#define	WAN_SLOW_MONSTER	156
+
+#define	WAN_SPEED_MONSTER	157
+
+#define	WAN_UNDEAD_TURNING	158
+
+#define	WAN_POLYMORPH	159
+
+#define	WAN_CANCELLATION	160
+
+#define	WAN_TELEPORT_MONSTER	161
+
+#define	WAN_MAKE_INVISIBLE	162
+
+#define	WAN_DIGGING	163
+
+#define	WAN_MAGIC_MISSILE	164
+
+#define	WAN_FIRE	165
+
+#define	WAN_SLEEP	166
+
+#define	WAN_COLD	167
+
+#define	WAN_DEATH	168
+
+#define	Adornment	u.uprops[0].p_flgs
+
+#define	RIN_ADORNMENT	172
+
+#define	Teleportation	u.uprops[1].p_flgs
+
+#define	RIN_TELEPORTATION	173
+
+#define	Regeneration	u.uprops[2].p_flgs
+
+#define	RIN_REGENERATION	174
+
+#define	Searching	u.uprops[3].p_flgs
+
+#define	RIN_SEARCHING	175
+
+#define	See_invisible	u.uprops[4].p_flgs
+
+#define	RIN_SEE_INVISIBLE	176
+
+#define	Stealth	u.uprops[5].p_flgs
+
+#define	RIN_STEALTH	177
+
+#define	Levitation	u.uprops[6].p_flgs
+
+#define	RIN_LEVITATION	178
+
+#define	Poison_resistance	u.uprops[7].p_flgs
+
+#define	RIN_POISON_RESISTANCE	179
+
+#define	Aggravate_monster	u.uprops[8].p_flgs
+
+#define	RIN_AGGRAVATE_MONSTER	180
+
+#define	Hunger	u.uprops[9].p_flgs
+
+#define	RIN_HUNGER	181
+
+#define	Fire_resistance	u.uprops[10].p_flgs
+
+#define	RIN_FIRE_RESISTANCE	182
+
+#define	Cold_resistance	u.uprops[11].p_flgs
+
+#define	RIN_COLD_RESISTANCE	183
+
+#define	Protection_from_shape_changers	u.uprops[12].p_flgs
+
+#define	RIN_PROT_SHAPE_CHANGERS	184
+
+#define	Conflict	u.uprops[13].p_flgs
+
+#define	RIN_CONFLICT	185
+
+#define	Gain_strength	u.uprops[14].p_flgs
+
+#define	RIN_GAIN_STRENGTH	186
+
+#define	Increase_damage	u.uprops[15].p_flgs
+
+#define	RIN_INCREASE_DAMAGE	187
+
+#define	Protection	u.uprops[16].p_flgs
+
+#define	RIN_PROTECTION	188
+
+#define	Warning	u.uprops[17].p_flgs
+
+#define	RIN_WARNING	189
+
+#define	Teleport_control	u.uprops[18].p_flgs
+
+#define	RIN_TELEPORT_CONTROL	190
+
+#define	DIAMOND	193
+
+#define	RUBY	194
+
+#define	SAPPHIRE	195
+
+#define	EMERALD	196
+
+#define	TURQUOISE	197
+
+#define	AQUAMARINE	198
+
+#define	TOURMALINE	199
+
+#define	TOPAZ	200
+
+#define	OPAL	201
+
+#define	GARNET	202
+
+#define	AMETHYST	203
+
+#define	AGATE	204
+
+#define	ONYX	205
+
+#define	JASPER	206
+
+#define	JADE	207
+
+/* #define WORTHLESS_PIECE_OF_BLUE_GLASS	208 */
+
+/* #define WORTHLESS_PIECE_OF_RED_GLASS	209 */
+
+/* #define WORTHLESS_PIECE_OF_YELLOW_GLASS	210 */
+
+/* #define WORTHLESS_PIECE_OF_GREEN_GLASS	211 */
+
+
+
+#define	CORPSE	DEAD_HUMAN
+
+#define	LAST_GEM	(JADE+1)
+
+#define	LAST_RING	19
+
+#define	NROFOBJECTS	211
+
+#file mklev.h
+/* Copyright (c) Stichting Mathematisch Centrum, Amsterdam, 1984. */
+
+#include "config.h"
+
+/* we are not BSD or system V */
+/* #ifdef BSD                   */
+/* #include <strings.h>      /* declarations for strcat etc. */
+/* #else                        */
+/* #include <string.h>      /* idem on System V */
+/* #define   index   strchr     */
+/* #define   rindex   strrchr   */
+/* #endif BSD                   */
+
+#include   "def.objclass.h"
+
+typedef struct {
+   xchar x,y;
+} coord;
+
+#include   "def.monst.h"   /* uses coord */
+#include   "def.gen.h"
+#include   "def.obj.h"
+
+extern char ismklev;
+extern char *sprintf();
+
+#define   BUFSZ   256   /* for getlin buffers */
+#define   PL_NSIZ   32   /* name of player, ghost, shopkeeper */
+
+#define   HWALL 1   /* Level location types */
+#define   VWALL 2
+#define   SDOOR 3
+#define   SCORR 4
+#define   LDOOR 5
+#define   DOOR 6   /* smallest accessible type */
+#define   CORR 7
+#define   ROOM 8
+#define   STAIRS 9
+#ifdef QUEST
+#define   CORR_SYM   ':'
+#else
+#define   CORR_SYM   '#'
+#endif QUEST
+
+#define   ERRCHAR   '{'
+
+#define TRAPNUM 9
+
+struct rm {
+   char scrsym;
+/*   unsigned typ:5; */
+/*   unsigned new:1; */
+/*   unsigned seen:1;*/
+/*   unsigned lit:1; */
+   char typ;
+   char new;
+   char seen;
+   char lit;
+};
+extern struct rm levl[COLNO][ROWNO];
+
+#ifndef QUEST
+struct mkroom {
+   xchar lx,hx,ly,hy;
+   schar rtype,rlit,doorct,fdoor;
+};
+#define   MAXNROFROOMS   15
+extern struct mkroom rooms[MAXNROFROOMS+1];
+#define   DOORMAX   100
+extern coord doors[DOORMAX];
+#endif QUEST
+
+
+#include   "def.permonst.h"
+extern struct permonst mons[];
+#define PM_ACIDBLOB	&mons[7]
+#define PM_PIERC	&mons[17]
+#define PM_MIMIC	&mons[37]
+#define PM_CHAM		&mons[47]
+#define PM_DEMON	&mons[54]
+#define PM_MINOTAUR	&mons[55]	/* last in mons array */
+#define PM_SHK		&mons[56]	/* very last */
+#define PM_GHOST	&mons[57]	/* for ghosts in saved files */
+#define PM_LI_DOG	&mons[58]	/* little dogs to be saved */
+#define PM_DOG		&mons[59]	/* medium sized dog */
+#define PM_LA_DOG	&mons[60]	/* large sized dog */
+#define PMONCOUNT	61		/* number of monsters total */
+#define CMNUM		55		/* number of common monsters */
+
+extern long *alloc();
+
+extern xchar xdnstair, ydnstair, xupstair, yupstair; /* stairs up and down */
+
+extern xchar dlevel;
+#ifdef WIZARD
+extern boolean wizard;
+#endif WIZARD
+#define   newstring(x)   (char *) alloc((unsigned)(x))

@@ -1,0 +1,296 @@
+MAKE(I)				3/10/84					MAKE(I)
+
+
+
+NAME
+	MAKE - maintain multiple source files (VAX/VMS and MSDOS 2.0)
+
+
+SYNOPSIS
+	MAKE [-N] [-A] [-F makefile] [name ...]
+
+
+DESCRIPTION
+	MAKE is a utility inspired by the Unix(tm) command of the same
+	name.  MAKE helps maintain programs that are constructed from
+	many files.  MAKE processes a "makefile", a file which describes
+	how to build a program from its source files, and produces a
+	script file containing the commands necessary to recompile the
+	program.
+
+	Be careful: this MAKE is NOT compatible with Unix(tm) MAKE!
+
+	The 'N' option causes MAKE to print out the steps it would follow
+	in order to rebuild the program.  The 'A' option tells MAKE to
+	assume that all files are obsolete, and that everything should be
+	recompiled.  The 'F' option, followed by a filename, can be used
+	to specify a makefile other than the default one.
+
+	If no names are specified in the commandline, the first dependency
+	in the makefile is examined.  Otherwise, the specified root names
+	are brought up to date.
+
+	The default makefiles are:
+
+		for VAX/VMS:	MAKEFILE
+				[-]MAKEFILE
+				SYS$LOGIN:MAKEFILE
+
+		for MSDOS:	MAKEFILE
+				..\MAKEFILE
+
+	If the first makefile cannot be found, MAKE attempts to use the
+	next one.  If no makefile is ever found, MAKE prints a diagnostic
+	and aborts.
+
+
+
+
+
+THE MAKEFILE
+	Comments begin with '!' and extend to the end of the line.  A
+	'!' (or almost any other character) may be escaped with the escape
+	character (backslash (\) on VMS, backquote (`) on MSDOS).  An escape
+	character may be typed by doubling it (\\ or ``).  The standard
+	Unix escape codes are recognized (\n, \r, \t, \b, \f, `n, `r, `t,
+	`b and `f).
+
+	A makefile is a list of dependencies.  A dependency consists of
+	a root name, a colon, and zero or more names of dependent files.
+	(The colon MUST be preceeded by whitespace.)  For instance, in:
+
+		make.exe : make.obj parsedir.obj file.obj macro.obj mk.h
+
+	the file 'make.exe' depends on five other files.  A root name
+	with an empty dependency, as in:
+
+		print :
+
+	is assumed NEVER up to date, and will always be recompiled.
+
+	The dependency list may be continued on successive lines:
+
+		bigfile.exe : one.obj two.obj three.obj four.obj
+		five.obj six.obj gronk.obj freeple.obj scuzzy.lnk
+		frog.txt greeble.out
+
+	Any number of 'method' lines may follow a dependency.  Method lines
+	begin with an ascii tab.  When a file is to be recompiled, MAKE
+	copies these method lines (minus the tab) to the script file.
+	For example, in:
+
+		make.exe : make.obj parsedir.obj file.obj macro.obj mk.h
+			$link make, parsedir, file, macro
+			$write sys$output "Just another version of MAKE ..."
+			$purge
+
+	the three lines following the dependency make up the method for
+	recompiling (or in this case, re-linking) the file 'make.exe'.
+
+	If the macro "~INIT" is defined, its text will appear first in the
+	script file.  If the macro "~DEINIT" is defined, its text will
+	appear last in the script file.  By defining these two macros, it
+	is possible to configure the shell enviroment:
+
+		~INIT = $set term/nowrap\n$on error then goto err_handler
+		~DEINIT = $set term/wrap\n$exit\$err_handler:\n
+		~DEINIT = #(~DEINIT)$type err.log\n$exit
+
+	will expand (in the script file) to:
+
+		$set term/nowrap
+		$on error then goto err_handler
+		.
+		.
+		$set term/wrap
+		$exit
+		$err_handler:
+		$type err.log
+		$exit
+
+	When a root's method is defined, the value of the macro "~BEFORE"
+	is prefixed to the method, and the value of the macro "~AFTER" is
+	appended to it.
+
+	Frequently one wants to maintain more than one program with a single
+	makefile.  In this case, a "master dependency" can appear first in
+	the file:
+
+		allOfMyToolsAndHorribleHacks : cat peek poke.exe grunge
+		cat : cat.exe
+		cat.exe : ....
+			(stuff for CAT.EXE)
+		peek : peek.exe
+		peek.exe : (stuff for PEEK.EXE)
+		poke.exe : (stuff for POKE.EXE)
+		grunge : grunge.com
+		grunge.com : (stuff for grung)
+
+	In other words, make will bring everything up to date that is somehow
+	connected to the first dependency (its assumed that the incredibly
+	lengthy filename specified in this example won't actually exist).
+
+
+
+
+
+
+
+
+
+MACROS
+	A macro is defined by a line of the form (the '=' MUST be surrounded
+	by whitespace):
+
+		<macro-name> = <macro-body>
+
+	A macro may be deleted by assigning an empty value to it.  Macros
+	may be redefined, but old definitions stay around.  If a macro is
+	redefined, and the redefinition is later deleted, the first definition
+	will take effect:
+
+		MAC = first			! MAC = "first"
+		MAC = second			! MAC = "second"
+		MAC = #(MAC) third		! MAC = "second third"
+		MAC =				! MAC = "second"
+		MAC =				! MAC = "first"
+		MAC =				! MAC has no definition
+
+	A macro may be referenced in two ways:
+
+			#<char>	  or	#(macro-name)
+
+	The first way only works if the macro's name is a single character.
+	If the macro's name is longer than one character, it must be
+	enclosed in parenthesis.  ['#' may be escaped by doubling it ("##".)]
+	For example, in:
+
+		G = mk.h mk1.h
+		OBJS = make.obj file.obj parsedir.obj macro.obj
+		BOTH = #(OBJS) #G
+	
+		make.exe : #(OBJS) #G
+		make.exe : #(BOTH)
+		make.exe : mk.h mk1.h make.obj file.obj parsedir.obj macro.obj
+			$write sys$output "This is a number sign --> ##"
+
+	after macro expansion, the three dependencies will appear identical
+	and the two '#'s in the last line will turn into one '#'.
+
+
+
+
+
+
+
+
+
+
+UNIX(tm) MAKE AND THIS ONE
+	They are NOT the same.  Do not expect Unix makefiles to work with
+	this MAKE, even if you change the pathnames.  There are some major
+	differences between this version and the standard Unix(tm) MAKE:
+
+	1. The Unix(tm) comment character is '#', VAX/VMS's is '!'.
+
+	2. The Unix(tm) macro-expansion character is '$'.  While this would
+	   have been easy to leave the same, the '$' character is used so
+	   often in VAX/VMS command-lines that I thought it best to change
+	   it to '#'.
+
+	3. Multiple root names are not allowed.  Unix(tm) MAKE accepts lines
+	   of the form:
+
+		name1 name2 : depend1 depend2
+
+	   but this one doesn't.
+
+	4. There is no equivalent of double-colon ("::".)
+
+	5. There is no equivalent of .SUFFIXES, or the corresponding special
+	   macros.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SAMPLE MAKEFILE
+	!
+	! VAX/VMS MAKE
+	! Landon Dyer
+	!
+	H = make.h
+	FILES = #H, make.c, macro.c, token.c, parsedir.c, file.c
+	DOCUMENTATION = distr.mem make.man makefile. make.com
+	
+	make.exe : make.obj macro.obj token.obj parsedir.obj file.obj
+		$link make.obj, macro, token, parsedir, file
+		$purge
+	
+	make.obj : make.c #H
+		$cc make.c
+	
+	macro.obj : macro.c #H
+		$cc macro
+	
+	token.obj : token.c #H
+		$cc token
+	
+	parsedir.obj : parsedir.c #H
+		$cc parsedir
+	
+	file.obj : file.c
+		$cc file
+	
+	!
+	! Print files associated with MAKE
+	!
+	print :
+		$print make.man, #(FILES), make.com, makefile.
+	
+	!
+	! Type out source to MAKE
+	!
+	type :
+		$type #(FILES), make.com, makefile.
+	
+	!
+	! Make backup of source files.
+	!
+	BACKUP = [.bak]
+	backup :
+		$copy #(FILES) #(BACKUP)
+		$copy make.man, make.com, makefile. #(BACKUP)
+	
+	!
+	! Collect MAKE into a distribution file.
+	!
+	collect :
+		$collect collect distr.mem make.man makefile make.com make.h -
+			make.c macro.c token.c parsedir.c file.c
+
+
+AUTHOR
+	Landon Dyer			G.DYER@SU-SCORE.ARPA
+	175 Calvert Dr. #F-211		BASHFL::DYER (Atari Coinop)
+	Cupertino, CA 95014

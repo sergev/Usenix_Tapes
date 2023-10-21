@@ -1,0 +1,79 @@
+: This shell procedure generates the vnews makefile.
+
+LIB=../lib
+if test ! -f $LIB/makedefs
+then	echo "$LIB/makedefs not does not exist"
+	exit 1
+fi
+exec > temp
+. $LIB/makedefs
+cat <<!
+# Vnews makefile 2.11-B 1/18/85
+
+# definitions
+
+!
+cat $LIB/makedefs
+sed -e 's:$LIB:'$LIB:g <<\!
+LOGDIR =
+
+IBMFLAGS =
+DEBUG = -O
+CFLAGS = $(DEBUG) $(IBMFLAGS) -I$LIB
+LFLAGS = -i $(DEBUG) $(IBMFLAGS)
+
+VOBJECTS = readnews.o vextern.o $(LOGDIR) vreadr.o dispcntl.o artseq.o termio.o virtterm.o
+
+# dependencies
+
+all: makefile vnews
+
+makefile: genmakefile $LIB/makedefs
+	genmakefile
+	@echo 'Makefile changed, so restart make.'
+	@sh -c 'exit 22'
+
+install: all
+	-/bin/mv $(BINDIR)/vnews $(BINDIR)/ovnews
+	/bin/cp vnews $(BINDIR)/vnews
+	-/bin/mv $(LIBDIR)/vnews.help $(LIBDIR)/ovnews.help
+	/bin/cp vnews.help $(LIBDIR)/vnews.help
+
+clean:
+	rm -f core *.o
+
+readnews.o:  readnews.c rparams.h
+	$(CC) $(CFLAGS) -c readnews.c
+
+rfuncs.o:  rfuncs.c rparams.h
+	$(CC) $(CFLAGS) -c rfuncs.c
+
+logdir.o: logdir.c
+	$(CC) $(CFLAGS) -c logdir.c
+
+vnews:	$(VOBJECTS) $LIB/rpathinit.o $LIB/rlib.a
+	$(CC) $(LFLAGS) $(VOBJECTS) $LIB/rpathinit.o $LIB/rlib.a $(TERMCAP) -o $@
+
+vreadr.o dispcntl.o artseq.o termio.o: vnews.h rparams.h
+
+vextern.o:  vextern.c rparams.h
+
+VNEWSLINT = artseq.c dispcntl.c readnews.c vextern.c rfuncs.c\
+termio.c virtterm.c vreadr.c\
+$LIB/addrc.c $LIB/afopen.c $LIB/allgroups.c $LIB/bcopy.s\
+$LIB/bfr.c $LIB/bzero.c $LIB/cancel.c $LIB/ckfopen.c\
+$LIB/ckmalloc.c $LIB/dirname.c $LIB/findgroup.c\
+$LIB/genafopen.c $LIB/gethead.c $LIB/getuser.c $LIB/gfopen.c\
+$LIB/hash.c $LIB/hfgets.c $LIB/isadmin.c $LIB/lookup.c\
+$LIB/makehimask.c $LIB/mypathinit.c $LIB/nextgrp.c\
+$LIB/ngchain.c $LIB/ngmatch.c $LIB/nsavestr.c $LIB/nstrip.c\
+$LIB/openrc.c $LIB/pgetuser.c $LIB/prefix.c $LIB/prevgrp.c\
+$LIB/process.c $LIB/read.c $LIB/readinrc.c $LIB/rename.c\
+$LIB/roptions.c $LIB/savestr.c $LIB/scopyn.c $LIB/setupgrp.c\
+$LIB/titmat.c
+
+vnewslint:
+	lint -I$LIB -DSPOOLDIR=\"$(SPOOLDIR) -DLIBDIR=\"$(LIBDIR) $(VNEWSLINT)		# You must be masochistic
+!
+
+mv temp makefile

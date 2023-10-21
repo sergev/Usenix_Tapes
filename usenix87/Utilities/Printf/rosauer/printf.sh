@@ -1,0 +1,12 @@
+if [ $# -lt 1 ]
+then
+	echo >&2 "Usage: printf format [ arg ...]"
+	exit 1
+fi
+x="\"$1\""
+shift
+for i
+do
+	x="$x,\"$i\""
+done
+awk "BEGIN { printf $x; exit }"

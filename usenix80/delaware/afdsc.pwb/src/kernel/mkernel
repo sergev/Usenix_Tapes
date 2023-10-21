@@ -1,0 +1,102 @@
+cd /usr/src/prog/kernel
+echo -n "Do you want to start a new kernel edition/change level?"
+if { query } goto newed
+echo -n "V6 KERNEL CREATION\nIs this kernel for a WP-34? "
+set z = .
+set w =  sf
+set d =
+set s = 0
+set p = 40
+set f = nf
+set x =
+set y =
+if ! { query } goto ed
+set w = wp
+set z = .
+echo -n "System number? "
+set s : $T
+echo -n "Is the processor an 11/70? "
+if ! { query } goto fp
+set p = 70
+set x = -r
+set y = -d
+set d = data.s
+: fp
+echo -n "Does it have a floating point processor? "
+if ! { query } goto ed
+set f = f
+: ed
+echo -n "Which software edition do you want? "
+set e : $T
+echo -n "Which software change within edition "$e" do you want? "
+set c : $T
+chdir /usr/src/prog/kernel/ed$e/chg$c/config
+if $1x = ldx goto load
+echo "Compiling CONFIG section"
+echo "COMPILER ERROR LIST FOR CREATION OF KERNEL FOR "$w" "$s" -- EDITION "$e" CHANGE "$c"\n\n" >../cclist
+as $d $w$s.l.s >>../cclist
+mv a.out $w$s.l.o >>../cclist
+cc -c $w$s.c.c >>../cclist
+mv a.out $w$s.c.o >>../cclist
+as m$p$f.s >>../cclist
+mv a.out m$p$f.o >>../cclist
+cp $w$s.param.h ../header/param.h
+chdir ../device
+echo "Compiling DEVICE section"
+cc -O -c *.c >>../cclist
+nar -r ../lib.device *.o >>../cclist
+rm *.o
+chdir ../system
+echo "Compiling SYSTEM section"
+cc -O -c *.c >>../cclist
+nar -r ../lib.system *.o >>../cclist
+rm *.o
+: load
+chdir ..
+echo "Loading kernel"
+ld -x $x $y\
+config/$w$s.l.o\
+config/m$p$f.o\
+config/$w$s.c.o\
+lib.system\
+lib.device >>../cclist
+if $px != 70x goto stat
+nm -ug
+config/sysfix a.out x
+mv x a.out
+: stat
+mv a.out /unix$w$s.$e.$c
+echo "Stats on new "$w" "$s" kernel (edition "$e" change "$c")"
+ls -l /unix$w$s.$e.$c
+size /unix$w$s.$e.$c
+echo "Stats on old "$w $s" kernel(s)"
+ls -l /unix$w$s.*
+size /unix$w$s.*
+echo -n "Do you want to see the compiler error listing? "
+set z : $T
+if $zx = yx opr cclist
+exit
+: newed
+echo -n "NEW V6 KERNEL CREATION\nWhat edition do you want to work in? "
+set e : $T
+set p = $e
+echo -n "Is this a new edition? "
+if ! { query } goto olded
+mkdir ed$e
+echo -n "What was the previous edtion number? "
+set p : $T
+: olded
+echo -n "What change do you want to work in within edition "$e"? "
+set c : $T
+mkdir ed$e/chg$c
+echo -n "What was the previous change level number? "
+set o : $T
+echo "Copying files from ed"$p"/chg"$o" to ed"$e"/chg"$c
+copyall ed$p/chg$o ed$e/chg$c 
+cd ed$e/chg$c
+echo "Description of Edition "$e", Change "$c
+echo "#define VER 6	/* BTL UNIX release */\n#define ED "$e"	/* AFDSC edition of the version */\n#define CHG "$c"	/* AFDSC change to the edition */" >header/version.h
+echo "Using this editor, enter a description of what this change\nentails, then w and q"
+edit description <$T
+echo "Now edit the appropriate files and re-execute "$0"\nto build the kernel for edition "$e", change "$c
+exit

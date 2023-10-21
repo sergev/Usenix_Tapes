@@ -1,0 +1,470 @@
+From: topaz!hedrick  17 Sept 1985
+
+[Note: These changes and comments are not the same as the ones posted
+to the net by topaz!hedrick.  I have changed them so that mail received
+via SMTP is labelled as such, rather than the orignal label of being
+received via SMTP (thanks to rick@seismo.css.gov for pointing this
+out).
+
+I also have removed the changes to add the "-p" flag and the comments
+associated with it.  The changes in file PATCH3 provided by oddjob!matt
+to use the -oMr flag instead seems to me to be more general and a
+better solution.  In addition, it allows one to munge rmail to include
+the sending (last relay) system via -oMs.	EHS]
+
+Here are some patches to SENDMAIL.
+  1) They allow us to handle an Arpanet host table containing names
+	like topaz.rutgers.edu.  The original version of sendmail,
+	as well as sendmail.cf, assumed that all host names end in
+	.arpa.  Changes may also be needed in UUCP and net news
+	if your site name does not end in .ARPA.
+  2) They allow you to translate all host names to their 
+	canonical forms, i.e. replace nicknames with the primary
+	name.  This is now considered the correct thing to do on
+	the Arpanet.  This adds an operator, $%, for doing the
+	mapping. WARNING: $% uses a single fixed location for
+	the translated address.  Thus only one translated address
+	may be active at a time.  This is fine for foo@bar,
+	but you could not normalize all of the host names in an
+	address like @foo,@bar:bar@gorp.  In practice I don't
+	believe this is a problem.
+  3) They allow you to make processing depend upon whether mail
+	arrived via UUCP or SMTP.  In addition to the patches here,
+	you will need to modify rmail, or whatever program calls
+	sendmail to delivery UUCP mail.  It should call sendmail
+	with an extra argument, -oMrUUCP.  This adds an operator,
+	$&, for evaluating macros at runtime instead of when
+	sendmail.cf is loaded.  $r is the name of the protocol via which
+	mail arrived.  $r is set from the -oMr option, or by the
+	SMTP daemon code, which automatically sets it to the
+	value SMTP.  The code for reading and writing queue files
+	saves the protocol in a line beginning with O.  In case
+	a message gets queued, this allows us to remember which
+	way it arrived.
+
+Originally, SENDMAIL would tack .ARPA onto your host name.  This is
+a bad idea, since not all host names end in .ARPA.  The assumption
+was that your rc file said
+   hostname foo
+and this would turn it into foo.arpa.  We now do
+   hostname foo.rutgers.edu
+and do not want .ARPA tacked on the end.
+
+*** daemon.c.ORIG	Fri Feb 10 06:59:21 1984
+--- daemon.c	Sat Aug  3 07:49:46 1985
+***************
+*** 183,189
+  			/* determine host name */
+  			hp = gethostbyaddr(&otherend.sin_addr, sizeof otherend.sin_addr, AF_INET);
+  			if (hp != NULL)
+! 				(void) sprintf(buf, "%s.ARPA", hp->h_name);
+  			else
+  				/* this should produce a dotted quad */
+  				(void) sprintf(buf, "%lx", otherend.sin_addr.s_addr);
+
+--- 185,191 -----
+  			/* determine host name */
+  			hp = gethostbyaddr(&otherend.sin_addr, sizeof otherend.sin_addr, AF_INET);
+  			if (hp != NULL)
+! 				(void) sprintf(buf, "%s", hp->h_name);
+  			else
+  				/* this should produce a dotted quad */
+  				(void) sprintf(buf, "%lx", otherend.sin_addr.s_addr);
+***************
+
+The following patches add two operators: $% and $&.  $% is used to
+map host names into their canonical forms.  Suppose a user sends mail
+to RED.  This should be turned into the official name, RED.RUTGERS.EDU,
+in the headers.  The fact that Unix does not do that causes problems
+to a number of mailers.  It is a violation of the standards.  $%n
+behaves like $n, i.e. it is replaced with the nth thing on the left
+hand side.  However before doing the replacement, the thing is looked
+up in /etc/hosts.  If it is a host name or nickname, the official
+form of the host name is used instead.
+
+$& is part of a change to allow us to differentiate between UUCP and
+SMTP mail.  What does foo!bar@baz mean?  If the mail arrived via UUCP,
+it is probably foo!<bar@baz>.  If it arrived via SMTP, it is by
+definition <foo!bar>@baz.  As we are a UUCP/SMTP gateway, it is
+important for us to get these things right.  In order to do so, we
+have done two things:
+  - implemented $r.  This is documented as being the name of the
+	protocol via which the message arrived.  However this was
+	not implemented.  I implement it as follows:
+	  - rmail calls sendmail with an option -oMrUUCP
+	  - the sendmail daemon code sets SMTP automatically
+	  - everything else should be local mail, and does
+		not set any value in this macro.
+	  - when a queue entry is written, the protocol name
+		must be written out
+  - implemented a new operator $& to allow us to use the
+	value of $r in productions.  You can't just use $r
+	on the right side of a production.  It will be
+	evaluated when the freeze file is made.  So $&r
+	is equivalent to $r, but is evaluated when the
+	rule is executed.  This allows us to write rules
+	that differentiate.  Here is the part of sendmail.cf
+	that uses it.  It checks for foo!bar, but only if
+	the message arrived via UUCP.  Note the use of $&r
+	to put the protocol name into the address, so we can
+	match on it.
+
+R$-!$*			$:<$&r>$1!$2			check arriving protocol
+R$-^$*			$:<$&r>$1^$2			both syntaxes
+R<UUCP>$-!$*		$@$>7$2<@$1.UUCP>		if via UUCP, resolve
+R<UUCP>$-^$*		$@$>7$2<@$1.UUCP>		if via UUCP, resolve
+R<$*>$*			$2				undo kludge
+
+*** main.c.ORIG	Fri Feb 10 11:17:52 1984
+--- main.c	Mon Aug 26 04:10:51 1985
+***************
+*** 538,543
+  		/* at this point we are in a child: reset state */
+  		OpMode = MD_SMTP;
+  		(void) newenvelope(CurEnv);
+  		openxscript(CurEnv);
+  #endif DAEMON
+  	}
+
+--- 541,547 -----
+  		/* at this point we are in a child: reset state */
+  		OpMode = MD_SMTP;
+  		(void) newenvelope(CurEnv);
++ 		define('r',"SMTP",CurEnv);
+  		openxscript(CurEnv);
+  #endif DAEMON
+  	}
+***************
+*** 701,706
+  
+  	/* and finally the conditional operations */
+  	'?', CONDIF,	'|', CONDELSE,	'.', CONDFI,
+  
+  	'\0'
+  };
+
+--- 705,716 -----
+  
+  	/* and finally the conditional operations */
+  	'?', CONDIF,	'|', CONDELSE,	'.', CONDFI,
++ 
++ 	/* now the normalization operator */
++ 	'%', NORMREPL,
++ 
++ 	/* and run-time macro expansion */
++ 	'&', MACVALUE,
+  
+  	'\0'
+  };
+*** parseaddr.c.ORIG	Fri Feb 10 06:59:12 1984
+--- parseaddr.c	Mon Aug 26 04:44:15 1985
+***************
+*** 394,400
+  		expand("$o", buf, &buf[sizeof buf - 1], CurEnv);
+  		(void) strcat(buf, DELIMCHARS);
+  	}
+! 	if (c == MATCHCLASS || c == MATCHREPL || c == MATCHNCLASS)
+  		return (ONE);
+  	if (c == '"')
+  		return (QST);
+
+--- 394,401 -----
+  		expand("$o", buf, &buf[sizeof buf - 1], CurEnv);
+  		(void) strcat(buf, DELIMCHARS);
+  	}
+! 	if (c == MATCHCLASS || c == MATCHREPL || c == MATCHNCLASS ||
+! 	    c == MACVALUE || c == NORMREPL )
+  		return (ONE);
+  	if (c == '"')
+  		return (QST);
+***************
+*** 446,451
+  
+  # define MAXMATCH	9	/* max params per rewrite */
+  
+  
+  rewrite(pvp, ruleset)
+  	char **pvp;
+
+--- 447,453 -----
+  
+  # define MAXMATCH	9	/* max params per rewrite */
+  
++ char hostbuf[512];
+  
+  
+  rewrite(pvp, ruleset)
+***************
+*** 447,452
+  # define MAXMATCH	9	/* max params per rewrite */
+  
+  
+  rewrite(pvp, ruleset)
+  	char **pvp;
+  	int ruleset;
+
+--- 449,455 -----
+  
+  char hostbuf[512];
+  
++ 
+  rewrite(pvp, ruleset)
+  	char **pvp;
+  	int ruleset;
+***************
+*** 626,631
+  		/* substitute */
+  		for (avp = npvp; *rvp != NULL; rvp++)
+  		{
+  			register struct match *m;
+  			register char **pp;
+  
+
+--- 629,635 -----
+  		/* substitute */
+  		for (avp = npvp; *rvp != NULL; rvp++)
+  		{
++ #include <netdb.h>
+  			register struct match *m;
+  			register char **pp;
+  			char **oldavp,**tavp;
+***************
+*** 628,633
+  		{
+  			register struct match *m;
+  			register char **pp;
+  
+  			rp = *rvp;
+  			if (*rp != MATCHREPL)
+
+--- 632,640 -----
+  #include <netdb.h>
+  			register struct match *m;
+  			register char **pp;
++ 			char **oldavp,**tavp;
++ 			struct hostent *hostpt;
++ 			extern char *macvalue();
+  
+  			rp = *rvp;
+  			if ((*rp != MATCHREPL) && (*rp != NORMREPL))
+***************
+*** 630,636
+  			register char **pp;
+  
+  			rp = *rvp;
+! 			if (*rp != MATCHREPL)
+  			{
+  				if (avp >= &npvp[MAXATOM])
+  				{
+
+--- 637,643 -----
+  			extern char *macvalue();
+  
+  			rp = *rvp;
+! 			if ((*rp != MATCHREPL) && (*rp != NORMREPL))
+  			{
+  				if (avp >= &npvp[MAXATOM])
+  				{
+***************
+*** 637,643
+  					syserr("rewrite: expansion too long");
+  					return;
+  				}
+! 				*avp++ = rp;
+  				continue;
+  			}
+  
+
+--- 644,655 -----
+  					syserr("rewrite: expansion too long");
+  					return;
+  				}
+! 				if (*rp == MACVALUE) {
+! 				  if (macvalue(rp[1],CurEnv))
+! 				    *avp++ = macvalue(rp[1],CurEnv);
+! }
+! 				else
+! 				  *avp++ = rp;
+  				continue;
+  			}
+  
+***************
+*** 642,647
+  			}
+  
+  			/* substitute from LHS */
+  			m = &mlist[rp[1] - '1'];
+  # ifdef DEBUG
+  			if (tTd(21, 15))
+
+--- 654,660 -----
+  			}
+  
+  			/* substitute from LHS */
++ 
+  			m = &mlist[rp[1] - '1'];
+  # ifdef DEBUG
+  			if (tTd(21, 15))
+***************
+*** 658,663
+  			}
+  # endif DEBUG
+  			pp = m->first;
+  			while (pp <= m->last)
+  			{
+  				if (avp >= &npvp[MAXATOM])
+
+--- 671,677 -----
+  			}
+  # endif DEBUG
+  			pp = m->first;
++ 			oldavp = avp;
+  			while (pp <= m->last)
+  			{
+  				if (avp >= &npvp[MAXATOM])
+***************
+*** 666,671
+  					return;
+  				}
+  				*avp++ = *pp++;
+  			}
+  		}
+  		*avp++ = NULL;
+
+--- 680,695 -----
+  					return;
+  				}
+  				*avp++ = *pp++;
++ 			}
++ 			if (*rp == NORMREPL) {
++ 			  hostbuf[0] = '\0';
++ 			  for (tavp = oldavp; tavp < avp; tavp++)
++ 			    strcat(hostbuf,*tavp);
++ 			  hostpt = gethostbyname(hostbuf);
++ 			  if (hostpt) {
++ 			    *oldavp = hostpt -> h_name;
++ 			    avp = oldavp + 1;
++ 			  }
+  			}
+  		}
+  		*avp++ = NULL;
+*** queue.c.ORIG	Fri Feb 10 06:59:20 1984
+--- queue.c	Mon Aug 26 04:45:19 1985
+***************
+*** 105,110
+  	/* output creation time */
+  	fprintf(tfp, "T%ld\n", e->e_ctime);
+  
+  	/* output name of data file */
+  	fprintf(tfp, "D%s\n", e->e_df);
+  
+
+--- 105,115 -----
+  	/* output creation time */
+  	fprintf(tfp, "T%ld\n", e->e_ctime);
+  
++ 	/* output protocol */
++ 	if (macvalue('r',e)) {
++ 	  fprintf(tfp, "O%s\n", macvalue('r',e));
++ }
++ 
+  	/* output name of data file */
+  	fprintf(tfp, "D%s\n", e->e_df);
+  
+***************
+*** 565,571
+  	/*
+  	**  Open the file created by queueup.
+  	*/
+! 
+  	p = queuename(e, 'q');
+  	f = fopen(p, "r");
+  	if (f == NULL)
+
+--- 570,576 -----
+  	/*
+  	**  Open the file created by queueup.
+  	*/
+!        
+  	p = queuename(e, 'q');
+  	f = fopen(p, "r");
+  	if (f == NULL)
+***************
+*** 575,580
+  	}
+  	FileName = p;
+  	LineNumber = 0;
+  
+  	/*
+  	**  Read and process the file.
+
+--- 580,586 -----
+  	}
+  	FileName = p;
+  	LineNumber = 0;
++ 	define('r',NULL,e);
+  
+  	/*
+  	**  Read and process the file.
+***************
+*** 595,600
+  				(void) chompheader(&buf[1], FALSE);
+  			break;
+  
+  		  case 'M':		/* message */
+  			e->e_message = newstr(&buf[1]);
+  			break;
+
+--- 601,610 -----
+  				(void) chompheader(&buf[1], FALSE);
+  			break;
+  
++ 		  case 'O':
++ 			define('r',newstr(&buf[1]),e);
++ 			break;
++ 
+  		  case 'M':		/* message */
+  			e->e_message = newstr(&buf[1]);
+  			break;
+***************
+*** 628,634
+  			break;
+  		}
+  	}
+- 
+  	FileName = NULL;
+  }
+  /*
+
+--- 638,643 -----
+  			break;
+  		}
+  	}
+  	FileName = NULL;
+  }
+  /*
+*** sendmail.h.ORIG	Fri Feb 10 06:59:10 1984
+--- sendmail.h	Sat Aug  3 05:06:53 1985
+***************
+*** 290,295
+  # define CONDIF		'\031'	/* conditional if-then */
+  # define CONDELSE	'\032'	/* conditional else */
+  # define CONDFI		'\033'	/* conditional fi */
+  /*
+  **  Symbol table definitions
+  */
+
+--- 290,300 -----
+  # define CONDIF		'\031'	/* conditional if-then */
+  # define CONDELSE	'\032'	/* conditional else */
+  # define CONDFI		'\033'	/* conditional fi */
++ 
++ /* normalize Internet address operator */
++ # define NORMREPL       '\034'  /* normalized host replacement */
++ # define MACVALUE	'\035'	/* run-time macro value */
++ 
+  /*
+  **  Symbol table definitions
+  */
+
+

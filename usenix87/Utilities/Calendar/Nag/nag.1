@@ -1,0 +1,147 @@
+.TH NAG 1 "Thu Sep  4 11:48:01 PDT 1986"
+.SH NAME
+nag \- annoying reminder service daemon.
+.SH SYNOPSIS
+.B nag
+.br
+.B okok
+.SH DESCRIPTION
+.I Nag
+issues reminders from your ~/.nag file as specified.  You start
+.I nag
+in your
+.I .profile
+or
+.I .login,
+where it lies around much like
+.I leave(1)
+until you logout.  It reads the .nag file, and executes reminder
+commands at intervals before a time.  Reminders are silenced with
+.I okok.
+When you log off,
+.I nag
+exits just before it would have executed a command on your behalf.
+.PP
+.I Nag
+ignores interrupts, quits and terminates.  To get rid of it, you can log
+off or use ``kill \-9.''
+.PP
+The .nag file has the format:
+.nf
+
+	[ status ] day time interval command
+.fi
+.PP
+.I status
+is either
+.br
+(1) '#', marking a comment line
+.br
+(2) ':', turning off execution of commands for the event.
+.PP
+.I day
+is one of
+.br
+(1) A date such as mm/dd/yy, or reasonable alternatives.
+.br
+(2) `*' meaning every day.
+.br
+(3) A day of the week.
+Day names may be recognizably abbreviated.
+.PP
+.I time
+is a standard time specification, like ``12:05'' or ``3AM''
+.PP
+.I interval
+is a colon separated list of signed integer offsets from the
+event
+.I time
+the
+.I command
+will be executed.  Negative values are before the event, 0 at the event,
+and positive values later.
+.PP
+.I command
+is a string up to a newline that will be executed by
+.I system(3)
+on your behalf at the specified
+.I interval
+until you shut it up with
+.I okok.
+.PP
+Some shell variables are set for use by the command:
+.br
+.B pretime
+is set to the -interval.
+.br
+.B posttime
+is set to the interval.
+.br
+.B now
+is set to an hh:mm string of the present time, in 24 hour format.
+.br
+.B then
+is set to an hh:mm string of the event time.
+.PP
+.I okok
+shuts up the the nagging.  It opens the terminal and prompts with the
+command(s) nearing their times, like rm -i.  Answering `y' silences
+further executions of the command.  It does this by editing the .nag
+file, which is noticed by any running
+.I nag
+processes the next time they wake up.
+.PP
+When a silenced event is past it's last possible occurrance,
+.I nag
+re\-enables it by writing the .nag file.  This makes `*' reminders
+work the next day.
+
+.SH EXAMPLES
+A .nag file might have the following entries:
+.PP
+.br
+ 8/8/88 2PM -60:-30:-15:0 writebig "$pretime to Client call at $then"
+.br
+ Mon 3PM -60:-30:-15:0 hey "Status report due in $pretime minutes"
+.br
+ Wed 3:30PM -30:-15:-5:0 echo "Committee at $then in $pretime minutes"
+.br
+ * 13:00 -45:-30:0 writebig "Lunch in $pretime minutes"
+.br
+ * 7PM -5:-4:-3:-2:-1:0 echo "GO HOME!!! It's $now"
+.br
+ * 10:30 -10:-5:0 echo "Donut truck in $pretime minutes"
+.SH FILES
+.ta 2i
+.B ~/.nag	file describing things to do.
+.SH ENVIRONMENT
+.br
+.B NAGFILE	a file to use as the nagfile instead of ~/.nag
+.SH "SEE ALSO"
+at(1),
+calendar(1),
+hey(1),
+leave(1),
+sleep(1),
+cron(8)
+.SH DIAGNOSTICS
+Complains about various syntax errors and times out of range, and problems
+accessing .nag file
+.SH BUGS
+.PP
+Probably won't work with `stty nostop' set.
+.PP
+Intervals will be approximate because of sleep granularity and scheduling
+contention.
+.PP
+There is no locking of the .nag file.  This could be trouble if a
+.I nag
+and an
+.I okok
+decide to write at the same time.
+.SH AUTHOR
+David Brower
+.br
+{sun, cbosgd, amdahl, mtxinu}!rtech!gonzo!daveb
+
+

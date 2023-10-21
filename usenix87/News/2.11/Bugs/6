@@ -1,0 +1,81 @@
+Received: by plus5.com (UIUC-5.31/24Nov86-03:13:38)
+	id AA11114; Thu, 9 Apr 87 02:36:31 CDT
+Path: plus5!wucs1!mcdchg!clyde!cbatt!soma!sob
+From: soma.bcm.tmc.edu!sob (Stan Barber)
+Newsgroups: news.software.b
+Subject: bugs in Patch #6 that affect SYSV sites only.
+Message-Id: <3018@soma.bcm.tmc.edu>
+Date: 31 Mar 87 20:10:26 GMT
+Reply-To: sob@soma.UUCP (Stan Barber)
+Distribution: world
+Organization: Neurology, Baylor College of Medicine, Houston, Tx
+Lines: 67
+Apparently-To: hokey
+
+For SYSV machines, there were a couple of bugs introduced
+in PATCH #6 for news.
+Problems: If you don't have F_RDLCK in <fcntrl.h>, you
+don't have struct flock either. 
+There was a typo in the routine to look for the history.d
+directories.
+
+These have been forwarded to rick.
+
+Here is the diff to fix the problems.
+Index: inews.c
+Prereq: 2.78
+*** inews.orig	Mon Mar 30 01:37:30 1987
+--- inews.c	Tue Mar 31 14:04:58 1987
+***************
+*** 25,31
+  # ifdef LOCKF
+  # include <unistd.h>
+  # include <fcntl.h>
+! 
+  struct flock news_lock;
+  # endif /* LOCKF */
+  
+
+--- 25,31 -----
+  # ifdef LOCKF
+  # include <unistd.h>
+  # include <fcntl.h>
+! #ifdef F_RDLCK
+  struct flock news_lock;
+  #endif
+  # endif /* LOCKF */
+***************
+*** 27,32
+  # include <fcntl.h>
+  
+  struct flock news_lock;
+  # endif /* LOCKF */
+  
+  #ifdef BSD4_2
+
+--- 27,33 -----
+  # include <fcntl.h>
+  #ifdef F_RDLCK
+  struct flock news_lock;
++ #endif
+  # endif /* LOCKF */
+  
+  #ifdef BSD4_2
+***************
+*** 540,546
+  		return; /* everything is ok */
+  	mfd = mailhdr((struct hbuf *)NULL,
+  		exists(dir) ? "Unwritable directories" : "Missing directories");
+! 	if (mfs == NULL)
+  		return;
+  	putc('\n', mfd);
+  	fprintf(mfd, "System: %s\n\nThere was a problem with %s!\n",
+
+--- 541,547 -----
+  		return; /* everything is ok */
+  	mfd = mailhdr((struct hbuf *)NULL,
+  		exists(dir) ? "Unwritable directories" : "Missing directories");
+! 	if (mfd == NULL)
+  		return;
+  	putc('\n', mfd);
+  	fprintf(mfd, "System: %s\n\nThere was a problem with %s!\n",

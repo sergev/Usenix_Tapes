@@ -1,0 +1,539 @@
+#
+/*
+ */
+
+#include "../param.h"
+#include "../systm.h"
+#include "../user.h"
+#include "../proc.h"
+#include "../buf.h"
+#include "../reg.h"
+#include "../inode.h"
+
+/*
+ * exec system call.
+ * Since an I/O buffer is not used to store the caller's
+ * arguments (swiped arg copy to swap from ver 7) the
+ * NEXEC define has been eliminated.  It has been replaced
+ * by "NCARGS", the max number of args allowed (must be
+ * multiple of 512) in param.h.
+ * --ghg 10/7/77
+ */
+#define EXPRI	-1
+
+int primetime	1;	/* set if prime time (used for games, etc) */
+exec()
+{
+	register struct buf *bp;
+	char *na, *nc, *ucp;
+	int c, bno, ss;
+	char *ap;
+	int ts, ds, sep;
+	int *iip;
+	struct inode *ip;
+	register char *cp;
+	extern uchar;
+
+	/*
+	 * pick up file names
+	 * and check various modes
+	 * for execute permission
+	 */
+
+	ip = namei(&uchar, 0);
+	if(ip == NULL)
+		return;
+	bno = 0;
+	bp = 0;
+	if(access(ip, IEXEC) || (ip->i_mode&IFMT)!=0)
+		goto bad;
+
+	/*
+	 * disallow a SUID file to be exec'd to tracing is set.
+	 * This eliminates the chance of a SUID execute-only
+	 * binary being run and dumped with cdb.
+	 * --ghg 2/25/79.
+	 */
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	if (u.u_uid)
+		if ((u.u_procp->p_flag&STRC) && (ip->i_mode&ISUID))
+			goto bad;
+	/*
+	 * pack up arguments into
+	 * a file on the swapdev (allows > 512 bytes of args)
+	 */
+
+	na = 0;
+	nc = 0;
+	if((bno = malloc(swapmap,(NCARGS+511)/512)) == 0)
+		panic("Out of swap");
+	if(u.u_arg[1]) while(ap = fuword(u.u_arg[1])) {
+		na++;
+		if(ap == -1)
+			u.u_error = EFAULT;
+		u.u_arg[1] =+ 2;
+		do {
+			if(nc >= NCARGS-1)
+				u.u_error = E2BIG;
+			if((c = fubyte(ap++)) < 0 )
+				u.u_error = EFAULT;
+			if(u.u_error)
+				goto bad;
+			if((nc&0777) == 0) {
+				if(bp)
+					bawrite(bp);
+				bp = getblk(swapdev, bno+(nc>>9));
+# ifndef XBUF
+				cp = bp->b_addr;
+# endif
+# ifdef XBUF
+				*ka5 = bp->b_par;
+				cp = &b;
+# endif
+			}
+			nc++;
+			*cp++ = c;
+		} while(c > 0);
+	}
+	if(bp)
+		bawrite(bp);
+	bp = 0;
+	if((nc&1) != 0)
+		nc++;
+
+	/*
+	 * read in first 8 bytes
+	 * of file for segment
+	 * sizes:
+	 * w0 = 407/410/411 (410 implies RO text) (411 implies sep ID)
+	 * w1 = text size
+	 * w2 = data size
+	 * w3 = bss size
+	 */
+
+	u.u_base = &u.u_arg[0];
+	u.u_count = 8;
+	u.u_offset[1] = 0;
+	u.u_offset[0] = 0;
+	u.u_segflg = 1;
+	readi(ip);
+	u.u_segflg = 0;
+	if(u.u_error)
+		goto bad;
+	sep = 0;
+	if(u.u_arg[0] == 0407) {
+		u.u_arg[2] =+ u.u_arg[1];
+		u.u_arg[1] = 0;
+	} else
+	if(u.u_arg[0] == 0411)
+		sep++; else
+	if(u.u_arg[0] != 0410) {
+		u.u_error = ENOEXEC;
+		goto bad;
+	}
+	if(u.u_arg[1]!=0 && (ip->i_flag&ITEXT)==0 && ip->i_count!=1) {
+		u.u_error = ETXTBSY;
+		goto bad;
+	}
+
+	/*
+	 * find text and data sizes
+	 * try them out for possible
+	 * exceed of max sizes
+	 */
+
+	ts = ((u.u_arg[1]+63)>>6) & 01777;
+	ds = ((u.u_arg[2]+u.u_arg[3]+63)>>6) & 01777;
+	ss = SSIZE + ((nc + na*2)>>6);
+	if(estabur(ts, ds, ss, sep))
+		goto bad;
+
+	/*
+	 * allocate and clear core
+	 * at this point, committed
+	 * to the new image
+	 */
+
+	u.u_prof[3] = 0;
+	xfree();
+	expand(USIZE);
+	xalloc(ip);
+	c = USIZE+ds+ss;
+	expand(c);
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	while(--c >= USIZE)
+		clearseg(u.u_procp->p_addr+c);
+
+	/*
+	 * read in data segment
+	 */
+
+	estabur(0, ds, 0, 0);
+	u.u_base = 0;
+	u.u_offset[1] = 020+u.u_arg[1];
+	u.u_count = u.u_arg[2];
+	readi(ip);
+
+	/*
+	 * initialize stack segment
+	 */
+
+	u.u_tsize = ts;
+	u.u_dsize = ds;
+	u.u_ssize = ss;
+	u.u_sep = sep;
+	estabur(u.u_tsize, u.u_dsize, u.u_ssize, u.u_sep);
+
+ 	/*
+ 	 * copy back arglist
+ 	 */
+ 
+ 	ucp = -nc;
+ 	ap = ucp - na*2 - 4;
+ 	u.u_ar0[R6] = ap;
+ 	suword(ap, na);
+ 	nc = 0;
+ 	while(na--) {
+ 		suword(ap=+2, ucp);
+ 		do {
+ 			if ((nc&0777) == 0) {
+ 				if (bp)
+ 					brelse(bp);
+ 				bp = bread(swapdev, bno+(nc>>9));
+# ifndef XBUF
+ 				cp = bp->b_addr;
+# endif
+# ifdef XBUF
+				*ka5 = bp->b_par;
+				cp = &b;
+# endif
+ 			}
+ 			subyte(ucp++, (c = *cp++));
+ 			nc++;
+ 		} while(c&0377);
+	}
+	suword(ap+2, -1);
+	/*
+	 * set SUID/SGID protections, if no tracing
+	 */
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	if ((u.u_procp->p_flag&STRC)==0) {
+		if(ip->i_mode&ISUID)
+			if(u.u_uid != 0) {
+				u.u_timlim = 0;
+				u.u_uid = ip->i_uid0&0377 | (ip->i_uid1<<8);
+				u.u_procp->p_uid = u.u_uid;
+			}
+	}
+
+	/*
+	 * Since group id's aren't used on this sys, if SGID bit
+	 * is set, set immediate bad execution priority.  This
+	 * is used to discourage games during primetime.
+	 * Take this code out if you have GID's.
+	 * --ghg 07/09/78.
+	 */
+
+	if (primetime) {
+		if (ip->i_mode&ISGID)
+			if (u.u_uid != 0) {
+				u.u_procp->p_nice = 126;
+				u.u_procp->p_flag =| LSCHD;
+			}
+	}
+
+	/* .................................................... */
+
+	/*
+	 * clear sigs, regs and return
+	 */
+
+	for(iip = &u.u_signal[0]; iip < &u.u_signal[NSIG]; iip++)
+		if((*iip & 1) == 0)
+			*iip = 0;
+	for(cp = &regloc[0]; cp < &regloc[6];)
+		u.u_ar0[*cp++] = 0;
+	u.u_ar0[R7] = 0;
+	for(iip = &u.u_fsav[0]; iip < &u.u_fsav[25];)
+		*iip++ = 0;
+
+bad:
+	if(bp)
+		brelse(bp);
+	if(bno)
+		mfree(swapmap, (NCARGS+511)/512, bno);
+	iput(ip);
+}
+
+/*
+ * exit system call:
+ * pass back caller's r0
+ */
+rexit()
+{
+
+	u.u_arg[0] = u.u_ar0[R0] << 8;
+	exit();
+}
+
+/*
+ * Release resources.
+ * Save u. area for parent to look at.
+ * Enter zombie state.
+ * Wake up parent and init processes,
+ * and dispose of children.
+ */
+exit()
+{
+	register int *q, a;
+	register struct proc *p;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	u.u_procp->p_flag =& ~STRC;
+	u.u_procp->p_clktim = 0;
+	for(q = &u.u_signal[0]; q < &u.u_signal[NSIG];)
+		*q++ = 1;
+	for(q = &u.u_ofile[0]; q < &u.u_ofile[NOFILE]; q++)
+		if(a = *q) {
+			*q = NULL;
+			closef(a);
+		}
+	plock2(u.u_cdir);
+	iput(u.u_cdir);
+	xfree();
+	a = malloc(swapmap, 1);
+	if(a == NULL)
+		panic("out of swap");
+	p = getblk(swapdev, a);
+# ifndef XBUF
+	bcopy(&u, p->b_addr, 256);
+# endif
+# ifdef XBUF
+	*ka5 = p->b_par;
+	bcopy(&u, &b, 256);
+# endif
+	bwrite(p);
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	q = u.u_procp;
+	mfree(coremap, q->p_size, q->p_addr);
+	q->p_addr = a;
+	q->p_stat = SZOMB;
+#ifdef INGRES
+/*
+ * remove outstanding ingres locks for dead proc
+ */
+	ilrma(q->p_pid);
+#endif
+
+loop:
+	for(p = &proc[0]; p < &proc[NPROC]; p++)
+	if(q->p_ppid == p->p_pid) {
+		wakeup(&proc[1]);
+		wakeup(p);
+		for(p = &proc[0]; p < &proc[NPROC]; p++)
+		if(q->p_pid == p->p_ppid) {
+			p->p_ppid  = 1;
+			if (p->p_stat == SSTOP)
+				setrun(p);
+		}
+		swtch();
+		/* no return */
+	}
+	q->p_ppid = 1;
+	goto loop;
+}
+
+/*
+ * Wait system call.
+ * Search for a terminated (zombie) child,
+ * finally lay it to rest, and collect its status.
+ * Look also for stopped (traced) children,
+ * and pass back status from them.
+ */
+wait()
+{
+	register f, *bp;
+	register struct proc *p;
+
+	f = 0;
+
+loop:
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	for(p = &proc[0]; p < &proc[NPROC]; p++)
+	if(p->p_ppid == u.u_procp->p_pid) {
+		f++;
+		if(p->p_stat == SZOMB) {
+			u.u_ar0[R0] = p->p_pid;
+			bp = bread(swapdev, f=p->p_addr);
+# ifdef XBUF
+			*ka5 = praddr;
+# endif
+			mfree(swapmap, 1, f);
+			p->p_stat = NULL;
+			p->p_pid = 0;
+			p->p_ppid = 0;
+			p->p_sig = 0;
+			p->p_ttyp = 0;
+			p->p_flag = 0;
+# ifndef XBUF
+			p = bp->b_addr;
+# endif
+# ifdef XBUF
+			*ka5 = bp->b_par;
+			p = &b;
+# endif
+			u.u_cstime[0] =+ p->u_cstime[0];
+			dpadd(u.u_cstime, p->u_cstime[1]);
+			dpadd(u.u_cstime, p->u_stime);
+			u.u_cutime[0] =+ p->u_cutime[0];
+			dpadd(u.u_cutime, p->u_cutime[1]);
+			dpadd(u.u_cutime, p->u_utime);
+			u.u_ar0[R1] = p->u_arg[0];
+			brelse(bp);
+			return;
+		}
+		if(p->p_stat == SSTOP) {
+			if((p->p_flag&SWTED) == 0) {
+				p->p_flag =| SWTED;
+				u.u_ar0[R0] = p->p_pid;
+				u.u_ar0[R1] = (p->p_sig<<8) | 0177;
+				return;
+			}
+			continue;
+		}
+	}
+	if(f) {
+		sleep(u.u_procp, PWAIT);
+		goto loop;
+	}
+	u.u_error = ECHILD;
+}
+
+/*
+ * fork system call.
+ */
+fork()
+{
+	register struct proc *p1, *p2;
+	int nproc;
+
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	p1 = u.u_procp;
+/*	Limit Max number of processes to MAXJOB if not super-user
+ *	This is mostly a safeguard against accidental "rabbit" jobs
+ *	which fill up the proc table.   -ghg 3/27/77
+ */
+	if(u.u_uid) {
+		nproc = 0;
+		for(p2 = &proc[0]; p2 < &proc[NPROC]; p2++)
+			if((p2->p_uid == u.u_uid) && (p2->p_stat != NULL))
+				nproc++;
+			if(nproc > MAXJOB)
+				goto excjob;
+	}
+/* ............................................................. */
+	for(p2 = &proc[0]; p2 < &proc[NPROC]; p2++)
+		if(p2->p_stat == NULL)
+			goto found;
+excjob:	/* excessive jobs for this user */
+	u.u_error = EAGAIN;
+	goto out;
+
+found:
+	if(newproc()) {
+		u.u_ar0[R0] = p1->p_pid;
+		u.u_cstime[0] = 0;
+		u.u_cstime[1] = 0;
+		u.u_stime = 0;
+		u.u_cutime[0] = 0;
+		u.u_cutime[1] = 0;
+		u.u_utime = 0;
+		u.u_timlim = 0;
+		p2->p_flag =& ~LSCHD;
+		return;
+	}
+	u.u_ar0[R0] = p2->p_pid;
+
+out:
+	u.u_ar0[R7] =+ 2;
+}
+
+/*
+ * break system call.
+ *  -- bad planning: "break" is a dirty word in C.
+ */
+sbreak()
+{
+	register a, n, d;
+	int i;
+
+	/*
+	 * set n to new data size
+	 * set d to new-old
+	 * set n to new total size
+	 */
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+
+	/*
+	 * kludge for xx dev, and other realtime I/O
+	 * sbreak() illegal if locked in core.
+	 */
+
+	if (u.u_procp->p_flag & SLOCK) {
+		u.u_error = ENOMEM;
+		return;
+	}
+
+	n = (((u.u_arg[0]+63)>>6) & 01777);
+	if(!u.u_sep)
+		n =- nseg(u.u_tsize) * 128;
+	if(n < 0)
+		n = 0;
+	d = n - u.u_dsize;
+	n =+ USIZE+u.u_ssize;
+	if(estabur(u.u_tsize, u.u_dsize+d, u.u_ssize, u.u_sep))
+		return;
+	u.u_dsize =+ d;
+	if(d > 0)
+		goto bigger;
+	a = u.u_procp->p_addr + n - u.u_ssize;
+	i = n;
+	n = u.u_ssize;
+	while(n--) {
+		copyseg(a-d, a);
+		a++;
+	}
+	expand(i);
+	return;
+
+bigger:
+	expand(n);
+# ifdef XBUF
+	*ka5 = praddr;
+# endif
+	a = u.u_procp->p_addr + n;
+	n = u.u_ssize;
+	while(n--) {
+		a--;
+		copyseg(a-d, a);
+	}
+	while(d--)
+		clearseg(--a);
+}

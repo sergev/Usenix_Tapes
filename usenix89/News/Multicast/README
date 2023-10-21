@@ -1,0 +1,92 @@
+INSTALLATION
+============
+
+First, be sure to customize Makefile for your site.  The variables should
+be the same as news 2.10.3 and beyond.
+
+Uucast may have to be customized for you site so that the uucp file
+names that are used are recognized by your uucico.  The only real option 
+is HDB.  Sites running HDB UUCP should just have to define
+HDB in Makefile.  I hope that this works :-).  If you don't have HDB,
+the other configuration should work just fine for you.  There are two
+GRADE values that are defined in the file uucast.h.  These are the
+grade values that can be used by 4.3 BSD to regulate traffic flow.  In
+the case of uucast they should be used to guarantee a unique job file
+name.  If your uux generates jobs like:
+
+	C.ihnp4AD8471	local command file
+	D.mecctsXA8471	remote command file (becomes X. file on ihnp4)
+	D.ihnp4BC8471	data to transmit
+
+then the grade is AD.  Choose a grade that doesn't conflict with this.
+The defaults are MA and XM.  Uucast would have generated:
+
+	C.ihnp4MA8471	local command file
+	D.mecctsXM8471	remote command file (becomes X. file on ihnp4)
+	D.ihnp4MA8471	data to transmit
+
+Note that while the grades in the data and local command files are not
+different, UUCP doesn't seem to care about this.  If it cares on your
+system, you should define a third grade (GRADE3) and use that as well.
+Also note that the remote command file usually must have an X in it's
+name so that it is recognized as such by the system.  This is a little
+curious, but since I don't have source I can't puzzle it out on my
+own.
+
+On Ultrix systems the UUCP datafiles are in a strange place, and job
+files are in different directories.  This can all be specified by
+changing the CDIR, DDIR, and XDIR definitions in uucast.h.  There may
+be other systems where this is weird as well.  In any case, you can
+specify the location of each type of file individually.  See uucast.h
+for more information.
+
+All of this stuff is different for each implementation of uucp, so
+I have made it as easy as possible to change.  If you need to hack it for your
+system, please send those hacks to ahby@MECC.COM, so I can incorporate them into
+future releases.
+
+A word of warning:  you WILL have trouble installing this software.  It
+is not perfect, nor is it forgiving.  If you are unsure about the
+stability of any of the modules on your system, there are ways in each
+of them to preserve the original state of things.  Please be careful
+when using this software, as it can be very detrimental to your news
+system, as well as all of your downstream sites.
+
+Also note that there is no make install option in the Makefile.  This
+is really just laziness on my part.  Move all of the generated files
+into LIBDIR.  Remember that uucast MUST be suid to uucp so that it can
+generate job files with the correct ownership.
+
+
+OPERATION
+=========
+
+Example sys file.  
+
+meccsd:mod,usa,na,net,world,comp,news,sci,rec,misc,soc,talk,to.meccsd:M:master
+karau:net.sources,news.admin,news.software.b,to.karau:M:master
+nis:mod,usa,na,net,world,comp,news,sci,rec,misc,soc,talk,to.nis:M:master
+zeke:mod,usa,na,net,world,comp,news,sci,rec,misc,soc,talk,to.zeke:M:master
+master:all:OF:/usr/spool/batch/master
+
+The M indicates that the site is being multicast to.  The
+word master is the name of a dummy entry in the sys file which gives
+the information about what to do with these multi cast sites.  Site
+"master" is receiving all articles, is the destination of a multicast
+(O) and is a batched feed (F).  The file it places things into is
+/usr/spool/batch/master, just like a normal batched entry.
+
+In your crontab, replace the sendbatches with something like:
+
+	55 18-5 * * * cat /usr/spool/batch/master >> /usr/spool/batch/hold; /usr/lib/news/multibatch -c master >> /usr/lib/cron/cast-log
+
+This preserves the batch file (just in case) and then multibatches the
+articles indicated in file master compressed (-c flag for multisend).
+
+Remember that multibatch calls the script multisend, and expects
+multisend to be in the $(LIBDIR) directory for news.  Multisend calls
+uucast, which should be in the path or in your $(LIBDIR) directory.
+
+Good luck!  If you have any problems, please drop me a line.
+
+Copyright (C) Shane McCarron, 1987.

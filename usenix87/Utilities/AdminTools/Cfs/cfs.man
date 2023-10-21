@@ -1,0 +1,206 @@
+.lg 0
+.hy 0
+.TH CFS 1 LOCAL "USGS Pacific Marine Geology"
+.SH NAME
+cfs \- check file states
+.SH SYNOPSIS
+.B cfs
+\-[scudt][v]  statfile  [filename ...]
+.SH DESCRIPTION
+.I Cfs
+maintains a
+.I statfile
+for checking the states of many files.
+.I Cfs
+checks for changes in most of the parameters returned by the
+.BR stat (2)
+system call, including:
+inode number,
+file mode,
+link count,
+owner,
+group,
+length,
+modification date/time,
+and
+inode change date/time.
+Access date/time is not checked for obvious reasons,
+and modification date/time is not checked for character or block special
+devices.
+By checking file states on a regular basis,
+you can help insure the security of the files checked.
+.PP
+Normal use of
+.I cfs
+is with the
+.B \-s
+option, as in:
+.sp
+.RS
+cfs  \-s  statfile
+.RE
+.SH OPTIONS
+.IP "\-s"
+checks the Status of each filename in
+.I statfile
+against the recorded status.
+If any differences are found,
+a warning message is printed on standard output,
+and
+.I cfs
+exits with an error status.
+.IP "\-c"
+Creates a
+.I statfile
+from a list of filenames read from standard input.
+.IP "\-u"
+Updates
+.I statfile
+for each
+.I filename.
+If no entry is found, the entry is added.
+.IP "\-d"
+Deletes the entry for each
+.I filename
+from
+.I statfile.
+.IP "\-t"
+prints a Table of contents for the entire
+.I statfile
+if no filename present.
+With 
+.B \-tv,
+prints the status information.
+Output format is similar to the output from \*(lqls  \-lig\*(rq,
+with the addition of inode change time after the modification time.
+.IP "v"
+Verbose option,
+prints a file-by-file description of the actions taken.
+Can be added to any of the other options, 
+i.e.
+.BR \-sv ,
+.BR \-cv ,
+.BR \-uv ,
+.BR \-dv ,
+.BR \-tv .
+.SH EXAMPLES
+To create a
+.I statfile
+for your home directory you could use the following sequence:
+.sp
+.RS
+.nf
+echo  $HOME/.??*  $HOME/*  |  cfs  \-c  statfile
+.fi
+.RE
+.sp
+To remove the volatile entries \*(lq.msgsrc\*(rq and \*(lqcalendar\*(rq:
+.sp
+.RS
+.nf
+cfs  \-d  statfile  $HOME/.msgsrc  $HOME/calendar
+.fi
+.RE
+.sp
+To check file states:
+.sp
+.RS
+.nf
+cfs  \-s  statfile
+.fi
+.RE
+.SH NOTES
+.PP
+The
+.I statfile
+is exclusively locked using
+.IR flock (2)
+for
+.I any
+operation.
+.I Cfs
+will exit with an error message if the
+.I statfile
+is locked.
+.PP
+When creating a
+.I statfile,
+use absolute pathnames for best results
+e.g. \*(lq/we/foo/bar\*(rq not just \*(lqbar\*(rq.
+.PP
+.IR Statfile s
+may be glued together using
+.BR cat (1).
+Otherwise, the status data is stored in binary form,
+and the
+.IR statfile s
+should not be read or edited.
+.SH DIAGNOSTICS
+.TP
+cfs: status check FAILED for \f2FILENAME\f1
+The file status stored in the statfile doesn't match the current status of
+.IR FILENAME ,
+or
+.I FILENAME
+doesn't exist.
+With the
+.B \-v
+option, more detail is printed.
+You should investigate this potential security violation.
+.TP
+cfs: can't open \f2STATFILE\f1 for reading
+.TP
+cfs: can't open \f2STATFILE\f1 for writing
+.TP
+cfs: statfile \f2STATFILE\f1 is in use and locked
+Another
+.I cfs
+program is using the
+.IR STATFILE .
+Try again later.
+.TP
+cfs: error - truncated statfile
+The statfile was not as long as expected.
+Perhaps you specified a file that is not really a statfile.
+.TP
+cfs: error - bad pathname in statfile
+A mangled pathname is in the statfile.
+Perhaps the statfile is truncated or trashed, or
+perhaps you specified a statfile that is not really a statfile.
+.TP
+cfs: \f2STATFILE\f1 not changed
+If
+.I cfs
+encounters an error during an update (\f3\-u\f1) or delete (\f3\-d\f1)
+operation,
+the original
+.I STATFILE
+will not be changed.
+.TP
+cfs: option \f2X\f1 not recognized
+You specified a command line option other than
+.BR -scudtv .
+.TP
+cfs: no statfile specified
+You did not specify the name of the statfile to be used on the command line.
+.TP
+cfs: \f2X\f1: only one of {scudt} may be specified
+You gave more than one action option on the command line, e.g.
+.BR \-ut .
+.TP
+cfs: one of {-s -c -u -d -t} must be specified
+You did not give any action options on the command line, e.g.
+.BR \-v .
+.SH FILES
+\&./cfs.XXXXXX \- temporary file for update and delete operations.
+.SH BUGS
+.I Cfs
+can't properly check the status of the
+.I statfile
+using
+.I statfile.
+This bug is not a fault of the program \-
+\*(lqTime is Mother Nature's way of keeping everything
+from happening at once.\*(rq
+.SH AUTHOR
+Rex Sanders, USGS Pacific Marine Geology

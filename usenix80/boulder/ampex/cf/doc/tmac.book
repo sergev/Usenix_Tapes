@@ -1,0 +1,1080 @@
+.\"
+.\" Book macros
+.\"
+.\"  These macros, to be used in conjunction with the -ms package
+.\" (as revised to make .KF's and .FS/.FE's work properly), are
+.\" for writing book-style documents, such as dissertations and
+.\" SEL tech reports.  They provide Table-of-Content generation
+.\" and illustration-inclusion facilities, and a number of minor
+.\" formatting options.  For details, see BOOK(VII).
+.\"
+.\" Copyright c 1978 by Robert G. Mathews
+.\"
+.
+.
+.\"
+.\" Initialization
+.\"
+.
+.
+.so /usr/lib/tmac.s	\" load -ms macros
+.
+.		\" Establish line spacing:
+.		\"  Ls is the baseline spacing to use in the body
+.		\"   the text
+.		\"  Ms is the minimal spacing, used in footnotes,
+.		\"   captions, etc
+.		\" Everything will fall apart if other than 12p
+.		\" basic spacing is used.
+.if !\n(Ms .nr Ms 12p
+.if !\n(Ls .nr Ls 24p
+.
+.		\" Tell -ms macros about sizes
+.		\"  s>0 -- set vertical spacing (default 24p)
+.		\"	    s < 12 -> number of 12p lines
+.		\"	    s > 11 -> spacing to request in points
+.		\"  p>0 -- offset page 1.5i extra
+.		\"  d>0 -- alternate offsets for double-sided printing
+.		\"  o>0 -- chapters etc. forced to odd pages
+.		\"  v>0 -- verbose: print page numbers etc.
+.ie \ns>11 .nr Ls \nsp
+.el .if \ns .nr Ls \nsu*12p
+.nr VS \n(Ls
+.nr FS \n(Ms
+.
+.		\" Handle static and oscillation page offsets
+.nr PO \n(.o
+.if \np .nr PO +1.5i
+.po \n(POu
+.if \nd\{\
+.		\" Set up oscillating offsets if necessary
+.if \n(POu<.5i .nr PO .5i
+.de Co
+.		\" Odd page => wide left margin
+.		\" Even page => narrow left margin
+.		\" Exception: treat pg. 0 (coversheet) as odd
+.ie ((\\n%%2)=1):(\\n%=0) .nr PO \n(POu
+.el .nr PO \n(POu-.5i
+.po \\n(POu
+'sp \\n(HMu/2u	\" finish header spacing
+..
+.wh 1 Co
+.  \}
+.
+.
+.		\" Set up odd-page force/page break macro
+.ie \no\{\
+.		\" force requested
+.de Bp
+.		\" Let p mean "at the page top", and m mean "in the
+.		\"  middle somewhere.  Let e mean "this page is even",
+.		\"  and o "this page is odd".  The four cases are:
+.		\"    mo - break the page, converting to pe
+.		\"    me - break the page, converting to po
+.		\"    pe - break the page
+.		\"    po - do nothing
+.if \\n(nlu>\\n(HMu\{\
+.rs
+.bp
+.  \}
+.if e\{\
+.rn CF Cf
+.rs
+.bp
+.rn Cf CF
+.  \}
+..
+.  \}
+.el\{\
+.		\" no force
+.de Bp
+.if \\n(nlu>\\n(HMu\{\
+.rs
+.bp
+.  \}
+..
+.  \}
+.
+.nr Pt 3	\" Default page for TOC
+.nr PN 1	\" Start with small Roman page numbers
+.af PN i
+.nr Mj 0	\" Major section: 0 for prelims, 1 for Ch, 2 for Ap, 3 for post
+.
+.\"
+.\" Header and footer setup
+.\"
+.
+.ds CF "\(hy \\n(PN \(hy
+.rm CH
+.
+.
+.\"
+.\" Format macros
+.\"
+.
+.de Di	\" Dissertation: Di date dept [3rd-reader-dept [2nd-reader-dept]]
+.Sm		\" small spacing
+.RP		\" like Released Paper
+.rm OK
+.rm TR
+.rm Tr
+.rm Ox
+.rm La
+.rm Lb
+.if \\n(.$<2 .tm Di: usage is .Di date dept ...
+.ds Da \\$1
+.ds Dd \\$2
+.if \\n(.$>2 .ds D3 (\\$3)
+.if \\n(.$>3 .ds D2 (\\$4)
+.nr ST 9	\" style 9 - cover sheet is pg. i, abstract on pg. v
+.Ra		\" set up Tr/Di abstract
+.rm S8
+.rm Di
+..
+.
+.de Tr	\" SEL Tech Rpt: Tr [dateline [tr-number [SEL-number]]]
+.am PT		\" arrange to print coversheet header
+.if \\\\n(Tr .tl '''\\$3'
+\\..
+.nr Tr 1	\" enable Tech report header
+.Sm		\" small spacing
+.RP		\" like Released Paper
+.rm OK
+.rm TR
+.rm Di
+.if \\n(.$>0 .ds Da \\$1
+.if \\n(.$>1 .ds Tn \\$2
+.rr Tr		\" Tr header printed; disable again
+.nr ST 8	\" style 8 - cover sheet is pg. i, abstract on pg. iii
+.Ra		\" set up Tr/Di abstract
+.rm S9
+.rm Tr
+..
+.
+.de Ra		\" redefine abstract for Tr/Di
+.RA		\" don't save it
+.rm RA
+.am AB		\" add page logic
+.nr Ab \\\\n%
+\\..
+.
+.am AE		\" add TOC logic to AE macro
+.RT
+.nf		\" Make TOC entry
+.ta \\n(.lu-5n \\n(.lu-1nR
+.af Ab i
+.di Tc
+Abstract \a\t\\\\n(Ab
+.di
+.fi
+.rr Ab
+.rm AB
+.rm AE
+\\..
+.rm Ra
+..
+.
+.de Xs	\" Extra abstract for dissertations: .Xs year author
+.if !\\n(.$=2 .tm Xs: wrong number of args
+.ds Wd \\$1
+.ds Wa \\$2
+.br
+.di
+.ll \\n(LLu+.5i
+.fi
+.Sm
+.nr 1T 1	\" fake the initialization
+.nr IK 1	\" avoid undiverting
+.di Wb		\" save in Wb
+..
+.
+.de Xe	\" End of extra abstract
+.br
+.di
+.ll -.5i
+.nr 1T 0
+.nr IK 0
+..
+.
+.de Cr	\" Print copyright notice: Cr date name
+.nr Cd \\$1
+.ds Cn \\$2
+..
+.
+.de La	\" Print lab name: La name-arg
+.	\"  The given arg may be "no" for no name, an SEL lab name
+.	\"  for the usual SEL lab subtitle, or nothing, in which
+.	\"  case the lab name follows the .La on subsequent lines.
+.br
+.di
+.ie ~\\$1~no~ .rm Lb
+.el .ie ~\\$1~~\
+.  \{\
+.	\" user-supplied lab name
+.	di Lb
+.	nf
+.  \}
+.el\
+.  \{\
+.	\" rebuild the name
+.de Lb
+\\$1
+Stanford Electronics Laboratories
+Stanford University      Stanford, California
+\\..
+.  \}
+..
+.
+.de Lb
+Stanford Electronics Laboratories
+Stanford University      Stanford, California
+..
+.
+.de Oc	\" Other comments
+.br
+.di
+.ns
+.ll \\n(LLu/2u
+.fi
+.di Od		\" save comments
+..
+.de Ox	\" Dump other comments
+.nf
+.ce 1000
+.di Oz		\" get vertical size
+.Od
+.di
+.rm Oz
+.rs
+.nr Ox (9.5i-\\n(nl-\\n(dn)/(2*12p)
+.if \\n(Ox<0 .nr Ox 0
+.sp \\n(Ox
+.rr Ox
+.Od
+.rm Od
+.fi
+..
+.
+.de S8	\" coversheet and copyright notice for SEL Tech Rept
+.ds CF " 
+.ce 0
+.br
+.ll \\n(LLu
+.rs
+.Ca U 		\" Upper case title
+.TX		\" Title
+.sp 1i
+.Ca UL 		\" Back to upper-lower
+.ce 1
+by
+.AX		\" Authors
+.rs
+.nr Da 5.5i-\\n(nlu
+.sp \\n(Dau
+.ce 1000
+\\*(Da
+.sp \\n(Dau
+.if !~\\*(Tn~~ Technical Report No. \\*(Tn
+.Ox		\" dump other comments
+.rs
+.sp |9.5i
+.pn 2
+.ce 1000
+.Lb
+.ce 0
+.
+.if \\n(nlu>\\n(HMu .bp
+.if \\n(Cd\{\
+.		\" Copyright requested
+.rs
+.sp (4.5i-24p-\\n(.sp)
+.ce 1000
+(c) Copyright \\n(Cd
+.sp 24p
+by
+.sp 24p
+\\*(Cn
+.ce 0
+.rr Cd
+.rm Cn
+.  \}
+.
+.Bp 		\" Go to abstract page
+.ds CF "\(hy \\\\n(PN \(hy
+.fi
+.rm Cr
+.rm La
+.rm Lb
+.rm Oc
+.rm Ox
+.rm Wa
+.rm Wb
+.rm Wd
+.rm S8
+..
+.
+.de S9	\" title page, copyright, and signature sheet for a dissertation
+.ds CF " 
+.ce 0
+.br
+.pn 2		\" title page is numbered i, so next page is ii
+.ll \\n(LLu
+.rs
+.ls 2
+.sp |1.5i
+.Ca U 		\" Upper case title
+.TX		\" Title
+.sp |4i
+.ce 100
+A Dissertation
+Submitted to the Department of \\*(Dd
+and the Committee on Graduate Studies
+of Stanford University
+in Partial Fulfillment of the Requirements
+for the Degree of
+Doctor of Philosophy
+.Ca UL 		\" Back to upper-lower
+.ls 0
+.sp |9.5i
+By
+.A1
+\\*(Da
+.ce 0
+.rs
+.
+.if \\n(nlu>\\n(HMu .bp
+.if \\n(Cd\{\
+.		\" Copyright requested
+.rs
+.sp (4.5i-24p-\\n(.sp)
+.ce 1000
+(c) Copyright \\n(Cd
+.sp 24p
+by
+.sp 24p
+\\*(Cn
+.ce 0
+.rr Cd
+.rm Cn
+.  \}
+.
+.Bp		\" Go to signature sheet
+.ds CF "\(hy \\\\n(PN \(hy
+.de Od	\" signature blurb macro: Od string-number
+.nf
+I certify that  I have read this thesis and that in my
+opinion it is fully adequate, in scope and quality, as
+a dissertation for the degree of Doctor of Philosophy.
+.sp .5i		\" signature line
+.ll 3i
+.po +\\n(LLu-3i
+.ce 2
+\\l'3i'
+\\\\&\\\\*(D\\\\$1\\\\&
+.sp .5i+12p
+.po
+.ll \\n(LLu
+\\..
+.rs		\" now, the real thing 3 times
+.sp |2i
+.ds D1 (Principal Adviser)
+.Od 1
+.Od 2
+.Od 3
+.rm Od
+.rm D1
+.rm D2
+.rm D3
+.sp |8.5i
+Approved for the University Committee\\kS
+\\h'|\\nSu-\\w~on Graduate Studies~u'on Graduate Studies:
+.rr S
+.sp .5i
+.ll 3i
+.po +\\n(LLu-3i
+.ce 2
+\\l'3i'
+Dean of Graduate Studies
+.po
+.ll \\n(LLu
+.
+.Bp 		\" Go to abstract page
+.fi
+.rm Cr
+.rm La
+.rm Oc
+.rm Ox
+.rm Dd
+.rm S9
+..
+.
+.
+.\"
+.\" Macro for sections not in body
+.\"
+.
+.de Se	\" Section title: Se Title...
+.if \\n(.$<1 .tm Se: NO ARGS GIVEN pg \\n% line \\n(.c
+.if \\n(.$>8 .tm Se: \\n(.$ ARGS GIVEN pg \\n% line \\n(.c
+.
+.Fk		\" Flush keeps
+.		\" Accumulate title string
+.Sp \\n(.lu-8n	\" full-line packing
+.Pa "\\$1" "\\$2" "\\$3" "\\$4" "\\$5" "\\$6" "\\$7" "\\$8" "\\$9"
+.		\" Break text and page if necessary
+.		\" Only honor force requests in later sections
+.Bp
+.		\" Play back the title
+.Pb
+.		\" Make a TOC entry
+.		\" TOC entry has large space before if it
+.		\" follows Ch or Ap entries, else no space
+.da Tc
+.if (\\n(Mj==1):(\\n(Mj==2)\{\
+.sp \\n(Lsu
+.nr Mj 3	\" Now in postliminaries
+.  \}
+.Te 0 "" 0 \\n(PN "\\*(Tl" "\\*(Fl"
+.da
+.PP
+..
+.
+.\"
+.\" Chapter title macro
+.\"
+.
+.de Ch	\" Chapter title: Ch chapter Title
+.if \\n(.$<2 .tm Ch: TOO FEW ARGS pg \\n% line \\n(.c
+.if \\$1<1 .tm Ch: BAD CHAPTER NUMBER pg \\n% line \\n(.c
+.if \\n(.$>8 .tm Ch: \\n(.$ ARGS GIVEN pg \\n% line \\n(.c
+.
+.Fk		\" Flush keeps
+.ie '\\n(Ch'0'\{.\" First chapter encountered
+.br		\" Clean up previous
+.Cs Chapter 	\" Start chapters
+.nr Ch 1	\" Init section numbers
+.nr H1 1
+.af H1 1
+.af Ch I	\" Chapter numbers in RO
+.  \}
+.el .Bp		\" nth chapter - break line and page if necessary
+.nr Ch \\$1	\" Set chapter number
+.Sp \\n(.lu-14n
+.Pa "\\$2" "\\$3" "\\$4" "\\$5" "\\$6" "\\$7" "\\$8" "\\$9"
+.
+.		\" Produce chapter title
+.Pb "Chapter \\n(Ch"
+.		\" Make TOC entry
+.da Tc
+.		\" TOC entry has extra space before always
+.sp \\n(Msu
+.Te 1 \\n(Ch. 6 \\n(PN "\\*(Tl" "\\*(Fl"
+.da
+.Ns \\$1	\" set up numbers
+.nr Mj 1	\" Now in chapters
+.PP
+..
+.
+.\"
+.\" Subsection of chapter or appendix (only!)
+.\"
+.
+.de Ss	\" Subsection: Ss level Title
+.if \\n(.$<2 .tm Ss: TOO FEW ARGS pg \\n% line \\n(.c
+.if \\n(.$>8 .tm Ss: \\n(.$ ARGS GIVEN pg \\n% line \\n(.c
+.if (\\$1<2):(\\$1>3) .tm Ss: SUBSECTION NOT AT LEVEL 2 or 3 pg \\n% line \\n(.c
+.if (\\n(Mj<1):(\\n(Mj>2) .tm Ss: CALLED OUTSIDE OF CHP/APP pg \\n% line \\n(.c
+.
+.		\" Accumulate 1- or 2-line title
+.ie \\$1=2 .Sp \\n(.lu-19n
+.el .Sp \\n(.lu-26n
+.Pa "\\$2" "\\$3" "\\$4" "\\$5" "\\$6" "\\$7" "\\$8" "\\$9"
+.
+.		\" Create the usual subsection heading
+.NH \\$1
+\\*(Ft
+.br
+.RT
+.		\" Make TOC entry
+.da Tc
+.		\" TOC entry has extra space before unless
+.		\" 2nd or subsequent at level 3.
+.if \\n(H3<2 .sp \\n(Msu
+.ie \\$1=2 .Te 6 \\*(SN 11 \\n(PN "\\*(Tl" "\\*(Fl"
+.el .Te 11 \\*(SN 18 \\n(PN "\\*(Tl" "\\*(Fl"
+.da
+.PP
+..
+.
+.\"
+.\" Appendix title
+.\"
+.
+.de Ap	\" Appendix title: Ap which Title
+.if \\n(.$<2 .tm Ap: TOO FEW ARGS pg \\n% line \\n(.c
+.if \\n(.$>8 .tm Ap: \\n(.$ ARGS GIVEN pg \\n% line \\n(.c
+.if \\$1<1 .tm Ap: BAD APPENDIX NUMBER pg \\n% line \\n(.c
+.
+.Fk		\" Flush keeps
+.ie '\\n(Ap'0'\{.\" First appendix
+.br		\" Clean up previous
+.Cs Appendix 	\" Start apendicies
+.nr Ap 1	\" Set up section numbers
+.af Ap A
+.nr H1 1
+.af H1 A
+.  \}
+.el .Bp		\" nth appendix - break line and page if necessary
+.nr Ap \\$1	\" Set appendix "number"
+.		\" accumulate the appendix title
+.Sp \\n(.lu-14n
+.Pa "\\$2" "\\$3" "\\$4" "\\$5" "\\$6" "\\$7" "\\$8" "\\$9"
+.
+.		\" Title the appendix
+.Pb "Appendix \\n(Ap"
+.		\" Make TOC entry
+.da Tc
+.		\" TOC entry has extra space preceding it
+.sp \\n(Msu
+.Te 1 \\n(Ap. 6 \\n(PN "\\*(Tl" "\\*(Fl"
+.da
+.Ns \\$1	\" Set up numbers
+.nr Mj 2	\" Now in appendicies
+.PP
+..
+.
+.\"
+.\" Macros for figures, tables, and the table of contents
+.\"
+.
+.de Is	\" Start illustration: Is [F] [T]
+.	\"  F switch forces full-page allocation
+.	\"  T switch indicates table instead of figure
+.	\"
+.	\"  Usage: Is, <body>, Ic, <caption>, [<body>, Ic, <caption>...], Ie
+.	\"
+.
+.if !\\n(1T .BG
+.if !~\\n(.z~Ib~\{\
+.if !~\\n(.z~~\
+.  \{\
+.	\" Bad news - Is use in a diversion other than its own
+.	tm Is: used in diversion ~\\n(.z~ pg \\n% line \\n(.c
+.	di
+.  \}
+.in 0		\" no indentation
+.nr IP 0	\" too bad if you were indented
+.br
+.di Ib		\" save body of figure
+\!.Rs
+.Sm		\" small spacing
+.		\" save F/T options
+.nr Io 0
+.ie '\\$1'F' .nr Io 1
+.el .if '\\$2'F' .nr Io 1
+.  \}
+.nr Io \\n(Io&1
+.ie '\\$1'T' .nr Io +2
+.el .if '\\$2'T' .nr Io +2
+..
+.
+.de Ic	\" Illustration caption: Ic caption...
+.if !~\\n(.z~Ib~ .tm Ic: USED WITHOUT Is pg \\n% line \\n(.c
+.if \\n(.$<1:\\n(.$>8 .tm Ic: \\n(.$ ARGS GIVEN pg \\n% line \\n(.c
+.		\" pack the caption
+.Sp \\n(.lu-14n
+.Pa "\\$1" "\\$2" "\\$3" "\\$4" "\\$5" "\\$6" "\\$7" "\\$8" "\\$9"
+.br		\" do the caption
+.		\" handle figure/table-dependent parts
+.ie \\n(Io<2\{\
+.nr Im \\n(Fn	\" figure
+.nr Fu 1	\" figure used
+.nr Fn +1 \}
+.el\{\
+.nr Im \\n(Tn	\" table
+.nr Tu 1	\" table used
+.nr Tn +1  \}
+.		\" set up to make table entry someday
+\!.It \\n(Io \\n(H1\\*(Ip\\n(Im. "\\*(Tl" "\\*(Fl"
+.		\" set up the immediately-printed part (like PP)
+.sp \\n(PDu
+.in 0
+.ti +\\n(PIu
+.Sm
+.ie \\n(Io<2 Figure
+.el Table
+\\n(H1\\*(Ip\\n(Im.
+..
+.
+.de Ie	\" End of illustration
+.if !~\\n(.z~Ib~ .tm Ie: USED WITHOUT Is pg \\n% line \\n(.c
+.		\" if full page, make it big
+.if (\\n(Io=1):(\\n(Io=3) .if \\n(.du<(9i-12p) .sp |9i-12p
+.br
+.ie (\\n(Io=1):(\\n(Io=3) \!.If 1200p 0
+.el \!.If 1.5i 48p
+.br
+.di		\" end of body diversion
+.nr Is \\n(dn	\" save diversion size
+.if \\n(Isu>(9i-12p)\{\
+.nr Iz (-(9i-12p-\\n(Isu)/12p)
+.tm Ie: \\n(H1.\\n(Im >1pg by \\n(Iz 12p lines pg \\n% line \\n(.c
+.rr Iz \}
+.		\" decide whether this figure must float.  If so,
+.		\" force a float.  If not, leave adjacent space.
+.ie (\\n(TC):(((\\n(Io=1):(\\n(Io=3))&(\\n(nlu>\\n(HMu))\
+:(((\\n(Io=0):(\\n(Io=2))&(\\n(Isu+48p>\\n(.t))\{\
+.nr TC 1	\" force float
+.KF		\" perform actual float
+.nf
+.Sm
+.Ib
+.KE \}
+.el\{\
+.nf
+.Sm
+.sp 36p		\" leading space
+.Ib		\" .If will provide trailer
+.  \}
+.rm Ib
+.fi
+.RT
+.Sl
+.rr Io
+.rr Is
+..
+.
+.de Rs	\" Restore spacing if not in a diversion
+.ie '\\n(.z'' .rs
+.el \!.Rs
+..
+.
+.de It	\" Illus. table: It I/T tag caption-line extra-caption-line
+.ie '\\n(.z''\{\
+.		\" The figure goes here.  Record where.
+.		\" Protect formatting as well as possible
+.		\" set up formatting for entry
+.br
+.ll \\n(LLu
+.in 0
+.ti 0
+.ls 1
+.Sm
+.		\" choose the appropriate table
+.ie \\$1<2 .da Ti
+.el .da Tt
+.Te 1 \\$2 7 \\n(PN "\\$3" "\\$4"
+.da
+.nf
+.Sm
+.ls
+.  \}
+.el \!.It \\$1 \\$2 "\\$3" "\\$4"
+..
+.
+.de If	\" Illustration space: .If kickover space
+.		\" When called undiverted, .bp's if
+.		\" there is less than the kickover space
+.		\" remaining.  Otherwise, the requested
+.		\" space is left.
+.ie '\\n(.z''\{\
+.ie \\n(.tu<\\$1 .bp
+.el\{\
+.sp \\$2
+.ns \}\}
+.el \!.If \\$1 \\$2
+..
+.
+.
+.de Pt	\" Print tables of contents
+.Fk		\" Flush keeps etc.
+.RT		\" Change to table spacing etc.
+.nf
+.Sm
+.
+.		\" Dump the TOC.  This copy will be garbage
+.		\" if there are figures or tables.
+.pn \\n(Pt	\" to TOC page
+.nr oo \\no	\" no blank page before
+.rr o
+.ie \\n(Fu:\\n(Tu .Bt "GARBAGE GARBAGE GARBAGE" \&
+.el .Bt "Table of Contents" \&
+.nr o \\n(oo
+.af PN i	\" All pages little Roman
+.Td		\" Do TOC, ending on the page before the lists
+.
+.		\" Table of Illus. first
+.if \\n(Fu\{\
+.Bt "List of Figures" Figure
+.nr Pi \\n%	\" Remember TOI page
+.Ti		\" dump TOI
+.  \}
+.
+.		\" Table of tables second
+.if \\n(Tu\{\
+.Bt "List of Tables" Table
+.nr Pu \\n%	\" save page number
+.Tt		\" dump TOT
+.  \}
+.
+.		\" Finally, redo the TOC if it was garbage previously.
+.if \\n(Fu:\\n(Tu\{\
+.pn \\n(Pt	\" Revert to TOC page
+.Bt "Table of Contents" \&
+.af Pi i	\" Get other pages into proper format
+.af Pu i
+.Td		\" Dump TOC for real
+.  \}
+.
+.nr IT 0	\" Turn off headings
+.rm TT
+.rm CH
+.if \\n(ST=9\
+.  \{\
+.	\" Some miscellaneous stuff for dissertations
+.bp
+.		\" Final Form Form
+.rm CF
+.po +.5i
+.ll -1i
+.vs 24p
+.ce 2
+S T A N F O R D   U N I V E R S I T Y
+GRADUATE STUDY OFFICE
+.sp 12p
+.ti +5n
+.fi
+.nh
+Each Ph.D. dissertation, when submitted to the
+Graduate Study Office, must be accompanied by this
+form, with the signature of one of the readers who
+signed the dissertation.
+.sp
+.vs 12p
+[It is hoped that this final reading will ensure that
+(1) footnotes and bibliography are in appropriate and
+consistent form; (2) all required illustrative tables
+and charts are in place; (3) all suggested changes
+have been incorporated in the manuscript; (4) the
+dissertation is ready for binding and microfilming.]
+.nf
+.po
+.ll \\n(LLu
+.sp 24p
+.ls 3
+\\l'\\n(LLu'
+To the University Committee on Graduate Studies:
+.fi
+.ti 5n
+I certify that I have read the Ph.D. dissertation of\\p
+\\l'2.5i' in its \fIfinal\fR form for submission\\p
+and have found it to be satisfactory.
+.ls 0
+.sp 4
+.po +3i
+.ll 3i
+.ce 1000
+\\l'3i'
+Signature
+.sp 2
+\\l'3i'
+Date
+.ce 0
+.ll \\n(LLu
+.po
+.sp 2
+\\l'\\n(LLu'
+.sp |10i-12p
+(Form G82, 1/70)
+.hy
+.bp
+.		\" The wide abstract for University Microfilms
+.if ~\\*(Wa~~ .tm Warning: .Xs/.Xe needed to complete dissertation
+.nr Po \\n(.o
+.po -.5i
+.ll +.5i
+.Ca U
+.vs 12p
+.ls 0
+.ce 1000
+.nh
+.WT
+.Ca UL
+.sp 2
+\\*(Wa, Ph.D.
+Stanford University, \\*(Wd
+.sp 3
+.ce 0
+.nf
+.ls 2
+.Wb
+.rm Wb
+.ls 0
+.sp 3
+.ne 9
+.po +\\n(.lu-4.5i
+.ll 4.5i
+.in 0
+.nf
+Approved for publication:
+.sp 3
+.po +.5i
+.ll -.5i
+.ce 1000
+By \\l'3i' \\h'\\w~By~u'\&
+For Major Department
+.sp 3
+By \\l'3i' \\h'\\w~By~u'\&
+Dean of Graduate Studies
+.ce 0
+.ll \\n(LLu
+.po \\n(Pou
+.  \}
+..
+.
+.de Td	\" TOC dump, a subroutine for sizing purposes
+.Tp		\" Dump iii TOC
+.		\" Dump TOI and TOT entries
+.ta \\n(.lu-5n \\n(.lu-1nR
+.if \\n(Fu List of Figures \a\t\\n(Pi
+.if \\n(Tu List of Tables \a\t\\n(Pu
+.Tc		\" Dump 123 TOC
+..
+.
+.de Bt	\" Begin a table: Bt title label
+.		\" Set up the table heading.
+.ta \\n(.luR
+.di TT
+\\$2\t\Page
+
+\!.ns
+.br
+.di
+.		\" If forcing to odd and on odd, skip a page.
+.ie (\\no)&((\\n%%2)=1)\{\
+.		\" Turn off headings
+.nr IT 0
+.rm CH
+.		\" Finish old page
+.bp
+.		\" Turn off footer on blank page
+.rn CF Cf
+.		\" Turn on headers for page thereafter
+.ds CH \\$1
+.nr IT 1
+.		\" Finish blank page and start real page
+.rs
+.bp
+.		\" Reenable footer
+.rn Cf CF
+.  \}
+.el\{\
+.		\" The page is aligned; just set up headings
+.ds CH \\$1
+.nr IT 1
+.bp
+.  \}
+..
+.
+.
+.\"
+.\" Vertical space macro
+.\"
+.
+.de Vs	\" assure adequate vertical space: Vs <argument>
+.nr Vs \\w~\\$1~
+.rm Vv
+.if \\n(stu>\\n(.vu .as Vv \\x~\\n(.vu-\\n(stu~
+.if (0-\\n(sb)>(\\n(.vu-\\n(.sp)\
+.as Vv \\x~\\n(.Vu/2u-\\n(sbu-\\n(.vu+\\n(.sp~
+\\*(Vv\\$1\\*(Vv
+..
+.
+.
+.\"
+.\" Utilities
+.\"
+.
+.		\" Spacing-changing macros
+.
+.de Sm	\" Space minimally
+.vs \\n(Msu
+..
+.
+.de Sl	\" Space large
+.ie !\\ns .vs \\n(Lsu
+.el .vs \\n(Msu
+..
+.
+.		\" Case-changing utility
+.
+.de Ca	\" change case: Ca [U or UL]
+.ie '\\$1'U' .tr aAbBcCdDeEfFgGhHiIjJkKlLmMnNoOpPqQrRsStTuUvVwWxXyYzZ
+.el .tr aabbccddeeffgghhiijjkkllmmnnooppqqrrssttuuvvwwxxyyzz
+..
+.
+.		\" TOC and similar table utilities
+.
+.de Cs	\" First chapter or appendix: Cs name
+.
+.		\" If preliminaries now complete, handle TOC
+.		\"  business and change pages.
+.ie \\n(Mj=0\{\
+.rn Tc Tp	\" Save preliminary TOC separately.
+.		\" If something has been printed...
+.if !((\\n(nlu<=\\n(HMu)&(\\n%=1))\{\
+.		\" Align the TOC if necessary.
+.Bp
+.nr Pt \\n%
+.pn 2		\" We're now on page 1.
+.nr PN 1	\" Any alignment will work, since '%' is odd, at least.
+.    \}
+.af PN 1
+.  \}
+.el .Bp
+.
+.		\" Now put separator into the TOC
+.RT
+.da Tc		\" Put subtitle into TOC
+.nf
+.sp \\n(Lsu	\" Large space before
+\\$1
+.fi
+.da
+..
+.
+.
+.de Sp	\" set up packing: Sp length
+.nr Ml \\$1
+..
+.
+.de Pa	\" pack arguments for TOC: Pa word...
+.		\" Arguments are packed into one or two
+.		\" lines in Fl and Tl.  Fl is non-null
+.		\" only if overflow occurs.
+.		\" Additionally, args are filled into the
+.		\" string Ft for later use.
+.rm Fl
+.rm Ft
+.ds Tl \\$1
+.if !~\\$2~~ .Aa "\\$2"
+.if !~\\$3~~ .Aa "\\$3"
+.if !~\\$4~~ .Aa "\\$4"
+.if !~\\$5~~ .Aa "\\$5"
+.if !~\\$6~~ .Aa "\\$6"
+.if !~\\$7~~ .Aa "\\$7"
+.if !~\\$8~~ .Aa "\\$8"
+.if !~\\$9~~ .Aa "\\$9"
+.ds Ft \\*(Fl \\*(Tl
+..
+.
+.de Aa	\" append arg to Tl; move Tl to Fl on overflow
+.ie !\\w~\\*(Tl \\$1~u-\\n(Mlu .as Tl " \\$1
+.el\{\
+.if !~\\*(Fl~~ .tm Ss or other: (SUB)TITLE STRING TOO LONG pg \\n% line \\n(.c
+.ds Fl \\*(Tl
+.ds Tl \\$1
+.  \}
+..
+.
+.de Te	\" make a TOC entry: Te tag-indent tag body-indent page line extra
+.		\" extra contains any first line.
+.		\" line contains the (second) line.
+.
+.ul 0
+.Sm
+.nf
+.in +\\$3n	\" indent for body
+.		\" if there's a tag, hang it
+.if !~\\$2~~\{\
+.ta \\$3n-\\$1n
+.ti -(\\$3n-\\$1n)
+\\$2\t\c
+.  \}
+.ta \\n(.lu-5n-\\$3n \\n(.lu-1n-\\$3nR
+.		\" if 2 lines, do the first
+.if !~\\$6~~ \\$6
+.		\" do (second) line with page number
+\\$5 \a\t\\$4
+.in -\\$3n
+.fi
+.Sl
+..
+.
+.
+.de Pb	\" Play back title: Pb [headline]
+.in 0
+.ti 0
+.RT
+.di Pc
+.ll \\n(LLu/2u	\" justify half-wide
+.na
+\\*(Ft
+.br
+.di
+.ad
+.RT		\" recover width
+.		\" now print it
+.DS C
+.if \\n(.$>0 \\$1
+.Pc
+.DE
+.rm Pc
+..
+.
+.
+.		\" other
+.
+.
+.de Fk		\" Flush keeps in preparation for new sections
+.br
+.RT
+.ti \\n(.i
+.rs
+.if \\n(TC:\\n(XX\{\
+.bp
+.Fk
+.  \}
+..
+.
+.de Ns	\" Set numbers: Ns chapter
+.nr H1 \\$1
+.nr H2 0
+.nr Fn 1 1	\" illus number
+.nr Tn 1 1	\" table number
+..
+.
+.\"
+.\" Some final initialization
+.\"
+.if \nv\{\
+.am PT
+.tm Page \\n%
+..
+.am Ic
+.ie \\n(Io<2 .tm Figure \\n(H1\\*(Ip\\n(Im
+.el .tm Table \\n(H1\\*(Ip\\n(Im
+..
+.am Ch
+.tm Internal space:
+.pm t
+..
+.  \}
+.
+.\"
+.\" JUNK
+.\"
+.
+.de Rf	\" Reserve space for figures: Rf n
+.tm VESTIGAL Rf CALL, LINE \\n(.c pg \\n%
+..
+.
+.
+.\"
+.\" Strings
+.\"
+.
+.ds - --
+.ds +- +_
+.ds * *
+.ds Ip .

@@ -1,0 +1,89 @@
+#!/bin/sh
+#
+# Kernel level setup for compiling RFS.
+#
+CHANGELIST='	h/errno.h
+		h/param.h
+		h/user.h
+		sys/init_sysent.c
+		sys/kern_exec.c
+		sys/kern_exit.c
+		sys/ufs_syscalls.c'
+CHANGE_42='	sys/sys_inode.c
+		sys/ufs_nami.c
+		sys/uipc_socket.c
+		machine/trap.c
+		conf/files'
+CHANGE_43='	sys/ufs_namei.c
+		machine/trap.c
+		conf/files'
+CHANGE_PYR='	sys/kern_trap.c'
+   PATCHES=$1
+       SRC=$2
+      DEST=$3
+       VER=$4
+     USAGE="Usage: $0 patch-dir src-dir dest-dir VAX4.3|VAX4.2|PYR2.5"
+	NL='
+'
+
+if [ ! -d "$PATCHES" -o ! -d "$SRC" -o ! -d "$DEST" ]
+then
+	echo "One of \"$PATCHES\", \"$SRC\" or \"$DEST\" is not a directory" \
+		"$NL$USAGE"
+	exit 1
+fi
+
+case "$VER" in
+VAX4.3) CHANGELIST="$CHANGELIST $CHANGE_43"
+	if [ -f $SRC/conf/Makefile.vax ]
+	then
+		CHANGELIST="$CHANGELIST conf/Makefile.vax"
+	else
+		CHANGELIST="$CHANGELIST conf/makefile.vax"
+	fi
+	;;
+VAX4.2) CHANGELIST="$CHANGELIST $CHANGE_42 conf/makefile.vax" ;;
+PYR2.5) CHANGELIST="$CHANGELIST $CHANGE_PYR conf/makefromsource" ;;
+*)	echo "Invalid version = \"$VER\"$NL$USAGE"
+	exit 1
+	;;
+esac
+
+#
+# copy the target files for the patches.
+#
+case "$DEST" in
+
+$SRC)	;; # no need to copy
+
+*)	echo "Copy in files that must be changed..."
+	(cd $DEST; rm -f $CHANGELIST)
+	for file in $CHANGELIST
+	do
+		(set -x; cp $SRC/$file $DEST/$file)
+	done
+	;;
+esac
+(cd $DEST; chmod 0644 $CHANGELIST)
+
+#
+# do the patches
+#
+for file in $CHANGELIST
+do
+	while :
+	do
+		echo -n "${NL}${NL}Hit <return> to patch" \
+			"$file or 'n' to skip: "
+		read prompt
+		case "$prompt" in
+		"")	(set -x; patch $DEST/$file $PATCHES/$file.diff)
+			;;	
+		n)	;;
+		*)	echo "Enter <return> or the letter 'n' only!"
+			continue
+			;;
+		esac
+		break
+	done
+done

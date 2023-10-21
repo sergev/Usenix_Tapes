@@ -1,0 +1,282 @@
+% Get troff font width table from PostScript device
+% Copyright (c) 1986 by Pipeline Associates, Inc.
+
+% Mapping of PostScript character names to ditroff names
+/DitNames 256 dict def
+
+% You may want to add other character definitions to the following dictionary.
+% The /name is the PostScript name of the character and the (xxx) is the
+% troff name of the character, i.e., the thing you put in DESC and the font
+% width file.  Note:  these defs must be changed for special fonts
+% (e.g., dingbat); also, not all special characters in the regular fonts
+% are supported.  Maybe someday, when we all have some time....
+DitNames begin
+	/exclam (!) def
+	/quotedbl (") def
+	/numbersign (#) def
+	/dollar ($) def
+	/percent (%) def
+	/ampersand (&) def
+	/quoteright (') def
+	/parenleft (\() def
+	/parenright (\)) def
+	/asterisk (*) def
+	/plus (+) def
+	/comma (,) def
+	/hyphen (-) def
+	/period (.) def
+	/slash (/) def
+	/zero (0) def
+	/one (1) def
+	/two (2) def
+	/three (3) def
+	/four (4) def
+	/five (5) def
+	/six (6) def
+	/seven (7) def
+	/eight (8) def
+	/nine (9) def
+	/colon (:) def
+	/semicolon (;) def
+	/less (<) def
+	/equal (=) def
+	/greater (>) def
+	/question (?) def
+	/at (@) def
+	/A (A) def
+	/B (B) def
+	/C (C) def
+	/D (D) def
+	/E (E) def
+	/F (F) def
+	/G (G) def
+	/H (H) def
+	/I (I) def
+	/J (J) def
+	/K (K) def
+	/L (L) def
+	/M (M) def
+	/N (N) def
+	/O (O) def
+	/P (P) def
+	/Q (Q) def
+	/R (R) def
+	/S (S) def
+	/T (T) def
+	/U (U) def
+	/V (V) def
+	/W (W) def
+	/X (X) def
+	/Y (Y) def
+	/Z (Z) def
+	/bracketleft ([) def
+	/backslash (\\) def
+	/bracketright (]) def
+	/asciicircum (^) def
+	/underscore (_) def
+	/quoteleft (`) def
+	/a (a) def
+	/b (b) def
+	/c (c) def
+	/d (d) def
+	/e (e) def
+	/f (f) def
+	/g (g) def
+	/h (h) def
+	/i (i) def
+	/j (j) def
+	/k (k) def
+	/l (l) def
+	/m (m) def
+	/n (n) def
+	/o (o) def
+	/p (p) def
+	/q (q) def
+	/r (r) def
+	/s (s) def
+	/t (t) def
+	/u (u) def
+	/v (v) def
+	/w (w) def
+	/x (x) def
+	/y (y) def
+	/z (z) def
+	/braceleft ({) def
+	/bar (|) def
+	/braceright (}) def
+	/asciitilde (~) def
+	/cent (ct) def
+	/sterling (ps) def
+	/yen (ye) def
+	/section (sc) def
+	/fi (fi) def
+	/fl (fl) def
+	/endash (en) def
+	/dagger (dg) def
+	/daggerdbl (dd) def
+	/paragraph (pp) def
+	/ellipsis (el) def
+	/grave (ga) def
+	/acute (aa) def
+	/dieresis (..) def
+	/ring (de) def
+	/emdash (em) def
+	/circumflex (cf) def
+end
+
+% The following contains information used to produce fractions
+/Fractions 5 dict def
+Fractions begin
+	/14 { (1) (4) } def
+	/13 { (1) (3) } def
+	/12 { (1) (2) } def
+	/23 { (2) (3) } def
+	/34 { (3) (4) } def
+end
+
+% The following values shouldn't be changed unless you know what you're doing!
+
+% The following is used to determine whether characters rise above the
+% x height (ascenders) or below the baseline (decenders).  Not that
+% important except for the bracket building functions and eqn.
+% KernSlop is the amount (in tenths of a point for ten-point characters,
+% or one percent increments) that the character must extend beyond the x
+% height or baseline to be considered having an acender or decender
+% respectively.
+/KernSlop 10 def
+
+% The following is set to the size that everything should be calculated at.
+% For devps, it's 100 points (10 rasters/point, 10 point characters).
+% For transscript, it's 200 points (8 rasters/point, 25 point characters).
+% Note: all this information is accessible from the ditroff DESC file:
+%	rasters/point = res/72
+%	character size = unitwidth
+% The following will pull res and unitwidth from the DESC.out file:
+% od -d DESC.out |
+% sed -n "s/[0-9]* [0-9]* \([0-9]*\) [0-9]* [0-9]* \([0-9]*\) .*/\1 \2/p;1q"
+
+/FontSize 100 def
+
+/nstr 4 string def
+/wstr 8 string def
+/char 1 string def
+/tempstr 100 string def
+
+/bdef { bind def } def
+
+/pr { print } bdef
+/np { newpath 0 0 moveto } bdef
+/getbbox { false charpath flattenpath pathbbox } bdef
+/FF {name findfont} bdef
+
+/prtwidth { 
+	char 0 3 -1 roll put 
+	char stringwidth 
+	pop round cvi wstr cvs
+} bdef
+
+/prtkern {
+	/kern 0 def
+	np getbbox	% llx lly urx ury
+	top-x sub KernSlop gt
+	{ /kern 2 def } if
+	pop		% urx
+	neg KernSlop gt	% is lly more than KernSlop below the baseline?
+	{ /kern kern 1 add def } if
+	pop		% ury
+	kern nstr cvs pr
+} bdef
+
+/PrintDitEntry {
+	DitNames charname get pr (\t) print
+	charnum prtwidth pr (\t) print
+	char prtkern (\t) pr
+	charnum nstr cvs pr (\t) print
+	FF /Encoding get charnum get tempstr cvs =
+} bdef
+
+/PrintCharMetrics { 
+	/charnum exch def
+ 	/charname FF /Encoding get charnum get def
+
+	% look up ditroff name using PostScript name
+	DitNames charname known
+	{
+		PrintDitEntry
+		charname /endash eq
+		{ (\\-\t"\t=en) = } if
+		charname /hyphen eq
+		{ (hy\t"\t=-) = } if
+		charname /slash eq
+		{ (sl\t"\t=-) = } if
+	} if
+} bdef
+
+/prfracts {
+	exch nstr cvs pr (\t) print	% fraction name
+	exec				% get characters in fraction
+	stringwidth pop .6 mul exch stringwidth pop .6 mul add
+	(/) stringwidth pop add 4 add	% width of x/y
+	round cvi wstr cvs pr (\t) print
+	(2\t) pr			% kern
+	(0377\t) pr			% "Funny character" designation
+	(Funny char) =
+} bdef
+
+/prligs {
+ 	FF /Encoding get
+	{
+		dup /fi eq
+		{ (fi ) pr } if
+		dup /fl eq
+		{ (fl ) pr } if
+		pop
+	} forall
+} bdef
+
+/gettroff {
+	/name exch def
+	FF FontSize scalefont setfont
+
+	% print font width table header
+
+	(# Troff font width file) =
+	(# Comment Produced by getdit.ps) =
+	(# PostScript font name:  ) pr
+	FF /FontName get =
+	(# Enter troff font name here !!) =
+	(spacewidth ) pr
+	/spacewidth ( ) stringwidth pop def
+	spacewidth round cvi =
+	(ligatures ) pr
+	prligs (0) =
+	(#char\twidth\tkern\tnumber\tPS name) =
+	(charset) = flush
+
+	% pr out \^ and \| space widths (devps makes them "funny")
+	(\\^\t) pr
+	spacewidth 4 div round cvi wstr cvs pr
+	(\t0\t0377) =
+	(\\|\t) pr
+	spacewidth 2 div round cvi wstr cvs pr
+	(\t0\t0377) = flush
+
+	% get top of "x" character for use in kern calc
+	np (x) getbbox /top-x exch def pop pop pop
+
+	0 1 255 {
+		PrintCharMetrics flush
+	} for
+
+	% fractions are special cases
+	Fractions {
+		prfracts flush
+	} forall
+} bdef
+
+% Sample uses of gettroff:
+%	/Times-Roman gettroff
+%	/Palatino-Roman gettroff
+%	/NewCenturySchlbk-Roman gettroff
+%	/AvantGarde-Book gettroff
+%	/Bookman-Demi gettroff

@@ -1,0 +1,135 @@
+/*  smatch.c
+*
+*	This routine gets all the syntax macros from the syntax file and calls
+*	amatch to check for an occurence of the pattern. If amatch succeeds,
+*	rewrite is called to rewrite the input query afterwhich semsmatch
+*	is called to generate the semantics output. The t option is handled
+*	here by generating a trace and diverting the semantics output to the
+*	file QP_SEMOUT when it is on.
+*
+*	Calls: amatch, rewrite, seek, putline, getprocpat, docomand, seek,
+*	       semsmatch
+*
+*	Parameters:
+*	   synline - pointer to the input string; synfd -pattern file descriptor
+*	   synlist - list of macros with "<" feature.
+*	   totnummacs - the total # macros currently in the preprocessed file.
+*
+*	UE's: See lower level procedures.
+*
+*			Programmers: Tony Marriott & G. Skillman
+*/
+/* The following defines the maximum pattern size and maximum # of macros 
+   with the "<" feature. */
+# include	"globdefin.h"
+
+
+smatch(synline,synfd,semfd,synout,semout,synlist)
+char	*synline;
+int	synfd, synout, semfd, semout;
+int	synlist [2][MAXSCANOFFS];
+
+{
+	extern int	tswitch;
+	extern char	MACDELIM,MACTERM;
+	extern int	EOS,YES,TRUE,FALSE,STDOUT,LT,SYNMACNUM,SEMMACNUM;
+	extern int	OFF,STDIN,EOF,EOS,RESCANMAC,DONTRESCAN;
+	int	begin,end,i,j,flag,index,answer,remember;
+	char	synpat[MAXPAT], semline[MAXLINE];
+	int	syntagary[100][2];
+
+	SYNMACNUM = 1;
+	index = 0;  /* Begin at the beginning of synlist. */
+
+	seek(synfd,0,0); /* begin at the beginning of pattern file. */
+
+	/* Do until none of the macros match anything in the input line. */
+	while (getline(synpat,synfd,EOS) != EOF)
+	{
+
+	     flag = FALSE;
+
+   	     /* if the macro is listed in synlist and the macro has
+   	        been processed for this input, then skip it. */
+   	     if (synlist [0][index] == SYNMACNUM && synlist [1] [index] == DONTRESCAN)
+	     {
+		     index = index + 1;
+		     SYNMACNUM = SYNMACNUM + 1;
+   	     	     continue;  
+	     }
+
+	     /* Process stack & counter calls that appear before the pattern. */
+	     j = 0;
+	     docalls(synpat,&j,synline,syntagary);
+
+	     /* Try to match the pattern starting at i. If we fail, try starting
+                at i+1:  */
+	     remember = j;
+   	     for (i = 0;synline[i] != EOS;i++)
+   	     {
+   	         begin = i;
+      	         if ((end = amatch(synline,i,synpat,&j,MACDELIM,syntagary)) != FALSE)
+
+   	          /* found a match !! */
+
+      	         {
+	     	     flag  = TRUE;
+   	             if (tswitch == TRUE)
+   	             {
+   	     	       printf("\n  oldline: ");
+   	     	     	       putline(synline,STDOUT,EOS);
+   	     	       printf("  macro#: %d",SYNMACNUM);
+   	             }
+		     /* Process stack & cntr calls before replacement symbol. */
+                     docalls(synpat,&j,synline,syntagary);
+
+      	       	     rewrite(synline,begin,&end,synpat,j,syntagary); /* rewrite line */
+	     	     i = end - 1; /* skip over replaced text */
+
+   	     	     if (tswitch == TRUE)
+	     	     {
+	     	     	     printf("\n  newline: ");
+   	     	     	     putline(synline,STDOUT,EOS);
+	     	     	     printf("\n");
+	     	     }
+    
+		     /* Now process the corresponding semantics macro: */
+		     semsmatch(semline,semfd);
+
+		     if (tswitch == TRUE && semline[0] != EOS)
+		     {
+			    printf("SEMANTICS MACRO %d: ",SEMMACNUM);
+			    putline(semline,STDOUT,EOS);
+			    putline(semline,semout,EOS);
+		     }
+		     else if (semline[0] != EOS)
+			    putline(semline,STDOUT,EOS);
+   	         } /* end 'if' amatch succeeded at position i of input line. */
+		 j = remember;
+
+   	       } /* end 'for' each position of the input line. */
+
+	       if (flag == TRUE)  /* if the macro matched at least once. */
+	       {
+ 	    	     /* if the macro is not  to be rescanned for this input line: */
+   	     	     if (synlist [0][index] == SYNMACNUM)
+   	     	     	     synlist [1][index] = DONTRESCAN;
+
+	     	     /* Go to the beginning of the macro file and start over. */
+	     	     index = 0;  /* Restart at the beginning of synlist. */
+      	      	     seek(synfd,0,0); /* go to the beginning of the pattern file. */
+	             SYNMACNUM = 1;
+	       }
+	       else  /* If no matches occur, then go to next macro. */
+	       {
+		     /* if this macro had "<" but didn't match: */
+	             if (SYNMACNUM == synlist[0][index])
+	                  index = index + 1;
+	             SYNMACNUM = SYNMACNUM + 1;
+	       }
+
+	}  /* end 'while' not at end of macro file. */
+	if (tswitch == TRUE)
+	     putline(synline,STDOUT,EOS);
+        putline(synline,synout,EOS);
+}

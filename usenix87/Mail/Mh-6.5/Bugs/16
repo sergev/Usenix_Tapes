@@ -1,0 +1,106 @@
+Received: from  by plus5.com (UIUC-5.31/24Nov86-03:13:38) with UUCP
+	id AA11719; Sat, 4 Apr 87 06:27:41 EST
+Received: by seismo.CSS.GOV (5.54/1.14) 
+	id AA07516; Sat, 4 Apr 87 03:23:25 EST
+Received: from bboards by ICS.UCI.EDU id a003987; 3 Apr 87 23:48 PST
+Received: from seismo.css.gov by ICS.UCI.EDU id a003978; 3 Apr 87 23:41 PST
+Received: from enea.UUCP by seismo.CSS.GOV (5.54/1.14) with UUCP 
+	id AA06910; Sat, 4 Apr 87 02:41:23 EST
+Received: by enea.se (5.51/1.30)
+	id AA03322; Sat, 4 Apr 87 09:34:57 +0200 (MET)
+Received: from luthcad by luth (4.40/2.1)
+	id AA23854; Sat, 4 Apr 87 03:31:24 -0200
+Received: by luthcad (1.1/2.1)
+	id AA14224; Sat, 4 Apr 87 03:24:58 -0200
+From: Sven-Ove Westberg <seismo.CSS.GOV!enea!luthcad!sow>
+Message-Id: <8704040124.AA14224@luthcad>
+To: ics.uci.edu!mh-workers
+Subject: Bug in inc FIX
+Date: Sat, 04 Apr 87 03:24:54 O
+
+
+Index: .../mh/uip/scansbr.c
+
+Description:
+	The inc(1) command, part of MH-6.4, clears the
+	maildrop even if a write error has occured.
+
+	Some fputs didn't return write error status correctly.
+
+Repeat-By:
+	Put the MH folder on a partition with no space left.
+	Do inc, it clears the maildrop without writing the
+	mail to the folder.
+
+Fix:
+	Check the return status on close.
+	Write your own fputs.
+
+
+
+*** uip/scansbr.c.old	Fri Apr  3 23:58:08 1987
+--- uip/scansbr.c	Sat Apr  4 02:53:32 1987
+***************
+*** 42,50
+  #endif	RPATHS
+  
+  #define FPUTS(buf) {\
+! 		if (fputs(buf,scnout) == EOF)\
+! 		    adios (scnmsg, "write error on");\
+! 		}
+  
+  /*  */
+  
+
+--- 42,50 -----
+  #endif	RPATHS
+  
+  #define FPUTS(buf) {\
+! 		    if(mh_fputs(buf,scnout) == EOF )\
+! 		       adios (scnmsg, "write error on");\
+! 		   }
+  
+  /*  */
+  
+***************
+*** 263,269
+      *--nxtbuf = tmpbuf;
+  
+      if (outnum)
+! 	(void) fclose (scnout);
+  
+      return (state != FILEEOF ? SCNERR : encrypted ? SCNENC : SCNMSG);
+  }
+
+--- 263,270 -----
+      *--nxtbuf = tmpbuf;
+  
+      if (outnum)
+! 	if( fclose (scnout) == EOF)
+! 	   adios (scnmsg, "write error on");
+  
+      return (state != FILEEOF ? SCNERR : encrypted ? SCNENC : SCNMSG);
+  }
+***************
+*** 280,283
+  register char  *name;
+  {
+      return name;
+  }
+
+--- 281,295 -----
+  register char  *name;
+  {
+      return name;
++ }
++ 
++ mh_fputs(s, stream)
++ char *s;
++ FILE *stream;
++ {
++ 	char	c;
++ 	while(c = *s++) 
++ 		if(putc(c,stream) == EOF )
++ 			return(EOF);
++ 	return(0);
+  }

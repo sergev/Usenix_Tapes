@@ -1,0 +1,824 @@
+Relay-Version: version B 2.10.3 4.3bsd-beta 6/6/85; site plus5.UUCP
+Posting-Version: version B 2.10.2 9/3/84; site genrad.UUCP
+Path: plus5!wuphys!wucs!busch!we53!mgnetp!ihnp4!mhuxn!mhuxr!ulysses!ucbvax!decvax!genrad!sources-request
+From: sources-request@genrad.UUCP
+Newsgroups: mod.sources
+Subject: Diffs to tar to use a remote system's tape drive
+Message-ID: <935@genrad.UUCP>
+Date: 8 Jul 85 15:35:11 GMT
+Date-Received: 10 Jul 85 02:37:58 GMT
+Sender: john@genrad.UUCP
+Lines: 811
+Approved: john@genrad.UUCP
+
+Mod.sources:  Volume 2, Issue 5
+Submitted by: Arnold Robbins <linus!gatech!arnold>
+
+
+* WARNING:  The man page rmt(8) for /etc/rmt documents the remote mag
+* tape protocol which rdump and rrestore use.  Unfortunately, the man
+* page is *WRONG*.  The author of the routines I'm including originally
+* wrote his code just based on the man page, and it didn't work, so he
+* went to the rdump source to figure out why.  The only thing he had to
+* change was to check for the 'F' return code in addition to the 'E',
+* and to separate the various arguments with \n instead of a space.  I
+* personally don't think that this is much of a problem, but I wanted to
+* point it out.
+*
+*   Arnold Robbins
+
+
+The following context diffs to the 4.2 BSD tar.c and man page allow tar
+to read and write tapes on a remote system's tape drive.  The routines
+at the end that deal with /etc/rmt across a pipe are general purpose and
+in the public domain.
+
+It is interesting to note that what rmt(8) says about its protocol, and what
+you actually have to do to get it to work are quite different.
+
+The command line syntax has not changed.  Instead, the file name for the -f
+option looks sorta like what rcp takes, e.g.
+
+	$ tar -cvf gatech:/dev/rmt8 /usr/src
+
+In particular, if "/dev/" does not follow the colon, tar decides it is using
+a regular, local file.
+
+The diffs are for the tar that comes with BRL Unix. Your line numbers
+may vary.
+
+Arnold Robbins		(rmt stuff courtesy of Jeff Lee, gatech!jeff)
+arnold@gatech.{CSNET, UUCP}
+
+*** /usr/src/bin/tar.c	Wed Nov 14 00:09:23 1984
+--- tar.c	Mon Jul  1 14:25:40 1985
+***************
+*** 115,120
+  char	*getcwd();
+  char	*getwd();
+  
+  main(argc, argv)
+  int	argc;
+  char	*argv[];
+
+--- 115,141 -----
+  char	*getcwd();
+  char	*getwd();
+  
++ int	open();
++ int	read();
++ int	write();
++ int	close();
++ int	ioctl();
++ long	lseek();
++ 
++ int	rmtopen();
++ int	rmtread();
++ int	rmtwrite();
++ int	rmtclose();
++ int	rmtioctl();
++ long	rmtlseek();
++ 
++ int	(*t_open)();
++ int	(*t_read)();
++ int	(*t_write)();
++ int	(*t_close)();
++ int	(*t_ioctl)();
++ long	(*t_lseek)();
++ 
+  main(argc, argv)
+  int	argc;
+  char	*argv[];
+***************
+*** 264,269
+  		    nblock);
+  		done(1);
+  	}
+  	if (rflag) {
+  		if (cflag && tfile != NULL)
+  			usage();
+
+--- 285,293 -----
+  		    nblock);
+  		done(1);
+  	}
++ 
++ 	fix_remote();
++ 
+  	if (rflag) {
+  		if (cflag && tfile != NULL)
+  			usage();
+***************
+*** 285,291
+  			}
+  			mt = dup(1);
+  			nblock = 1;
+! 		} else if ((mt = open(usefile, 2)) < 0) {
+  			if (cflag == 0 || (mt =  creat(usefile, 0666)) < 0) {
+  				fprintf(stderr,
+  					"tar: cannot open %s\n", usefile);
+
+--- 309,315 -----
+  			}
+  			mt = dup(1);
+  			nblock = 1;
+! 		} else if ((mt = (*t_open)(usefile, 2)) < 0) {
+  			if (cflag == 0 || (mt =  creat(usefile, 0666)) < 0) {
+  				fprintf(stderr,
+  					"tar: cannot open %s\n", usefile);
+***************
+*** 298,304
+  	if (strcmp(usefile, "-") == 0) {
+  		mt = dup(0);
+  		nblock = 1;
+! 	} else if ((mt = open(usefile, 0)) < 0) {
+  		fprintf(stderr, "tar: cannot open %s\n", usefile);
+  		done(1);
+  	}
+
+--- 322,328 -----
+  	if (strcmp(usefile, "-") == 0) {
+  		mt = dup(0);
+  		nblock = 1;
+! 	} else if ((mt = (*t_open)(usefile, 0)) < 0) {
+  		fprintf(stderr, "tar: cannot open %s\n", usefile);
+  		done(1);
+  	}
+***************
+*** 306,311
+  		doxtract(argv);
+  	else
+  		dotable();
+  	done(0);
+  }
+  
+
+--- 330,336 -----
+  		doxtract(argv);
+  	else
+  		dotable();
++ 	(*t_close) (mt);
+  	done(0);
+  }
+  
+***************
+*** 1195,1201
+  {
+  	first = 1;
+  	if (recno >= nblock) {
+! 		if (write(mt, tbuf, TBLOCK*nblock) < 0) {
+  			fprintf(stderr, "tar: tape write error\n");
+  			done(2);
+  		}
+
+--- 1220,1226 -----
+  {
+  	first = 1;
+  	if (recno >= nblock) {
+! 		if ((*t_write)(mt, tbuf, TBLOCK*nblock) < 0) {
+  			fprintf(stderr, "tar: tape write error\n");
+  			done(2);
+  		}
+***************
+*** 1209,1215
+  	 *  residual to the tape buffer.
+  	 */
+  	while (recno == 0 && n >= nblock) {
+! 		if (write(mt, buffer, TBLOCK*nblock) < 0) {
+  			fprintf(stderr, "tar: tape write error\n");
+  			done(2);
+  		}
+
+--- 1234,1240 -----
+  	 *  residual to the tape buffer.
+  	 */
+  	while (recno == 0 && n >= nblock) {
+! 		if ((*t_write)(mt, buffer, TBLOCK*nblock) < 0) {
+  			fprintf(stderr, "tar: tape write error\n");
+  			done(2);
+  		}
+***************
+*** 1221,1227
+  		bcopy(buffer, (char *)&tbuf[recno++], TBLOCK);
+  		buffer += TBLOCK;
+  		if (recno >= nblock) {
+! 			if (write(mt, tbuf, TBLOCK*nblock) < 0) {
+  				fprintf(stderr, "tar: tape write error\n");
+  				done(2);
+  			}
+
+--- 1246,1252 -----
+  		bcopy(buffer, (char *)&tbuf[recno++], TBLOCK);
+  		buffer += TBLOCK;
+  		if (recno >= nblock) {
+! 			if ((*t_write)(mt, tbuf, TBLOCK*nblock) < 0) {
+  				fprintf(stderr, "tar: tape write error\n");
+  				done(2);
+  			}
+***************
+*** 1240,1246
+  	struct mtget mtget;
+  
+  	if (mtdev == 1)
+! 		mtdev = ioctl(mt, MTIOCGET, &mtget);
+  	if (mtdev == 0) {
+  		if (ioctl(mt, MTIOCTOP, &mtop) < 0) {
+  			fprintf(stderr, "tar: tape backspace error\n");
+
+--- 1265,1271 -----
+  	struct mtget mtget;
+  
+  	if (mtdev == 1)
+! 		mtdev = (*t_ioctl)(mt, MTIOCGET, &mtget);
+  	if (mtdev == 0) {
+  		if ((*t_ioctl)(mt, MTIOCTOP, &mtop) < 0) {
+  			fprintf(stderr, "tar: tape backspace error\n");
+***************
+*** 1242,1248
+  	if (mtdev == 1)
+  		mtdev = ioctl(mt, MTIOCGET, &mtget);
+  	if (mtdev == 0) {
+! 		if (ioctl(mt, MTIOCTOP, &mtop) < 0) {
+  			fprintf(stderr, "tar: tape backspace error\n");
+  			done(4);
+  		}
+
+--- 1267,1273 -----
+  	if (mtdev == 1)
+  		mtdev = (*t_ioctl)(mt, MTIOCGET, &mtget);
+  	if (mtdev == 0) {
+! 		if ((*t_ioctl)(mt, MTIOCTOP, &mtop) < 0) {
+  			fprintf(stderr, "tar: tape backspace error\n");
+  			done(4);
+  		}
+***************
+*** 1247,1253
+  			done(4);
+  		}
+  	} else
+! 		lseek(mt, (long) -TBLOCK*nblock, 1);
+  	recno--;
+  }
+  
+
+--- 1272,1278 -----
+  			done(4);
+  		}
+  	} else
+! 		(*t_lseek)(mt, (long) -TBLOCK*nblock, 1);
+  	recno--;
+  }
+  
+***************
+*** 1253,1259
+  
+  flushtape()
+  {
+! 	write(mt, tbuf, TBLOCK*nblock);
+  }
+  
+  bread(fd, buf, size)
+
+--- 1278,1284 -----
+  
+  flushtape()
+  {
+! 	(*t_write)(mt, tbuf, TBLOCK*nblock);
+  }
+  
+  bread(fd, buf, size)
+***************
+*** 1265,1271
+  	static int lastread = 0;
+  
+  	if (!Bflag)
+! 		return (read(fd, buf, size));
+  	for (count = 0; count < size; count += lastread) {
+  		if (lastread < 0) {
+  			if (count > 0)
+
+--- 1290,1296 -----
+  	static int lastread = 0;
+  
+  	if (!Bflag)
+! 		return ((*t_read)(fd, buf, size));
+  	for (count = 0; count < size; count += lastread) {
+  		if (lastread < 0) {
+  			if (count > 0)
+***************
+*** 1272,1278
+  				return (count);
+  			return (lastread);
+  		}
+! 		lastread = read(fd, buf, size - count);
+  		buf += lastread;
+  	}
+  	return (count);
+
+--- 1297,1303 -----
+  				return (count);
+  			return (lastread);
+  		}
+! 		lastread = (*t_read)(fd, buf, size - count);
+  		buf += lastread;
+  	}
+  	return (count);
+***************
+*** 1288,1291
+  		exit(1);
+  	}
+  	return (buf);
+  }
+
+--- 1313,1758 -----
+  		exit(1);
+  	}
+  	return (buf);
++ }
++ 
++ fix_remote ()
++ {
++ 	char *cp, *index ();
++ 
++ 	if ((cp = index (usefile, ':')) == NULL ||
++ 		strncmp (cp + 1, "/dev/", 5) != 0)
++ 	{
++ 		t_open = open;
++ 		t_read = read;
++ 		t_write = write;
++ 		t_close = close;
++ 		t_ioctl = ioctl;
++ 		t_lseek = lseek;
++ 	}
++ 	else
++ 	{
++ 		t_open = rmtopen;
++ 		t_read = rmtread;
++ 		t_write = rmtwrite;
++ 		t_close = rmtclose;
++ 		t_ioctl = rmtioctl;
++ 		t_lseek = rmtlseek;
++ 	}
++ }
++ 
++ /*
++ *	rmt --- remote tape emulator subroutines
++ *
++ *	Originally written by Jeff Lee, modified some by Arnold Robbins
++ */
++ 
++ /* these are included above, except setjmp.h */
++ /*
++ #include <stdio.h>
++ #include <errno.h>
++ #include <setjmp.h>
++ #include <signal.h>
++ 
++ #include <sys/types.h>
++ #include <sys/ioctl.h>
++ #include <sys/mtio.h>
++ */
++ 
++ #include <setjmp.h>
++ 
++ /*
++ *	MAXUNIT --- Maximum number of remote tape file units
++ *
++ *	READ --- Return the number of the read side file descriptor
++ *	WRITE --- Return the number of the write side file descriptor
++ */
++ 
++ #define MAXUNIT	4
++ 
++ #define READ(fd)	(Ctp[fd][0])
++ #define WRITE(fd)	(Ptc[fd][1])
++ 
++ static int Ctp[MAXUNIT][2] = { -1, -1, -1, -1, -1, -1, -1, -1 };
++ static int Ptc[MAXUNIT][2] = { -1, -1, -1, -1, -1, -1, -1, -1 };
++ 
++ jmp_buf Jmpbuf;
++ extern int errno;
++ 
++ 
++ 
++ /*
++ *	abort --- close off a remote tape connection
++ */
++ 
++ static abort(tfd)
++ int tfd;
++ {
++ 	close(READ(tfd));
++ 	close(WRITE(tfd));
++ 	READ(tfd) = -1;
++ 	WRITE(tfd) = -1;
++ }
++ 
++ 
++ 
++ /*
++ *	command --- attempt to perform a remote tape command
++ */
++ 
++ static command(tfd, buf)
++ char *buf;
++ int tfd;
++ {
++ 	int blen;
++ 	int (*pstat)();
++ 
++ /*
++ *	save current pipe status and try to make the request
++ */
++ 
++ 	blen = strlen(buf);
++ 	pstat = signal(SIGPIPE, SIG_IGN);
++ 	if (write(WRITE(tfd), buf, blen) == blen)
++ 	{
++ 		signal(SIGPIPE, pstat);
++ 		return(0);
++ 	}
++ 
++ /*
++ *	something went wrong. close down and go home
++ */
++ 
++ 	signal(SIGPIPE, pstat);
++ 	abort(tfd);
++ 
++ 	errno = EIO;
++ 	return(-1);
++ }
++ 
++ 
++ 
++ /*
++ *	status --- retrieve the status from the pipe
++ */
++ 
++ static status(tfd)
++ int tfd;
++ {
++ 	int i;
++ 	char c, *cp;
++ 	char buf[64];
++ 
++ /*
++ *	read the reply command line
++ */
++ 
++ 	for (i = 0, cp = buf; i < 64; i++, cp++)
++ 	{
++ 		if (read(READ(tfd), cp, 1) != 1)
++ 		{
++ 			abort(tfd);
++ 			errno = EIO;
++ 			return(-1);
++ 		}
++ 		if (*cp == '\n')
++ 		{
++ 			*cp = 0;
++ 			break;
++ 		}
++ 	}
++ 
++ 	if (i == 64)
++ 	{
++ 		abort(tfd);
++ 		errno = EIO;
++ 		return(-1);
++ 	}
++ 
++ /*
++ *	check the return status
++ */
++ 
++ 	for (cp = buf; *cp; cp++)
++ 		if (*cp != ' ')
++ 			break;
++ 
++ 	if (*cp == 'E' || *cp == 'F')
++ 	{
++ 		errno = atoi(cp + 1);
++ 		while (read(READ(tfd), &c, 1) == 1)
++ 			if (c == '\n')
++ 				break;
++ 
++ 		if (*cp == 'F')
++ 			abort(tfd);
++ 
++ 		return(-1);
++ 	}
++ 
++ /*
++ *	check for mis-synced pipes
++ */
++ 
++ 	if (*cp != 'A')
++ 	{
++ 		abort(tfd);
++ 		errno = EIO;
++ 		return(-1);
++ 	}
++ 
++ 	return(atoi(cp + 1));
++ }
++ 
++ 
++ 
++ /*
++ *	rmtopen --- open a magtape device on system specified
++ */
++ 
++ rmtopen(dev, mode)
++ char *dev;
++ int mode;
++ {
++ 	int i, rc;
++ 	char buf[64];
++ 	char *sys;
++ 
++ /*
++ *	first, find an open pair of file descriptors
++ */
++ 
++ 	for (i = 0; i < MAXUNIT; i++)
++ 		if (READ(i) == -1 && WRITE(i) == -1)
++ 			break;
++ 
++ 	if (i == MAXUNIT)
++ 	{
++ 		errno = EMFILE;
++ 		return(-1);
++ 	}
++ 
++ /*
++ *	pull apart system and device
++ */
++ 	for (sys = dev; *dev != ':'; dev++)
++ 		;
++ 	*dev++ = '\0';
++ 
++ /*
++ *	setup the pipes for the 'rsh' command and fork
++ */
++ 
++ 	if (pipe(Ptc[i]) == -1 || pipe(Ctp[i]) == -1)
++ 		return(-1);
++ 
++ 	if ((rc = fork()) == -1)
++ 		return(-1);
++ 
++ 	if (rc == 0)
++ 	{
++ 		close(0);
++ 		dup(Ptc[i][0]);
++ 		close(Ptc[i][0]); close(Ptc[i][1]);
++ 		close(1);
++ 		dup(Ctp[i][1]);
++ 		close(Ctp[i][0]); close(Ctp[i][1]);
++ 
++ 		execl("/usr/ucb/rsh", "rsh", sys, "/etc/rmt", (char *) 0);
++ 
++ /*
++ *	bad problems if we get here
++ */
++ 
++ 		perror("exec");
++ 		exit(1);
++ 	}
++ 
++ 	close(Ptc[i][0]); close(Ctp[i][1]);
++ 
++ /*
++ *	now attempt to open the tape device
++ */
++ 
++ 	sprintf(buf, "O%s\n%d\n", dev, mode);
++ 	if (command(i, buf) == -1 || status(i) == -1)
++ 		return(-1);
++ 
++ 	return(i);
++ }
++ 
++ 
++ 
++ /*
++ *	rmtclose --- close a remote magtape unit and shut down
++ */
++ 
++ rmtclose(tfd)
++ int tfd;
++ {
++ 	int rc;
++ 
++ 	if (command(tfd, "C\n") != -1)
++ 	{
++ 		rc = status(tfd);
++ 
++ 		abort(tfd);
++ 		return(rc);
++ 	}
++ 
++ 	return(-1);
++ }
++ 
++ 
++ 
++ /*
++ *	rmtread --- read a buffer from a remote tape
++ */
++ 
++ rmtread(tfd, data, cnt)
++ int tfd, cnt;
++ char *data;
++ {
++ 	int rc, i;
++ 	char buf[64];
++ 
++ 	sprintf(buf, "R%d\n", cnt);
++ 	if (command(tfd, buf) == -1 || (rc = status(tfd)) == -1)
++ 		return(-1);
++ 
++ 	for (i = 0; i < rc; i += cnt, data += cnt)
++ 	{
++ 		cnt = read(READ(tfd), data, rc);
++ 		if (cnt <= 0)
++ 		{
++ 			abort(tfd);
++ 			errno = EIO;
++ 			return(-1);
++ 		}
++ 	}
++ 
++ 	return(rc);
++ }
++ 
++ 
++ 
++ /*
++ *	rmtwrite --- write a buffer to the remote tape
++ */
++ 
++ rmtwrite(tfd, data, cnt)
++ int tfd, cnt;
++ char *data;
++ {
++ 	int rc;
++ 	char buf[64];
++ 	int (*pstat)();
++ 
++ 	sprintf(buf, "W%d\n", cnt);
++ 	if (command(tfd, buf) == -1)
++ 		return(-1);
++ 
++ 	pstat = signal(SIGPIPE, SIG_IGN);
++ 	if (write(WRITE(tfd), data, cnt) == cnt)
++ 		return(status(tfd));
++ 
++ 	abort(tfd);
++ 	errno = EIO;
++ 	return(-1);
++ }
++ 
++ 
++ 
++ /*
++ *	rmtlseek --- perform an imitation lseek operation remotely
++ */
++ 
++ rmtlseek(tfd, wh, off)
++ int tfd, wh, off;
++ {
++ 	char buf[64];
++ 
++ 	sprintf(buf, "L%d\n%d\n", wh, off);
++ 	if (command(tfd, buf) == -1)
++ 		return(-1);
++ 
++ 	return(status(tfd));
++ }
++ 
++ 
++ 
++ /*
++ *	rmtioctl --- perform raw tape operations remotely
++ */
++ 
++ rmtioctl(tfd, op, arg)
++ int tfd, op;
++ char *arg;
++ {
++ 	char c;
++ 	int rc, cnt;
++ 	char buf[64];
++ 
++ /*
++ *	MTIOCOP is the easy one. nothing is transfered in binary
++ */
++ 
++ 	if (op == MTIOCTOP)
++ 	{
++ 		sprintf(buf, "I%d\n%d\n", ((struct mtop *) arg)->mt_op,
++ 			((struct mtop *) arg)->mt_count);
++ 		if (command(tfd, buf) == -1)
++ 			return(-1);
++ 		return(status(tfd));
++ 	}
++ 
++ /*
++ *	we can only handle 2 ops, if not the other one, punt
++ */
++ 
++ 	if (op != MTIOCGET)
++ 	{
++ 		errno = EINVAL;
++ 		return(-1);
++ 	}
++ 
++ /*
++ *	grab the status and read it directly into the structure
++ *	this assumes that the status buffer is (hopefully) not
++ *	padded and that 2 shorts fit in a long without any word
++ *	alignment problems, ie - the whole struct is contiguous
++ *	NOTE - this is probably NOT a good assumption.
++ */
++ 
++ 	if (command(tfd, "S\n") == -1 || (rc = status(tfd)) == -1)
++ 		return(-1);
++ 
++ 	for (; rc > 0; rc -= cnt, arg += cnt)
++ 	{
++ 		cnt = read(READ(tfd), arg, rc);
++ 		if (cnt <= 0)
++ 		{
++ 			abort(tfd);
++ 			errno = EIO;
++ 			return(-1);
++ 		}
++ 	}
++ 
++ /*
++ *	now we check for byte position. mt_type is a small integer field
++ *	(normally) so we will check its magnitude. if it is larger than
++ *	256, we will assume that the bytes are swapped and go through
++ *	and reverse all the bytes
++ */
++ 
++ 	if (((struct mtget *) arg)->mt_type < 256)
++ 		return(0);
++ 
++ 	for (cnt = 0; cnt < rc; cnt += 2)
++ 	{
++ 		c = arg[cnt];
++ 		arg[cnt] = arg[cnt+1];
++ 		arg[cnt+1] = c;
++ 	}
++ 
++ 	return(0);
+  }
+*** /usr/man/man1/tar.1	Mon Jun 27 00:35:14 1983
+--- tar.1	Mon Jul  1 13:51:09 1985
+***************
+*** 95,101
+  .B f
+  .I Tar
+  uses the next argument as the name of the archive instead of
+! /dev/rmt?. If the name of the file is `\-', tar writes to standard output or
+  reads from standard input, whichever is appropriate. Thus,
+  .I tar
+  can be used as the head or tail of a filter chain.
+
+--- 95,113 -----
+  .B f
+  .I Tar
+  uses the next argument as the name of the archive instead of
+! /dev/rmt?.
+! .sp
+! If the file name has the form
+! .IR system :/dev/???,
+! .I tar
+! will use the tape drive /dev/??? on the remote system
+! .IR system ,
+! via
+! .IR rsh (1),
+! and
+! .IR rmt (8).
+! .sp
+! If the name of the file is `\-', tar writes to standard output or
+  reads from standard input, whichever is appropriate. Thus,
+  .I tar
+  can be used as the head or tail of a filter chain.
+***************
+*** 179,181
+  The current limit on file name length is 100 characters.
+  .br
+  There is no way to selectively follow symbolic links.
+
+--- 191,195 -----
+  The current limit on file name length is 100 characters.
+  .br
+  There is no way to selectively follow symbolic links.
++ .br
++ Using a remote system's tape drive can be slow.
+exit

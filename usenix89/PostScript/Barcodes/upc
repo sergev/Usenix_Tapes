@@ -1,0 +1,33 @@
+#!/bin/sh
+# upc -- print upc code with PostScript
+# usage:  upc prod code-5 code-5
+# prod is the product type (zero for store items)
+# code-5 is a five digit code (needs two of these)
+
+# Copyright (C) 1986 by Pipeline Associates, Inc.
+# Permission is granted to use and distribute as long as this copyright
+# notice remains intact and it is distributed free of charge.
+
+UPCFONT=./upc.pro
+X=1	# x coordinate of lower right corner (in inches)
+Y=1	# x coordinate of lower right corner (in inches)
+
+# calculate checksum
+sum=`echo "$2
+$3
+$2
+$3" | sed "
+	1s/\(.\)\(.\)\(.\)\(.\)\(.\)/a=$1 + \2 + \4/
+	2s/\(.\)\(.\)\(.\)\(.\)\(.\)/b=\1 + \3 + \5/
+	3s/\(.\)\(.\)\(.\)\(.\)\(.\)/c=\1 + \3 + \5/
+	4s/\(.\)\(.\)\(.\)\(.\)\(.\)/s=(a+b)*3+c+\2+\4;(10-(s%10))%10/" | bc`
+
+cat $UPCFONT
+echo "$X 72 mul $Y 72 mul translate /UPC findfont 50 scalefont setfont
+0 0 moveto
+(| |$1$2 | | ) show
+switch
+($3$sum) show
+switch
+(| |) show
+showpage"

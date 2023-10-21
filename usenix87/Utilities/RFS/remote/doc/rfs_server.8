@@ -1,0 +1,158 @@
+.TH RFS_SERVER 8  "18 October 1985"
+.UC 4
+.SH NAME
+rfs_server \- remote file system server and kernel name server
+.SH SYNOPSIS
+.B /etc/rfs_server
+[ -s internet-service ]
+[ -v debug-level ]
+.SH DESCRIPTION
+This is a server for the remote file system and
+is intended to be started up in /etc/rc.
+.PP
+.PP
+The optional flag
+.I \-s
+and its argument,
+.I internet-service,
+tells the server to accept calls on the named service
+port described in /etc/services.
+Without this argument, 
+.I rfs_server
+uses the service
+.I remotefs.
+.PP
+The optional flag
+.I \-v
+and its argument,
+.I debug-level,
+starts up the server with the given initial debug level.
+The argument should be a hexadecimal number containing one bit
+for each class of debug output desired.
+.PP
+The server maintains three identities,
+and each can be determined by the current command line using the
+.I ps(1)
+command.
+.PP
+The first identity is the
+.I sentry
+of which there can only be one at any time.
+The command line for this remains unaltered from the way it was started.
+The function of the
+.I sentry
+server is to build a database of all hosts in /etc/hosts,
+all users and groups in /etc/passwd and /etc/group,
+and of all users' .rhost files.
+After this database has been built,
+it waits 
+for connections from remote hosts.
+.PP
+The second identity is a
+.I "gateway server"
+and changes its command line
+to tell which host it is a
+.I "gateway server"
+for.
+This identity is the child of the
+.I sentry
+after the latter receives a connection from a remote host;
+there can only be one
+.I "gateway server"
+for each remote host.
+The responsibilities of the
+.I "gateway server"
+are to service context-free system calls for the remote host,
+create other servers to handle context-sensitive system calls,
+maintain complete information about all remote processes being served,
+and ensure at all times
+that only one server has control of the socket file
+descriptor to the remote machine being served.
+.PP
+The third identity is that of a plain
+.I server,
+and changes its command line to be similar to that
+of the
+.I "gateway server"
+except that the word
+.I gateway
+is missing and it identifies its parent process.
+Its responsibilities
+are to service context-free system calls for the remote host and
+create other servers for remote processes that must inherit
+certain context information (e.g. remote current working directories,
+and open file descriptors).
+.SH "DEBUG LEVELS"
+It should be noted that the debug option is only useful with
+a copy of the source code in hand and a server that has been
+compiled with the debug software turned on.
+The current selection of the bits are:
+.PP
+.ta 1i 2.5i 4i
+	0x00000001	process switching
+.br
+	0x00000002	system calls
+.br
+	0x00000004	setuid/setgid, umask
+.br
+	0x00000008	file descriptor allocation
+.br
+	0x00000010	connections
+.br
+	0x00000020	server switching
+.br
+	0x00000040	nameserver
+.br
+	0x00000080	directory nuxi
+.br
+	0x00000100	message in and out
+.br
+	0x00000200	don't fork child for gateway (good for adb)
+.br
+	0x00000400	local/remote file decisions
+.br
+	0x00000800	don't remove log file on exit (except exit on error)
+.br
+	0x00001000	exec information
+.br
+	0x00002000	auto debug for 0x20 (server switching)
+.br
+	0x00004000	parsing messages to gateway
+.PP
+Another method of setting the debug level in any identity of the
+.I rfs_server
+is to place the desired hexidecimal level in the file /usr/tmp/rfs_debug
+and to send the appropiate server signal number 5, aka
+.I SIGTRAP.
+This method can be used with
+.I sentry
+servers, any
+.I gateway
+servers, and any other servers that are marked active.
+It should not be used on sleeping servers.
+.PP
+If any server receives SIGILL, SIGSEGV or SIGBUS,
+it will arrange for its core file to be dumped in /usr/tmp.
+.SH "RESTARTING THE SERVER"
+The best way to restart the
+.I sentry
+server (e.g. installing a new
+.I rfs_server),
+is to simply run the new server.
+The new server knows how to examine the previous log file
+to discover the pid number of the previous server, and kill it.
+.PP
+If you know that that will fail, then the second best way
+is to send it the signal
+.I SIGTERM
+.PP
+Sending
+.I SIGTERM
+signal to a
+.I "gateway server"
+will cause it and all of its children to gracefully go away.
+.SH "SEE ALSO"
+remotename(2),
+rmtmnt(8).
+.SH BUGS
+Probably.

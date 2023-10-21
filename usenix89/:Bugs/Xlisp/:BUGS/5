@@ -1,0 +1,108 @@
+Path: plus5!wuphys!wucs!we53!ltuxa!cuae2!ihnp4!cbosgd!cbatt!clyde!caip!topaz!ll-xn!nike!lll-crg!seismo!gatech!akgua!usl!elg
+From: elg@usl.UUCP (Eric Lee Green)
+Newsgroups: net.sources.bugs
+Subject: Xlisp varargs bug
+Message-ID: <885@usl.UUCP>
+Date: 30 Aug 86 22:23:43 GMT
+Distribution: net
+Organization: USL, Lafayette, LA
+Lines: 97
+Posted: Sat Aug 30 17:23:43 1986
+
+<munch>
+
+Xlisp 1.6 will not run on the Pyramid 90x, or any other computer which
+does not have a traditional-type down-growing stack (a 90x has a
+sliding register file for parameter passing). Machines which have
+their stacks growing upwards would also have this problem.
+
+The problem is the routine "xlsave" in the file "xleval.c", which
+takes the address of the first parameter passed to it, then does a
+"++" on that address to get the subsequent parameters (until it hits a
+"nil" parameter. Difficult to take the address of a register, and if
+your stack is growing upwards instead of downwards, you would want a
+"--". 
+
+The solution is to use the varargs macros, at least on Unix. For toy
+compilers on toy computers, that may not work, and the old code can be
+retained. Routines with variable numbers of arguments aren't really
+"C" and shouldn't be in the code anyhow, at least if one hopes for the
+code to be portable.
+
+This is the first time I've ever posted a bug report, so bear with
+me... Following, are the diffs for the Makefile, and for xleval.c.
+These are just normal output from the "diff" command, there may be
+some better way to do it but I haven't been around long enough to
+know. 
+
+diff Makefile.new Makefile.old
+18,20c18
+< # Modified: August 1986 by Eric Green.                          
+< # remove the "-Dvargs" for machines without the VARARGS library
+< CFLAGS =	-O -Dvargs 
+---
+> CFLAGS =	-O
+
+
+diff xleval.c.new x.eval.c.old
+8,12d7
+< /* added, Eric Green, August 1986, for Pyramids etc. that need vargs. */
+< #ifdef vargs
+< #include <varargs.h>
+< #endif
+< 
+350,359d344
+< 
+< /* Modification: August 1986 by Eric Green, to deal with the fact
+<    that their code won't work on machines with weird stacks,
+<    like the Pyramid (which has a RISC-like sliding register file).
+<    Modified to use the standard varargs routines. Because some
+<    toy compilers like those for the IBM PC don't have the varargs stuff,
+<    the old code is also retained for those toy computers.
+< */
+< 
+< #ifndef vargs
+361c346
+<      NODE **n;
+---
+>   NODE **n;
+363a349
+> 
+378,384d363
+< #else
+< NODE ***xlsave(va_alist)
+<      va_dcl
+< {
+<   NODE ***oldstk;
+<   NODE **n;
+<   va_list arglist;
+386,405d364
+<   va_start(arglist);
+<   /* save the old stack pointer */
+<   oldstk = xlstack;
+< 
+<   /* ok, now go through the list doing stuph */
+<   while (n=va_arg(arglist, NODE **))
+<     {
+<       if (xlstack <= xlstkbase)
+< 	xlabort("evaluation stack overflow");
+<       *--xlstack = n;
+<       *n = NIL;
+<     }	
+<   
+<   /* clean up varglist */
+<   va_end (arglist);
+<   
+<   /* return old stack pointer */
+<   return(oldstk);
+< }
+< #endif
+
+-- 
+
+      Eric Green {akgua,ut-sally}!usl!elg
+        (Snail Mail P.O. Box 92191, Lafayette, LA 70509)
+          Bayou Telecommunication's ML guru, USL student
+
+" In the beginning the Universe was created. This has made a lot of
+ people very angry and been widely regarded as a bad move."

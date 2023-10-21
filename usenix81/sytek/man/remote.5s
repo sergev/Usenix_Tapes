@@ -1,0 +1,199 @@
+.TH REMOTE 5 SYTEK
+.ad
+.SH NAME
+remote \- remote host description file
+.ad
+.SH SYNOPSIS
+/etc/remote
+.SH DESCRIPTION
+.I Remote
+is a data base describing remote hosts,
+used by
+.IR tip (1).
+Hosts are described in
+.I remote
+by giving a set of capabilities which they have, and by describing
+how operations are performed.
+.I Remote
+format is virtually identical to that of
+.IR termcap (5)
+(in fact most of the library routines are identical to those of
+.IR termcap ,
+except for the names).
+.PP
+Entries in
+.I remote
+consist of a number of `:' separated fields.
+The first entry for each host gives the names which are known for the
+host, separated by `|' characters.  
+The first name given is the most common abbreviation for the host, and the
+last name given should be a long name fully identifying the host.
+The first name should contain no blanks; the last name may well contain
+blanks for readability.
+.SH CAPABILITIES
+.nf
+
+.ta \w'Name  'u +\w'Type  'u +\w'Default  'u
+\fBName	Type	Default	Description\fR
+at	str		auto call unit type (see below)
+br	num	300	baud rate for connection
+cm	str		message sent upon establishing connection 
+cu	str	(dv)	call unit device, if dialed up
+du	bool	false	host must be ``dialed up''
+el	str	"\er"	characters indicating end of logical line
+fs	num	512	frame size (for buffering local writes)
+hw	bool	false	device is ``hard-wired'' (e.g. DF, direct lines)
+ie	str		input EOF indicators
+oe	str		output EOF string
+pn	str		list of phone numbers, or indirect operator `@'
+tc	str		entry to use for remainder of description
+.fi
+.PP
+.B A Sample Entry
+.PP
+The following entry, which describes a fictious host, illustrates
+the use of the auto dialing capabilities.
+.PP
+.nf
+du|dialer|generic DN-11 call unit description:\e
+        :dv=/dev/cul1:br#1200:cu=/dev/cua1:du:at=dn11:
+/6|case|case/6|Case Western Reserve Harris /6:\e
+        :el=^U^C^R^O^S^Q:ie=@:oe=^Z:pn=434-292-0600,233-9999:\e
+        :tc=dialer:
+.fi
+.PP
+Entries may continue onto multiple lines by giving a \e as the last
+character of a line, and empty fields
+may be included for readability (here between the last field on a line
+and the first field on the next).
+Capabilities in
+.I remote
+are of three types:
+Boolean capabilities which indicate that the host has
+some particular feature (or that some particular feature of the connection
+program should be used; here use of an auto call unit),
+numeric capabilities, and string
+capabilities, which give a sequence which can be used to perform
+particular operations.
+.PP
+Note that, where reasonable, capabilities support
+a list of alternatives (separated
+by commas).  At present 
+only the \fBdv\fR and \fBpn\fR capabilities utilize this.
+.PP
+.B Types of Capabilities
+.PP
+All capabilities have two letter codes.  For instance, the fact that
+.I case
+may be reached only by phone is indicated by the \fBdu\fR capability.
+Numeric capabilities are followed by the character `#' and then the value.
+Thus \fBbr\fR which indicates the baud rate to be used in establishing a
+connection gives the value `1200' for 
+.IR case .
+.PP
+Finally, string valued capabilities, such as \fBel\fR (end of line indicators)
+are given by the two character code, an `=', and then a string
+ending at the next following `:'.
+.PP
+A number of escape sequences are provided in the string valued capabilities
+for easy encoding of characters there.  A \fB\eE\fR maps to an ESCAPE
+character, \fB^x\fR maps to a control-x for any appropriate x, and the sequences
+\fB\en \er \et \eb \ef\fR give a newline, return, tab, backspace and formfeed.
+Finally, characters may be given as three octal digits after a \fB\e\fR,
+and the characters \fB^\fR and \fB\e\fR may be given as \fB\e^\fR and
+\fB\e\e\fR.
+If it is necessary to place a \fB:\fR in a capability it must be escaped in
+octal as \fB\e072\fR.
+.br
+.ne 5
+.PP
+.B Preparing Descriptions
+.PP
+The most effective way to prepare a host description is by imitating
+the description of a similar host in
+.I remote
+and use the \fBtc\fR
+capability for sharing common definitions.
+.PP
+Systems which are connected via a direct connection (e.g. an RS-232 line
+between two teminal ports) should specify the device to open as
+\fBdv\fR, and the baud rate, if other than 300 baud, as \fBbr\fR.
+Systems which may only be reached by phone must add the call
+unit device, \fBcu\fR, call unit type, \fBat\fR,
+phone numbers to be used, \fBpn\fR, and the boolean \fBdu\fR
+to indicate the host is ``dialed up''.
+If the connection uses only a single line (i.e. it isn't a DN-11
+like call unit) \fBhw\fR must be specified.
+.PP
+.I Tip
+currently supports the following auto call units:
+.nf
+
+.ta \w'at Name  'u +\w'DF02,DF03  'u
+\fBName	Type	Description\fR
+df	DF02,DF03	DEC DF02-AC and DF03-AC
+dn11	DN-11	DEC DN-11/Able Quadracall
+bizw	BIZCOMP	BIZCOMP 1302 using tone dialing
+bizf	BIZCOMP	BIZCOMP 1302 using pulse dialing
+.fi
+.PP
+Phone numbers may be placed directly in the
+.I remote
+file or may be placed in a secondary, private file.  By default
+this secondary file is
+.IR /etc/phones ,
+however, if the
+.B PHONES
+variable is exported,
+.I tip
+will try and find the phone number there.  This file is
+comprised of a series of lines of the form
+.ce
+system-name\ \[\ \et\]*\ phone-number
+Refer to
+.IR tip (1)
+for a description of the use of this file.
+.PP
+The \fBel\fR string is used by
+.IR tip (1)
+to decide when a logical end-of-line has been reached.  This is
+important, as
+.I tip
+will only recognize an escape sequence after an end-of-line.
+Normally the special characters recognized by a remote host are
+specified (kill character, suspend/resume output, etc.).
+.PP
+The \fBie\fR and \fBoe\fR strings are used by
+.I tip
+for file transfer.  When sending a file to a remote host,
+.I tip
+will terminate the transmission by sending the ``output eof'',
+\fBoe\fR, string.  When receiving a file from a remote host, the
+\fBie\fR string, if seen at the beginning of a line,
+is interpreted as the end of transmission.  Normally \fBie\fR
+is set to the remote system's prompt character and \fBoe\fR
+is set to the remote system's end-of-file character(s).
+.SH FILES
+.DT
+/etc/remote	file containing host descriptions
+.SH SEE ALSO
+tip(1)
+.SH AUTHOR
+These routines are modified versions of the
+.I termcap
+data base which was written by William Joy.
+.SH BUGS
+.I Tip
+allows only 256 characters for string capabilities, and the routines
+in
+.I tip
+do not check for overflow of this buffer.
+The total length of a single entry (excluding only escaped newlines)
+may not exceed 1024.
+.PP
+The \fBhw\fR stuff is a late hack caused by supporting DN-11's,
+and should go away soon.
+.PP
+The information common to
+.IR uucp (1)
+should be shared.

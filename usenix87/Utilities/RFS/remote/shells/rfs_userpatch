@@ -1,0 +1,70 @@
+#!/bin/sh
+#
+# User-level software setup for compiling RFS.
+#
+umask 02
+   PATCHES=$1
+INCLUDEDIR=$2
+       SYS=$3
+	NL='
+'
+
+echo "$NL"
+
+if [ ! -d $PATCHES -o ! -d $SYS ]
+then
+	echo "Either \"$PATCHES\" or \"$SYS\" is not a directory"
+	exit 1
+fi
+
+#
+# Make the proper include directories if they don't already exist.
+# link in remotefs.h and param.h
+#
+if [ ! -d $INCLUDEDIR ]
+then
+	mkdir $INCLUDEDIR
+fi
+if [ ! -d $INCLUDEDIR/remote ]
+then
+	mkdir $INCLUDEDIR/remote
+fi
+if [ ! -d $INCLUDEDIR/sys ]
+then
+	mkdir $INCLUDEDIR/sys
+fi
+
+rm -f $INCLUDEDIR/remote/remotefs.h $INCLUDEDIR/sys/param.h
+
+ln -s $SYS/remote/remotefs.h $INCLUDEDIR/remote/remotefs.h
+ln -s $SYS/h/param.h $INCLUDEDIR/sys/param.h
+
+#
+# Finally make the change to syscall.h.  If the changes go in usr.include,
+# then assume that we must copy it there first.  Otherwise, we make the
+# changes in place.
+#
+case "$INCLUDEDIR" in
+
+/usr/include)	;;
+
+*)	rm -f $INCLUDEDIR/syscall.h
+	cat /usr/include/syscall.h > $INCLUDEDIR/syscall.h
+	;;
+esac
+
+while :
+do
+	echo -n "${NL}${NL}Hit <return> to patch" \
+		"$INCLUDEDIR/syscall.h or 'n' to skip: "
+	read prompt
+	case "$prompt" in
+	"")	(set -x; patch $INCLUDEDIR/syscall.h $PATCHES/syscall.h.diff)
+		;;	
+	n)	;;
+	*)	echo "Enter <return> or the letter 'n' only!"
+		continue
+		;;
+	esac
+	break
+done

@@ -1,0 +1,143 @@
+
+.TH KAFKA 6
+.SH NAME
+kafka \- compile a language generator
+.SH SYNOPSIS
+.B kafka
+[
+.I file
+] [
+.B \-v
+]
+.SH DESCRIPTION
+.I Kafka
+compiles a BNF grammar into a language generator.
+The
+.B \-v
+(verbose)
+option sets a flag for the programmer's convenience.
+.SH INPUT
+.PP
+.IR Kafka \&'s
+source input looks like this:
+.sp 0.5
+.RS
+.I declarations
+.br
+%%
+.br
+.I rules
+.RE
+.sp 0.5
+The only legal contents of the ``declarations'' section
+are sections of C source code to be compiled into the generator:
+.sp 0.5
+.RS
+%{
+.br
+any legal C statements
+.br
+%}
+.RE
+.sp 0.5
+A
+.I rule
+has the form
+.sp 0.5
+.RS
+<\fInon-terminal\fR> \fB=\fR \fIsymbol\fR ... \fB{ \fIstatement;\fR ... \
+\fBreturn\fR \fIexpression\fR \fB} ;\fR
+.RE
+.sp 0.5
+A
+.I symbol
+may be a non-terminal enclosed in angle brackets
+or a
+.I terminal.
+A terminal may be a string of non-blanks
+or an arbitrary string surrounded by double quotes.
+The optional series of statements in braces is executed
+when the rule is tried.
+If the last statement returns zero,
+the generator rejects the rule and tries the next rule;
+this is how the output is customarily randomized.
+If the right-hand side of a rule contains no symbols,
+the last statement is assumed to return a string pointer.
+.SH USAGE
+.PP
+.I Kafka
+writes the output grammar to the files
+.I kaf.spec.c
+and
+.I kaf.text.c.
+The interface to the grammar
+normally consists of two standard routines,
+.I maketext
+and
+.I kkoutput:
+.RS
+.sp
+.ft B
+int maketext(s)
+.br
+char *s;
+.sp
+int kkoutput(s)
+.br
+char *s;
+.ft R
+.RE
+.sp
+The argument of
+.I maketext
+is a non-terminal symbol.
+The generator expands the symbol and stores the result
+in an array.
+.I Maketext
+returns nonzero if something goes wrong.
+.PP
+The generator calls
+.I kkoutput
+with its output as argument.
+.I Kkoutput
+accumulates the output until called with the string ``@'' as argument.
+It then punctuates, inserts
+line breaks, and otherwise cleans up the accumulated text,
+and dumps it to the standard output.
+Imbedded
+.B %n
+becomes a newline,
+.B %t
+becomes a tab, and
+.B %s
+becomes a space.
+A symbol beginning with
+.B #
+is concatenated to the preceding symbol.
+.PP
+The simplest possible main program is:
+.RS
+.sp
+.ft B
+.nf
+.ta +4n
+main() {
+	maketext(``start'');
+	kkoutput(``@'');
+}
+.ft R
+.fi
+.sp
+.RE
+.SH FILES
+.ta \w'kaf.text.c   'u
+kaf.spec.c	specifications for generator
+.br
+kaf.text.c	actions for generator
+.SH "SEE ALSO"
+insult(6)
+.SH AUTHOR
+Wayne Christopher
+-- 
+Col. G. L. Sicherman
+...{rocksvax|decvax}!sunybcs!colonel

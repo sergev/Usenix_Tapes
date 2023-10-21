@@ -1,0 +1,87 @@
+/* ByteVect.c -- Data type-specific functions for class ByteVec
+
+Author:
+	K. E. Gorlen
+	Bg. 12A, Rm. 2017
+	Computer Systems Laboratory
+	Division of Computer Research and Technology
+	National Institutes of Health
+	Bethesda, Maryland 20892
+	Phone: (301) 496-5363
+	uucp: {decvax!}seismo!elsie!cecil!keith
+	June, 1986
+
+Function:
+	
+Data type -specific functions for class ByteVec.
+
+Modification History:
+	
+*/
+
+#include "ByteVec.h"
+#include "oopsconfig.h"
+//#include <libc.h>		// cfront bug
+extern void qsort(void*,int,int,int(*)());
+
+#define	THIS	ByteVec
+#define	BASE	Vector
+
+static int typeCmp(char& a, char& b)
+{
+	return a-b;
+}
+
+static union hash_byte_mask {
+	int in[sizeof(int)];
+	char ch[sizeof(int)*sizeof(int)];
+	hash_byte_mask();
+} mask;
+
+static hash_byte_mask::hash_byte_mask()
+{
+	for (register int i=0; i<sizeof(int); i++) {
+		for (register int j=0; j<sizeof(int); j++) ch[sizeof(int)*i+j] = j<i ? 0xff : 0;
+	}
+}
+
+int THIS::hash()
+{
+	register int h = n;
+#ifdef LOG2_INT
+	register int i = n >> LOG2_INT;
+#else
+	register int i = n/sizeof(int);
+#endif
+	register int* vv = (int*)v;
+	while (i--) h ^= *vv++;
+#ifdef LOG2_INT
+	if ((i = n&(sizeof(int)-1)) != 0)
+#else
+	if ((i = n%sizeof(int)) != 0)
+#endif
+		h ^= *vv & mask.in[i];
+	return h;
+}
+
+void THIS::printOn(ostream& strm)
+{
+	for (register int i=0; i<n; i++) {
+		if (i>0 && (i%10 == 0)) strm << "\n\t";
+		strm << dec(v[i],8);
+	}
+}
+
+THIS::THIS(istream& strm, THIS& where)
+{
+	this = &where;
+	strm >> n;
+	v = new char[n];
+	for (register int i =0; i<n; i++) { int _i; strm >> _i; v[i] = _i; }
+}
+
+void THIS::storer(ostream& strm)
+{
+	BASE::storer(strm);
+	for (register int i=0; i<n; i++) strm << (unsigned int)(unsigned char)v[i] << " ";
+}

@@ -1,0 +1,1121 @@
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+     NAME  
+
+	  pc-shell - pc command processor 
+
+     SYNOPSIS  
+
+	  pc-shell  [-s] [-v] [-b] [arg1 ... argn] 
+
+     DESCRIPTION  
+
+	  pc-shell is a command processor for IBM-PC's and compatibles 
+	  that	emulates  some	of the more desirable functions of the
+	  Berkeley UNIX* C-shell. In addition,	it  implements	PC-DOS
+	  versions  of some of the common UNIX* commands  -ls, mv, cp,
+	  etc.	
+
+	  The -v option (verbose)  causes  the	program	 to  echo  all
+	  commands  to	the  standard  error  stream  before executing
+	  them.	 
+
+	  The -b option suppresses mapping of the backslash  character
+	  to  the  forward  slash  character  in  all  operations that
+	  communicate with [PC|MS]DOS.	This  is  here	primarily  for
+	  compatibility	 with  PC-NET,	which  seems to choke on paths
+	  containing forward slashes.  
+
+	  arg1 ... argn (the command line arguments) are put into  the
+	  shell's environment as the variables $1 through $n.  
+
+
+     Wild Card Substitution  
+
+	  Ambiguous file names are expanded to a list of matching file 
+	  names on the command line.  This can be defeated by quoting, 
+	  and by setting the NOGLOB environment variable to '1'.  
+
+	  Command  lines  passed to external programs are truncated to
+	  128 characters.  
+
+
+     History Substitution  
+
+
+	  History substitution is a powerful means to save retyping of 
+	  long	command	 lines.It  allows  you	to  do	 things	  like
+	  re-execute  the  last	 command,  re-execute the last command
+	  but redirect output to a file, or execute a new command with 
+	  arguments from previous command lines.  The last 20 commands 
+	  are saved, and can be	  reviewed  by	typing	the  'history'
+	  command.  
+
+	  Previous  commands  can  be  referred to by their number, or
+	  relative to the  current command's number.  Parameters  from
+	  previous   commands	can   be   seperated   out   and  used
+	  individually.	 
+
+	  History substitutions specifications come in two parts - the 
+	  command  number    specifier	and  the  argument  specifier,
+
+
+				      -1-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  seperated by	a colon.  The argument	specifier is optional;
+	  if it is omitted, the entire command line is specified.  
+
+	  <command specifier> ::= !! | !n | !-n | <shortcut> 
+	  !!  = last command
+	  !n  = nth command
+	  !-n = command n commands before current command number
+	  !#  = the current command line
+
+	  <arg specifier> ::= :[^$*] | [^$*] | :n | :n* | <searchstr> | <empty>
+	  n   = number of argument (0 being the command name)
+	  ^   = first argument (i.e. argv[1])
+	  $   = last argument
+	  *   = ^-$, or nothing if only one word on command line
+	  n*  = arguments n through $
+
+	  <searchstr> ::= (initial characters of a previous command)
+
+	  <history subst specification> ::= <command specifier><arg specifier>
+
+	  This is not as complicatated as it may appear.  Here	is  an
+	  example session.  
+
+	  EXAMPLE 
+
+	  0% ls *.c
+	  *.c
+	  foo.c bar.c
+	  1% more foo.c
+	  /* edit the last argument of the last command */
+	  2% edit !!:$			
+	  /* go off and edit */
+	  /* reference last argument of last command */
+	  3% fgrep foo !!:$ bar.c 
+	  FOO.C : foo
+	  BAR.C : foo
+	  /* edit the second thru the last args of command 3 */
+	  4% edit !3:2*			
+	  (go off and edit)
+	  /* repeat last command */
+	  %5 !!
+	  (go off and edit)
+	  /* remove the 1st argument of the command 2 before the current one */
+	  %6 rm !-6:^
+
+
+	  Several shortcut expressions (that don't fit into the formal 
+	  description above)  are  also	 allowed.    !$,  !^,  !*  are
+	  allowable synonyms for !!:$, !!:^, and !!:*.	  It  is  also
+	  possible  to	select	a  previous  command  with one or more
+	  characters from the beginning of that command line.  
+
+	       %1 edit foo.c	# edit a source file
+	       %2 cc foo.c		# try and compile it
+	       %3 !e			# repeat command #1
+
+	  History substitution here is	a  compatible  subset  of  the
+	  [U|XE]NIX C  shell	history substitution facility.	Cshell
+
+
+				      -2-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  allows even weirder combinations.  
+
+
+     Variable Substitution  
+
+
+	  Shell	 variables  are	 synonymous  for  our  purposes	  with
+	  environment strings,	i.e.   they are defined with the 'set'
+	  command.  
+
+	  Variables are referenced on the command line by prefacing  a
+	  variable name	 by  a dollar sign.  Two dollar signs in a row
+	  signify a dollar sign character.  
+
+	  As mentioned above, command line arguments are contained  in
+	  the shell variables, $1 through $n, where n is the number of 
+	  the last argument.  
+
+	  EXAMPLE
+
+	  %0 set home = c:/
+	  %1 echo $home
+	  C:/
+	  %2 ls $home
+	  C:/*.*
+	  command.com
+	  %3 echo $path
+	  C:/bin
+
+	  And so on.  
+
+
+     Special variables	
+
+	  There	 are a some shell variables that have special meanings
+	  for the shell.  They	can  be	 given	values	with  the  set
+	  command.  They are 
+
+	 NOCLOBBER  
+
+	      If  NOCLOBBER  is	 equal to '1', then existing files may
+	      not be destroyed by output redirection, and output files 
+	      to be appended to by >> must exist.  
+
+
+	 PROMPT	 
+
+	      The PROMPT environment string is handled the same way as 
+	      it is by COMMAND.COM.  There  is	one  pc-shell-specific
+	      prompt string  character	!   that specifies the current
+	      command index.   If  no  PROMPT  environment  string  is
+	      defined, then the default is '$!% '.  
+
+	 NOGLOB	 
+
+	      The  NOGLOB  environment	string,	 if  set  to '1', will
+	      suppress file name expansion.  
+
+
+
+				      -3-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	 NODOS	
+
+	      The NODOS	 environment string, if set to '1', will  keep
+	      the  shell  from invoking command.com to handle commands
+	      it doesn't understand.  
+
+
+	 TEMP  
+
+	      The TEMP environment, gives the directory	 in  which  to
+	      place pipe  files.    This  can  be  a ram disk, or just
+	      someplace out of harm's way.  This variable must contain 
+	      a trailing slash, if it specifies a subdirectory.	 
+
+
+     Multiple commands on one command line  
+
+	  Command lines are split at semicolons.  This can be defeated 
+	  by quoting or escaping.  
+
+	  EXAMPLE 
+
+	  %0 ls -l *.c ; make shell.exe ; exit
+
+     Conditional command execution  
+
+	  If two commands are seperated by '&&', then the second  will
+	  be executed only if the first returns 0 as an exit code.  If 
+	  two  commands are seperated by '||', then the second will be
+	  executed only the first command returns non-zero as an  exit
+	  code.	 
+
+	  Example 
+
+	      make shell.exe && chmod +w /bin/shell.exe && mv shell.exe /bin 
+
+	      If  the  make operation fails, then the chmod and the mv
+	      will not be executed.  
+
+	      make shell.exe || echo You blew it bub!
+
+	      If the make operation fails,  then  the  echo  operation
+	      will be executed.	 
+
+
+     Character Escapes, Shell Comments, and Argument Quoting  
+
+	  Any  character  preceded  by	a    \	(backslash)  is copied
+	  unmodified to the  command  buffer.	 This  allows  you  to
+	  suppress  the	 special meanings of shell command characters,
+	  such as '|', ';', and '* '.  
+
+	  # is the shell comment character.  Anything on a line	 after
+	  a # character is ignored.  
+
+	  Command  line	 arguments  contained  in  quotes  (single  or
+	  double) may contain  blank  space  (i.e.  blanks  or	tabs).
+	  Variable   substitution   will  take	place  within  strings
+
+
+				      -4-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  surrounded by double quotes.	No interpretation takes	 place
+	  within single quotes.	  
+
+	  Within  double  quotes,  the	'C'  language escape sequences
+	  \r,\n,\b,\f, and \a are honored - i.e.  they are  mapped  to
+	  their corresponding control characters.  
+
+
+     Startup and Script Files  
+
+
+	  If  '-s'  is	specified on the command line the program will
+	  look for a file called SHELL.RC in  the  current  directory,
+	  and execute it before passing	 control to the console.  This 
+	  allows you  to  set  up all your alias commands.  It isn't a
+	  good idea to put an 'exit' command in your SHELL.RC file, as 
+	  the shell will terminate.  
+
+	  Any file whose extension is .sh is run as  a	command	 file.
+	  The  environment  string  PATH  is used to locate the script
+	  file if it isn't in the current directory.  .sp 1  There  is
+			  sh							   also	 a command sh, into which shell scripts whose extension
+	  is not .sh can be redirected as standard input.  
+
+	  EXAMPLE
+
+	  %0 sh <batch.fil		# use the sh command
+	  %1 shell <batch.fil	  # run the external program
+
+			   bat							   Files ending in .bat files are  passed  to  COMMAND.COM  for
+	  execution.  
+
+
+     INPUT/OUTPUT  
+
+	  I/O  redirection  operates as it does under COMMAND.COM with
+	  some additional options: 
+
+      <name 
+
+	  Opens the file name as the standard input.  
+
+      <<word 
+
+	  reads the shell input up to a line  which  is	 identical  to
+	  word.	 The resulting text is put into an anonymous temporary 
+	  file, which is given to the command as standard input.  
+
+       name	   >name
+	name	    >!name
+	name	    >&name
+	 name	     >&!name
+
+	  The file  name    is used as standard output.	 If it doesn't
+	  exist, it's created; if it exists, it is truncated, and  its
+	  previous contents are lost.  
+
+	  If  the variable NOCLOBBER is set, the file must not already
+
+
+				      -5-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  exist, or an error results.  The forms using an  exclamation
+	  point override the NOCLOBBER variable's action.  
+
+	  The  form  >&name  routes standard error along with standard
+	  output to name.  
+
+	name	    >>name
+	 name	     >>!name
+	 name	     >>&name
+	  name	      >>&!name
+
+	  Uses the file name as standard output, like  >,  but	places
+	  output at  the  end  of  file.  If the variable NOCLOBBER is
+	  set, it is an error if the file doesn't already exist.   The
+	  forms	 using	an  exclamation	 point	override the NOCLOBBER
+	  variable's action.  
+
+
+     BUILT-IN COMMANDS	
+
+
+	  Some of the internal commands are UNIX*  style  replacements
+	  for COMMAND.COM internal commands, and some are included for 
+	  convenience.	
+
+	      Output of the 'commands' command
+
+	      a:	      alias	      b:	      c:
+	      cat	      cd	      chdir	      chmod
+	      cls	      commands	      copy	      cp
+	      d:	      del	      dir	      dump
+	      e:	      echo	      era	      erase
+	      error	      exit	      f:	      fgrep
+	      g:	      h:	      hd	      history
+	      i:	      j:	      ls	      md
+	      mkdir	      mon	      more	      mv
+	      popd	      pushd	      pwd	      rd
+	      read	      rm	      rmdir	      set
+	      sh	      switchar	      tee	      touch
+	      unalias	      version	      y
+
+	  There are  many  that	 are  simply aliases, e.g.  'copy' and
+	  'cp' invoke the same program.	 
+
+
+     COMMAND DESCRIPTION SYNTAX	 
+
+	  terms used in syntax explanations : 
+
+	  fname ::= PC-DOS ambiguous or unambiguous file or  directory
+	  name.	 
+
+	  uname ::= unambiguous PC-DOS file or directory name 
+
+	  string   ::=	 any   string	of   printable	characters  of
+	  arbitrary(<512) length.  
+
+	  filelist ::= filename [filename .. filename] 
+
+
+				      -6-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  noargs ::= no arguments at all 
+
+	  space ::= any white space characters 
+
+	  [arg] ::= term is optional 
+
+	  envstring ::=	<string>=<string> | <string><space>=<space><string> |
+		    <string><space><string>
+
+
+     COMMANDS  
+
+
+	  drive
+
+	      a: | b: | c: | d: | e: | f: | g: | h: | i: | j: <noargs> 
+
+	      changes default drive.  If you don't have such a	drive,
+	      nothing happens.	
+
+	  alias
+
+	      alias <envstring> 
+
+	      assigns cmdstring to name.  name can now be used just as 
+	      if it  were  a  built-in or external command.  cmdstring
+	      may   contain   history	 expressions	or    variable
+	      substitutions.  
+
+	      The syntax of this command is flexible - you can specify 
+	      alii  (?)	 in the form 'name=subst','name subst','name =
+	      subst', or 'name	=subst.'  However  you	need  a	 space
+	      character	 before	 a single quote in order to specify an
+	      alias that contains blanks.  
+
+	      The alias and set commands are  case  sensitive,	unlike
+	      their analogs in COMMAND.COM.  
+
+	  cat
+
+	      cat [<filelist>] 
+
+	      copies specified	files to standard output.  If none are
+	      given, copies standard input to standard output 
+
+	  cp
+
+	      cp | copy <filelist> <uname> 
+
+	      copies specified files to destination  file  or  device.
+	      If  more than one file is in the file list, <uname> must
+	      be a directory.  
+
+	  cd
+
+	      cd | chdir <dirname> 
+
+	      makes <dirname> the current default directory.  
+
+
+				      -7-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  chmod
+
+	      chmod [-|+[arwhs]*] <filelist> 
+
+	      change file permissions for specified files 
+
+	      +r, -r turn on or off read permission - i.e. hide the file.
+	      +w, -w turn on or off write permission.
+	      +h, -h turn on or off hidden attribute - converse of r
+	      +a, -a turn on or off archive attribute
+	      +s, -s turns on or off the system attribute
+
+	      Note that '-r' or	 '+rwh'	 are  both  valid  syntax  for
+	      switches.	  Also new permission switches are permissable
+	      between file names with the following warning:  I	 don't
+	      reset  the  masks	 between  file	names  - if you have a
+	      second batch of attribute changes on the	command	 line,
+	      the effect  is  additive.	   If  you're not careful, you
+	      could make a mess of a files attributes.	
+
+	      If  you  don't  specify  any  attribute  switches,  file
+	      attributes  will be set to 0, which means read,write,not
+	      hidden,not system, not  modified since last backup.  
+
+	  cls
+
+	      cls <noargs> 
+
+	      clears the screen and homes the cursor.  
+
+	  commands
+
+	      commands <noargs> 
+
+	      prints a table of available  built-in  commands.	  (see
+	      above) 
+
+	  del
+
+	      del 
+
+	      synonym for rm.  
+
+	  dir
+
+	      dir 
+
+	      synonym for ls.  
+
+	  dirs
+
+	      dirs <noargs> 
+
+	      lists the	 directories  on  the  directory  stack.  (see
+	      pushd and popd) 
+
+
+
+
+
+				      -8-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  du
+
+	      du [drivename] 
+
+	      prints out remaining space on drive  drivename.  If  you
+	      leave  off  the  drivename,  it  defaults to the current
+	      drive.  
+
+	  dump
+
+
+	      dump  filespec  [block  [page]]	|   [segment:[offset]]
+	      [count] 
+
+	      Where a block is 64K bytes and a page is 256 bytes
+	      Segment:offset are standard 8086 notation in hexadecimal
+	      Count is the number of bytes to dump in decimal
+
+	      This came from some anonymous public domain source, ported by me
+
+	  echo
+
+	      echo <anything> 
+
+	      echos argument  list  to	screen.	   echo	 on causes all
+	      commands to be echoed before execution  (i.e.  sets  the
+	      verbose  flag).  echo off turns off the verbose flag.  
+
+	  era
+
+	      era 
+
+	      synonym for rm.  
+
+	  error
+
+	      error <noargs> 
+
+	      prints returned value of last command to the screen.  
+
+	  exit
+
+	      exit <noargs> 
+
+	      terminates    execution	of   the   currently   running
+	      sub-shell.  If you are at top level  of  execution,  you
+	      will return to dos.  
+
+	  fgrep
+
+	      fgrep <pattern> <filelist> 
+
+	      looks  for  unambiguous pattern <pattern> in <filelist>.
+	      echos lines matching to the screen.  
+
+
+
+
+
+
+				      -9-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  history
+
+	      history [size] 
+
+	      prints history list to standard  output.	  If  size  is
+	      given,  the  number of commands history remembers is set
+	      to size.	If you change the size, history 'forgets'  all
+	      previous commands and resets its counters to 0.  
+
+	  ls
+
+	      ls | dir [-[alqctrR]] <filelist> 
+
+	      Lists files that match <filelist> 
+
+	      -a all  files,  including	 system files are listed.  '.'
+	      and '..' are suppressed, but you know they're  there  if
+	      you need them, don't you?	 
+	      -l prints out file times, permissions, etc 
+	      -q suppresses header line from display - useful when you 
+	      want to pipe stuff into another program.	
+	      -c print as one column.  
+	      -t sort by time, most recent last 
+	      -R recurse through all encountered subdirectories.  
+	      -r reverses sort order.  
+
+	  md
+
+	      md | mkdir <uname> 
+
+	      make a directory.	 Prints an error if it can't be done 
+
+	  mon
+
+	      mon <noargs> 
+
+	      mon   prints   to	  standard  error  a  lot  of  cryptic
+	      information on system variables thusly: 
+
+		  Corg : 0000 Cend : 715a Dorg : 0002 Dend 167a
+		  Uorg : 167a Uend : 327a mbot : 427c mtop 4800
+		  sbot : 0000 PSP  : 490d STKSIZ : 00256 HEAPSIZ : 00064
+		  dsval : 5033 csval : 491d
+		  STKLOW : 0001 MEMRY : 4680
+		  CS : 491d DS : 5033 SP : 4186
+
+	      You can probably figure out what most of	the  variables
+	      mean.   If  you  have  source and have broken the shell,
+	      this command may help.  
+
+	  more
+
+	      more [-[0-9]*] [<filelist>] 
+
+	      List file to screen with pauses 
+
+	      -n specify tab width when expanding tabs, where n is  an
+	      integer.	more acts like 'cat' when redirected - you can 
+
+
+				      -10-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	      concatenate files	 in  this  manner.    If  no files are
+	      specifed, standard input is 'mored.' 
+
+	  mv
+
+	      mv [-v] <filelist> <uname> 
+
+	      moves specified file or  files  to  target  specifed  by
+	      <uname>.	 If  there  is	more  than  one	 file in list,
+	      <uname> must be a directory 
+
+	      -v  will	print  out  a  message	saying	 how   it   is
+	      accomplishing   the   move,   which   is	probably  more
+	      interesting to me than you.  
+
+	  popd
+
+	      popd <noargs> 
+
+	      returns to directory at top of directory stack.  
+
+	  pushd
+
+	      pushd [<uname>] 
+
+	      save current working directory on directory  stack,  and
+	      changes current working directory to <uname>.  
+
+	      If no <uname> is given, the current directory is swapped 
+	      with the top of the directory stack.  
+
+	  pwd
+
+	      pwd 
+
+	      prints current working directory to standard output.  
+
+	  read
+
+	      read vname0 [vname1 .. vnamen] 
+
+	      read  reads a line from standard input, and assigns each
+	      word from the  line  to  the  corresponding  environment
+	      variable specified by  vname0  through vnamen.  
+
+	      EXAMPLE 
+
+		  read a b	# read into environment variables a and b
+	      you type
+		  hello there
+		  echo $a
+	      the shell echos
+		  hello
+		  echo $b
+	      there
+
+	      If  there	 are  fewer environment variables specified on
+	      the command line than there are  words  in  the  command
+
+
+				      -11-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	      line,  the  last	environment  variable will contain the
+	      rest of the words on the line.  
+
+	      EXAMPLE 
+
+		  read a b	# read into environment variables a and b
+	      you type
+		  hello there Mister Jones
+		  echo $a
+	      the shell echos
+		  hello
+		  echo $b
+	      there Mister Jones
+
+	      If there are more environment variables on  the  command
+	      line  than  words	 on the line read from standard input,
+	      the left-over  environment  variables'  state  will  not
+	      change  -	 if  they  were	 defined  in  the  environment
+	      already, their status won't change, and if they  weren't
+	      defined, they stay undefined.  
+
+	  rd
+
+	      rd | rmdir <uname> 
+
+	      remove specified directory if possible.  
+
+	  rm
+
+	      rm [-q] <filelist> 
+
+	      blows  away all files in <filelist>. If -q is specified,
+	      will ask if they should be removed.  
+
+	  set
+
+	      set [<envstring>] 
+
+	      sets a string  in	 the  environment.    If  you  specify
+	      'name=' with no string after, it will remove it from the 
+	      environment.   If you don't specify a string, set prints
+	      out current environment.	
+
+	      The syntax of this command is flexible - you can specify 
+	      set in the form 'set name=subst','set  name  subst','set
+	      name  = subst', or 'set name =subst.' However you need a
+	      space character  before  a  single  quote	 in  order  to
+	      specify a substitution string that contains blanks.  
+
+	  sh
+
+	      sh [ <arg1> .. <argn>] <scriptfile 
+
+	      forks a  'local'	shell  -  i.e.	  saves	 all pertinent
+	      information about the  shell  you're  currently  in  and
+	      invokes the command processor function recursively, with 
+	      scriptfile as  input.    The  arguments are copied to $1
+	      through $N environment strings, overwriting the  startup
+
+
+				      -12-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	      arguments.  
+
+	      sh  gives	 you  a way to run scripts, without loading an
+	      extra copy of shell.com or small.com.  
+
+	  switchar
+
+	      switchar [schar] 
+
+	      sets the DOS switch character to schar.  If schar is not 
+	      given, the current switch character is echoed.  
+
+	  tee
+
+	      tee <uname> 
+
+	      Copies standard input to standard output,	 depositing  a
+	      copy in <uname> 
+
+	  touch
+
+	      touch <filelist> 
+
+	      Makes  the  modification	time  of  specified  files the
+	      current date and time.  
+
+	  unalias
+
+	      unalias aliasname 
+
+	      remove alias name from the alias list.  
+
+	  y
+
+	      y <filelist> 
+
+	      copies standard  input  to  standard  output,  and  then
+	      copies the  specified files to standard output.  Sort of
+	      the opposite of tee, in other words.  
+
+
+     Helpful hints  
+
+
+	  Use forward slashes in all path names.  (See note  below  on
+	  switch  characters)	 If  you  use  DOS 3.0 or higher, this
+	  includes paths to transient programs.	 
+
+	  put single quotes around arguments with semicolons in	 them,
+	  so they don't turn into command delimiters.  
+
+	  The  set command affects only the local shell's environment.
+	  You can 'exit' to command.com and the	 original  environment
+	  is intact.	The  local  environment is 2K large - which is
+	  useful.  
+
+	  When using the Microsoft  C  compiler	 under	pc-shell,  the
+	  compiler  has	 a  bad habit of look for parameters beginning
+
+
+				      -13-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	  with forward slashes in the environment.  If you  get	 their
+	  famous   'P0	 :  bad	 option'  message,  try	 revising  the
+	  environment.	
+
+	  Anything compiled with  Microsoft  C	3.0  that  uses	 their
+	  system,  exec,  and  spawn  functions	 will  complain	 about
+	  forward slashes.  Use the -b option.	
+
+	  Sidekick has	obnoxious  ideas  about	 when  it  should  and
+	  shouldn't pop	 up.	From the shell prompt you have to type
+	  <HOT-KEY><RETURN> to get it to wake up.  The	<RETURN>  gets
+	  passed back to  the shell.  Why?  Talk to Borland. I use DOS
+	  function 3F (read from file or device) to get keys, and  you
+	  can't get any more vanilla than that.	 
+
+
+     Implementation notes  
+
+
+	  DOS  doesn't	acknowledge  a	'change default drive' command
+	  until you issue a 'get current directory' call.  Why?	   The
+	  only	 way   I   figured   this   out	 is  by	 disassembling
+	  command.com.	
+
+	  PC|MS-DOS has a limit of 20 file handles.    If  you	add  a
+	  command that opens files, make sure you catch the ctrl-break 
+	  signal and close them.  Look at CAT.C or Y.C for examples.  
+
+	  DON'T	 REDIRECT  INPUT  INTO PRINT. Print gets all hosed up.
+	  Print has lots of trouble in general with the pc-shell,  and
+	  should be avoided.  
+
+     BUGS  
+
+
+	  Due  to the way that environment strings are expanded on the
+	  command line, semicolons inside shell	 variables  look  like
+	  command seperators.	 If you enclose them in double quotes,
+	  the problem will go away.  
+
+	  I have noticed intermittent problems running on an AT,  with
+	  DOS  3.0,  but have been unable to reproduce them on a PC. I
+	  suspect bugs in DOS 3.0 that	are  absent  in	 3.1.  If  you
+	  notice any consistent problems, send	me a bug report.  
+
+     HISTORY  
+
+
+	 V 3.0	
+
+	      Bug  fixed : when you switched to a disk for which there
+	      was no /tmp directory, the shell couldn't open its  pipe
+	      files.   Now  pipe  files	 are  opened  in  the  default
+	      directory.  If you have a better idea, let me know.  
+
+	      Added a critical error handler - if you get  the	abort,
+	      retry,  ignore  message  and  abort,  you	 return to the
+	      shell, rather than to DOS.  It is possible that all  the
+
+
+				      -14-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	      memory  allocated	 during the execution of the offending
+	      command may not be freed, in which case the shell	 could
+	      run out  of  memory.   Just give it the exit command and
+	      re-invoke if that happens.  
+
+	      If you type something that the shell can't interpret  as
+	      an  internal  command,  run  as an external program or a
+	      script, I give command.com a  crack  at  it.    You  can
+	      therefore now  run  dos batch files transparently.  This
+	      slows things down somewhat if  you  type	totally	 bogus
+	      commands,	 so  this  feature can be turned off with "set
+	      NODOS=1".	 
+
+	 V 3.1	
+
+	      Some general cleanup.  Added a function  that  makes  an
+	      absolute	path  from any relative path, which cleaned up
+	      mv, ls, and cp quite a bit.  
+
+	      Went back to .com format for pc-shell and small.	  This
+	      makes the archive file about 1K smaller on average.  
+
+	 V 3.2	
+
+	      Added  -b	 option in hopes of being more compatible with
+	      recalcitrant  software  (like  PC-NET)  that  chokes  on
+	      forward slashes  in  paths.  It should be noted that DOS
+	      2.XX versions don't like forward	slashes	 in  the  PATH
+	      environment string.  
+
+	      Stopped  closing	standard  handles  3 and 4 on startup.
+	      This should make	weird  things  like  Wordstar  printer
+	      output being redirected to the screen go away.  
+
+	      Single or double quotes around redirected file names are 
+	      now permitted.  
+
+	 V 3.3	
+
+	      Refined behavior	of  -b	option.	   Fixed  aliasing  in
+	      compound commands.  Deleted small.com from  distribution
+	      package because  of  lack of interest.  Fixed bug in add
+	      to  environment  function,  that	made  parts   of   the
+	      environment disappear.	Made  sidekick	work  slightly
+	      better.  Mv will now work on directories under DOS V 3.0 
+	      or later.	 
+
+	 V 3.4	
+
+	      Added logic to use the TEMP environment  string  to  put
+	      pipe files someplace useful.  
+
+	 V 3.5	
+
+	      Tuning and  linting.    Added  pushd  with no arguments.
+	      Removed  version	history	 prior	to  version  3.0  from
+	      documentation.  
+
+
+
+				      -15-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+	 LICENCING STATEMENT  
+
+	      PC-SHELL is not in the public domain.  I, Kent Williams, 
+	      retain   all   rights   of  ownership  over  source  and
+	      executables, unless I explicitly transfer such rights to 
+	      someone else.  
+
+	      All persons who come into possesion of PC-SHELL  in  the
+	      binary-only  version are entitled to use it however they
+	      wish.  No warranty is given or implied.  All persons who 
+	      come into possesion of PC-SHELL  are  also  entitled  to
+	      redistribute  the	 package  in  any  way	they  see  fit
+	      providing that 
+
+		   1) The package is distributed intact.   This	 means
+		   that	 the  archive  file  or	 distribution diskette
+		   contains PC-SHELL.COM and SHELL.DOC,	 and  that  no
+		   changes have been made to any of these files.  
+
+		   2) That no charge is made, beyond a nominal fee for 
+		   media duplication.  
+
+	      The   above   three  paragraphs  constitute  an  limited
+	      non-commercial licence to PC-SHELL  binaries  to	anyone
+	      who obtains  it.	This distiguishes it from being public
+	      domain only in that I retain enough control over	it  to
+	      protect my own interests.	 (Take heart, hackers!) 
+
+	      All  person who obtain copies of source code are granted
+	      unlimited noncommercial use thereof.  This  source  code
+	      licence is not transferrable to any other party, for any 
+	      reason.  
+
+	      In   addition,  no  modified  versions  of  the  program
+	      PC-SHELL	 may   be   distributed	  by   commercial   or
+	      non-commercial means.  
+
+	      Any  company  wishing  to	 purchase  source licenses are
+	      subject to these further restrictions.  
+
+		   1) That no part of the source code is used, in  any
+		   form in any program sold commercially.  
+
+		   2)  That  a	licence fee will be paid for each user
+		   within a company of PC-SHELL, according to the rate 
+	      schedule below.  
+
+	 PRICING  
+
+	      Noncommercial Personal Use - 25.00$
+	      Commercial User	- 25.00$, plus 15.00$ per each additional user.
+	      Commercial Distribution - by written agreement only
+
+		   For the above prices you will receive: 
+
+		   1) Complete source code for shell, with makefile 
+		   2) Source and executable  for  the  text  formatter
+		   used to prepare this documentation.	NOTE: I didn't 
+
+
+				      -16-
+
+
+	  PC-SHELL (1)		 PC-DOS C Shell		  PC-SHELL (1)
+
+
+		   write  this	program,  and  am distributing it as a
+		   service only.  
+
+		   3) Executable and  documentation  for  NDMAKE,  the
+		   best	 make  available  for love or money on PC-DOS.
+		   This is distributed as  a  service  only.	Please
+		   honor the author's request for donations.  
+
+		   4)  Source for as many other Unix Utilities as will
+		   fit on the disk.  Currently I am distributing  cut,
+		   paste,  sed, and nro (the formatter used to prepare
+		   this documentation).	   I  did  not	 write	 these
+		   programs,  and  am  distributing  them as a service
+		   only.  
+
+		   As	always,	  miscellaneous	  contributions	   are
+		   welcome.   As anyone who has contacted me is aware,
+		   I will provide as much help as  I  can,  in	fixing
+		   bugs,  providing updates, taking suggestions, etc.,
+		   regardless of monetary arrangements.	 
+
+		   QUESTIONS COMMENTS BUGREPORTS GOTO 
+		   KENT WILLIAMS
+		   722 Rundell St.
+		   Iowa City, IA 52240
+		   (319) 338-6053 (HOME VOICE)
+		   UUCP: ...!cwruecmp!ncoast!kent
+		   
+		   * UNIX is an unregistered trademark of AT&T.	 This is what my
+		   company's legal department decided should be used for any use of the
+		   trademark UNIX, if anyone cares.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+				      -17-

@@ -1,0 +1,200 @@
+#include "hd.h"
+#include "mydir.h"
+#include <pwd.h>
+#include <signal.h>
+#ifdef	PWBTTY
+#include <sys/sgtty.h>
+#endif
+
+#ifdef	STOPABLE
+#define	sigmask(sig)	(1 << ((sig) - 1))
+#define	sigunblock(mask) sigsetmask(sigblock(0) & ~(mask))
+int suspend();
+#include <sgtty.h>
+#endif
+
+/* Extract data about environment */
+#define ENV_COUNT	6
+
+char *env_name [ENV_COUNT] =			/* Names */
+{
+    "SHELL", "HOME", "TERM", "PATH", "EDITOR", "MAIL"
+} ;
+
+char **env_dest [ENV_COUNT] =			/* Place stored */
+{
+    &SHELL, &HOME, &TERM, &PATH, &EDITOR, &MAIL
+} ;
+
+#define	USERSIZE 20
+char username[USERSIZE] = { "(who are you ?)" };
+char *arrow;
+
+char *helptext = 0;
+/* HELPSIZE should be plenty */
+#define	HELPSIZE 1536
+
+/* Screen parameters, see also setwindow() */
+#define	CRTROW	24			/* Standard 24x80 CRT default */
+int window = CRTROW;
+int nfpp = (CRTROW-4);			/* Two lines of header and footer
+					 *  not greater than maxnfpp == 26
+					 */
+
+main (c, v) 
+char **v;
+{
+
+/*  Initialize everything, then run.  */
+
+    register int i, j;
+    register char *s;
+    struct passwd *p, *getpwuid();
+    extern leave ();
+    extern char *shargv[];
+    extern char *getenv();
+
+	int fflag;
+	int (*oi)(), (*oq)();
+#ifdef	PWBTTY
+	int tm[3];
+#endif
+
+    comein ();
+    for (i = 0; i < ENV_COUNT; i++)
+	if ((s = getenv(env_name[i])) != NULL)
+		*env_dest [i] = s;
+
+    *shargv = SHELL;
+#ifdef	PWBTTY
+	HOME = (char *) logdir();
+#endif
+	/* Should we depend on $USER ? */
+	p = getpwuid(i = geteuid());
+	if (p) {
+		strcpy(username, p->pw_name);
+		if (*HOME == 0)
+			HOME = p->pw_dir;
+	}
+	/* Give root a different arrow */
+	arrow = i ? "->" : "#>";
+
+	if (MAIL && *MAIL) {
+		i = strlen(MAIL);
+		if (MAIL[i-1] == '~') {
+			s = (char *) malloc(i+1+USERSIZE);
+			if (s != NULL) {
+				strcpy(s, MAIL);
+				strcpy(&s[i-1], username);
+				MAIL = s;
+			}
+		}
+	}
+
+	if (signal(SIGHUP, leave) == SIG_IGN)
+		signal(SIGHUP, SIG_IGN);
+	if (signal(SIGTERM, leave) == SIG_IGN)
+		signal(SIGTERM, SIG_IGN);
+	oi = signal (SIGINT, SIG_IGN);	/* dyt, was leave */
+	oq = signal (SIGQUIT, SIG_IGN);
+	tty_init ();
+	i = curs_init ();
+	/*
+	 * Check if terminal is a CRT
+	 * if not, check option to chain to /bin/sh
+	 */
+	fflag = 0;
+	j = 1;
+	if (c > 1 && strcmp(v[j], "-f") == 0) {
+		c--;
+		j++;
+		fflag++;
+	}
+#ifdef	PWBTTY
+	if (i == 0)
+		i = gtty(0, tm);
+	if (!fflag && (i || (tm[2]&CRT) == 0)) {
+#else
+	if (!fflag && i) {
+#endif
+		fprintf(stderr, "Not a screen terminal");
+		if ((c > 0 && **v == '-')
+			|| (c > 1 && strcmp(v[j], "-") == 0)) {
+			fprintf(stderr, ", exec'ing %s...\r\n", SHELL);
+			signal(SIGINT, oi);
+			signal(SIGQUIT, oq);
+			execl(SHELL, "sh", 0);
+			fprintf(stderr, "exec failed");
+		}
+		fprintf(stderr, "\r\n");
+		exit(0);
+	}
+
+    erase (); printf ("Vsh %s\r\n", VERSION);
+    cmdldrc ();
+    wdfile = -1;
+    if (curdir () || enterdir (DOT) == NOREPLOT)
+	leave ();
+#ifdef	STOPABLE
+    signal(SIGTSTP, suspend);
+#endif
+    tty_push (RAWMODE);
+
+	/* Read in helpfile once */
+	helptext = "";
+	if (HELPFILE && *(HELPFILE)) {
+		if (stat(HELPFILE, &scr_stb) == 0) {
+#ifdef	V6
+			i = (scr_stb.st_size1 < HELPSIZE) ? scr_stb.st_size1 :
+#else
+			i = (scr_stb.st_size < HELPSIZE) ? scr_stb.st_size :
+#endif
+				HELPSIZE;
+			if ((helptext = (char *) malloc(i+1)) == NULL) {
+				fprintf(stderr, "No memory\n");
+				exit(-1);
+			}
+			j = open(HELPFILE, 0);
+			helptext[0] = 0;
+			if (j > 0 && (i = read(j, helptext, i)) > 0)
+				helptext[i] = 0;
+			close(j);
+		}
+	}
+
+	setwindow();
+	setcolumn();
+    process ();
+}
+
+#ifdef	STOPABLE
+suspend(signo)
+int signo;
+{
+	int putch();
+	
+	tty_push(COOKEDMODE);
+	/*
+	 * This is debatable: should we give back a full screen
+	 *	or just the execute window ?
+	 */
+	if (CS && ewindow) {
+		tputs(tgoto(CS, LI-1, 0), 0, putch);
+		atxy(1, LI);
+	}
+#ifdef	SIGVTALRM			/* Kludge to detect 4.2BSD signal */
+	/* stop ourselves */
+	sigunblock(sigmask(signo));
+	signal(signo, SIG_DFL);
+	kill(getpid(), signo);
+	sigblock(sigmask(signo));
+#else
+	kill(getpid(), signo);
+#endif
+	signal(signo, suspend);
+	printf("Vsh restarted.\r");
+	fflush(stdout);
+	tty_pop();
+	ioctl(0, TIOCSTI, "\014");	/* Fake an input of ^L */
+}
+#endif
